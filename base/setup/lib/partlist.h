@@ -36,6 +36,8 @@ typedef struct _PARTENTRY
     ULONG PartitionIndex;   /* Index in the LayoutBuffer->PartitionEntry[] cached array of the corresponding DiskEntry */
 
     CHAR DriveLetter;
+    // CHAR VolumeLabel[17];    // NOTE: On 1st-stage Win setup, the volume label is also displayed in the list
+    // CHAR FileSystemName[9];  // NOTE: Superseded by the FileSystem member
 
     BOOLEAN LogicalPartition;
 
