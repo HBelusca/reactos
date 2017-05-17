@@ -21,8 +21,9 @@
  * PROJECT:         ReactOS text-mode setup
  * FILE:            base/setup/usetup/usetup.c
  * PURPOSE:         Text-mode setup
- * PROGRAMMERS:     Casper S. Hornstrup (chorns@users.sourceforge.net)
- *                  HervÃ© Poussineau (hpoussin@reactos.org)
+ * PROGRAMMERS:     Eric Kohl
+ *                  Casper S. Hornstrup (chorns@users.sourceforge.net)
+ *                  Hervé Poussineau (hpoussin@reactos.org)
  */
 
 #include <usetup.h>

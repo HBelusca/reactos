@@ -3,7 +3,8 @@
  * PROJECT:         ReactOS Setup Library
  * FILE:            base/setup/lib/install.c
  * PURPOSE:         Installation functions
- * PROGRAMMERS:     Hervé Poussineau (hpoussin@reactos.org)
+ * PROGRAMMERS:     Eric Kohl
+ *                  Hervé Poussineau (hpoussin@reactos.org)
  *                  Hermes Belusca-Maito (hermes.belusca@sfr.fr)
  */
 

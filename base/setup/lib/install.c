@@ -3,7 +3,8 @@
  * PROJECT:         ReactOS Setup Library
  * FILE:            base/setup/lib/install.c
  * PURPOSE:         Installation functions
- * PROGRAMMERS:     Hervé Poussineau (hpoussin@reactos.org)
+ * PROGRAMMERS:     Eric Kohl
+ *                  Hervé Poussineau (hpoussin@reactos.org)
  *                  Hermes Belusca-Maito (hermes.belusca@sfr.fr)
  */
 
@@ -377,7 +378,7 @@ AddSectionToCopyQueueCab(
 
     } while (SpInfFindNextLine(&FilesContext, &FilesContext));
 
-    return TRUE;
+    return TRUE; // ERROR_SUCCESS;
 }
 
 // Note: Modeled after the SetupQueueCopySection() API
@@ -417,7 +418,10 @@ AddSectionToCopyQueue(
     if (!SpInfFindFirstLine(InfFile, SectionName, NULL, &FilesContext))
     {
         DPRINT1("AddSectionToCopyQueue(): Unable to find section '%S' in TXTSETUP.SIF\n", SectionName);
-        return FALSE;
+        pSetupData->LastErrorNumber = ERROR_TXTSETUP_SECTION;
+        if (pSetupData->ErrorRoutine)
+            pSetupData->ErrorRoutine(pSetupData, SectionName);
+        return FALSE; // ERROR_TXTSETUP_SECTION;
     }
 
     /*
@@ -449,7 +453,7 @@ AddSectionToCopyQueue(
             pSetupData->LastErrorNumber = ERROR_TXTSETUP_SECTION;
             if (pSetupData->ErrorRoutine)
                 pSetupData->ErrorRoutine(pSetupData, SectionName);
-            return FALSE;
+            return FALSE; // ERROR_TXTSETUP_SECTION;
             // break;
         }
         /*
@@ -497,7 +501,7 @@ AddSectionToCopyQueue(
 
     } while (SpInfFindNextLine(&FilesContext, &FilesContext));
 
-    return TRUE;
+    return TRUE; // ERROR_SUCCESS;
 }
 
 BOOLEAN // ERROR_NUMBER
@@ -539,7 +543,7 @@ PrepareCopyInfFile(
 
         /* Add specific files depending of computer type */
         if (!ProcessComputerFiles(InfFile, pSetupData->ComputerList, &AdditionalSectionName))
-            return FALSE;
+            return FALSE; // ERROR_LOAD_COMPUTER;
 
         if (AdditionalSectionName &&
             !AddSectionToCopyQueue(pSetupData, InfFile,
@@ -677,6 +681,7 @@ PrepareFileCopy(
     IN OUT PUSETUP_DATA pSetupData,
     IN PFILE_COPY_STATUS_ROUTINE StatusRoutine OPTIONAL)
 {
+    // ERROR_NUMBER ErrorNumber;
     HINF InfHandle;
     INFCONTEXT CabinetsContext;
     PCWSTR CabinetName;
@@ -695,7 +700,7 @@ PrepareFileCopy(
         pSetupData->LastErrorNumber = ERROR_COPY_QUEUE;
         if (pSetupData->ErrorRoutine)
             pSetupData->ErrorRoutine(pSetupData);
-        return FALSE;
+        return FALSE; // ERROR_COPY_QUEUE;
     }
 
     /* Prepare the copy of the common files that are not in installation cabinets */
@@ -709,7 +714,7 @@ PrepareFileCopy(
     if (!SpInfFindFirstLine(pSetupData->SetupInf, L"Cabinets", NULL, &CabinetsContext))
     {
         /* Skip this step and return success if no cabinet file is listed */
-        return TRUE;
+        return TRUE; // ERROR_SUCCESS;
     }
 
     /*
@@ -743,7 +748,7 @@ PrepareFileCopy(
                 pSetupData->LastErrorNumber = ERROR_CABINET_SCRIPT;
                 if (pSetupData->ErrorRoutine)
                     pSetupData->ErrorRoutine(pSetupData, PathBuffer);
-                return FALSE;
+                return FALSE; // ERROR_CABINET_SCRIPT;
             }
         }
         else
@@ -754,7 +759,7 @@ PrepareFileCopy(
             pSetupData->LastErrorNumber = ERROR_CABINET_MISSING;
             if (pSetupData->ErrorRoutine)
                 pSetupData->ErrorRoutine(pSetupData, PathBuffer);
-            return FALSE;
+            return FALSE; // ERROR_CABINET_MISSING;
         }
 
         InfHandle = INF_OpenBufferedFileA((PSTR)InfFileData,
@@ -794,7 +799,7 @@ PrepareFileCopy(
             pSetupData->LastErrorNumber = ERROR_INVALID_CABINET_INF;
             if (pSetupData->ErrorRoutine)
                 pSetupData->ErrorRoutine(pSetupData, PathBuffer);
-            return FALSE;
+            return FALSE; // ERROR_INVALID_CABINET_INF;
         }
 
         if (!PrepareCopyInfFile(pSetupData, InfHandle, CabinetName))
@@ -811,7 +816,7 @@ PrepareFileCopy(
 #endif
     } while (SpInfFindNextLine(&CabinetsContext, &CabinetsContext));
 
-    return TRUE;
+    return TRUE; // ERROR_SUCCESS;
 }
 
 BOOLEAN

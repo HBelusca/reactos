@@ -389,7 +389,6 @@ ParseArcName(
     OUT PPERIPHERAL_TYPE pPeripheralType,
     OUT PBOOLEAN pUseSignature)
 {
-    // NTSTATUS Status;
     WCHAR TokenBuffer[50];
     UNICODE_STRING Token;
     PCWSTR p, q;

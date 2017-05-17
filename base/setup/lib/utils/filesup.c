@@ -60,7 +60,7 @@ SetupCreateSingleDirectory(
                                NULL);
 
     Status = NtCreateFile(&DirectoryHandle,
-                          FILE_LIST_DIRECTORY | SYNCHRONIZE,
+                          FILE_LIST_DIRECTORY | FILE_TRAVERSE | FILE_ADD_FILE | FILE_ADD_SUBDIRECTORY | SYNCHRONIZE,
                           &ObjectAttributes,
                           &IoStatusBlock,
                           NULL,

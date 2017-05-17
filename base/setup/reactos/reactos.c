@@ -1086,6 +1086,37 @@ FileCopyCallback(PVOID Context,
     return FILEOP_DOIT;
 }
 
+static VOID
+__cdecl
+RegistryStatus(IN REGISTRY_STATUS RegStatus, ...)
+{
+    /* WARNING: Please keep this lookup table in sync with the resources! */
+    static const UINT StringIDs[] =
+    {
+        STRING_DONE,                    /* Success */
+        STRING_REGHIVEUPDATE,           /* RegHiveUpdate */
+        STRING_IMPORTFILE,              /* ImportRegHive */
+        STRING_DISPLAYSETTINGSUPDATE,   /* DisplaySettingsUpdate */
+        STRING_LOCALESETTINGSUPDATE,    /* LocaleSettingsUpdate */
+        STRING_ADDKBLAYOUTS,            /* KeybLayouts */
+        STRING_KEYBOARDSETTINGSUPDATE,  /* KeybSettingsUpdate */
+        STRING_CODEPAGEINFOUPDATE,      /* CodePageInfoUpdate */
+    };
+
+    va_list args;
+
+    if (RegStatus < ARRAYSIZE(StringIDs))
+    {
+        va_start(args, RegStatus);
+        CONSOLE_SetStatusTextV(MUIGetString(StringIDs[RegStatus]), args);
+        va_end(args);
+    }
+    else
+    {
+        CONSOLE_SetStatusText("Unknown status %d", RegStatus);
+    }
+}
+
 static DWORD
 WINAPI
 PrepareAndDoCopyThread(
@@ -1105,6 +1136,8 @@ PrepareAndDoCopyThread(
     /* Get the progress handle */
     hWndProgress = GetDlgItem(hwndDlg, IDC_PROCESSPROGRESS);
 
+
+#if 1
 
     /*
      * Preparation of the list of files to be copied
@@ -1190,6 +1223,28 @@ PrepareAndDoCopyThread(
 
     /* Create the $winnt$.inf file */
     InstallSetupInfFile(&pSetupData->USetupData);
+
+#endif
+
+
+    /*
+     * Create or update the registry hives
+     */
+
+    /* Set status text */
+    SetDlgItemTextW(hwndDlg, IDC_ACTIVITY,
+                    pSetupData->RepairUpdateFlag
+                        ? L"Updating the registry..."
+                        : L"Creating the registry...");
+    SetDlgItemTextW(hwndDlg, IDC_ITEM, L"");
+
+    ErrorNumber = UpdateRegistry(&pSetupData->USetupData,
+                                 pSetupData->RepairUpdateFlag,
+                                 pSetupData->PartitionList,
+                                 L'D', // DestinationDriveLetter,   // FIXME!!
+                                 pSetupData->SelectedLanguageId,
+                                 NULL /*RegistryStatus*/);
+
 
     /* We are done! Switch to the Terminate page */
     PropSheet_SetCurSelByID(GetParent(hwndDlg), IDD_RESTARTPAGE);

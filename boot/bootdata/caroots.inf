@@ -6,6 +6,7 @@
 
 [Version]
 Signature = "$Windows NT$"
+;Signature = "$ReactOS$"
 
 [AddReg]
 ; "Certum Trusted Root CA" (1476 bytes)

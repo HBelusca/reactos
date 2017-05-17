@@ -21,7 +21,7 @@
  * PROJECT:         ReactOS Setup Library
  * FILE:            base/setup/lib/registry.c
  * PURPOSE:         Registry creation functions
- * PROGRAMMERS:     ...
+ * PROGRAMMERS:     Eric Kohl
  *                  Hermes Belusca-Maito (hermes.belusca@sfr.fr)
  */
 
@@ -781,7 +781,7 @@ RegInitializeRegistry(
                          NULL,
                     // FIXME: Using REG_OPTION_VOLATILE works OK on Windows,
                     // but I need to check whether it works OK on ReactOS too.
-                         REG_OPTION_NON_VOLATILE, // REG_OPTION_VOLATILE,
+                         /* REG_OPTION_NON_VOLATILE, */ REG_OPTION_VOLATILE,
                          &Disposition);
     if (!NT_SUCCESS(Status))
     {
@@ -805,7 +805,7 @@ RegInitializeRegistry(
                          NULL,
                     // FIXME: Using REG_OPTION_VOLATILE works OK on Windows,
                     // but I need to check whether it works OK on ReactOS too.
-                         REG_OPTION_NON_VOLATILE, // REG_OPTION_VOLATILE,
+                         /* REG_OPTION_NON_VOLATILE, */ REG_OPTION_VOLATILE,
                          &Disposition);
     if (!NT_SUCCESS(Status))
     {
@@ -864,7 +864,7 @@ RegInitializeRegistry(
                                  NULL,
                             // FIXME: Using REG_OPTION_VOLATILE works OK on Windows,
                             // but I need to check whether it works OK on ReactOS too.
-                                 REG_OPTION_NON_VOLATILE, // REG_OPTION_VOLATILE,
+                                 /* REG_OPTION_NON_VOLATILE, */ REG_OPTION_VOLATILE,
                                  &Disposition);
             if (!NT_SUCCESS(Status))
             {
