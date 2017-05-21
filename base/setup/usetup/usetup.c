@@ -2125,25 +2125,27 @@ CreatePrimaryPartitionPage(PINPUT_RECORD Ir)
     if (DiskEntry->DriverName.Length > 0)
     {
         CONSOLE_PrintTextXY(6, 10,
-                            MUIGetString(STRING_HDINFOPARTCREATE),
+                            MUIGetString(STRING_HDINFOPARTCREATE_1),
                             DiskSize,
                             Unit,
                             DiskEntry->DiskNumber,
                             DiskEntry->Port,
                             DiskEntry->Bus,
                             DiskEntry->Id,
-                            &DiskEntry->DriverName);
+                            &DiskEntry->DriverName,
+                            DiskEntry->NoMbr ? "GPT" : "MBR");
     }
     else
     {
         CONSOLE_PrintTextXY(6, 10,
-                            MUIGetString(STRING_HDDINFOUNK1),
+                            MUIGetString(STRING_HDINFOPARTCREATE_2),
                             DiskSize,
                             Unit,
                             DiskEntry->DiskNumber,
                             DiskEntry->Port,
                             DiskEntry->Bus,
-                            DiskEntry->Id);
+                            DiskEntry->Id,
+                            DiskEntry->NoMbr ? "GPT" : "MBR");
     }
 
     CONSOLE_SetTextXY(6, 12, MUIGetString(STRING_HDDSIZE));
@@ -2282,25 +2284,27 @@ CreateExtendedPartitionPage(PINPUT_RECORD Ir)
     if (DiskEntry->DriverName.Length > 0)
     {
         CONSOLE_PrintTextXY(6, 10,
-                            MUIGetString(STRING_HDINFOPARTCREATE),
+                            MUIGetString(STRING_HDINFOPARTCREATE_1),
                             DiskSize,
                             Unit,
                             DiskEntry->DiskNumber,
                             DiskEntry->Port,
                             DiskEntry->Bus,
                             DiskEntry->Id,
-                            &DiskEntry->DriverName);
+                            &DiskEntry->DriverName,
+                            DiskEntry->NoMbr ? "GPT" : "MBR");
     }
     else
     {
         CONSOLE_PrintTextXY(6, 10,
-                            MUIGetString(STRING_HDDINFOUNK1),
+                            MUIGetString(STRING_HDINFOPARTCREATE_2),
                             DiskSize,
                             Unit,
                             DiskEntry->DiskNumber,
                             DiskEntry->Port,
                             DiskEntry->Bus,
-                            DiskEntry->Id);
+                            DiskEntry->Id,
+                            DiskEntry->NoMbr ? "GPT" : "MBR");
     }
 
     CONSOLE_SetTextXY(6, 12, MUIGetString(STRING_HDDSIZE));
@@ -2438,25 +2442,27 @@ CreateLogicalPartitionPage(PINPUT_RECORD Ir)
     if (DiskEntry->DriverName.Length > 0)
     {
         CONSOLE_PrintTextXY(6, 10,
-                            MUIGetString(STRING_HDINFOPARTCREATE),
+                            MUIGetString(STRING_HDINFOPARTCREATE_1),
                             DiskSize,
                             Unit,
                             DiskEntry->DiskNumber,
                             DiskEntry->Port,
                             DiskEntry->Bus,
                             DiskEntry->Id,
-                            &DiskEntry->DriverName);
+                            &DiskEntry->DriverName,
+                            DiskEntry->NoMbr ? "GPT" : "MBR");
     }
     else
     {
         CONSOLE_PrintTextXY(6, 10,
-                            MUIGetString(STRING_HDDINFOUNK1),
+                            MUIGetString(STRING_HDINFOPARTCREATE_2),
                             DiskSize,
                             Unit,
                             DiskEntry->DiskNumber,
                             DiskEntry->Port,
                             DiskEntry->Bus,
-                            DiskEntry->Id);
+                            DiskEntry->Id,
+                            DiskEntry->NoMbr ? "GPT" : "MBR");
     }
 
     CONSOLE_SetTextXY(6, 12, MUIGetString(STRING_HDDSIZE));
@@ -2675,25 +2681,27 @@ DeletePartitionPage(PINPUT_RECORD Ir)
     if (DiskEntry->DriverName.Length > 0)
     {
         CONSOLE_PrintTextXY(6, 12,
-                            MUIGetString(STRING_HDINFOPARTDELETE),
+                            MUIGetString(STRING_HDINFOPARTDELETE_1),
                             DiskSize,
                             Unit,
                             DiskEntry->DiskNumber,
                             DiskEntry->Port,
                             DiskEntry->Bus,
                             DiskEntry->Id,
-                            &DiskEntry->DriverName);
+                            &DiskEntry->DriverName,
+                            DiskEntry->NoMbr ? "GPT" : "MBR");
     }
     else
     {
         CONSOLE_PrintTextXY(6, 12,
-                            MUIGetString(STRING_HDDINFOUNK3),
+                            MUIGetString(STRING_HDINFOPARTDELETE_2),
                             DiskSize,
                             Unit,
                             DiskEntry->DiskNumber,
                             DiskEntry->Port,
                             DiskEntry->Bus,
-                            DiskEntry->Id);
+                            DiskEntry->Id,
+                            DiskEntry->NoMbr ? "GPT" : "MBR");
     }
 
     while (TRUE)
@@ -2905,14 +2913,15 @@ SelectFileSystemPage(PINPUT_RECORD Ir)
                             PartTypeString);
 #endif
 
-        CONSOLE_PrintTextXY(8, 10, MUIGetString(STRING_HDINFOPARTZEROED),
+        CONSOLE_PrintTextXY(8, 10, MUIGetString(STRING_HDINFOPARTZEROED_1),
                             DiskEntry->DiskNumber,
                             DiskSize,
                             DiskUnit,
                             DiskEntry->Port,
                             DiskEntry->Bus,
                             DiskEntry->Id,
-                            &DiskEntry->DriverName);
+                            &DiskEntry->DriverName,
+                            DiskEntry->NoMbr ? "GPT" : "MBR");
 
         CONSOLE_SetTextXY(6, 12, MUIGetString(STRING_PARTFORMAT));
 
@@ -2965,14 +2974,15 @@ SelectFileSystemPage(PINPUT_RECORD Ir)
                                 PartUnit);
         }
 
-        CONSOLE_PrintTextXY(6, 12, MUIGetString(STRING_HDINFOPARTEXISTS),
+        CONSOLE_PrintTextXY(6, 12, MUIGetString(STRING_HDINFOPARTEXISTS_1),
                             DiskEntry->DiskNumber,
                             DiskSize,
                             DiskUnit,
                             DiskEntry->Port,
                             DiskEntry->Bus,
                             DiskEntry->Id,
-                            &DiskEntry->DriverName);
+                            &DiskEntry->DriverName,
+                            DiskEntry->NoMbr ? "GPT" : "MBR");
     }
 
     MUIDisplayPage(SELECT_FILE_SYSTEM_PAGE);
@@ -2987,8 +2997,6 @@ SelectFileSystemPage(PINPUT_RECORD Ir)
             return QUIT_PAGE;
         }
     }
-
-    DrawFileSystemList(FileSystemList);
 
     if (RepairUpdateFlag)
     {
@@ -3012,6 +3020,8 @@ SelectFileSystemPage(PINPUT_RECORD Ir)
 
         return CHECK_FILE_SYSTEM_PAGE;
     }
+
+    DrawFileSystemList(FileSystemList);
 
     while (TRUE)
     {
@@ -4558,15 +4568,12 @@ BootLoaderFloppyPage(PINPUT_RECORD Ir)
 static PAGE_NUMBER
 BootLoaderHarddiskVbrPage(PINPUT_RECORD Ir)
 {
-    UCHAR PartitionType;
     NTSTATUS Status;
-
-    PartitionType = PartitionList->SystemPartition->PartitionType;
 
     Status = InstallVBRToPartition(&SystemRootPath,
                                    &SourceRootPath,
                                    &DestinationArcPath,
-                                   PartitionType);
+                                   PartitionList->SystemPartition->PartitionType);
     if (!NT_SUCCESS(Status))
     {
         MUIDisplayError(ERROR_WRITE_BOOT, Ir, POPUP_WAIT_ENTER);
@@ -4594,19 +4601,16 @@ BootLoaderHarddiskVbrPage(PINPUT_RECORD Ir)
 static PAGE_NUMBER
 BootLoaderHarddiskMbrPage(PINPUT_RECORD Ir)
 {
-    UCHAR PartitionType;
     NTSTATUS Status;
     WCHAR DestinationDevicePathBuffer[MAX_PATH];
     WCHAR SourceMbrPathBuffer[MAX_PATH];
     WCHAR DstPath[MAX_PATH];
 
     /* Step 1: Write the VBR */
-    PartitionType = PartitionList->SystemPartition->PartitionType;
-
     Status = InstallVBRToPartition(&SystemRootPath,
                                    &SourceRootPath,
                                    &DestinationArcPath,
-                                   PartitionType);
+                                   PartitionList->SystemPartition->PartitionType);
     if (!NT_SUCCESS(Status))
     {
         MUIDisplayError(ERROR_WRITE_BOOT, Ir, POPUP_WAIT_ENTER);
@@ -4757,9 +4761,7 @@ SuccessPage(PINPUT_RECORD Ir)
     MUIDisplayPage(SUCCESS_PAGE);
 
     if (IsUnattendedSetup)
-    {
         return FLUSH_PAGE;
-    }
 
     while (TRUE)
     {
