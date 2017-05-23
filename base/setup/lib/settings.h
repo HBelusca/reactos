@@ -21,7 +21,8 @@
  * PROJECT:         ReactOS text-mode setup
  * FILE:            base/setup/usetup/settings.h
  * PURPOSE:         Device settings support functions
- * PROGRAMMERS:     Colin Finck
+ * PROGRAMMERS:     Eric Kohl
+ *                  Colin Finck
  */
 
 #pragma once
