@@ -21,7 +21,7 @@
  * PROJECT:         ReactOS Setup Library
  * FILE:            base/setup/lib/registry.c
  * PURPOSE:         Registry creation functions
- * PROGRAMMERS:     ...
+ * PROGRAMMERS:     Eric Kohl
  *                  Hermes Belusca-Maito (hermes.belusca@sfr.fr)
  */
 

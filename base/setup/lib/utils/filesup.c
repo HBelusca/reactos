@@ -2,7 +2,8 @@
  * PROJECT:     ReactOS Setup Library
  * LICENSE:     GPL-2.0+ (https://spdx.org/licenses/GPL-2.0+)
  * PURPOSE:     File support functions.
- * COPYRIGHT:   Casper S. Hornstrup (chorns@users.sourceforge.net)
+ * COPYRIGHT:   Eric Kohl
+ *              Casper S. Hornstrup (chorns@users.sourceforge.net)
  *              Copyright 2017-2018 Hermes Belusca-Maito
  */
 
