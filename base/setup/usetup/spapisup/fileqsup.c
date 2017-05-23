@@ -21,7 +21,8 @@
  * PROJECT:         ReactOS text-mode setup
  * FILE:            base/setup/lib/fileqsup.c
  * PURPOSE:         Interfacing with Setup* API File Queue support functions
- * PROGRAMMERS:     Casper S. Hornstrup (chorns@users.sourceforge.net)
+ * PROGRAMMERS:     Eric Kohl
+ *                  Casper S. Hornstrup (chorns@users.sourceforge.net)
  *                  Hermes Belusca-Maito (hermes.belusca@sfr.fr)
  */
 
