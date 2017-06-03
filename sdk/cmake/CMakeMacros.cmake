@@ -776,10 +776,11 @@ function(create_registry_hives)
                 FOR bootcd regtest)
 
     # BootCD setup system hive
+    # FIXME: When PnP problems are fixed, use hivesys_utf16.inf instead!
     add_custom_command(
         OUTPUT ${CMAKE_BINARY_DIR}/boot/bootdata/SETUPREG.HIV
-        COMMAND native-mkhive -h:SETUPREG -u -d:${CMAKE_BINARY_DIR}/boot/bootdata ${_registry_inf} ${CMAKE_SOURCE_DIR}/boot/bootdata/setupreg.inf
-        DEPENDS native-mkhive ${_registry_inf})
+        COMMAND native-mkhive -h:SETUPREG -u -d:${CMAKE_BINARY_DIR}/boot/bootdata ${CMAKE_BINARY_DIR}/boot/bootdata/hivesetup_utf16.inf
+        DEPENDS native-mkhive ${CMAKE_BINARY_DIR}/boot/bootdata/hivesetup_utf16.inf)
 
     add_custom_target(bootcd_hives
         DEPENDS ${CMAKE_BINARY_DIR}/boot/bootdata/SETUPREG.HIV)
