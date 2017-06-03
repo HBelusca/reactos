@@ -16,6 +16,8 @@ add_registry_inf(
     hivedef.inf
     hivesft.inf
     hivesys.inf
+# FIXME: When PnP problems are fixed, remove hivesetup.inf
+    hivesetup.inf
     hivebcd.inf)
 
 
