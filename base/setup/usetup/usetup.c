@@ -4251,7 +4251,7 @@ DoUpdate:
          * we only update the hives.
          */
 
-        Success = SetupFindFirstLineW(SetupInf, L"HiveInfs.Update", NULL, &InfContext);
+        Success = SetupFindFirstLineW(SetupInf, L"HiveInfs.Upgrade", NULL, &InfContext);
         if (!Success)
         {
             /* Nothing to do for update! */
