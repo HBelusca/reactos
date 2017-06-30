@@ -2,18 +2,36 @@
  * PROJECT:     ReactOS Setup Library
  * LICENSE:     GPL-2.0+ (https://spdx.org/licenses/GPL-2.0+)
  * PURPOSE:     File support functions.
- * COPYRIGHT:   Copyright 2017-2018 Hermes Belusca-Maito
+ * COPYRIGHT:   Eric Kohl
+ *              Copyright 2017-2018 Hermes Belusca-Maito
  */
 
 #pragma once
 
-#if 0
+NTSTATUS
+SetupDeleteFile(
+    IN PCWSTR FileName,
+    IN BOOLEAN ForceDelete); // ForceDelete can be used to delete read-only files
 
-BOOLEAN
-IsValidPath(
-    IN PCWSTR InstallDir);
+NTSTATUS
+SetupCopyFile(
+    IN PCWSTR SourceFileName,
+    IN PCWSTR DestinationFileName,
+    IN BOOLEAN FailIfExists);
+
+#ifndef _WINBASE_
+
+#define MOVEFILE_REPLACE_EXISTING   1
+#define MOVEFILE_COPY_ALLOWED       2
+#define MOVEFILE_WRITE_THROUGH      8
 
 #endif
+
+NTSTATUS
+SetupMoveFile(
+    IN PCWSTR ExistingFileName,
+    IN PCWSTR NewFileName,
+    IN ULONG Flags);
 
 NTSTATUS
 ConcatPathsV(
