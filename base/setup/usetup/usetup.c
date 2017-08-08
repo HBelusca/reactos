@@ -1649,7 +1649,7 @@ IsDiskSizeValid(PPARTENTRY PartEntry)
     ULONGLONG size;
 
     size = PartEntry->SectorCount.QuadPart * PartEntry->DiskEntry->BytesPerSector;
-    size = (size + 524288) / 1048576;  /* in MBytes */
+    size = (size + (512 * KB)) / MB;  /* in MBytes */
 
     if (size < RequiredPartitionDiskSpace)
     {
@@ -2162,15 +2162,15 @@ CreatePrimaryPartitionPage(PINPUT_RECORD Ir)
 
     DiskSize = DiskEntry->SectorCount.QuadPart * DiskEntry->BytesPerSector;
 #if 0
-    if (DiskSize >= 10737418240) /* 10 GB */
+    if (DiskSize >= 10 * GB) /* 10 GB */
     {
-        DiskSize = DiskSize / 1073741824;
+        DiskSize = DiskSize / GB;
         Unit = MUIGetString(STRING_GB);
     }
     else
 #endif
     {
-        DiskSize = DiskSize / 1048576;
+        DiskSize = DiskSize / MB;
         if (DiskSize == 0)
             DiskSize = 1;
 
@@ -2207,7 +2207,7 @@ CreatePrimaryPartitionPage(PINPUT_RECORD Ir)
 
 #if 0
     CONSOLE_PrintTextXY(8, 10, "Maximum size of the new partition is %I64u MB",
-                        PartitionList->CurrentPartition->SectorCount * DiskEntry->BytesPerSector / 1048576);
+                        PartitionList->CurrentPartition->SectorCount * DiskEntry->BytesPerSector / MB);
 #endif
 
     CONSOLE_SetStatusText(MUIGetString(STRING_CREATEPARTITION));
@@ -2215,7 +2215,7 @@ CreatePrimaryPartitionPage(PINPUT_RECORD Ir)
     PartEntry = PartitionList->CurrentPartition;
     while (TRUE)
     {
-        MaxSize = (PartEntry->SectorCount.QuadPart * DiskEntry->BytesPerSector) / 1048576;  /* in MBytes (rounded) */
+        MaxSize = (PartEntry->SectorCount.QuadPart * DiskEntry->BytesPerSector) / MB;  /* in MBytes (rounded) */
 
         if (MaxSize > PARTITION_MAXSIZE)
             MaxSize = PARTITION_MAXSIZE;
@@ -2259,7 +2259,7 @@ CreatePrimaryPartitionPage(PINPUT_RECORD Ir)
             else
             {
                 /* Calculate the sector count from the size in MB */
-                SectorCount = PartSize * 1048576 / DiskEntry->BytesPerSector;
+                SectorCount = PartSize * MB / DiskEntry->BytesPerSector;
 
                 /* But never get larger than the unpartitioned disk space */
                 if (SectorCount > PartEntry->SectorCount.QuadPart)
@@ -2321,15 +2321,15 @@ CreateExtendedPartitionPage(PINPUT_RECORD Ir)
 
     DiskSize = DiskEntry->SectorCount.QuadPart * DiskEntry->BytesPerSector;
 #if 0
-    if (DiskSize >= 10737418240) /* 10 GB */
+    if (DiskSize >= 10 * GB) /* 10 GB */
     {
-        DiskSize = DiskSize / 1073741824;
+        DiskSize = DiskSize / GB;
         Unit = MUIGetString(STRING_GB);
     }
     else
 #endif
     {
-        DiskSize = DiskSize / 1048576;
+        DiskSize = DiskSize / MB;
         if (DiskSize == 0)
             DiskSize = 1;
 
@@ -2366,7 +2366,7 @@ CreateExtendedPartitionPage(PINPUT_RECORD Ir)
 
 #if 0
     CONSOLE_PrintTextXY(8, 10, "Maximum size of the new partition is %I64u MB",
-                        PartitionList->CurrentPartition->SectorCount * DiskEntry->BytesPerSector / 1048576);
+                        PartitionList->CurrentPartition->SectorCount * DiskEntry->BytesPerSector / MB);
 #endif
 
     CONSOLE_SetStatusText(MUIGetString(STRING_CREATEPARTITION));
@@ -2374,7 +2374,7 @@ CreateExtendedPartitionPage(PINPUT_RECORD Ir)
     PartEntry = PartitionList->CurrentPartition;
     while (TRUE)
     {
-        MaxSize = (PartEntry->SectorCount.QuadPart * DiskEntry->BytesPerSector) / 1048576;  /* in MBytes (rounded) */
+        MaxSize = (PartEntry->SectorCount.QuadPart * DiskEntry->BytesPerSector) / MB;  /* in MBytes (rounded) */
 
         if (MaxSize > PARTITION_MAXSIZE)
             MaxSize = PARTITION_MAXSIZE;
@@ -2418,7 +2418,7 @@ CreateExtendedPartitionPage(PINPUT_RECORD Ir)
             else
             {
                 /* Calculate the sector count from the size in MB */
-                SectorCount = PartSize * 1048576 / DiskEntry->BytesPerSector;
+                SectorCount = PartSize * MB / DiskEntry->BytesPerSector;
 
                 /* But never get larger than the unpartitioned disk space */
                 if (SectorCount > PartEntry->SectorCount.QuadPart)
@@ -2479,15 +2479,15 @@ CreateLogicalPartitionPage(PINPUT_RECORD Ir)
 
     DiskSize = DiskEntry->SectorCount.QuadPart * DiskEntry->BytesPerSector;
 #if 0
-    if (DiskSize >= 10737418240) /* 10 GB */
+    if (DiskSize >= 10 * GB) /* 10 GB */
     {
-        DiskSize = DiskSize / 1073741824;
+        DiskSize = DiskSize / GB;
         Unit = MUIGetString(STRING_GB);
     }
     else
 #endif
     {
-        DiskSize = DiskSize / 1048576;
+        DiskSize = DiskSize / MB;
         if (DiskSize == 0)
             DiskSize = 1;
 
@@ -2524,7 +2524,7 @@ CreateLogicalPartitionPage(PINPUT_RECORD Ir)
 
 #if 0
     CONSOLE_PrintTextXY(8, 10, "Maximum size of the new partition is %I64u MB",
-                        PartitionList->CurrentPartition->SectorCount * DiskEntry->BytesPerSector / 1048576);
+                        PartitionList->CurrentPartition->SectorCount * DiskEntry->BytesPerSector / MB);
 #endif
 
     CONSOLE_SetStatusText(MUIGetString(STRING_CREATEPARTITION));
@@ -2532,7 +2532,7 @@ CreateLogicalPartitionPage(PINPUT_RECORD Ir)
     PartEntry = PartitionList->CurrentPartition;
     while (TRUE)
     {
-        MaxSize = (PartEntry->SectorCount.QuadPart * DiskEntry->BytesPerSector) / 1048576;  /* in MBytes (rounded) */
+        MaxSize = (PartEntry->SectorCount.QuadPart * DiskEntry->BytesPerSector) / MB;  /* in MBytes (rounded) */
 
         if (MaxSize > PARTITION_MAXSIZE)
             MaxSize = PARTITION_MAXSIZE;
@@ -2576,7 +2576,7 @@ CreateLogicalPartitionPage(PINPUT_RECORD Ir)
             else
             {
                 /* Calculate the sector count from the size in MB */
-                SectorCount = PartSize * 1048576 / DiskEntry->BytesPerSector;
+                SectorCount = PartSize * MB / DiskEntry->BytesPerSector;
 
                 /* But never get larger than the unpartitioned disk space */
                 if (SectorCount > PartEntry->SectorCount.QuadPart)
@@ -2677,21 +2677,21 @@ DeletePartitionPage(PINPUT_RECORD Ir)
 
     PartSize = PartEntry->SectorCount.QuadPart * DiskEntry->BytesPerSector;
 #if 0
-    if (PartSize >= 10737418240) /* 10 GB */
+    if (PartSize >= 10 * GB) /* 10 GB */
     {
-        PartSize = PartSize / 1073741824;
+        PartSize = PartSize / GB;
         Unit = MUIGetString(STRING_GB);
     }
     else
 #endif
-    if (PartSize >= 10485760) /* 10 MB */
+    if (PartSize >= 10 * MB) /* 10 MB */
     {
-        PartSize = PartSize / 1048576;
+        PartSize = PartSize / MB;
         Unit = MUIGetString(STRING_MB);
     }
     else
     {
-        PartSize = PartSize / 1024;
+        PartSize = PartSize / KB;
         Unit = MUIGetString(STRING_KB);
     }
 
@@ -2718,15 +2718,15 @@ DeletePartitionPage(PINPUT_RECORD Ir)
 
     DiskSize = DiskEntry->SectorCount.QuadPart * DiskEntry->BytesPerSector;
 #if 0
-    if (DiskSize >= 10737418240) /* 10 GB */
+    if (DiskSize >= 10 * GB) /* 10 GB */
     {
-        DiskSize = DiskSize / 1073741824;
+        DiskSize = DiskSize / GB;
         Unit = MUIGetString(STRING_GB);
     }
     else
 #endif
     {
-        DiskSize = DiskSize / 1048576;
+        DiskSize = DiskSize / MB;
         if (DiskSize == 0)
             DiskSize = 1;
 
@@ -2927,27 +2927,27 @@ SelectFileSystemPage(PINPUT_RECORD Ir)
 
     /* Adjust disk size */
     DiskSize = DiskEntry->SectorCount.QuadPart * DiskEntry->BytesPerSector;
-    if (DiskSize >= 10737418240) /* 10 GB */
+    if (DiskSize >= 10 * GB) /* 10 GB */
     {
-        DiskSize = DiskSize / 1073741824;
+        DiskSize = DiskSize / GB;
         DiskUnit = MUIGetString(STRING_GB);
     }
     else
     {
-        DiskSize = DiskSize / 1048576;
+        DiskSize = DiskSize / MB;
         DiskUnit = MUIGetString(STRING_MB);
     }
 
     /* Adjust partition size */
     PartSize = PartEntry->SectorCount.QuadPart * DiskEntry->BytesPerSector;
-    if (PartSize >= 10737418240) /* 10 GB */
+    if (PartSize >= 10 * GB) /* 10 GB */
     {
-        PartSize = PartSize / 1073741824;
+        PartSize = PartSize / GB;
         PartUnit = MUIGetString(STRING_GB);
     }
     else
     {
-        PartSize = PartSize / 1048576;
+        PartSize = PartSize / MB;
         PartUnit = MUIGetString(STRING_MB);
     }
 
