@@ -86,17 +86,24 @@ SetupGetFieldCount(PINFCONTEXT Context)
     return InfGetFieldCount(Context);
 }
 
-extern BOOLEAN InfGetIntField(PINFCONTEXT Context,
-                              ULONG FieldIndex,
-                              INT *IntegerValue);
-// #define SetupGetIntField InfGetIntField
-BOOLEAN
+/*
+ * This function corresponds to an undocumented but exported setupapi API
+ * that exists since WinNT4 and is still present in Win10.
+ * The returned string pointer is a read-only pointer to a string in the
+ * maintained INF cache, and is always in UNICODE (on NT systems).
+ */
+extern BOOLEAN InfGetDataField(PINFCONTEXT Context,
+                               ULONG FieldIndex,
+                               PWCHAR *Data);
+PCWSTR
 WINAPI
-SetupGetIntField(PINFCONTEXT Context,
-                 ULONG FieldIndex,
-                 INT *IntegerValue)
+pSetupGetField(PINFCONTEXT Context,
+               ULONG FieldIndex)
 {
-    return InfGetIntField(Context, FieldIndex, IntegerValue);
+    PWCHAR Data = NULL;
+    if (!InfGetDataField(Context, FieldIndex, &Data))
+        return NULL;
+    return Data;
 }
 
 extern BOOLEAN InfGetBinaryField(PINFCONTEXT Context,
@@ -118,6 +125,19 @@ SetupGetBinaryField(PINFCONTEXT Context,
                                ReturnBuffer,
                                ReturnBufferSize,
                                RequiredSize);
+}
+
+extern BOOLEAN InfGetIntField(PINFCONTEXT Context,
+                              ULONG FieldIndex,
+                              INT *IntegerValue);
+// #define SetupGetIntField InfGetIntField
+BOOL
+WINAPI
+SetupGetIntField(PINFCONTEXT Context,
+                 ULONG FieldIndex,
+                 INT *IntegerValue) // PINT
+{
+    return !!InfGetIntField(Context, FieldIndex, IntegerValue);
 }
 
 extern BOOLEAN InfGetMultiSzField(PINFCONTEXT Context,
@@ -193,24 +213,6 @@ SetupOpenInfFileExW(
 
 
 /* HELPER FUNCTIONS **********************************************************/
-
-BOOLEAN
-INF_GetData(
-    IN PINFCONTEXT Context,
-    OUT PWCHAR *Key,
-    OUT PWCHAR *Data)
-{
-    return InfGetData(Context, Key, Data);
-}
-
-BOOLEAN
-INF_GetDataField(
-    IN PINFCONTEXT Context,
-    IN ULONG FieldIndex,
-    OUT PWCHAR *Data)
-{
-    return InfGetDataField(Context, FieldIndex, Data);
-}
 
 HINF WINAPI
 INF_OpenBufferedFileA(
