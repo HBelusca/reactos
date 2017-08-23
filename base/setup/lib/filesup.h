@@ -105,6 +105,6 @@ UnMapFile(
 do {    \
     UnMapFile((SectionHandle), (BaseAddress));  \
     NtClose(FileHandle);                        \
-} while (1)
+} while (0)
 
 /* EOF */

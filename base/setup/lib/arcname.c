@@ -251,7 +251,7 @@ ArcMatchTokenA(
     return Index;
 }
 
-static ULONG
+/* static */ ULONG
 ArcMatchTokenU(
     IN PCWSTR CandidateToken,
     IN const PCWSTR* TokenTable)
@@ -782,7 +782,6 @@ ResolveArcNameManually(
     }
 #endif
 
-Quit:
     if (!NT_SUCCESS(Status))
         return Status;
 

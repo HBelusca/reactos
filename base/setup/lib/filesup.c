@@ -9,6 +9,7 @@
 /* INCLUDES *****************************************************************/
 
 #include "precomp.h"
+#include "filesup.h"
 
 #define NDEBUG
 #include <debug.h>
