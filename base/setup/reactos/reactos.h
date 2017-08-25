@@ -28,6 +28,7 @@
 #define _REACTOS_PCH_
 
 /* C Headers */
+#include <stdlib.h>
 #include <stdarg.h>
 #include <tchar.h>
 
@@ -130,6 +131,17 @@ typedef struct _IMGINFO
     INT cySource;
 } IMGINFO, *PIMGINFO;
 
+
+
+/*
+ * Attempts to convert a pure NT file path into a corresponding Win32 path.
+ * Adapted from GetInstallSourceWin32() in dll/win32/syssetup/wizard.c
+ */
+BOOL
+ConvertNtPathToWin32Path(
+    OUT PWSTR pwszPath,
+    IN DWORD cchPathMax,
+    IN PCWSTR pwszNTPath);
 
 
 /* drivepage.c */
