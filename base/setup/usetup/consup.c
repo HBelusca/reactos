@@ -109,16 +109,14 @@ CONSOLE_ConOutPuts(
 }
 
 VOID
-CONSOLE_ConOutPrintf(
-    IN LPCSTR szFormat, ...)
+CONSOLE_ConOutPrintfV(
+    IN LPCSTR szFormat,
+    IN va_list args)
 {
     CHAR szOut[256];
     DWORD dwWritten;
-    va_list arg_ptr;
 
-    va_start(arg_ptr, szFormat);
-    vsprintf(szOut, szFormat, arg_ptr);
-    va_end(arg_ptr);
+    vsprintf(szOut, szFormat, args);
 
     WriteConsole(
         StdOutput,
@@ -126,6 +124,19 @@ CONSOLE_ConOutPrintf(
         (ULONG)strlen(szOut),
         &dwWritten,
         NULL);
+}
+
+VOID
+__cdecl
+CONSOLE_ConOutPrintf(
+    IN LPCSTR szFormat,
+    ...)
+{
+    va_list arg_ptr;
+
+    va_start(arg_ptr, szFormat);
+    CONSOLE_ConOutPrintfV(szFormat, arg_ptr);
+    va_end(arg_ptr);
 }
 
 BOOL
@@ -377,56 +388,16 @@ CONSOLE_SetUnderlinedTextXY(
 }
 
 VOID
-CONSOLE_SetStatusText(
-    IN LPCSTR fmt, ...)
-{
-    CHAR Buffer[128];
-    va_list ap;
-    COORD coPos;
-    DWORD Written;
-
-    va_start(ap, fmt);
-    vsprintf(Buffer, fmt, ap);
-    va_end(ap);
-
-    coPos.X = 0;
-    coPos.Y = yScreen - 1;
-
-    FillConsoleOutputAttribute(
-        StdOutput,
-        BACKGROUND_WHITE,
-        xScreen,
-        coPos,
-        &Written);
-
-    FillConsoleOutputCharacterA(
-        StdOutput,
-        ' ',
-        xScreen,
-        coPos,
-        &Written);
-
-    WriteConsoleOutputCharacterA(
-        StdOutput,
-        Buffer,
-        (ULONG)strlen(Buffer),
-        coPos,
-        &Written);
-}
-
-VOID
-CONSOLE_SetStatusTextX(
+CONSOLE_SetStatusTextXV(
     IN SHORT x,
-    IN LPCSTR fmt, ...)
+    IN LPCSTR fmt,
+    IN va_list args)
 {
-    CHAR Buffer[128];
-    va_list ap;
     COORD coPos;
     DWORD Written;
+    CHAR Buffer[128];
 
-    va_start(ap, fmt);
-    vsprintf(Buffer, fmt, ap);
-    va_end(ap);
+    vsprintf(Buffer, fmt, args);
 
     coPos.X = 0;
     coPos.Y = yScreen - 1;
@@ -453,6 +424,41 @@ CONSOLE_SetStatusTextX(
         (ULONG)strlen(Buffer),
         coPos,
         &Written);
+}
+
+VOID
+__cdecl
+CONSOLE_SetStatusTextX(
+    IN SHORT x,
+    IN LPCSTR fmt,
+    ...)
+{
+    va_list ap;
+
+    va_start(ap, fmt);
+    CONSOLE_SetStatusTextXV(x, fmt, ap);
+    va_end(ap);
+}
+
+VOID
+CONSOLE_SetStatusTextV(
+    IN LPCSTR fmt,
+    IN va_list args)
+{
+    CONSOLE_SetStatusTextXV(0, fmt, args);
+}
+
+VOID
+__cdecl
+CONSOLE_SetStatusText(
+    IN LPCSTR fmt,
+    ...)
+{
+    va_list ap;
+
+    va_start(ap, fmt);
+    CONSOLE_SetStatusTextV(fmt, ap);
+    va_end(ap);
 }
 
 static
@@ -475,6 +481,7 @@ CONSOLE_ClearStatusTextX(IN SHORT x,
 
 
 VOID
+__cdecl
 CONSOLE_SetStatusTextAutoFitX(
     IN SHORT x,
     IN LPCSTR fmt, ...)
@@ -560,6 +567,7 @@ CONSOLE_SetHighlightedTextXY(
 }
 
 VOID
+__cdecl
 CONSOLE_PrintTextXY(
     IN SHORT x,
     IN SHORT y,
@@ -586,6 +594,7 @@ CONSOLE_PrintTextXY(
 }
 
 VOID
+__cdecl
 CONSOLE_PrintTextXYN(
     IN SHORT x,
     IN SHORT y,
