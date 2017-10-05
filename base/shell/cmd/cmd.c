@@ -690,8 +690,8 @@ ExecutePipeline(PARSED_COMMAND *Cmd)
 {
 #ifdef FEATURE_REDIRECTION
     HANDLE hInput = NULL;
-    HANDLE hOldConIn = GetStdHandle(STD_INPUT_HANDLE);
-    HANDLE hOldConOut = GetStdHandle(STD_OUTPUT_HANDLE);
+    HANDLE hOldConIn  = ConStreamGetOSHandle(StdIn);
+    HANDLE hOldConOut = ConStreamGetOSHandle(StdOut);
     HANDLE hProcess[MAXIMUM_WAIT_OBJECTS];
     INT nProcesses = 0;
     DWORD dwExitCode;
@@ -767,7 +767,7 @@ failed:
         TerminateProcess(hProcess[nProcesses], 0);
         CloseHandle(hProcess[nProcesses]);
     }
-    SetStdHandle(STD_INPUT_HANDLE, hOldConIn);
+    SetStdHandle(STD_INPUT_HANDLE , hOldConIn);
     SetStdHandle(STD_OUTPUT_HANDLE, hOldConOut);
 #endif
 
@@ -1600,9 +1600,12 @@ BreakHandler(IN DWORD dwCtrlType)
     rec.Event.KeyEvent.bKeyDown = TRUE;
     rec.Event.KeyEvent.wRepeatCount = 1;
     rec.Event.KeyEvent.wVirtualKeyCode = _T('C');
-    rec.Event.KeyEvent.wVirtualScanCode = _T('C') - 35;
-    rec.Event.KeyEvent.uChar.AsciiChar = _T('C');
+    rec.Event.KeyEvent.wVirtualScanCode = _T('C') - 35; // MapVirtualKeyW(_T('C'), MAPVK_VK_TO_VSC);
+#ifdef _UNICODE
     rec.Event.KeyEvent.uChar.UnicodeChar = _T('C');
+#else
+    rec.Event.KeyEvent.uChar.AsciiChar = _T('C');
+#endif
     rec.Event.KeyEvent.dwControlKeyState = RIGHT_CTRL_PRESSED;
 
     WriteConsoleInput(ConStreamGetOSHandle(StdIn),
@@ -1650,9 +1653,8 @@ ShowCommands(VOID)
 #ifdef FEATURE_HISTORY
     ConOutResPuts(STRING_CMD_HELP4);
 #endif
-#ifdef FEATURE_UNIX_FILENAME_COMPLETION
-    ConOutResPuts(STRING_CMD_HELP5);
-#endif
+    if (bUseBashCompletion)
+        ConOutResPuts(STRING_CMD_HELP5);
 #ifdef FEATURE_DIRECTORY_STACK
     ConOutResPuts(STRING_CMD_HELP6);
 #endif
@@ -1809,6 +1811,23 @@ LoadRegistrySettings(HKEY hKeyRoot)
         PathCompletionChar = AutoCompletionChar;
     else if (AutoCompletionChar >= 0x20 && PathCompletionChar < 0x20)
         AutoCompletionChar = PathCompletionChar;
+
+    len = sizeof(Buffer);
+    lRet = RegQueryValueEx(hKey,
+                           _T("UseBashCompletion"),
+                           NULL,
+                           &dwType,
+                           (LPBYTE)&Buffer,
+                           &len);
+    if (lRet == ERROR_SUCCESS)
+    {
+        /* Overwrite the default setting */
+        if (dwType == REG_DWORD)
+            bUseBashCompletion = !!*(PDWORD)Buffer;
+        else if (dwType == REG_SZ)
+            bUseBashCompletion = (_ttol((PTSTR)Buffer) == 1);
+    }
+    // else, use the default setting set globally.
 
     RegCloseKey(hKey);
 }
@@ -2153,6 +2172,7 @@ int _tmain(int argc, const TCHAR *argv[])
 
     /* Initialize the Console Standard Streams */
     ConStreamInit(StdIn , GetStdHandle(STD_INPUT_HANDLE) , /*OutputStreamMode*/ AnsiText, InputCodePage);
+    // The following two are set to UTF8Text by default
     ConStreamInit(StdOut, GetStdHandle(STD_OUTPUT_HANDLE), OutputStreamMode, OutputCodePage);
     ConStreamInit(StdErr, GetStdHandle(STD_ERROR_HANDLE) , OutputStreamMode, OutputCodePage);
 
