@@ -40,34 +40,40 @@ GetCharacterTimeout (LPTCH ch, DWORD dwMilliseconds)
 //  be set to INFINITE, so the function works like
 //  stdio.h's getchar()
 
+    DWORD Ret;
+
     HANDLE hInput;
     DWORD  dwRead;
+    INPUT_RECORD ir;
 
-    INPUT_RECORD lpBuffer;
+    hInput = GetStdHandle(STD_INPUT_HANDLE);
 
-    hInput = GetStdHandle (STD_INPUT_HANDLE);
-
-    //if the timeout expired return GC_TIMEOUT
-    if (WaitForSingleObject (hInput, dwMilliseconds) == WAIT_TIMEOUT)
+    /* If the timeout expired return GC_TIMEOUT */
+    Ret = WaitForSingleObject(hInput, dwMilliseconds);
+    if (Ret == WAIT_TIMEOUT)
         return GC_TIMEOUT;
 
-    //otherwise get the event
-    ReadConsoleInput (hInput, &lpBuffer, 1, &dwRead);
+    /* Otherwise get the event */
+#if 0
+    ReadConsoleInput(hInput, &ir, 1, &dwRead);
 
-    //if the event is a key pressed
-    if ((lpBuffer.EventType == KEY_EVENT) &&
-        (lpBuffer.Event.KeyEvent.bKeyDown != FALSE))
-    {
-        //read the key
-#ifdef _UNICODE
-        *ch = lpBuffer.Event.KeyEvent.uChar.UnicodeChar;
+    /* If the event is a key pressed */
+    if ((ir.EventType == KEY_EVENT) &&
+        (ir.Event.KeyEvent.bKeyDown == TRUE))
 #else
-        *ch = lpBuffer.Event.KeyEvent.uChar.AsciiChar;
+    ConInKey(&ir.Event.KeyEvent);
+#endif
+    {
+        /* Read the key */
+#ifdef _UNICODE
+        *ch = ir.Event.KeyEvent.uChar.UnicodeChar;
+#else
+        *ch = ir.Event.KeyEvent.uChar.AsciiChar;
 #endif
         return GC_KEYREAD;
     }
 
-    //else return no key
+    /* Else return no key */
     return GC_NOKEY;
 }
 
@@ -109,7 +115,7 @@ CommandChoice (LPTSTR param)
     BOOL   bTimeout = FALSE;
     INT    nTimeout = 0;
     TCHAR  cDefault = _T('\0');
-    INPUT_RECORD ir;
+    KEY_EVENT_RECORD KeyEvent;
     LPTSTR p, np;
     LPTSTR *arg;
     INT    argc;
@@ -234,22 +240,21 @@ CommandChoice (LPTSTR param)
     {
         while (TRUE)
         {
-            ConInKey (&ir);
+            ConInKey(&KeyEvent);
 
-            val = IsKeyInString (lpOptions,
+            val = IsKeyInString(lpOptions,
 #ifdef _UNICODE
-                                 ir.Event.KeyEvent.uChar.UnicodeChar,
+                                KeyEvent.uChar.UnicodeChar,
 #else
-                                 ir.Event.KeyEvent.uChar.AsciiChar,
+                                KeyEvent.uChar.AsciiChar,
 #endif
-                                 bCaseSensitive);
+                                bCaseSensitive);
 
             if (val >= 0)
             {
-                ConOutPrintf (_T("%c\n"), lpOptions[val]);
+                ConOutPrintf(_T("%c\n"), lpOptions[val]);
 
                 nErrorLevel = val + 1;
-
                 break;
             }
 
