@@ -42,7 +42,9 @@ DEFINE_GUID(GUID_BUS_TYPE_RAMDISK, 0x9D6D66A6, 0x0B0C, 0x4563, 0x90, 0x77, 0xA0,
 // IoControlCode values for ramdisk devices.
 //
 #define IOCTL_RAMDISK_BASE                  FILE_DEVICE_VIRTUAL_DISK
-#define FSCTL_CREATE_RAM_DISK               CTL_CODE(FILE_DEVICE_VIRTUAL_DISK, 0x0000, METHOD_BUFFERED, FILE_ANY_ACCESS)
+#define FSCTL_CREATE_RAM_DISK               CTL_CODE(FILE_DEVICE_VIRTUAL_DISK, 0x0000, METHOD_BUFFERED, FILE_ANY_ACCESS) /* FSCTL_DISK_CREATE_RAM_DISK */
+#define FSCTL_MARK_RAM_DISK_FOR_DELETION    CTL_CODE(FILE_DEVICE_VIRTUAL_DISK, 0x0001, METHOD_BUFFERED, FILE_ANY_ACCESS)
+#define FSCTL_QUERY_RAM_DISK                CTL_CODE(FILE_DEVICE_VIRTUAL_DISK, 0x0002, METHOD_BUFFERED, FILE_ANY_ACCESS)
 
 //
 // Disk Types
@@ -50,7 +52,9 @@ DEFINE_GUID(GUID_BUS_TYPE_RAMDISK, 0x9D6D66A6, 0x0B0C, 0x4563, 0x90, 0x77, 0xA0,
 #define RAMDISK_REGISTRY_DISK               1 // Loaded from the registry
 #define RAMDISK_MEMORY_MAPPED_DISK          2 // Loaded from a file and mapped in memory
 #define RAMDISK_BOOT_DISK                   3 // Used as a boot device "ramdisk(0)"
-#define RAMDISK_WIM_DISK                    4 // Used as an installation device
+#define RAMDISK_WIM_DISK                    4 // Used as an installation device   // NOPE!! It's RAMDISK_TYPE_VIRTUAL_FLOPPY . The WIM stuff is interepreted by a filter.
+
+#define RAMDISK_IS_FILE_BACKED(DiskType)    ((DiskType) <= 2)
 
 //
 // Options when creating a ramdisk
@@ -64,6 +68,10 @@ typedef struct _RAMDISK_CREATE_OPTIONS
     ULONG Hidden:1;
     ULONG ExportAsCd:1;
 } RAMDISK_CREATE_OPTIONS;
+
+// PHYSICAL_ADDRESS ImageBase;
+// LARGE_INTEGER ImageSize;
+// ULONG ImageOffset;
 
 //
 // This structure is passed in for a FSCTL_CREATE_RAM_DISK call
@@ -83,15 +91,36 @@ typedef struct _RAMDISK_CREATE_INPUT
             ULONG ViewCount;
             SIZE_T ViewLength;
             WCHAR FileName[ANYSIZE_ARRAY];
-        };
+        };                  // Used when DiskType == 1 or 2
         struct
         {
             ULONG_PTR BasePage;
             WCHAR DriveLetter;
-        };
-        PVOID BaseAddress;
+        };                  // Used when DiskType == 3
+        PVOID BaseAddress;  // Used when DiskType == 4
     };
 } RAMDISK_CREATE_INPUT, *PRAMDISK_CREATE_INPUT;
+
+typedef struct _RAMDISK_INFO_OUTPUT
+{
+    ULONG Length;
+    WCHAR DriveName[8];
+    ULONG DiskType;
+    int DiskOptions;
+    int field_1C;
+    LARGE_INTEGER DiskLength;
+    LONG DiskOffset;
+    int field_2C;
+    int field_30;
+    int field_34;
+    int field_38;
+} RAMDISK_INFO_OUTPUT, *PRAMDISK_INFO_OUTPUT;
+
+typedef struct _RAMDISK_DELETE_INPUT
+{
+    ULONG Length;
+    WCHAR DriveName[8];
+} RAMDISK_DELETE_INPUT, *PRAMDISK_DELETE_INPUT;
 
 #ifdef __cplusplus
 }
