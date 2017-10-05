@@ -12,3 +12,6 @@ add_subdirectory(screensavers)
 add_subdirectory(sysutils)
 add_subdirectory(vcdcontroltool)
 add_subdirectory(winfile)
+
+
+add_subdirectory(vhddump)
