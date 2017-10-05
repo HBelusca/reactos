@@ -34,152 +34,6 @@
 
 #include "precomp.h"
 
-/*
- * get a character out-of-band and honor Ctrl-Break characters
- */
-TCHAR
-cgetchar (VOID)
-{
-    HANDLE hInput = GetStdHandle (STD_INPUT_HANDLE);
-    INPUT_RECORD irBuffer;
-    DWORD  dwRead;
-
-    do
-    {
-        ReadConsoleInput (hInput, &irBuffer, 1, &dwRead);
-        if ((irBuffer.EventType == KEY_EVENT) &&
-            (irBuffer.Event.KeyEvent.bKeyDown != FALSE))
-        {
-            if (irBuffer.Event.KeyEvent.dwControlKeyState &
-                 (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED))
-            {
-                if (irBuffer.Event.KeyEvent.wVirtualKeyCode == 'C')
-                {
-                    bCtrlBreak = TRUE;
-                    break;
-                }
-            }
-            else if ((irBuffer.Event.KeyEvent.wVirtualKeyCode == VK_SHIFT) ||
-                     (irBuffer.Event.KeyEvent.wVirtualKeyCode == VK_MENU) ||
-                     (irBuffer.Event.KeyEvent.wVirtualKeyCode == VK_CONTROL))
-            {
-                // Nothing to do
-            }
-            else
-            {
-                break;
-            }
-        }
-    }
-    while (TRUE);
-
-#ifndef _UNICODE
-    return irBuffer.Event.KeyEvent.uChar.AsciiChar;
-#else
-    return irBuffer.Event.KeyEvent.uChar.UnicodeChar;
-#endif /* _UNICODE */
-}
-
-/*
- * Takes a path in and returns it with the correct case of the letters
- */
-VOID GetPathCase( TCHAR * Path, TCHAR * OutPath)
-{
-    UINT i = 0;
-    TCHAR TempPath[MAX_PATH];
-    WIN32_FIND_DATA FindFileData;
-    HANDLE hFind;
-    _tcscpy(TempPath, _T(""));
-    _tcscpy(OutPath, _T(""));
-
-    for(i = 0; i < _tcslen(Path); i++)
-    {
-        if (Path[i] != _T('\\'))
-        {
-            _tcsncat(TempPath, &Path[i], 1);
-            if (i != _tcslen(Path) - 1)
-                continue;
-        }
-        /* Handle the base part of the path different.
-           Because if you put it into findfirstfile, it will
-           return your current folder */
-        if (_tcslen(TempPath) == 2 && TempPath[1] == _T(':'))
-        {
-            _tcscat(OutPath, TempPath);
-            _tcscat(OutPath, _T("\\"));
-            _tcscat(TempPath, _T("\\"));
-        }
-        else
-        {
-            hFind = FindFirstFile(TempPath,&FindFileData);
-            if (hFind == INVALID_HANDLE_VALUE)
-            {
-                _tcscpy(OutPath, Path);
-                return;
-            }
-            _tcscat(TempPath, _T("\\"));
-            _tcscat(OutPath, FindFileData.cFileName);
-            _tcscat(OutPath, _T("\\"));
-            FindClose(hFind);
-        }
-    }
-}
-
-/*
- * Check if Ctrl-Break was pressed during the last calls
- */
-
-BOOL CheckCtrlBreak(INT mode)
-{
-    static BOOL bLeaveAll = FALSE; /* leave all batch files */
-    TCHAR options[4]; /* Yes, No, All */
-    TCHAR c;
-
-    switch (mode)
-    {
-        case BREAK_OUTOFBATCH:
-            bLeaveAll = FALSE;
-            return FALSE;
-
-        case BREAK_BATCHFILE:
-        {
-            if (bLeaveAll)
-                return TRUE;
-
-            if (!bCtrlBreak)
-                return FALSE;
-
-            LoadString(CMD_ModuleHandle, STRING_COPY_OPTION, options, ARRAYSIZE(options));
-
-            ConOutResPuts(STRING_CANCEL_BATCH_FILE);
-            do
-            {
-                c = _totupper(cgetchar());
-            } while (!(_tcschr(options, c) || c == _T('\3')) || !c);
-
-            ConOutChar(_T('\n'));
-
-            if (c == options[1])
-            {
-                bCtrlBreak = FALSE; /* ignore */
-                return FALSE;
-            }
-
-            /* leave all batch files */
-            bLeaveAll = ((c == options[2]) || (c == _T('\3')));
-            break;
-        }
-
-        case BREAK_INPUT:
-            if (!bCtrlBreak)
-                return FALSE;
-            break;
-    }
-
-    /* state processed */
-    return TRUE;
-}
-
 /* add new entry for new argument */
 BOOL add_entry (LPINT ac, LPTSTR **arg, LPCTSTR entry)
 {
@@ -475,11 +329,10 @@ StripQuotes(TCHAR *in)
     *out = _T('\0');
 }
 
-
 /*
  * Checks if a path is valid (accessible)
  */
-BOOL IsValidPathName (LPCTSTR pszPath)
+BOOL IsValidPathName(LPCTSTR pszPath)
 {
     TCHAR szOldPath[MAX_PATH];
     BOOL  bResult;
@@ -492,63 +345,206 @@ BOOL IsValidPathName (LPCTSTR pszPath)
     return bResult;
 }
 
-
 /*
  * Checks if a file exists (accessible)
  */
-BOOL IsExistingFile (LPCTSTR pszPath)
+BOOL IsExistingFile(LPCTSTR pszPath)
 {
     DWORD attr = GetFileAttributes (pszPath);
     return (attr != 0xFFFFFFFF && (! (attr & FILE_ATTRIBUTE_DIRECTORY)) );
 }
 
-
-BOOL IsExistingDirectory (LPCTSTR pszPath)
+BOOL IsExistingDirectory(LPCTSTR pszPath)
 {
     DWORD attr = GetFileAttributes (pszPath);
     return (attr != 0xFFFFFFFF && (attr & FILE_ATTRIBUTE_DIRECTORY) );
 }
 
+/*
+ * Takes a path in and returns it with the correct case of the letters.
+ */
+VOID GetPathCase(TCHAR * Path, TCHAR * OutPath)
+{
+    UINT i = 0;
+    TCHAR TempPath[MAX_PATH];
+    WIN32_FIND_DATA FindFileData;
+    HANDLE hFind;
+    _tcscpy(TempPath, _T(""));
+    _tcscpy(OutPath, _T(""));
+
+    for(i = 0; i < _tcslen(Path); i++)
+    {
+        if (Path[i] != _T('\\'))
+        {
+            _tcsncat(TempPath, &Path[i], 1);
+            if (i != _tcslen(Path) - 1)
+                continue;
+        }
+        /* Handle the base part of the path different.
+           Because if you put it into findfirstfile, it will
+           return your current folder */
+        if (_tcslen(TempPath) == 2 && TempPath[1] == _T(':'))
+        {
+            _tcscat(OutPath, TempPath);
+            _tcscat(OutPath, _T("\\"));
+            _tcscat(TempPath, _T("\\"));
+        }
+        else
+        {
+            hFind = FindFirstFile(TempPath,&FindFileData);
+            if (hFind == INVALID_HANDLE_VALUE)
+            {
+                _tcscpy(OutPath, Path);
+                return;
+            }
+            _tcscat(TempPath, _T("\\"));
+            _tcscat(OutPath, FindFileData.cFileName);
+            _tcscat(OutPath, _T("\\"));
+            FindClose(hFind);
+        }
+    }
+}
+
+
+
+
+/*
+ * get a character out-of-band and honor Ctrl-Break characters
+ */
+TCHAR
+cgetchar(VOID)
+{
+    HANDLE hInput = GetStdHandle(STD_INPUT_HANDLE);
+    KEY_EVENT_RECORD KeyEvent;
+
+    // NOTE: This stuff is also checked inside ConInKey...
+    if (hInput == INVALID_HANDLE_VALUE)
+    {
+        WARN("Invalid input handle!!!\n");
+        return _T('\0'); // No need to make infinite loops!
+    }
+
+    do
+    {
+        ConInKey(&KeyEvent);
+
+        if (KeyEvent.dwControlKeyState &
+             (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED))
+        {
+            if (KeyEvent.wVirtualKeyCode == 'C')
+            {
+                bCtrlBreak = TRUE;
+                break;
+            }
+        }
+        else if ((KeyEvent.wVirtualKeyCode == VK_SHIFT) ||
+                 (KeyEvent.wVirtualKeyCode == VK_MENU) ||
+                 (KeyEvent.wVirtualKeyCode == VK_CONTROL))
+        {
+            // Nothing to do
+        }
+        else
+        {
+            break;
+        }
+    }
+    while (TRUE);
+
+#ifndef _UNICODE
+    return KeyEvent.uChar.AsciiChar;
+#else
+    return KeyEvent.uChar.UnicodeChar;
+#endif /* _UNICODE */
+}
+
+/*
+ * Check if Ctrl-Break was pressed during the last calls.
+ */
+BOOL CheckCtrlBreak(INT mode)
+{
+    static BOOL bLeaveAll = FALSE; /* Leave all batch files */
+    TCHAR options[4]; /* Yes, No, All */
+    TCHAR c;
+
+    switch (mode)
+    {
+        case BREAK_OUTOFBATCH:
+            bLeaveAll = FALSE;
+            return FALSE;
+
+        case BREAK_BATCHFILE:
+        {
+            if (bLeaveAll)
+                return TRUE;
+
+            if (!bCtrlBreak)
+                return FALSE;
+
+            LoadString(CMD_ModuleHandle, STRING_COPY_OPTION, options, ARRAYSIZE(options));
+
+            ConOutResPuts(STRING_CANCEL_BATCH_FILE);
+            do
+            {
+                c = _totupper(cgetchar());
+            } while (!(_tcschr(options, c) || c == _T('\3')) || !c);
+
+            ConOutChar(_T('\n'));
+
+            if (c == options[1])
+            {
+                bCtrlBreak = FALSE; /* Ignore */
+                return FALSE;
+            }
+
+            /* Leave all batch files */
+            bLeaveAll = ((c == options[2]) || (c == _T('\3')));
+            break;
+        }
+
+        case BREAK_INPUT:
+            if (!bCtrlBreak)
+                return FALSE;
+            break;
+    }
+
+    /* State processed */
+    return TRUE;
+}
 
 // See r874
 BOOL __stdcall PagePrompt(PCON_PAGER Pager, DWORD Done, DWORD Total)
 {
-    SHORT iScreenWidth, iCursorY;
-    INPUT_RECORD ir;
+    KEY_EVENT_RECORD KeyEvent;
 
-    ConOutResPuts(STRING_MISC_HELP1);
+    ConResPuts(Pager->Screen->Stream, STRING_MISC_HELP1);
 
     RemoveBreakHandler();
     ConInDisable();
 
     do
     {
-        ConInKey(&ir);
+        ConInKey(&KeyEvent);
     }
-    while ((ir.Event.KeyEvent.wVirtualKeyCode == VK_SHIFT) ||
-           (ir.Event.KeyEvent.wVirtualKeyCode == VK_MENU) ||
-           (ir.Event.KeyEvent.wVirtualKeyCode == VK_CONTROL));
+    while ((KeyEvent.wVirtualKeyCode == VK_SHIFT) ||
+           (KeyEvent.wVirtualKeyCode == VK_MENU) ||
+           (KeyEvent.wVirtualKeyCode == VK_CONTROL));
 
     AddBreakHandler();
     ConInEnable();
 
     /*
-     * Get the screen width, erase the full line where the cursor is,
-     * and move the cursor back to the beginning of the line.
+     * Erase the full line where the cursor is, and move
+     * the cursor back to the beginning of the line.
      */
-    GetScreenSize(&iScreenWidth, NULL);
-    iCursorY = GetCursorY();
-    SetCursorXY(0, iCursorY);
-    while (iScreenWidth-- > 0) // Or call FillConsoleOutputCharacter ?
-        ConOutChar(_T(' '));
-    SetCursorXY(0, iCursorY);
+    ConClearLine(Pager->Screen->Stream);
 
-    if ((ir.Event.KeyEvent.wVirtualKeyCode == VK_ESCAPE) ||
-        ((ir.Event.KeyEvent.wVirtualKeyCode == _T('C')) &&
-         (ir.Event.KeyEvent.dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED))))
+    if ((KeyEvent.wVirtualKeyCode == VK_ESCAPE) ||
+        ((KeyEvent.wVirtualKeyCode == _T('C')) &&
+         (KeyEvent.dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED))))
     {
         /* We break, output a newline */
-        ConOutChar(_T('\n'));
+        TCHAR ch = L'\n';
+        ConStreamWrite(Pager->Screen->Stream, &ch, 1);
 
         bCtrlBreak = TRUE;
         return FALSE;
@@ -557,32 +553,31 @@ BOOL __stdcall PagePrompt(PCON_PAGER Pager, DWORD Done, DWORD Total)
     return TRUE;
 }
 
-
-INT FilePromptYN (UINT resID)
+// See r874
+INT FilePromptYN(UINT resID)
 {
-    TCHAR szMsg[RC_STRING_MAX_SIZE];
+    TCHAR szKeys[3]; // LPTSTR /* Yes, No */
 //  TCHAR cKey = 0;
-//  LPTSTR szKeys = _T("yna");
 
     TCHAR szIn[10];
     LPTSTR p;
 
     if (resID != 0)
-        ConOutResPrintf (resID);
+        ConOutResPrintf(resID);
 
     /* preliminary fix */
-    ConInString(szIn, 10);
+    ConInString(szIn, ARRAYSIZE(szIn));
     ConOutChar(_T('\n'));
 
-    _tcsupr (szIn);
-    for (p = szIn; _istspace (*p); p++)
+    _tcsupr(szIn);
+    for (p = szIn; _istspace(*p); p++)
         ;
 
-    LoadString(CMD_ModuleHandle, STRING_CHOICE_OPTION, szMsg, ARRAYSIZE(szMsg));
+    LoadString(CMD_ModuleHandle, STRING_CHOICE_OPTION, szKeys, ARRAYSIZE(szKeys));
 
-    if (_tcsncmp(p, &szMsg[0], 1) == 0)
+    if (_tcsncmp(p, &szKeys[0], 1) == 0)
         return PROMPT_YES;
-    else if (_tcsncmp(p, &szMsg[1], 1) == 0)
+    else if (_tcsncmp(p, &szKeys[1], 1) == 0)
         return PROMPT_NO;
 #if 0
     else if (*p == _T('\03'))
@@ -593,62 +588,63 @@ INT FilePromptYN (UINT resID)
 
     /* unfinished solution */
 #if 0
+KEY_EVENT_RECORD KeyEvent;
+
     RemoveBreakHandler();
     ConInDisable();
 
     do
     {
-        ConInKey (&ir);
-        cKey = _totlower (ir.Event.KeyEvent.uChar.AsciiChar);
-        if (_tcschr (szKeys, cKey[0]) == NULL)
+        ConInKey(&KeyEvent);
+        cKey = _totlower(KeyEvent.uChar.AsciiChar);
+        if (_tcschr(szKeys, cKey[0]) == NULL)
             cKey = 0;
-
-
     }
-    while ((ir.Event.KeyEvent.wVirtualKeyCode == VK_SHIFT) ||
-           (ir.Event.KeyEvent.wVirtualKeyCode == VK_MENU) ||
-           (ir.Event.KeyEvent.wVirtualKeyCode == VK_CONTROL));
+    while ((KeyEvent.wVirtualKeyCode == VK_SHIFT) ||
+           (KeyEvent.wVirtualKeyCode == VK_MENU) ||
+           (KeyEvent.wVirtualKeyCode == VK_CONTROL));
 
     AddBreakHandler();
     ConInEnable();
 
-    if ((ir.Event.KeyEvent.wVirtualKeyCode == VK_ESCAPE) ||
-        ((ir.Event.KeyEvent.wVirtualKeyCode == 'C') &&
-         (ir.Event.KeyEvent.dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED))))
+    if ((KeyEvent.wVirtualKeyCode == VK_ESCAPE) ||
+        ((KeyEvent.wVirtualKeyCode == 'C') &&
+         (KeyEvent.dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED))))
         return PROMPT_BREAK;
+
+    // FIXME: Set bCtrlBreak = TRUE; ??
 
     return PROMPT_YES;
 #endif
 }
 
-
-INT FilePromptYNA (UINT resID)
+// See r874
+INT FilePromptYNA(UINT resID)
 {
-    TCHAR szMsg[RC_STRING_MAX_SIZE];
+    TCHAR szKeys[4]; // LPTSTR /* Yes, No, All */
 //  TCHAR cKey = 0;
-//  LPTSTR szKeys = _T("yna");
 
     TCHAR szIn[10];
     LPTSTR p;
 
     if (resID != 0)
-        ConOutResPrintf (resID);
+        ConOutResPrintf(resID);
 
     /* preliminary fix */
-    ConInString(szIn, 10);
+    ConInString(szIn, ARRAYSIZE(szIn));
     ConOutChar(_T('\n'));
 
-    _tcsupr (szIn);
-    for (p = szIn; _istspace (*p); p++)
+    _tcsupr(szIn);
+    for (p = szIn; _istspace(*p); p++)
         ;
 
-    LoadString( CMD_ModuleHandle, STRING_COPY_OPTION, szMsg, ARRAYSIZE(szMsg));
+    LoadString(CMD_ModuleHandle, STRING_COPY_OPTION, szKeys, ARRAYSIZE(szKeys));
 
-    if (_tcsncmp(p, &szMsg[0], 1) == 0)
+    if (_tcsncmp(p, &szKeys[0], 1) == 0)
         return PROMPT_YES;
-    else if (_tcsncmp(p, &szMsg[1], 1) == 0)
+    else if (_tcsncmp(p, &szKeys[1], 1) == 0)
         return PROMPT_NO;
-    else if (_tcsncmp(p, &szMsg[2], 1) == 0)
+    else if (_tcsncmp(p, &szKeys[2], 1) == 0)
         return PROMPT_ALL;
 #if 0
     else if (*p == _T('\03'))
@@ -659,26 +655,32 @@ INT FilePromptYNA (UINT resID)
 
     /* unfinished solution */
 #if 0
+KEY_EVENT_RECORD KeyEvent;
+
+    LoadString(CMD_ModuleHandle, STRING_COPY_OPTION, szKeys, ARRAYSIZE(szKeys));
+    // FIXME: In case of failure, return PROMPT_NO ??
+
     RemoveBreakHandler();
     ConInDisable();
 
     do
     {
-        ConInKey (&ir);
-        cKey = _totlower (ir.Event.KeyEvent.uChar.AsciiChar);
-        if (_tcschr (szKeys, cKey[0]) == NULL)
+        ConInKey(&KeyEvent);
+        // cKey = _totlower(KeyEvent.uChar.AsciiChar);
+        cKey = _totupper(KeyEvent.uChar.AsciiChar);
+        if (_tcschr(szKeys, cKey) == NULL)
             cKey = 0;
     }
-    while ((ir.Event.KeyEvent.wVirtualKeyCode == VK_SHIFT) ||
-           (ir.Event.KeyEvent.wVirtualKeyCode == VK_MENU) ||
-           (ir.Event.KeyEvent.wVirtualKeyCode == VK_CONTROL));
+    while ((KeyEvent.wVirtualKeyCode == VK_SHIFT) ||
+           (KeyEvent.wVirtualKeyCode == VK_MENU) ||
+           (KeyEvent.wVirtualKeyCode == VK_CONTROL));
 
     AddBreakHandler();
     ConInEnable();
 
-    if ((ir.Event.KeyEvent.wVirtualKeyCode == VK_ESCAPE) ||
-        ((ir.Event.KeyEvent.wVirtualKeyCode == _T('C')) &&
-         (ir.Event.KeyEvent.dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED))))
+    if ((KeyEvent.wVirtualKeyCode == VK_ESCAPE) ||
+        ((KeyEvent.wVirtualKeyCode == _T('C')) &&
+         (KeyEvent.dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED))))
         return PROMPT_BREAK;
 
     return PROMPT_YES;
