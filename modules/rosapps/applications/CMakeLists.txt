@@ -14,4 +14,5 @@ add_subdirectory(vcdcontroltool)
 add_subdirectory(winfile)
 
 
+add_subdirectory(ramdiskctl)
 add_subdirectory(vhddump)
