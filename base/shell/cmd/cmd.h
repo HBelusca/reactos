@@ -105,14 +105,7 @@ extern HANDLE CMD_ModuleHandle;
 
 
 /* Prototypes for CMDINPUT.C */
-BOOL ReadCommand (LPTSTR, INT);
-
-extern TCHAR AutoCompletionChar;
-extern TCHAR PathCompletionChar;
-
-#define IS_COMPLETION_DISABLED(CompletionCtrl)  \
-    ((CompletionCtrl) == 0x00 || (CompletionCtrl) == 0x0D || (CompletionCtrl) >= 0x20)
-
+#include "cmdinput.h"
 
 /* Prototypes for CMDTABLE.C */
 #define CMD_SPECIAL     1
@@ -198,15 +191,8 @@ VOID error_syntax (LPTSTR);
 
 VOID msg_pause (VOID);
 
-/* Prototypes for FILECOMP.C */
-#ifdef FEATURE_UNIX_FILENAME_COMPLETION
-VOID CompleteFilename (LPTSTR, UINT);
-INT  ShowCompletionMatches (LPTSTR, INT);
-#endif
-#ifdef FEATURE_4NT_FILENAME_COMPLETION
-VOID CompleteFilename (LPTSTR, BOOL, LPTSTR, UINT);
-#endif
 
+/* Prototypes for FILECOMP.C */
 
 /* Prototypes for FOR.C */
 #define FOR_DIRS      1 /* /D */
@@ -215,7 +201,6 @@ VOID CompleteFilename (LPTSTR, BOOL, LPTSTR, UINT);
 #define FOR_RECURSIVE 8 /* /R */
 INT cmd_for (LPTSTR);
 INT ExecuteFor(struct _PARSED_COMMAND *Cmd);
-
 
 /* Prototypes for FREE.C */
 INT CommandFree (LPTSTR);
@@ -251,6 +236,7 @@ enum {
     IF_EQU, IF_NEQ, IF_LSS, IF_LEQ, IF_GTR, IF_GEQ
 };
 INT ExecuteIf(struct _PARSED_COMMAND *Cmd);
+
 
 /* Prototypes for INTERNAL.C */
 VOID InitLastPath (VOID);
@@ -308,8 +294,9 @@ VOID   GetPathCase(TCHAR *, TCHAR *);
 #define PROMPT_BREAK 3
 
 BOOL __stdcall PagePrompt(PCON_PAGER Pager, DWORD Done, DWORD Total);
-INT FilePromptYN (UINT);
-INT FilePromptYNA (UINT);
+INT FilePromptYN(UINT);
+INT FilePromptYNA(UINT);
+
 
 /* Prototypes for MOVE.C */
 INT cmd_move (LPTSTR);
