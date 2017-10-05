@@ -13,22 +13,18 @@
 
 #define WIN32_LEAN_AND_MEAN
 
-//#define NT4_INTERNAL_COMMANDS
+/* Define to enable internal commands */
+// #define NT4_INTERNAL_COMMANDS
 
-/* Define to enable the alias command, and aliases.*/
+/* Define to enable the alias command, and aliases */
 #define FEATURE_ALIASES
 
 
 /* Define to enable history */
 #define FEATURE_HISTORY
 
-/*Define to enable history wrap (4nt's style)*/
+/* Define to enable history wrap (4nt's style) */
 #define WRAP_HISTORY
-
-
-/* Define one of these to enable filename completion */
-//#define FEATURE_UNIX_FILENAME_COMPLETION
-#define FEATURE_4NT_FILENAME_COMPLETION
 
 
 /* Define to enable the directory stack */
@@ -38,13 +34,14 @@
 /* Define to activate redirections and piping */
 #define FEATURE_REDIRECTION
 
-
-/* Define one of these to select the used locale. */
-/*  (date and time formats etc.) used in DATE, TIME, */
-/*  DIR, PROMPT etc. */
-/* #define LOCALE_WINDOWS */   /* System locale */
-/* #define LOCALE_GERMAN */    /* German locale */
-/* #define LOCALE_DEFAULT */   /* United States locale */
+/**** FIXME: Completely out of date. Remove as soon as possible ****/
+/** Was used only in locale.c, removed in r14979 **/
+// /* Define one of these to select the used locale. */
+// /*  (date and time formats etc.) used in DATE, TIME, */
+// /*  DIR, PROMPT etc. */
+// /* #define LOCALE_WINDOWS */   /* System locale */
+// /* #define LOCALE_GERMAN */    /* German locale */
+// /* #define LOCALE_DEFAULT */   /* United States locale */
 
 #ifdef NT4_INTERNAL_COMMANDS
 #define INCLUDE_CMD_ACTIVATE
