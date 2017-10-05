@@ -891,13 +891,13 @@ DirPrintNewList(PDIRFINDINFO ptrFiles[],        /* [IN]Files' Info */
         {
             /* Junction */
             iSizeFormat = -14;
-            _tcscpy(szSize, _T("<JUNCTION>"));
+            _tcscpy(szSize, _T("<JUNCTION>")); // FIXME: Localize
         }
         else if (ptrFiles[i]->stFindInfo.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
         {
             /* Directory */
             iSizeFormat = -14;
-            _tcscpy(szSize, _T("<DIR>"));
+            _tcscpy(szSize, _T("<DIR>")); // FIXME: Localize
         }
         else
         {
@@ -1068,7 +1068,7 @@ DirPrintOldList(PDIRFINDINFO ptrFiles[],        /* [IN] Files' Info */
         {
             /* Directory, no size it's a directory */
             iSizeFormat = -17;
-            _tcscpy(szSize, _T("<DIR>"));
+            _tcscpy(szSize, _T("<DIR>")); // FIXME: Localize
         }
         else
         {
