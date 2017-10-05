@@ -24,8 +24,6 @@
  *
  */
 
-
-
 /*
  *  HISTORY.C - command line history. Second version
  *
@@ -61,10 +59,10 @@ VOID History(INT dir, LPTSTR commandline);
 VOID CleanHistory(VOID);
 VOID History_del_current_entry(LPTSTR str);
 
-/*service functions*/
+/* Helper functions */
 static VOID del(LPHIST_ENTRY item);
 static VOID add_at_bottom(LPTSTR string);
-/*VOID add_before_last(LPTSTR string);*/
+// VOID add_before_last(LPTSTR string);
 VOID set_size(INT new_size);
 
 
@@ -75,34 +73,35 @@ INT CommandHistory(LPTSTR param)
     LPHIST_ENTRY h_tmp;
     TCHAR szBuffer[2048];
 
-    tmp=_tcschr(param,_T('/'));
+    tmp = _tcschr(param,_T('/'));
 
     if (tmp)
     {
-        param=tmp;
+        param = tmp;
         switch (_totupper(param[1]))
         {
-            case _T('F'):/*delete history*/
-                CleanHistory();InitHistory();
+            case _T('F'): /* Delete history */
+                CleanHistory(); InitHistory();
                 break;
 
-            case _T('R'):/*read history from standard in*/
-                for(;;)
+            case _T('R'): /* Read history from StdIn */
+                for (;;)
                 {
-                    ConInString(szBuffer,sizeof(szBuffer)/sizeof(TCHAR));
-                    if (*szBuffer!=_T('\0'))
-                        History(0,szBuffer);
+                    ConInString(szBuffer, ARRAYSIZE(szBuffer));
+                    if (*szBuffer != _T('\0'))
+                        History(0, szBuffer);
                     else
                         break;
                 }
                 break;
 
-            case _T('A'):/*add an antry*/
-                History(0,param+2);
+            case _T('A'): /* Add an entry */
+                History(0, param+2);
                 break;
 
-            case _T('S'):/*set history size*/
-                if ((tmp_int=_ttoi(param+2)))
+            case _T('S'): /* Set history size */
+                tmp_int = _ttoi(param+2);
+                if (tmp_int)
                     set_size(tmp_int);
                 break;
 
@@ -113,7 +112,7 @@ INT CommandHistory(LPTSTR param)
     else
     {
         for (h_tmp = Top->prev; h_tmp != Bottom; h_tmp = h_tmp->prev)
-            ConErrPuts(h_tmp->string);
+            ConOutPrintf(_T("%s\n"), h_tmp->string);
     }
     return 0;
 }
@@ -187,7 +186,6 @@ VOID History_del_current_entry(LPTSTR str)
     if (curr_ptr == Top)
         curr_ptr = Top->prev;
 
-
     tmp = curr_ptr;
     curr_ptr = curr_ptr->prev;
     del(tmp);
@@ -208,11 +206,11 @@ VOID del(LPHIST_ENTRY item)
         return;
     }
 
-    /*free string's mem*/
+    /* Free string's memory */
     if (item->string)
         cmd_free(item->string);
 
-    /*set links in prev and next item*/
+    /* Set links in prev and next item */
     item->next->prev=item->prev;
     item->prev->next=item->next;
 
@@ -228,24 +226,21 @@ VOID add_at_bottom(LPTSTR string)
 
     ASSERT(Top && Bottom);
 
-    /*delete first entry if maximum number of entries is reached*/
-    while (size>=max_size)
+    /* Delete first entry if maximum number of entries is reached */
+    while (size >= max_size)
         del(Top->prev);
 
     while (_istspace(*string))
-        string++;
+        ++string;
 
-    if (*string==_T('\0'))
+    if (*string == _T('\0'))
         return;
 
-    /*if new entry is the same than the last do not add it*/
-    if (size)
-    {
-        if (_tcscmp(string,Bottom->next->string)==0)
-            return;
-    }
+    /* If new entry is the same than the last do not add it */
+    if (size && _tcscmp(string, Bottom->next->string) == 0)
+        return;
 
-    /*create new empty Bottom*/
+    /* Create new empty Bottom */
     tmp = cmd_alloc(sizeof(HIST_ENTRY));
     if (!tmp)
     {
@@ -253,7 +248,7 @@ VOID add_at_bottom(LPTSTR string)
         return;
     }
 
-    /*fill old bottom with string, it will become new Bottom->next*/
+    /* Fill old bottom with string, it will become new Bottom->next */
     Bottom->string = cmd_alloc((_tcslen(string)+1)*sizeof(TCHAR));
     if (!Bottom->string)
     {
@@ -261,7 +256,7 @@ VOID add_at_bottom(LPTSTR string)
         cmd_free(tmp);
         return;
     }
-    _tcscpy(Bottom->string,string);
+    _tcscpy(Bottom->string, string);
 
     tmp->next = Bottom;
     tmp->prev = NULL;
@@ -269,10 +264,10 @@ VOID add_at_bottom(LPTSTR string)
 
     Bottom->prev = tmp;
 
-    /*save the new Bottom value*/
+    /* Save the new Bottom value */
     Bottom = tmp;
 
-    /*set new size*/
+    /* Set new size */
     size++;
 }
 
@@ -295,7 +290,7 @@ LPCTSTR PeekHistory(INT dir)
 
     if (dir < 0)
     {
-        /* key up */
+        /* Key up */
         if (entry->next == Top || entry == Top)
         {
 #ifdef WRAP_HISTORY
@@ -308,7 +303,7 @@ LPCTSTR PeekHistory(INT dir)
     }
     else
     {
-        /* key down */
+        /* Key down */
         if (entry->prev == Bottom || entry == Bottom)
         {
 #ifdef WRAP_HISTORY
@@ -327,53 +322,53 @@ VOID History(INT dir, LPTSTR commandline)
 {
     ASSERT(Top && Bottom);
 
-    if (dir==0)
+    if (dir == 0)
     {
         add_at_bottom(commandline);
         curr_ptr = Bottom;
         return;
     }
 
-    if (size==0)
+    if (size == 0)
     {
-        commandline[0]=_T('\0');
+        commandline[0] = _T('\0');
         return;
     }
 
-    if (dir<0)/*key up*/
+    if (dir < 0) /* Key up */
     {
-        if (curr_ptr->next==Top || curr_ptr==Top)
+        if (curr_ptr->next == Top || curr_ptr == Top)
         {
 #ifdef WRAP_HISTORY
             curr_ptr = Bottom;
 #else
             curr_ptr = Top;
-            commandline[0]=_T('\0');
+            commandline[0] = _T('\0');
             return;
 #endif
         }
 
         curr_ptr = curr_ptr->next;
         if (curr_ptr->string)
-            _tcscpy(commandline,curr_ptr->string);
+            _tcscpy(commandline, curr_ptr->string);
     }
 
-    if (dir>0)
+    if (dir > 0) /* Key down */
     {
-        if (curr_ptr->prev==Bottom || curr_ptr==Bottom)
+        if (curr_ptr->prev == Bottom || curr_ptr == Bottom)
         {
 #ifdef WRAP_HISTORY
             curr_ptr = Top;
 #else
             curr_ptr = Bottom;
-            commandline[0]=_T('\0');
+            commandline[0] = _T('\0');
             return;
 #endif
         }
 
         curr_ptr = curr_ptr->prev;
         if (curr_ptr->string)
-            _tcscpy(commandline,curr_ptr->string);
+            _tcscpy(commandline, curr_ptr->string);
     }
 }
 
