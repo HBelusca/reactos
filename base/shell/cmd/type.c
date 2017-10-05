@@ -86,7 +86,6 @@ DoTypeFile(
     DWORD  dwFileSize;
     DWORD  dwFilePos;
     DWORD  dwRet;
-    LPTSTR errmsg;
     TCHAR  buff[256];
 
     hFile = CreateFile(FileName,
@@ -97,18 +96,11 @@ DoTypeFile(
 
     if (hFile == INVALID_HANDLE_VALUE)
     {
+        ConErrPrintf(_T("%s - "), FileName);
+        // ConErrFormatMessage(GetLastError());
         // FIXME: Use ErrorMessage() ?
-        FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER |
-                      FORMAT_MESSAGE_IGNORE_INSERTS |
-                      FORMAT_MESSAGE_FROM_SYSTEM,
-                      NULL,
-                      GetLastError(),
-                      MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-                      (LPTSTR)&errmsg,
-                      0,
-                      NULL);
-        ConErrPrintf(_T("%s - %s"), FileName, errmsg);
-        LocalFree(errmsg);
+        ConMsgPuts(StdErr, FORMAT_MESSAGE_FROM_SYSTEM,
+                   NULL, GetLastError(), LANG_USER_DEFAULT);
         nErrorLevel = 1;
         return TRUE;
     }
@@ -222,7 +214,6 @@ INT cmd_type(LPTSTR param)
 {
     INT argc, i;
     LPTSTR* argv;
-    LPTSTR errmsg;
     HANDLE hConsoleOut;
     BOOL bNoFileName = FALSE;
     BOOL bPaging = FALSE;
@@ -278,7 +269,7 @@ INT cmd_type(LPTSTR param)
 
     nErrorLevel = 0;
 
-    hConsoleOut = GetStdHandle(STD_OUTPUT_HANDLE);
+    hConsoleOut = ConStreamGetOSHandle(StdOut);
 
     /* Reset paging state */
     if (bPaging)
@@ -335,18 +326,11 @@ INT cmd_type(LPTSTR param)
 
             if (dwLastError != ERROR_SUCCESS)
             {
+                ConErrPrintf(_T("%s - "), argv[i]);
+                // ConErrFormatMessage(dwLastError);
                 // FIXME: Use ErrorMessage() ?
-                FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER |
-                              FORMAT_MESSAGE_IGNORE_INSERTS |
-                              FORMAT_MESSAGE_FROM_SYSTEM,
-                              NULL,
-                              dwLastError,
-                              MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-                              (LPTSTR)&errmsg,
-                              0,
-                              NULL);
-                ConErrPrintf(_T("%s - %s"), argv[i], errmsg);
-                LocalFree(errmsg);
+                ConMsgPuts(StdErr, FORMAT_MESSAGE_FROM_SYSTEM,
+                           NULL, dwLastError, LANG_USER_DEFAULT);
                 nErrorLevel = 1;
             }
         }
