@@ -73,34 +73,66 @@ VOID PrintInfoLine(VOID)
 {
 #define FOREGROUND_WHITE (FOREGROUND_BLUE | FOREGROUND_GREEN | FOREGROUND_RED | FOREGROUND_INTENSITY)
 
-    HANDLE hOutput = GetStdHandle(STD_OUTPUT_HANDLE);
-    CONSOLE_SCREEN_BUFFER_INFO csbi;
-    COORD coPos;
-    DWORD dwWritten;
-
+    HANDLE hOutput = ConStreamGetOSHandle(StdOut);
     PTSTR pszInfoLine = NULL;
     INT iInfoLineLen;
-
-    /* Return directly if the output handle is not a console handle */
-    if (!GetConsoleScreenBufferInfo(hOutput, &csbi))
-        return;
 
     iInfoLineLen = LoadString(CMD_ModuleHandle, STRING_CMD_INFOLINE, (PTSTR)&pszInfoLine, 0);
     if (!pszInfoLine || iInfoLineLen == 0)
         return;
 
-    /* Display the localized information line */
-    coPos.X = 0;
-    coPos.Y = 0;
-    FillConsoleOutputAttribute(hOutput, BACKGROUND_BLUE | FOREGROUND_WHITE,
-                               csbi.dwSize.X,
-                               coPos, &dwWritten);
-    FillConsoleOutputCharacter(hOutput, _T(' '),
-                               csbi.dwSize.X,
-                               coPos, &dwWritten);
+    if (IsConsoleHandle(hOutput))
+    {
+        CONSOLE_SCREEN_BUFFER_INFO csbi;
+        COORD coPos;
+        DWORD dwWritten;
 
-    WriteConsoleOutputCharacter(hOutput, pszInfoLine, iInfoLineLen,
-                                coPos, &dwWritten);
+        GetConsoleScreenBufferInfo(hOutput, &csbi);
+
+        /* Display the localized information line */
+        coPos.X = 0;
+        coPos.Y = 0;
+        FillConsoleOutputAttribute(hOutput, BACKGROUND_BLUE | FOREGROUND_WHITE,
+                                   csbi.dwSize.X,
+                                   coPos, &dwWritten);
+        FillConsoleOutputCharacter(hOutput, _T(' '),
+                                   csbi.dwSize.X,
+                                   coPos, &dwWritten);
+
+        WriteConsoleOutputCharacter(hOutput, pszInfoLine, iInfoLineLen,
+                                    coPos, &dwWritten);
+    }
+    else if (IsTTYHandle(hOutput))
+    {
+        WORD wColor = BACKGROUND_BLUE | FOREGROUND_WHITE;
+
+        /* Save the cursor position, move the cursor to (0,0) */
+        ConOutPuts(_T("\x1B[s\x1B[1;1H"));
+
+        /*
+         * Change color to BACKGROUND_BLUE | FOREGROUND_WHITE .
+         * This is using aixterm (not standard) way, but it correctly works.
+         * The "more" standard way, using the "bold"/"intensity" attribute,
+         * does not always work as expected.
+         */
+        ConOutPrintf(_T("\x1B[%d;%dm"),
+                     30 + CGA_TO_ANSI_COLOR(wColor & 0x0F),
+                     40 + CGA_TO_ANSI_COLOR(((wColor & 0xF0) >> 4)));
+        // ConOutPuts(_T("\x1B[2K")); // See comment after...
+
+        /* Write the text */
+        // ConResPuts(StdOut, STRING_CMD_INFOLINE);
+        ConStreamWrite(StdOut, pszInfoLine, iInfoLineLen);
+        /*
+         * Fill with attributes until the end of line.
+         * This has the advantage of completely filling the last line,
+         * in case the information line takes more than one line.
+         */
+        ConOutPuts(_T("\x1B[0K"));
+
+        /* Restore the previous cursor position */
+        ConOutPuts(_T("\x1B[u"));
+    }
 }
 
 /*
