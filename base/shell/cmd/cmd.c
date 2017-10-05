@@ -2084,7 +2084,7 @@ Initialize(VOID)
     }
 
     if (wDefColor != 0)
-        ConSetScreenColor(ConStreamGetOSHandle(StdOut), wDefColor, TRUE);
+        ConSetScreenColor(&StdOutScreen, wDefColor, TRUE);
 #endif
 
     /* Reset the output Standard Streams translation modes and codepage caches */

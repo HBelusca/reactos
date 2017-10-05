@@ -46,7 +46,7 @@ INT CommandColor(LPTSTR rest)
     /* No parameter: Set the default colors */
     if (rest[0] == _T('\0'))
     {
-        ConSetScreenColor(ConStreamGetOSHandle(StdOut), wDefColor, TRUE);
+        ConSetScreenColor(&StdOutScreen, wDefColor, TRUE);
         return 0;
     }
 
@@ -87,10 +87,13 @@ INT CommandColor(LPTSTR rest)
      * Set the chosen color. Use also the following advanced flag:
      * /-F to avoid changing already buffered foreground/background.
      */
-    if (ConSetScreenColor(ConStreamGetOSHandle(StdOut), wColor,
+    if (ConSetScreenColor(&StdOutScreen, wColor,
                           !_tcsstr(rest, _T("/-F")) && !_tcsstr(rest, _T("/-f"))) == FALSE)
     {
         /* Failed because foreground and background colors were the same */
+        //
+        // FIXME!!
+        //
         ConErrResPuts(STRING_COLOR_ERROR1);
         nErrorLevel = 1;
         return 1;
