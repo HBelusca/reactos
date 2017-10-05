@@ -9,23 +9,28 @@ extern UINT OutputCodePage;
 extern CON_SCREEN StdOutScreen;
 extern CON_PAGER  StdOutPager;
 
-// /* Global variables */
-// extern BOOL   bCtrlBreak;
-// extern BOOL   bIgnoreEcho;
-// extern BOOL   bExit;
 
-VOID ConInDummy (VOID);
-VOID ConInDisable (VOID);
-VOID ConInEnable (VOID);
-VOID ConInFlush (VOID);
-VOID ConInKey (PINPUT_RECORD);
-VOID ConInString (LPTSTR, DWORD);
+VOID ConInDisable(VOID);
+VOID ConInEnable(VOID);
+VOID ConInFlush(VOID);
+VOID ConInKey(PKEY_EVENT_RECORD);
+VOID ConInString(LPTSTR, DWORD);
 
+/* Unique variable names generation inside macros */
+#define CONCAT1(a, b) a ## b
+#define CONCAT(a, b) CONCAT1(a, b)
 
-VOID ConOutChar(TCHAR);
-VOID ConErrChar(TCHAR);
+#define ConOutChar(c) \
+do { \
+    TCHAR CONCAT(ch, __LINE__) = (c); \
+    ConStreamWrite(StdOut, &CONCAT(ch, __LINE__), 1); \
+} while(0)
 
-VOID __cdecl ConFormatMessage(PCON_STREAM Stream, DWORD MessageId, ...);
+#define ConErrChar(c) \
+do { \
+    TCHAR CONCAT(ch, __LINE__) = (c); \
+    ConStreamWrite(StdErr, &CONCAT(ch, __LINE__), 1); \
+} while(0)
 
 #define ConOutPuts(szStr) \
     ConPuts(StdOut, (szStr))
@@ -51,30 +56,30 @@ VOID __cdecl ConFormatMessage(PCON_STREAM Stream, DWORD MessageId, ...);
 #define ConErrResPrintf(uID, ...) \
     ConResPrintf(StdErr, (uID), ##__VA_ARGS__)
 
+VOID __cdecl ConFormatMessage(PCON_STREAM Stream, DWORD MessageId, ...);
+
 #define ConOutFormatMessage(MessageId, ...) \
     ConFormatMessage(StdOut, (MessageId), ##__VA_ARGS__)
 
 #define ConErrFormatMessage(MessageId, ...) \
     ConFormatMessage(StdErr, (MessageId), ##__VA_ARGS__)
 
-
 BOOL ConPrintfVPaging(PCON_PAGER Pager, BOOL StartPaging, LPTSTR szFormat, va_list arg_ptr);
 BOOL __cdecl ConOutPrintfPaging(BOOL StartPaging, LPTSTR szFormat, ...);
 VOID ConOutResPaging(BOOL StartPaging, UINT resID);
 
-SHORT GetCursorX  (VOID);
-SHORT GetCursorY  (VOID);
-VOID  GetCursorXY (PSHORT, PSHORT);
-VOID  SetCursorXY (SHORT, SHORT);
+SHORT GetCursorX(VOID);
+SHORT GetCursorY(VOID);
+VOID  GetCursorXY(PSHORT, PSHORT);
+VOID  SetCursorXY(SHORT, SHORT);
 
-VOID GetScreenSize (PSHORT, PSHORT);
-VOID SetCursorType (BOOL, BOOL);
+VOID GetScreenSize(PSHORT, PSHORT);
+VOID SetCursorType(BOOL, BOOL);
 
 
 #ifdef INCLUDE_CMD_COLOR
 BOOL ConGetDefaultAttributes(PWORD pwDefAttr);
 #endif
-
 
 BOOL ConSetTitle(IN LPCTSTR lpConsoleTitle);
 
@@ -85,6 +90,11 @@ VOID ConRingBell(HANDLE hOutput);
 #ifdef INCLUDE_CMD_COLOR
 BOOL ConSetScreenColor(HANDLE hOutput, WORD wColor, BOOL bFill);
 #endif
+
+
+//
+// The following is possibly of no use at all...
+//
 
 // TCHAR  cgetchar (VOID);
 // BOOL   CheckCtrlBreak (INT);

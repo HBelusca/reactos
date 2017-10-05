@@ -30,9 +30,9 @@ CON_SCREEN StdOutScreen = INIT_CON_SCREEN(StdOut);
 CON_PAGER  StdOutPager  = INIT_CON_PAGER(&StdOutScreen);
 
 
-
 /********************* Console STREAM IN utility functions ********************/
 
+// Used in misc.c prompt functions
 VOID ConInDisable(VOID)
 {
     HANDLE hInput = GetStdHandle(STD_INPUT_HANDLE);
@@ -43,6 +43,7 @@ VOID ConInDisable(VOID)
     SetConsoleMode(hInput, dwMode);
 }
 
+// Used in misc.c prompt functions
 VOID ConInEnable(VOID)
 {
     HANDLE hInput = GetStdHandle(STD_INPUT_HANDLE);
@@ -53,31 +54,111 @@ VOID ConInEnable(VOID)
     SetConsoleMode(hInput, dwMode);
 }
 
+// Used in choice.c!CommandChoice()
 VOID ConInFlush(VOID)
 {
     FlushConsoleInputBuffer(GetStdHandle(STD_INPUT_HANDLE));
 }
 
-VOID ConInKey(PINPUT_RECORD lpBuffer)
+// Used in choice.c, cmdinput.c, misc.c
+VOID ConInKey(PKEY_EVENT_RECORD KeyEvent)
 {
-    HANDLE hInput = GetStdHandle(STD_INPUT_HANDLE);
-    DWORD  dwRead;
+    HANDLE hInput = ConStreamGetOSHandle(StdIn);
+    DWORD dwRead;
 
     if (hInput == INVALID_HANDLE_VALUE)
-        WARN ("Invalid input handle!!!\n");
-
-    do
     {
-        ReadConsoleInput(hInput, lpBuffer, 1, &dwRead);
-        if (lpBuffer->EventType == KEY_EVENT &&
-            lpBuffer->Event.KeyEvent.bKeyDown)
-        {
-            break;
-        }
+        WARN("Invalid input handle!!!\n");
+        return; // No need to make infinite loops!
     }
-    while (TRUE);
+
+    if (IsConsoleHandle(hInput))
+    {
+        INPUT_RECORD ir;
+        do
+        {
+            ReadConsoleInput(hInput, &ir, 1, &dwRead);
+        }
+        while ((ir.EventType != KEY_EVENT) || (!ir.Event.KeyEvent.bKeyDown));
+
+        /* Got our key, return to caller */
+        *KeyEvent = ir.Event.KeyEvent;
+    }
+    else if (IsTTYHandle(hInput))
+    {
+        USHORT VkKey; // MAKEWORD(low = vkey_code, high = shift_state);
+        KEY_EVENT_RECORD KeyEvt;
+        WCHAR ch;
+        CHAR Buffer[6]; // Real maximum number of bytes for a UTF-8 encoded character
+
+        memset(Buffer, 'X', sizeof(Buffer));
+        // if (!ReadFile(hInput, &Buffer, ARRAYSIZE(Buffer), &dwRead, NULL))
+        if (!ReadFile(hInput, &Buffer, 1, &dwRead, NULL))
+            return;
+
+        if (dwRead > 1)
+        {
+            ConOutPrintf(L"Read more than one char! (dwRead = %d)\n", dwRead);
+        }
+
+        ch = *(PCHAR)Buffer; // *(PWCHAR)Buffer;
+        // MultiByteToWideChar(...);
+
+        /* Get the key code (+ shift state) corresponding to the character */
+        if (ch == '\0' || ch >= 0x20 || ch == '\t' /** HACK **/ || ch == '\n' || ch == '\r')
+        {
+// #ifdef _UNICODE
+            // VkKey = VkKeyScanW(ch);
+// #else
+            VkKey = VkKeyScanA(ch);
+// #endif
+            if (VkKey == 0xFFFF)
+            {
+                ConOutPuts(L"FIXME: TODO: VkKeyScanW failed - Should simulate the key!\n");
+                /*
+                 * We don't really need the scan/key code because we actually only
+                 * use the UnicodeChar for output purposes. It may pose few problems
+                 * later on but it's not of big importance. One trick would be to
+                 * convert the character to OEM / multibyte and use MapVirtualKey
+                 * on each byte (simulating an Alt-0xxx OEM keyboard press).
+                 */
+            }
+        }
+        else
+        {
+            ch += 0x40;
+            VkKey = ch;
+            VkKey |= 0x0200;
+        }
+
+        KeyEvt.bKeyDown = TRUE;
+        KeyEvt.wRepeatCount = 1;
+#ifdef _UNICODE
+        KeyEvt.uChar.UnicodeChar = ch;
+#else
+        KeyEvt.uChar.AsciiChar = ch;
+#endif
+        KeyEvt.wVirtualKeyCode = LOBYTE(VkKey);
+        KeyEvt.wVirtualScanCode = MapVirtualKeyW(LOBYTE(VkKey), MAPVK_VK_TO_VSC);
+        KeyEvt.dwControlKeyState = 0;
+        if (HIBYTE(VkKey) & 1)
+            KeyEvt.dwControlKeyState |= SHIFT_PRESSED;
+        if (HIBYTE(VkKey) & 2)
+            KeyEvt.dwControlKeyState |= LEFT_CTRL_PRESSED; // RIGHT_CTRL_PRESSED;
+        if (HIBYTE(VkKey) & 4)
+            KeyEvt.dwControlKeyState |= LEFT_ALT_PRESSED; // RIGHT_ALT_PRESSED;
+
+        /* Got our key, return to caller */
+        *KeyEvent = KeyEvt;
+    }
+    else
+    {
+        ConOutPuts(L"Not a console input handle!!!\n");
+        return;
+    }
 }
 
+// Used in many places...
 VOID ConInString(LPTSTR lpInput, DWORD dwLength)
 {
     DWORD dwOldMode;
@@ -93,11 +174,14 @@ VOID ConInString(LPTSTR lpInput, DWORD dwLength)
     pBuf = lpInput;
 #endif
     ZeroMemory(lpInput, dwLength * sizeof(TCHAR));
-    hFile = GetStdHandle(STD_INPUT_HANDLE);
+    hFile = GetStdHandle(STD_INPUT_HANDLE); // ConStreamGetOSHandle(StdIn);
     GetConsoleMode(hFile, &dwOldMode);
 
     SetConsoleMode(hFile, ENABLE_LINE_INPUT | ENABLE_ECHO_INPUT);
 
+    // FIXME: Note that calling this API will work directly for TTYs or files,
+    // but for consoles it will call ReadConsoleA unconditionally so that
+    // we will be forced to do some conversion...
     ReadFile(hFile, (PVOID)pBuf, dwLength - 1, &dwRead, NULL);
 
 #ifdef _UNICODE
@@ -106,7 +190,7 @@ VOID ConInString(LPTSTR lpInput, DWORD dwLength)
 #endif
     for (p = lpInput; *p; p++)
     {
-        if (*p == _T('\x0d'))
+        if (*p == _T('\r')) // || (*p == _T('\n'))
         {
             *p = _T('\0');
             break;
@@ -119,16 +203,6 @@ VOID ConInString(LPTSTR lpInput, DWORD dwLength)
 
 
 /******************** Console STREAM OUT utility functions ********************/
-
-VOID ConOutChar(TCHAR c)
-{
-    ConWrite(StdOut, &c, 1);
-}
-
-VOID ConErrChar(TCHAR c)
-{
-    ConWrite(StdErr, &c, 1);
-}
 
 VOID __cdecl ConFormatMessage(PCON_STREAM Stream, DWORD MessageId, ...)
 {
@@ -188,20 +262,66 @@ VOID ConOutResPaging(BOOL StartPaging, UINT resID)
 
 /************************** Console SCREEN functions **************************/
 
-VOID SetCursorXY(SHORT x, SHORT y)
+//
+// FIXME: FOR TESTING PURPOSES ONLY! WIP
+//
+#if 0
+BOOL
+IsPipeHandle(IN HANDLE hHandle)
 {
-    COORD coPos;
-
-    coPos.X = x;
-    coPos.Y = y;
-    SetConsoleCursorPosition(GetStdHandle(STD_OUTPUT_HANDLE), coPos);
+    return ((GetFileType(hHandle) & ~FILE_TYPE_REMOTE) == FILE_TYPE_PIPE);
 }
 
+BOOL
+IsDiskFileHandle(IN HANDLE hHandle)
+{
+    return ((GetFileType(hHandle) & ~FILE_TYPE_REMOTE) == FILE_TYPE_DISK);
+}
+
+#if 0
+    if (IsConsoleHandle(hOutput))
+        MessageBoxW(NULL, L"This is a console!", L"Test", MB_OK); // Console
+    else if (IsTTYHandle(hOutput))
+        MessageBoxW(NULL, L"This is a TTY!", L"Test", MB_OK); // COM port, ...
+    else if (IsPipeHandle(hOutput))
+        MessageBoxW(NULL, L"This is a pipe!", L"Test", MB_OK);
+    else if (IsDiskFileHandle(hOutput))
+        MessageBoxW(NULL, L"This is a disk file!", L"Test", MB_OK);
+    else
+        MessageBoxW(NULL, L"This is an unknown handle!", L"Test", MB_OK);
+#endif
+
+#endif
+
+
+
+//
+// NOTE: Candidate for conutils.c
+//
+
+VOID SetCursorXY(SHORT x, SHORT y)
+{
+    HANDLE hOutput = ConStreamGetOSHandle(StdOut);
+
+    if (IsConsoleHandle(hOutput))
+    {
+        COORD coPos;
+        coPos.X = x;
+        coPos.Y = y;
+        SetConsoleCursorPosition(hOutput, coPos);
+    }
+    else if (IsTTYHandle(hOutput))
+    {
+        ConOutPrintf(_T("\x1B[%d;%dH"), 1 + y, 1 + x);
+    }
+}
+
+// FIXME: Not TTY-ready!
 VOID GetCursorXY(PSHORT x, PSHORT y)
 {
     CONSOLE_SCREEN_BUFFER_INFO csbi;
 
-    GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &csbi);
+    GetConsoleScreenBufferInfo(ConStreamGetOSHandle(StdOut), &csbi);
 
     *x = csbi.dwCursorPosition.X;
     *y = csbi.dwCursorPosition.Y;
@@ -209,20 +329,70 @@ VOID GetCursorXY(PSHORT x, PSHORT y)
 
 SHORT GetCursorX(VOID)
 {
-    CONSOLE_SCREEN_BUFFER_INFO csbi;
-
-    GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &csbi);
-    return csbi.dwCursorPosition.X;
+    SHORT x, y;
+    GetCursorXY(&x, &y);
+    return x;
 }
 
 SHORT GetCursorY(VOID)
 {
-    CONSOLE_SCREEN_BUFFER_INFO csbi;
-
-    GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &csbi);
-    return csbi.dwCursorPosition.Y;
+    SHORT x, y;
+    GetCursorXY(&x, &y);
+    return y;
 }
 
+//
+// NOTE: Candidate for conutils.c
+//
+// FIXME: Partially TTY-ready!
+VOID GetScreenSize(PSHORT maxx, PSHORT maxy)
+{
+    HANDLE hOutput = ConStreamGetOSHandle(StdOut);
+
+    CONSOLE_SCREEN_BUFFER_INFO csbi;
+
+    if (!GetConsoleScreenBufferInfo(hOutput, &csbi))
+    {
+        csbi.dwSize.X = 80;
+        csbi.dwSize.Y = 25;
+
+#if 0
+        if (!IsConsoleHandle(hOutput) && IsTTYHandle(hOutput))
+        {
+            BOOL Success;
+            HANDLE hOutputRead;
+            DWORD dwRead;
+            TCHAR Buffer[20];
+
+            /* Duplicate a handle to StdOut for reading access */
+            Success = DuplicateHandle(GetCurrentProcess(),
+                                      hOutput,
+                                      GetCurrentProcess(),
+                                      &hOutputRead,
+                                      GENERIC_READ,
+                                      FALSE,
+                                      0);
+            if (Success)
+            {
+                ConOutPuts(_T("\x1B[18t"));
+                // ConInString(Buffer, ARRAYSIZE(Buffer));
+                dwRead = ARRAYSIZE(Buffer);
+                ReadFile(hOutputRead, (PVOID)Buffer, dwRead, &dwRead, NULL);
+                *Buffer = *Buffer;
+                CloseHandle(hOutputRead);
+            }
+        }
+#endif
+    }
+
+    if (maxx) *maxx = csbi.dwSize.X;
+    if (maxy) *maxy = csbi.dwSize.Y;
+}
+
+//
+// NOTE: Candidate for conutils.c
+//
+// FIXME: Not TTY-ready!
 VOID SetCursorType(BOOL bInsert, BOOL bVisible)
 {
     CONSOLE_CURSOR_INFO cci;
@@ -230,24 +400,8 @@ VOID SetCursorType(BOOL bInsert, BOOL bVisible)
     cci.dwSize = bInsert ? 10 : 99;
     cci.bVisible = bVisible;
 
-    SetConsoleCursorInfo(GetStdHandle(STD_OUTPUT_HANDLE), &cci);
+    SetConsoleCursorInfo(ConStreamGetOSHandle(StdOut), &cci);
 }
-
-VOID GetScreenSize(PSHORT maxx, PSHORT maxy)
-{
-    CONSOLE_SCREEN_BUFFER_INFO csbi;
-
-    if (!GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &csbi))
-    {
-        csbi.dwSize.X = 80;
-        csbi.dwSize.Y = 25;
-    }
-
-    if (maxx) *maxx = csbi.dwSize.X;
-    if (maxy) *maxy = csbi.dwSize.Y;
-}
-
-
 
 
 #ifdef INCLUDE_CMD_COLOR
@@ -279,6 +433,25 @@ BOOL ConGetDefaultAttributes(PWORD pwDefAttr)
 
 BOOL ConSetTitle(IN LPCTSTR lpConsoleTitle)
 {
+    HANDLE hOutput = ConStreamGetOSHandle(StdOut);
+
+    /*
+     * If the output handle is a TTY (but not console) handle,
+     * set also the TTY title. Undefined for devices other than consoles.
+     */
+    if (!IsConsoleHandle(hOutput) && IsTTYHandle(hOutput))
+    {
+        /*
+         * Use standardized XTerm ANSI sequence:
+         *   ESC]0;stringBEL -- Set icon name and window title to string;
+         *   ESC]1;stringBEL -- Set icon name to string;
+         *   ESC]2;stringBEL -- Set window title to string
+         * where ESC is the escape character (\033), and BEL is the
+         * bell character (\007).
+         */
+        ConOutPrintf(_T("\x1B]0;%s\x07"), lpConsoleTitle);
+    }
+
     /* Now really set the console title */
     return SetConsoleTitle(lpConsoleTitle);
 }
@@ -286,14 +459,12 @@ BOOL ConSetTitle(IN LPCTSTR lpConsoleTitle)
 #ifdef INCLUDE_CMD_BEEP
 VOID ConRingBell(HANDLE hOutput)
 {
-#if 0
     /* Emit an error beep sound */
     if (IsConsoleHandle(hOutput))
         Beep(800, 200);
     else if (IsTTYHandle(hOutput))
         ConOutPuts(_T("\a")); // BEL character 0x07
     else
-#endif
         MessageBeep(-1);
 }
 #endif
