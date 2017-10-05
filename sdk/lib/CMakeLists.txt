@@ -49,6 +49,7 @@ add_subdirectory(tdilib)
 add_subdirectory(tzlib)
 add_subdirectory(udmihelp)
 add_subdirectory(uuid)
+add_subdirectory(vhdlib) # FIXME: Add host-compiling support
 add_subdirectory(wdmguid)
 
 else()
