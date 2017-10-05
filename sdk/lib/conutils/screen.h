@@ -63,6 +63,16 @@ ConGetScreenInfo(
 VOID
 ConClearScreen(IN PCON_SCREEN Screen);
 
+extern const UCHAR CGA_TO_ANSI_COLOR_TABLE[16];
+
+#define CGA_TO_ANSI_COLOR(CgaColor) \
+    CGA_TO_ANSI_COLOR_TABLE[CgaColor & 0x0F]
+
+BOOL
+ConSetScreenColor(
+    IN PCON_SCREEN Screen,
+    IN WORD wColor,
+    IN BOOL bFill);
 
 #ifdef __cplusplus
 }

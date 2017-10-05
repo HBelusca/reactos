@@ -177,4 +177,91 @@ ConClearScreen(IN PCON_SCREEN Screen)
     }
 }
 
+
+/*
+ * Headless terminal text colors -- Taken from ntoskrnl/inbv/inbv.c
+ */
+
+// Conversion table CGA to ANSI color index
+const UCHAR CGA_TO_ANSI_COLOR_TABLE[16] =
+{
+    0,  // Black
+    4,  // Blue
+    2,  // Green
+    6,  // Cyan
+    1,  // Red
+    5,  // Magenta
+    3,  // Brown/Yellow
+    7,  // Grey/White
+
+    60, // Bright Black
+    64, // Bright Blue
+    62, // Bright Green
+    66, // Bright Cyan
+    61, // Bright Red
+    65, // Bright Magenta
+    63, // Bright Yellow
+    67  // Bright Grey (White)
+};
+
+// #define CGA_TO_ANSI_COLOR(CgaColor) /
+    // CGA_TO_ANSI_COLOR_TABLE[CgaColor & 0x0F]
+
+BOOL
+ConSetScreenColor(
+    IN PCON_SCREEN Screen,
+    IN WORD wColor,
+    IN BOOL bFill)
+{
+    HANDLE hOutput;
+
+    /* Parameters validation */
+    if (!Screen) return FALSE;
+
+    /* Foreground and Background colors cannot be the same */
+    if ((wColor & 0x0F) == ((wColor & 0xF0) >> 4))
+        return FALSE;
+
+    hOutput = ConStreamGetOSHandle(Screen->Stream);
+
+    /* Fill the whole background if needed */
+    // FIXME: I am not aware of any ANSI sequence capable of doing that...
+    if (bFill && IsConsoleHandle(hOutput))
+    {
+        CONSOLE_SCREEN_BUFFER_INFO csbi;
+        COORD coPos;
+        DWORD dwWritten;
+
+        GetConsoleScreenBufferInfo(hOutput, &csbi);
+
+        coPos.X = 0;
+        coPos.Y = 0;
+        FillConsoleOutputAttribute(hOutput,
+                                   LOBYTE(wColor),
+                                   csbi.dwSize.X * csbi.dwSize.Y,
+                                   coPos,
+                                   &dwWritten);
+    }
+
+    /* Set the text attribute */
+    if (IsConsoleHandle(hOutput))
+    {
+        // NOTE: High byte contains interesting stuff
+        SetConsoleTextAttribute(hOutput, LOBYTE(wColor));
+    }
+    else if (IsTTYHandle(hOutput))
+    {
+        /*
+         * This is using aixterm (not standard) way, but it correctly works.
+         * The "more" standard way, using the "bold"/"intensity" attribute,
+         * does not always work as expected.
+         */
+        ConPrintf(Screen->Stream, L"\x1B[%d;%dm",
+                  30 + CGA_TO_ANSI_COLOR(wColor & 0x0F),
+                  40 + CGA_TO_ANSI_COLOR(((wColor & 0xF0) >> 4)));
+    }
+
+    return TRUE;
+}
+
 /* EOF */
