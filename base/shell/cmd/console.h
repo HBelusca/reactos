@@ -87,10 +87,6 @@ BOOL ConSetTitle(IN LPCTSTR lpConsoleTitle);
 VOID ConRingBell(HANDLE hOutput);
 #endif
 
-#ifdef INCLUDE_CMD_COLOR
-BOOL ConSetScreenColor(HANDLE hOutput, WORD wColor, BOOL bFill);
-#endif
-
 
 //
 // The following is possibly of no use at all...

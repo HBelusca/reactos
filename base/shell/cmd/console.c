@@ -57,7 +57,108 @@ VOID ConInEnable(VOID)
 // Used in choice.c!CommandChoice()
 VOID ConInFlush(VOID)
 {
-    FlushConsoleInputBuffer(GetStdHandle(STD_INPUT_HANDLE));
+    HANDLE hInput = GetStdHandle(STD_INPUT_HANDLE);
+
+    if (IsConsoleHandle(hInput))
+        FlushConsoleInputBuffer(hInput);
+    else
+        FlushFileBuffers(hInput);
+}
+
+BOOL ReadTTYChar(
+    IN HANDLE hInput,
+    OUT PWCHAR pWChar,
+    IN OUT LPOVERLAPPED lpOverlapped OPTIONAL)
+{
+    DWORD dwRead;
+    DWORD dwTotalRead;
+    CHAR Buffer[6]; // Real maximum number of bytes for a UTF-8 encoded character
+
+    ZeroMemory(Buffer, sizeof(Buffer));
+    dwTotalRead = 0;
+
+    /* Read the leading byte */
+    if (!ReadFile(hInput, Buffer, 1, &dwRead, lpOverlapped) &&
+        GetLastError() != ERROR_IO_PENDING)
+    {
+        return FALSE;
+    }
+    // FIXME: Deal with overlapped!
+    ++dwTotalRead;
+
+#if 0 /* Extensions to the UTF-8 encoding */
+    if ((Buffer[0] & 0xFE) == 0xFC) /* Check for 1111110x: 1+5-byte encoded character */
+    {
+        ReadFile(hInput, &Buffer[1], 5, &dwRead, lpOverlapped);
+        dwTotalRead += 5;
+
+        /* The other bytes should all start with 10xxxxxx */
+        if ((Buffer[1] & 0xC0) != 0x80 ||
+            (Buffer[2] & 0xC0) != 0x80 ||
+            (Buffer[3] & 0xC0) != 0x80 ||
+            (Buffer[4] & 0xC0) != 0x80 ||
+            (Buffer[5] & 0xC0) != 0x80)
+        {
+            return FALSE;
+        }
+    }
+    else
+    if ((Buffer[0] & 0xFC) == 0xF8) /* Check for 111110xx: 1+4-byte encoded character */
+    {
+        ReadFile(hInput, &Buffer[1], 4, &dwRead, lpOverlapped);
+        dwTotalRead += 4;
+
+        /* The other bytes should all start with 10xxxxxx */
+        if ((Buffer[1] & 0xC0) != 0x80 ||
+            (Buffer[2] & 0xC0) != 0x80 ||
+            (Buffer[3] & 0xC0) != 0x80 ||
+            (Buffer[4] & 0xC0) != 0x80)
+        {
+            return FALSE;
+        }
+    }
+    else
+#endif
+    if ((Buffer[0] & 0xF8) == 0xF0) /* Check for 11110xxx: 1+3-byte encoded character */
+    {
+        ReadFile(hInput, &Buffer[1], 3, &dwRead, lpOverlapped);
+        dwTotalRead += 3;
+
+        /* The other bytes should all start with 10xxxxxx */
+        if ((Buffer[1] & 0xC0) != 0x80 ||
+            (Buffer[2] & 0xC0) != 0x80 ||
+            (Buffer[3] & 0xC0) != 0x80)
+        {
+            return FALSE;
+        }
+    }
+    else
+    if ((Buffer[0] & 0xF0) == 0xE0) /* Check for 1110xxxx: 1+2-byte encoded character */
+    {
+        ReadFile(hInput, &Buffer[1], 2, &dwRead, lpOverlapped);
+        dwTotalRead += 2;
+
+        /* The other bytes should all start with 10xxxxxx */
+        if ((Buffer[1] & 0xC0) != 0x80 ||
+            (Buffer[2] & 0xC0) != 0x80)
+        {
+            return FALSE;
+        }
+    }
+    else
+    if ((Buffer[0] & 0xE0) == 0xC0) /* Check for 110xxxxx: 1+1-byte encoded character */
+    {
+        ReadFile(hInput, &Buffer[1], 1, &dwRead, lpOverlapped);
+        ++dwTotalRead;
+
+        /* The other bytes should all start with 10xxxxxx */
+        if ((Buffer[1] & 0xC0) != 0x80)
+            return FALSE;
+    }
+    /* else, this is a 1-byte character */
+
+    /* Convert to UTF-16 */
+    return (MultiByteToWideChar(CP_UTF8, 0, Buffer, dwTotalRead, pWChar, 1) == 1);
 }
 
 // Used in choice.c, cmdinput.c, misc.c
@@ -79,42 +180,32 @@ VOID ConInKey(PKEY_EVENT_RECORD KeyEvent)
         {
             ReadConsoleInput(hInput, &ir, 1, &dwRead);
         }
-        while ((ir.EventType != KEY_EVENT) || (!ir.Event.KeyEvent.bKeyDown));
+        while ((ir.EventType != KEY_EVENT) || !ir.Event.KeyEvent.bKeyDown);
 
         /* Got our key, return to caller */
         *KeyEvent = ir.Event.KeyEvent;
     }
     else if (IsTTYHandle(hInput))
     {
+        WCHAR wChar;
         USHORT VkKey; // MAKEWORD(low = vkey_code, high = shift_state);
         KEY_EVENT_RECORD KeyEvt;
-        WCHAR ch;
-        CHAR Buffer[6]; // Real maximum number of bytes for a UTF-8 encoded character
 
-        memset(Buffer, 'X', sizeof(Buffer));
-        // if (!ReadFile(hInput, &Buffer, ARRAYSIZE(Buffer), &dwRead, NULL))
-        if (!ReadFile(hInput, &Buffer, 1, &dwRead, NULL))
+        if (!ReadTTYChar(hInput, &wChar, NULL))
             return;
 
-        if (dwRead > 1)
-        {
-            ConOutPrintf(L"Read more than one char! (dwRead = %d)\n", dwRead);
-        }
-
-        ch = *(PCHAR)Buffer; // *(PWCHAR)Buffer;
-        // MultiByteToWideChar(...);
-
         /* Get the key code (+ shift state) corresponding to the character */
-        if (ch == '\0' || ch >= 0x20 || ch == '\t' /** HACK **/ || ch == '\n' || ch == '\r')
+        if (wChar == _T('\0') || wChar >= 0x20 || wChar == _T('\t') /** HACK **/ ||
+            wChar == _T('\n') || wChar == _T('\r'))
         {
-// #ifdef _UNICODE
-            // VkKey = VkKeyScanW(ch);
-// #else
-            VkKey = VkKeyScanA(ch);
-// #endif
+#ifdef _UNICODE
+            VkKey = VkKeyScanW(wChar);
+#else
+            VkKey = VkKeyScanA(wChar);
+#endif
             if (VkKey == 0xFFFF)
             {
-                ConOutPuts(L"FIXME: TODO: VkKeyScanW failed - Should simulate the key!\n");
+                WARN("FIXME: TODO: VkKeyScanW failed - Should simulate the key!\n");
                 /*
                  * We don't really need the scan/key code because we actually only
                  * use the UnicodeChar for output purposes. It may pose few problems
@@ -126,17 +217,17 @@ VOID ConInKey(PKEY_EVENT_RECORD KeyEvent)
         }
         else
         {
-            ch += 0x40;
-            VkKey = ch;
+            wChar += 0x40;
+            VkKey = wChar;
             VkKey |= 0x0200;
         }
 
         KeyEvt.bKeyDown = TRUE;
         KeyEvt.wRepeatCount = 1;
 #ifdef _UNICODE
-        KeyEvt.uChar.UnicodeChar = ch;
+        KeyEvt.uChar.UnicodeChar = wChar;
 #else
-        KeyEvt.uChar.AsciiChar = ch;
+        KeyEvt.uChar.AsciiChar = wChar;
 #endif
         KeyEvt.wVirtualKeyCode = LOBYTE(VkKey);
         KeyEvt.wVirtualScanCode = MapVirtualKeyW(LOBYTE(VkKey), MAPVK_VK_TO_VSC);
@@ -163,7 +254,7 @@ VOID ConInString(LPTSTR lpInput, DWORD dwLength)
 {
     DWORD dwOldMode;
     DWORD dwRead = 0;
-    HANDLE hFile;
+    HANDLE hInput;
 
     LPTSTR p;
     PCHAR pBuf;
@@ -174,15 +265,44 @@ VOID ConInString(LPTSTR lpInput, DWORD dwLength)
     pBuf = lpInput;
 #endif
     ZeroMemory(lpInput, dwLength * sizeof(TCHAR));
-    hFile = GetStdHandle(STD_INPUT_HANDLE); // ConStreamGetOSHandle(StdIn);
-    GetConsoleMode(hFile, &dwOldMode);
+    hInput = GetStdHandle(STD_INPUT_HANDLE); // ConStreamGetOSHandle(StdIn);
+    GetConsoleMode(hInput, &dwOldMode);
 
-    SetConsoleMode(hFile, ENABLE_LINE_INPUT | ENABLE_ECHO_INPUT);
+    SetConsoleMode(hInput, ENABLE_LINE_INPUT | ENABLE_ECHO_INPUT);
 
-    // FIXME: Note that calling this API will work directly for TTYs or files,
-    // but for consoles it will call ReadConsoleA unconditionally so that
-    // we will be forced to do some conversion...
-    ReadFile(hFile, (PVOID)pBuf, dwLength - 1, &dwRead, NULL);
+    if (IsConsoleHandle(hInput))
+    {
+        // FIXME: Note that calling this API will work directly for TTYs or files,
+        // but for consoles it will call ReadConsoleA unconditionally so that
+        // we will be forced to do some conversion...
+        ReadFile(hInput, (PVOID)pBuf, dwLength - 1, &dwRead, NULL);
+    }
+    else if (IsTTYHandle(hInput))
+    {
+        p = (PTCHAR)pBuf;
+        dwRead = 0;
+        while ((dwRead < dwLength - 1) && ReadTTYChar(hInput, p, NULL))
+        {
+            ++dwRead;
+
+            /* Echo the input character */
+            // FIXME: do it if user asked to do so!!
+            ConOutChar(*p);
+
+            /* Break if there is a newline */
+            if (*p == _T('\r') || *p == _T('\n'))
+            {
+                *p = _T('\0');
+                break;
+            }
+            ++p;
+        }
+    }
+    else
+    {
+        /* Directly read the file */
+        ReadFile(hInput, (PVOID)pBuf, dwLength - 1, &dwRead, NULL);
+    }
 
 #ifdef _UNICODE
     MultiByteToWideChar(InputCodePage, 0, pBuf, dwRead, lpInput, dwLength - 1);
@@ -197,7 +317,7 @@ VOID ConInString(LPTSTR lpInput, DWORD dwLength)
         }
     }
 
-    SetConsoleMode(hFile, dwOldMode);
+    SetConsoleMode(hInput, dwOldMode);
 }
 
 
@@ -466,37 +586,6 @@ VOID ConRingBell(HANDLE hOutput)
         ConOutPuts(_T("\a")); // BEL character 0x07
     else
         MessageBeep(-1);
-}
-#endif
-
-#ifdef INCLUDE_CMD_COLOR
-BOOL ConSetScreenColor(HANDLE hOutput, WORD wColor, BOOL bFill)
-{
-    DWORD dwWritten;
-    CONSOLE_SCREEN_BUFFER_INFO csbi;
-    COORD coPos;
-
-    /* Foreground and Background colors can't be the same */
-    if ((wColor & 0x0F) == (wColor & 0xF0) >> 4)
-        return FALSE;
-
-    /* Fill the whole background if needed */
-    if (bFill)
-    {
-        GetConsoleScreenBufferInfo(hOutput, &csbi);
-
-        coPos.X = 0;
-        coPos.Y = 0;
-        FillConsoleOutputAttribute(hOutput,
-                                   wColor & 0x00FF,
-                                   csbi.dwSize.X * csbi.dwSize.Y,
-                                   coPos,
-                                   &dwWritten);
-    }
-
-    /* Set the text attribute */
-    SetConsoleTextAttribute(hOutput, wColor & 0x00FF);
-    return TRUE;
 }
 #endif
 
