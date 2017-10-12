@@ -65,7 +65,33 @@ VOID ConInFlush(VOID)
         FlushFileBuffers(hInput);
 }
 
-BOOL ReadTTYChar(
+static BOOL
+ReadTTYBytes(
+    IN HANDLE hInput,
+    OUT PCHAR pBuffer,
+    IN DWORD  nNumberOfBytesToRead,
+    OUT LPDWORD lpNumberOfBytesRead OPTIONAL,
+    IN OUT LPOVERLAPPED lpOverlapped OPTIONAL)
+{
+    DWORD dwTotalRead = 0;
+
+    /* Read the leading byte */
+    if (!ReadFile(hInput, pBuffer, nNumberOfBytesToRead, /*lpNumberOfBytesRead*/ &dwTotalRead, lpOverlapped) &&
+        GetLastError() != ERROR_IO_PENDING)
+    {
+        return FALSE;
+    }
+
+    if (lpNumberOfBytesRead)
+        *lpNumberOfBytesRead = dwTotalRead;
+
+    // FIXME: Deal with overlapped!
+
+    return TRUE;
+}
+
+static BOOL
+ReadTTYChar(
     IN HANDLE hInput,
     OUT PWCHAR pWChar,
     IN OUT LPOVERLAPPED lpOverlapped OPTIONAL)
@@ -78,18 +104,22 @@ BOOL ReadTTYChar(
     dwTotalRead = 0;
 
     /* Read the leading byte */
-    if (!ReadFile(hInput, Buffer, 1, &dwRead, lpOverlapped) &&
-        GetLastError() != ERROR_IO_PENDING)
+    if (!ReadTTYBytes(hInput, Buffer, 1, &dwRead, lpOverlapped))
+        return FALSE;
+    ++dwTotalRead;
+
+    /* Is it an escape sequence? */
+    if (Buffer[0] == '\x1B')
     {
+        /* Yes it is, let the caller interpret it instead */
+        *pWChar = L'\x1B';
         return FALSE;
     }
-    // FIXME: Deal with overlapped!
-    ++dwTotalRead;
 
 #if 0 /* Extensions to the UTF-8 encoding */
     if ((Buffer[0] & 0xFE) == 0xFC) /* Check for 1111110x: 1+5-byte encoded character */
     {
-        ReadFile(hInput, &Buffer[1], 5, &dwRead, lpOverlapped);
+        ReadTTYBytes(hInput, &Buffer[1], 5, &dwRead, lpOverlapped);
         dwTotalRead += 5;
 
         /* The other bytes should all start with 10xxxxxx */
@@ -105,7 +135,7 @@ BOOL ReadTTYChar(
     else
     if ((Buffer[0] & 0xFC) == 0xF8) /* Check for 111110xx: 1+4-byte encoded character */
     {
-        ReadFile(hInput, &Buffer[1], 4, &dwRead, lpOverlapped);
+        ReadTTYBytes(hInput, &Buffer[1], 4, &dwRead, lpOverlapped);
         dwTotalRead += 4;
 
         /* The other bytes should all start with 10xxxxxx */
@@ -121,7 +151,7 @@ BOOL ReadTTYChar(
 #endif
     if ((Buffer[0] & 0xF8) == 0xF0) /* Check for 11110xxx: 1+3-byte encoded character */
     {
-        ReadFile(hInput, &Buffer[1], 3, &dwRead, lpOverlapped);
+        ReadTTYBytes(hInput, &Buffer[1], 3, &dwRead, lpOverlapped);
         dwTotalRead += 3;
 
         /* The other bytes should all start with 10xxxxxx */
@@ -135,7 +165,7 @@ BOOL ReadTTYChar(
     else
     if ((Buffer[0] & 0xF0) == 0xE0) /* Check for 1110xxxx: 1+2-byte encoded character */
     {
-        ReadFile(hInput, &Buffer[1], 2, &dwRead, lpOverlapped);
+        ReadTTYBytes(hInput, &Buffer[1], 2, &dwRead, lpOverlapped);
         dwTotalRead += 2;
 
         /* The other bytes should all start with 10xxxxxx */
@@ -148,7 +178,7 @@ BOOL ReadTTYChar(
     else
     if ((Buffer[0] & 0xE0) == 0xC0) /* Check for 110xxxxx: 1+1-byte encoded character */
     {
-        ReadFile(hInput, &Buffer[1], 1, &dwRead, lpOverlapped);
+        ReadTTYBytes(hInput, &Buffer[1], 1, &dwRead, lpOverlapped);
         ++dwTotalRead;
 
         /* The other bytes should all start with 10xxxxxx */
@@ -161,24 +191,159 @@ BOOL ReadTTYChar(
     return (MultiByteToWideChar(CP_UTF8, 0, Buffer, dwTotalRead, pWChar, 1) == 1);
 }
 
-// Used in choice.c, cmdinput.c, misc.c
-VOID ConInKey(PKEY_EVENT_RECORD KeyEvent)
+static BOOL
+ReadTTYEscapes(
+    IN HANDLE hInput,
+    OUT PCHAR pEscapeType,
+    OUT PCHAR pFunctionChar,
+    OUT PSTR pszParams OPTIONAL,
+    IN DWORD dwParamsLength,
+    OUT PSTR pszInterm OPTIONAL,
+    IN DWORD dwIntermLength,
+    IN OUT LPOVERLAPPED lpOverlapped OPTIONAL)
 {
+    DWORD dwRead, dwLength;
+    PCHAR p;
+    CHAR bChar;
+
+    *pEscapeType = 0;
+    *pFunctionChar = 0;
+    if (pszParams && dwParamsLength > 0)
+        *pszParams = 0;
+    if (pszInterm && dwIntermLength > 0)
+        *pszInterm = 0;
+
+    /*
+     * Possibly an escape character, check the second character.
+     * Note that we only try to interpret CSI sequences.
+     */
+    if (!ReadTTYBytes(hInput, &bChar, 1, NULL, lpOverlapped))
+        return FALSE;
+
+    if (bChar == 'O')
+    {
+        /* Single Shift Select of G3 Character Set (SS3) */
+        if (!ReadTTYBytes(hInput, &bChar, 1, NULL, lpOverlapped))
+            return FALSE;
+
+        *pEscapeType = 'O';
+        *pFunctionChar = bChar;
+        return TRUE;
+    }
+    else
+    if (bChar == '[')
+    {
+        /* Control Sequence Introducer (CSI) */
+
+        /* Read any number of parameters */
+        dwLength = dwParamsLength;
+        p = pszParams;
+        dwRead = 0;
+
+        while ((dwRead < dwLength - 1) &&
+               ReadTTYBytes(hInput, &bChar, 1, NULL, lpOverlapped))
+        {
+            /* Is it a paramater? */
+            if (0x30 <= bChar && bChar <= 0x3F)
+            {
+                ++dwRead;
+                if (pszParams && dwParamsLength > 0)
+                    *p++ = bChar;
+            }
+            else
+            {
+                if (pszParams && dwParamsLength > 0)
+                    *p = 0;
+                break;
+            }
+        }
+
+        /* Read any number of intermediate bytes */
+        dwLength = dwIntermLength;
+        p = pszInterm;
+        dwRead = 0;
+
+        do
+        {
+            /* Is it an intermediate byte? */
+            if (0x20 <= bChar && bChar <= 0x2F)
+            {
+                ++dwRead;
+                if (pszInterm && dwIntermLength > 0)
+                    *p++ = bChar;
+            }
+            else
+            {
+                if (pszInterm && dwIntermLength > 0)
+                    *p = 0;
+                break;
+            }
+        } while (ReadTTYBytes(hInput, &bChar, 1, NULL, lpOverlapped));
+
+        /* Check the terminating byte */
+        if (0x40 <= bChar && bChar <= 0x7E)
+        {
+            *pEscapeType = '[';
+            *pFunctionChar = bChar;
+            return TRUE;
+        }
+        else
+        {
+            /* Malformed CSI escape sequence, ignore it */
+            *pEscapeType = 0;
+            *pFunctionChar = 0;
+            if (pszParams && dwParamsLength > 0)
+                *pszParams = 0;
+            if (pszInterm && dwIntermLength > 0)
+                *pszInterm = 0;
+            return FALSE;
+        }
+    }
+    else
+    {
+        /* Unsupported escape sequence */
+        return FALSE;
+    }
+}
+
+// Used in choice.c, cmdinput.c, misc.c
+DWORD ConInKeyTimeout(PKEY_EVENT_RECORD KeyEvent, DWORD dwMilliseconds)
+{
+    DWORD dwWaitState;
     HANDLE hInput = ConStreamGetOSHandle(StdIn);
     DWORD dwRead;
 
     if (hInput == INVALID_HANDLE_VALUE)
     {
         WARN("Invalid input handle!!!\n");
-        return; // No need to make infinite loops!
+        return FALSE; // No need to make infinite loops!
     }
 
     if (IsConsoleHandle(hInput))
     {
         INPUT_RECORD ir;
+
+        dwWaitState = WaitForSingleObject(hInput, dwMilliseconds);
+        if (dwWaitState == WAIT_TIMEOUT)
+            return dwWaitState;
+        if (dwWaitState != WAIT_OBJECT_0)
+            return dwWaitState; // An error happened.
+
+        /* Be sure there is someting in the console input queue */
+        if (!PeekConsoleInput(hInput, &ir, 1, &dwRead))
+        {
+            /* An error happened, bail out */
+            WARN("PeekConsoleInput failed\n");
+            return FALSE;
+        }
+
+        if (dwRead == 0)
+            return FALSE; // TRUE;
+
         do
         {
-            ReadConsoleInput(hInput, &ir, 1, &dwRead);
+            if (!ReadConsoleInput(hInput, &ir, 1, &dwRead))
+                return FALSE;
         }
         while ((ir.EventType != KEY_EVENT) || !ir.Event.KeyEvent.bKeyDown);
 
@@ -188,47 +353,205 @@ VOID ConInKey(PKEY_EVENT_RECORD KeyEvent)
     else if (IsTTYHandle(hInput))
     {
         WCHAR wChar;
-        USHORT VkKey; // MAKEWORD(low = vkey_code, high = shift_state);
+        WORD  VkKey; // MAKEWORD(low = vkey_code, high = shift_state);
         KEY_EVENT_RECORD KeyEvt;
 
-        if (!ReadTTYChar(hInput, &wChar, NULL))
-            return;
-
-        /* Get the key code (+ shift state) corresponding to the character */
-        if (wChar == _T('\0') || wChar >= 0x20 || wChar == _T('\t') /** HACK **/ ||
-            wChar == _T('\n') || wChar == _T('\r'))
+        if (ReadTTYChar(hInput, &wChar, NULL))
         {
-#ifdef _UNICODE
-            VkKey = VkKeyScanW(wChar);
-#else
-            VkKey = VkKeyScanA(wChar);
-#endif
-            if (VkKey == 0xFFFF)
+            /* Get the key code (+ shift state) corresponding to the character */
+            if (wChar == _T('\0') || wChar >= 0x20 || wChar == _T('\t') /** HACK **/ ||
+                wChar == _T('\n') || wChar == _T('\r'))
             {
-                WARN("FIXME: TODO: VkKeyScanW failed - Should simulate the key!\n");
-                /*
-                 * We don't really need the scan/key code because we actually only
-                 * use the UnicodeChar for output purposes. It may pose few problems
-                 * later on but it's not of big importance. One trick would be to
-                 * convert the character to OEM / multibyte and use MapVirtualKey
-                 * on each byte (simulating an Alt-0xxx OEM keyboard press).
-                 */
+#ifdef _UNICODE
+                VkKey = VkKeyScanW(wChar);
+#else
+                VkKey = VkKeyScanA(wChar);
+#endif
+                if (VkKey == 0xFFFF)
+                {
+                    WARN("FIXME: TODO: VkKeyScanW failed - Should simulate the key!\n");
+                    /*
+                     * We don't really need the scan/key code because we actually only
+                     * use the UnicodeChar for output purposes. It may pose few problems
+                     * later on but it's not of big importance. One trick would be to
+                     * convert the character to OEM / multibyte and use MapVirtualKey
+                     * on each byte (simulating an Alt-0xxx OEM keyboard press).
+                     */
+                }
             }
+            else
+            {
+                wChar += 0x40;
+                VkKey = wChar;
+                VkKey |= 0x0200;
+            }
+
+#ifdef _UNICODE
+            KeyEvt.uChar.UnicodeChar = wChar;
+#else
+            KeyEvt.uChar.AsciiChar = wChar;
+#endif
         }
         else
         {
-            wChar += 0x40;
-            VkKey = wChar;
-            VkKey |= 0x0200;
+            CHAR EscapeType, FunctionChar;
+            CHAR szParams[255];
+            CHAR szInterm[255];
+
+            /* We may have failed because of an escape sequence: check this */
+            if (wChar != _T('\x1B'))
+            {
+                /* Not an escape sequence, bail out */
+                return FALSE;
+            }
+
+            /*
+             * Possibly an escape character, check the second character.
+             * Note that we only try to interpret CSI sequences.
+             */
+            if (!ReadTTYEscapes(hInput, &EscapeType, &FunctionChar,
+                                szParams, sizeof(szParams),
+                                szInterm, sizeof(szInterm),
+                                NULL))
+            {
+                return FALSE;
+            }
+
+            VkKey = 0;
+
+            if (EscapeType == 'O')
+            {
+                /* Single Shift Select of G3 Character Set (SS3) */
+
+                switch (FunctionChar)
+                {
+                    case 'A': // Cursor up
+                        VkKey = VK_UP;
+                        break;
+
+                    case 'B': // Cursor down
+                        VkKey = VK_DOWN;
+                        break;
+
+                    case 'C': // Cursor right
+                        VkKey = VK_RIGHT;
+                        break;
+
+                    case 'D': // Cursor left
+                        VkKey = VK_LEFT;
+                        break;
+
+                    case 'F': // End
+                        VkKey = VK_END;
+                        break;
+
+                    case 'H': // Home
+                        VkKey = VK_HOME;
+                        break;
+
+                    case 'P': // F1
+                        VkKey = VK_F1;
+                        break;
+
+                    case 'Q': // F2
+                        VkKey = VK_F2;
+                        break;
+
+                    case 'R': // F3
+                        VkKey = VK_F3;
+                        break;
+
+                    case 'S': // F4
+                        VkKey = VK_F4;
+                        break;
+
+                    default: // Unknown
+                        return FALSE;
+                }
+            }
+            else
+            if (EscapeType == '[')
+            {
+                /* Control Sequence Introducer (CSI) */
+
+                switch (FunctionChar)
+                {
+                    case 'A': // Cursor up
+                        VkKey = VK_UP;
+                        break;
+
+                    case 'B': // Cursor down
+                        VkKey = VK_DOWN;
+                        break;
+
+                    case 'C': // Cursor right
+                        VkKey = VK_RIGHT;
+                        break;
+
+                    case 'D': // Cursor left
+                        VkKey = VK_LEFT;
+                        break;
+
+                    case '~': // Some Navigation or Function key
+                    {
+                        UINT uFnKey = atoi(szParams);
+
+                        switch (uFnKey)
+                        {
+                            case 1: // Home
+                                VkKey = VK_HOME;
+                                break;
+
+                            case 2: // Insert
+                                VkKey = VK_INSERT;
+                                break;
+
+                            case 3: // Delete
+                                VkKey = VK_DELETE;
+                                break;
+
+                            case 4: // End
+                                VkKey = VK_END;
+                                break;
+
+                            case 5: // Page UP
+                                VkKey = VK_PRIOR;
+                                break;
+
+                            case 6: // Page DOWN
+                                VkKey = VK_NEXT;
+                                break;
+
+                            default:
+                            {
+                                if (uFnKey < 11)
+                                    return FALSE;
+
+                                uFnKey -= 11;
+                                if (uFnKey >= 6)
+                                    uFnKey--;
+                                if (uFnKey >= 10)
+                                    uFnKey--;
+
+                                VkKey = VK_F1 + uFnKey;
+                            }
+                        }
+
+                        break;
+                    }
+                }
+            }
+            else
+            {
+                /* Unsupported escape sequence */
+                return FALSE;
+            }
+
+            KeyEvt.uChar.UnicodeChar = 0;
         }
 
         KeyEvt.bKeyDown = TRUE;
         KeyEvt.wRepeatCount = 1;
-#ifdef _UNICODE
-        KeyEvt.uChar.UnicodeChar = wChar;
-#else
-        KeyEvt.uChar.AsciiChar = wChar;
-#endif
         KeyEvt.wVirtualKeyCode = LOBYTE(VkKey);
         KeyEvt.wVirtualScanCode = MapVirtualKeyW(LOBYTE(VkKey), MAPVK_VK_TO_VSC);
         KeyEvt.dwControlKeyState = 0;
@@ -245,8 +568,16 @@ VOID ConInKey(PKEY_EVENT_RECORD KeyEvent)
     else
     {
         ConOutPuts(L"Not a console input handle!!!\n");
-        return;
+        return FALSE;
     }
+
+    return TRUE;
+}
+
+// Used in choice.c, cmdinput.c, misc.c
+VOID ConInKey(PKEY_EVENT_RECORD KeyEvent)
+{
+    ConInKeyTimeout(KeyEvent, INFINITE);
 }
 
 // Used in many places...
@@ -418,7 +749,6 @@ IsDiskFileHandle(IN HANDLE hHandle)
 //
 // NOTE: Candidate for conutils.c
 //
-
 VOID SetCursorXY(SHORT x, SHORT y)
 {
     HANDLE hOutput = ConStreamGetOSHandle(StdOut);
@@ -436,15 +766,68 @@ VOID SetCursorXY(SHORT x, SHORT y)
     }
 }
 
-// FIXME: Not TTY-ready!
 VOID GetCursorXY(PSHORT x, PSHORT y)
 {
-    CONSOLE_SCREEN_BUFFER_INFO csbi;
+    HANDLE hOutput = ConStreamGetOSHandle(StdOut);
 
-    GetConsoleScreenBufferInfo(ConStreamGetOSHandle(StdOut), &csbi);
+    if (IsConsoleHandle(hOutput))
+    {
+        CONSOLE_SCREEN_BUFFER_INFO csbi;
 
-    *x = csbi.dwCursorPosition.X;
-    *y = csbi.dwCursorPosition.Y;
+        GetConsoleScreenBufferInfo(hOutput, &csbi);
+        *x = csbi.dwCursorPosition.X;
+        *y = csbi.dwCursorPosition.Y;
+    }
+    else if (IsTTYHandle(hOutput))
+    {
+        BOOL Success;
+        HANDLE hOutputRead;
+        DWORD dwRead, dwLength;
+        PCHAR p;
+        CHAR bChar;
+        CHAR Buffer[20];
+
+        /* Duplicate a handle to StdOut for reading access */
+        Success = DuplicateHandle(GetCurrentProcess(),
+                                  hOutput,
+                                  GetCurrentProcess(),
+                                  &hOutputRead,
+                                  GENERIC_READ,
+                                  FALSE,
+                                  0);
+        if (Success)
+        {
+            ConOutPuts(_T("\x1B[6n"));
+
+            /* Read any number of parameters */
+            dwLength = sizeof(Buffer);
+            p = Buffer;
+            dwRead = 0;
+
+            while ((dwRead < dwLength - 1) &&
+                   ReadTTYBytes(hOutputRead, &bChar, 1, NULL, NULL))
+            {
+                if (bChar == 'R')
+                {
+                    *p++ = bChar;
+                    *p = 0;
+                    break;
+                }
+
+                *p++ = bChar;
+                ++dwRead;
+            }
+
+            // // ConInString(Buffer, ARRAYSIZE(Buffer));
+            // dwRead = ARRAYSIZE(Buffer);
+            // ReadFile(hOutputRead, (PVOID)Buffer, dwRead, &dwRead, NULL);
+
+            CloseHandle(hOutputRead);
+
+            sscanf(Buffer, "\x1B[%hu;%huR", y, x);
+            --*x; --*y;
+        }
+    }
 }
 
 SHORT GetCursorX(VOID)
@@ -464,45 +847,77 @@ SHORT GetCursorY(VOID)
 //
 // NOTE: Candidate for conutils.c
 //
-// FIXME: Partially TTY-ready!
 VOID GetScreenSize(PSHORT maxx, PSHORT maxy)
 {
     HANDLE hOutput = ConStreamGetOSHandle(StdOut);
-
     CONSOLE_SCREEN_BUFFER_INFO csbi;
 
-    if (!GetConsoleScreenBufferInfo(hOutput, &csbi))
+    if (IsConsoleHandle(hOutput))
+    {
+        if (!GetConsoleScreenBufferInfo(hOutput, &csbi))
+        {
+            csbi.dwSize.X = 80;
+            csbi.dwSize.Y = 25;
+        }
+    }
+    else if (IsTTYHandle(hOutput))
+    {
+        BOOL Success;
+        HANDLE hOutputRead;
+        DWORD dwRead, dwLength;
+        PCHAR p;
+        CHAR bChar;
+        CHAR Buffer[20];
+
+        SHORT x, y;
+
+        /* Duplicate a handle to StdOut for reading access */
+        Success = DuplicateHandle(GetCurrentProcess(),
+                                  hOutput,
+                                  GetCurrentProcess(),
+                                  &hOutputRead,
+                                  GENERIC_READ,
+                                  FALSE,
+                                  0);
+        if (Success)
+        {
+            ConOutPuts(_T("\x1B[18t"));
+
+            /* Read any number of parameters */
+            dwLength = sizeof(Buffer);
+            p = Buffer;
+            dwRead = 0;
+
+            while ((dwRead < dwLength - 1) &&
+                   ReadTTYBytes(hOutputRead, &bChar, 1, NULL, NULL))
+            {
+                if (bChar == 't')
+                {
+                    *p++ = bChar;
+                    *p = 0;
+                    break;
+                }
+
+                *p++ = bChar;
+                ++dwRead;
+            }
+
+            // // ConInString(Buffer, ARRAYSIZE(Buffer));
+            // dwRead = ARRAYSIZE(Buffer);
+            // ReadFile(hOutputRead, (PVOID)Buffer, dwRead, &dwRead, NULL);
+
+            CloseHandle(hOutputRead);
+
+            sscanf(Buffer, "\x1B[8;%hu;%hut", &y, &x);
+
+            csbi.dwSize.X = x;
+            csbi.dwSize.Y = y;
+        }
+    }
+    else
     {
         csbi.dwSize.X = 80;
         csbi.dwSize.Y = 25;
-
-#if 0
-        if (!IsConsoleHandle(hOutput) && IsTTYHandle(hOutput))
-        {
-            BOOL Success;
-            HANDLE hOutputRead;
-            DWORD dwRead;
-            TCHAR Buffer[20];
-
-            /* Duplicate a handle to StdOut for reading access */
-            Success = DuplicateHandle(GetCurrentProcess(),
-                                      hOutput,
-                                      GetCurrentProcess(),
-                                      &hOutputRead,
-                                      GENERIC_READ,
-                                      FALSE,
-                                      0);
-            if (Success)
-            {
-                ConOutPuts(_T("\x1B[18t"));
-                // ConInString(Buffer, ARRAYSIZE(Buffer));
-                dwRead = ARRAYSIZE(Buffer);
-                ReadFile(hOutputRead, (PVOID)Buffer, dwRead, &dwRead, NULL);
-                *Buffer = *Buffer;
-                CloseHandle(hOutputRead);
-            }
-        }
-#endif
     }
 
     if (maxx) *maxx = csbi.dwSize.X;
@@ -512,15 +927,26 @@ VOID GetScreenSize(PSHORT maxx, PSHORT maxy)
 //
 // NOTE: Candidate for conutils.c
 //
-// FIXME: Not TTY-ready!
 VOID SetCursorType(BOOL bInsert, BOOL bVisible)
 {
-    CONSOLE_CURSOR_INFO cci;
+    HANDLE hOutput = ConStreamGetOSHandle(StdOut);
 
-    cci.dwSize = bInsert ? 10 : 99;
-    cci.bVisible = bVisible;
+    if (IsConsoleHandle(hOutput))
+    {
+        CONSOLE_CURSOR_INFO cci;
 
-    SetConsoleCursorInfo(ConStreamGetOSHandle(StdOut), &cci);
+        cci.dwSize   = bInsert ? 10 : 99;
+        cci.bVisible = bVisible;
+
+        SetConsoleCursorInfo(hOutput, &cci);
+    }
+    else if (IsTTYHandle(hOutput))
+    {
+        ConOutPrintf(_T("\x1B[%hu q")  // Mode style
+                     _T("\x1B[?25%c"), // Visible (h) or hidden (l)
+                     bInsert  ?  3  :  1, // Blinking underline (3) or blinking block (1)
+                     bVisible ? 'h' : 'l');
+    }
 }
 
 

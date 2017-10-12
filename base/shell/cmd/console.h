@@ -13,6 +13,8 @@ extern CON_PAGER  StdOutPager;
 VOID ConInDisable(VOID);
 VOID ConInEnable(VOID);
 VOID ConInFlush(VOID);
+
+DWORD ConInKeyTimeout(PKEY_EVENT_RECORD KeyEvent, DWORD dwMilliseconds);
 VOID ConInKey(PKEY_EVENT_RECORD);
 VOID ConInString(LPTSTR, DWORD);
 

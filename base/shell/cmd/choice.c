@@ -40,7 +40,7 @@ GetCharacterTimeout (LPTCH ch, DWORD dwMilliseconds)
 //  be set to INFINITE, so the function works like
 //  stdio.h's getchar()
 
-    DWORD Ret;
+    DWORD Ret; // dwWaitState
 
     HANDLE hInput;
     DWORD  dwRead;
@@ -54,24 +54,14 @@ GetCharacterTimeout (LPTCH ch, DWORD dwMilliseconds)
         return GC_TIMEOUT;
 
     /* Otherwise get the event */
-#if 0
-    ReadConsoleInput(hInput, &ir, 1, &dwRead);
-
-    /* If the event is a key pressed */
-    if ((ir.EventType == KEY_EVENT) &&
-        (ir.Event.KeyEvent.bKeyDown == TRUE))
-#else
     ConInKey(&ir.Event.KeyEvent);
-#endif
-    {
-        /* Read the key */
+    /* Read the key */
 #ifdef _UNICODE
-        *ch = ir.Event.KeyEvent.uChar.UnicodeChar;
+    *ch = ir.Event.KeyEvent.uChar.UnicodeChar;
 #else
-        *ch = ir.Event.KeyEvent.uChar.AsciiChar;
+    *ch = ir.Event.KeyEvent.uChar.AsciiChar;
 #endif
-        return GC_KEYREAD;
-    }
+    return GC_KEYREAD;
 
     /* Else return no key */
     return GC_NOKEY;
