@@ -168,8 +168,10 @@ RetryOpenConsole:
             goto RetryOpenConsole;
         }
 
-        /* Attempt to retrieve a handle for standard output.
-         * Note that GENERIC_READ is needed for IsConsoleHandle() to succeed afterwards. */
+        /*
+         * Attempt to retrieve a handle for standard output.
+         * Note that GENERIC_READ is needed for IsConsoleHandle() to succeed afterwards.
+         */
         hStdHandles[1] = CreateFile(_T("CONOUT$"),
                                     GENERIC_READ | GENERIC_WRITE,
                                     FILE_SHARE_READ | FILE_SHARE_WRITE,
@@ -190,14 +192,14 @@ RetryOpenConsole:
             goto RetryOpenConsole;
         }
 
-        /* Duplicate a handle for standard error */
+        /* Duplicate a handle for standard error (inherits from standard output) */
         Success = DuplicateHandle(GetCurrentProcess(),
                                   hStdHandles[1],
                                   GetCurrentProcess(),
                                   &hStdHandles[2],
-                                  0, // GENERIC_WRITE,
+                                  0,
                                   TRUE,
-                                  DUPLICATE_SAME_ACCESS /* 0 */);
+                                  DUPLICATE_SAME_ACCESS);
         if (!Success)
         {
             // TODO: Error
@@ -229,7 +231,7 @@ RetryOpenConsole:
             return 1;
         }
 
-        /* Duplicate a handle for standard input */
+        /* Duplicate a handle for standard input, read access only */
         Success = DuplicateHandle(GetCurrentProcess(),
                                   hDevice,
                                   GetCurrentProcess(),
@@ -245,12 +247,17 @@ RetryOpenConsole:
             return 1;
         }
 
-        /* Duplicate a handle for standard output */
+        /*
+         * Duplicate a handle for standard output, with
+         * both read and write access. The write access
+         * also allows for sending escape sequence queries,
+         * that can be read back thanks to the read access.
+         */
         Success = DuplicateHandle(GetCurrentProcess(),
                                   hDevice,
                                   GetCurrentProcess(),
                                   &hStdHandles[1],
-                                  GENERIC_WRITE,
+                                  GENERIC_READ | GENERIC_WRITE,
                                   TRUE,
                                   0);
         if (!Success)
@@ -262,14 +269,14 @@ RetryOpenConsole:
             return 1;
         }
 
-        /* Duplicate a handle for standard error */
+        /* Duplicate a handle for standard error (inherits from standard output) */
         Success = DuplicateHandle(GetCurrentProcess(),
-                                  hDevice,
+                                  hStdHandles[1],
                                   GetCurrentProcess(),
                                   &hStdHandles[2],
-                                  GENERIC_WRITE,
+                                  0,
                                   TRUE,
-                                  0);
+                                  DUPLICATE_SAME_ACCESS);
         if (!Success)
         {
             // TODO: Error
