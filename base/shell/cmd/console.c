@@ -65,37 +65,54 @@ VOID ConInFlush(VOID)
         FlushFileBuffers(hInput);
 }
 
-static BOOL
+static DWORD
 ReadTTYBytes(
     IN HANDLE hInput,
     OUT PCHAR pBuffer,
     IN DWORD  nNumberOfBytesToRead,
     OUT LPDWORD lpNumberOfBytesRead OPTIONAL,
+    IN DWORD dwMilliseconds OPTIONAL,
     IN OUT LPOVERLAPPED lpOverlapped OPTIONAL)
 {
     DWORD dwTotalRead = 0;
 
-    /* Read the leading byte */
-    if (!ReadFile(hInput, pBuffer, nNumberOfBytesToRead, /*lpNumberOfBytesRead*/ &dwTotalRead, lpOverlapped) &&
-        GetLastError() != ERROR_IO_PENDING)
+    /* Read the data and write it into the buffer */
+    if (!ReadFile(hInput, pBuffer, nNumberOfBytesToRead,
+                  /*lpNumberOfBytesRead*/ &dwTotalRead, lpOverlapped))
     {
-        return FALSE;
+        DWORD dwLastError = GetLastError();
+        if (dwLastError != ERROR_IO_PENDING)
+            return dwLastError;
+
+        if (lpOverlapped->hEvent)
+        {
+            DWORD dwWaitState;
+
+            dwWaitState = WaitForSingleObject(lpOverlapped->hEvent, dwMilliseconds);
+            if (dwWaitState == WAIT_TIMEOUT)
+                return dwWaitState;    // A timeout occurred
+            if (dwWaitState != WAIT_OBJECT_0)
+                return GetLastError(); // An unknown error happened
+        }
+
+        if (!GetOverlappedResult(hInput, lpOverlapped, &dwTotalRead, !lpOverlapped->hEvent))
+            return GetLastError();
     }
 
     if (lpNumberOfBytesRead)
         *lpNumberOfBytesRead = dwTotalRead;
 
-    // FIXME: Deal with overlapped!
-
-    return TRUE;
+    return ERROR_SUCCESS;
 }
 
-static BOOL
+static DWORD
 ReadTTYChar(
     IN HANDLE hInput,
     OUT PWCHAR pWChar,
+    IN DWORD dwMilliseconds OPTIONAL,
     IN OUT LPOVERLAPPED lpOverlapped OPTIONAL)
 {
+    DWORD dwLastError;
     DWORD dwRead;
     DWORD dwTotalRead;
     CHAR Buffer[6]; // Real maximum number of bytes for a UTF-8 encoded character
@@ -104,8 +121,9 @@ ReadTTYChar(
     dwTotalRead = 0;
 
     /* Read the leading byte */
-    if (!ReadTTYBytes(hInput, Buffer, 1, &dwRead, lpOverlapped))
-        return FALSE;
+    dwLastError = ReadTTYBytes(hInput, Buffer, 1, &dwRead, dwMilliseconds, lpOverlapped);
+    if (dwLastError != ERROR_SUCCESS)
+        return dwLastError;
     ++dwTotalRead;
 
     /* Is it an escape sequence? */
@@ -113,13 +131,15 @@ ReadTTYChar(
     {
         /* Yes it is, let the caller interpret it instead */
         *pWChar = L'\x1B';
-        return FALSE;
+        return ERROR_SUCCESS;
     }
 
 #if 0 /* Extensions to the UTF-8 encoding */
     if ((Buffer[0] & 0xFE) == 0xFC) /* Check for 1111110x: 1+5-byte encoded character */
     {
-        ReadTTYBytes(hInput, &Buffer[1], 5, &dwRead, lpOverlapped);
+        dwLastError = ReadTTYBytes(hInput, &Buffer[1], 5, &dwRead, dwMilliseconds, lpOverlapped);
+        if (dwLastError != ERROR_SUCCESS)
+            return dwLastError;
         dwTotalRead += 5;
 
         /* The other bytes should all start with 10xxxxxx */
@@ -129,13 +149,15 @@ ReadTTYChar(
             (Buffer[4] & 0xC0) != 0x80 ||
             (Buffer[5] & 0xC0) != 0x80)
         {
-            return FALSE;
+            return ERROR_INVALID_DATA;
         }
     }
     else
     if ((Buffer[0] & 0xFC) == 0xF8) /* Check for 111110xx: 1+4-byte encoded character */
     {
-        ReadTTYBytes(hInput, &Buffer[1], 4, &dwRead, lpOverlapped);
+        dwLastError = ReadTTYBytes(hInput, &Buffer[1], 4, &dwRead, dwMilliseconds, lpOverlapped);
+        if (dwLastError != ERROR_SUCCESS)
+            return dwLastError;
         dwTotalRead += 4;
 
         /* The other bytes should all start with 10xxxxxx */
@@ -144,14 +166,16 @@ ReadTTYChar(
             (Buffer[3] & 0xC0) != 0x80 ||
             (Buffer[4] & 0xC0) != 0x80)
         {
-            return FALSE;
+            return ERROR_INVALID_DATA;
         }
     }
     else
 #endif
     if ((Buffer[0] & 0xF8) == 0xF0) /* Check for 11110xxx: 1+3-byte encoded character */
     {
-        ReadTTYBytes(hInput, &Buffer[1], 3, &dwRead, lpOverlapped);
+        dwLastError = ReadTTYBytes(hInput, &Buffer[1], 3, &dwRead, dwMilliseconds, lpOverlapped);
+        if (dwLastError != ERROR_SUCCESS)
+            return dwLastError;
         dwTotalRead += 3;
 
         /* The other bytes should all start with 10xxxxxx */
@@ -159,39 +183,44 @@ ReadTTYChar(
             (Buffer[2] & 0xC0) != 0x80 ||
             (Buffer[3] & 0xC0) != 0x80)
         {
-            return FALSE;
+            return ERROR_INVALID_DATA;
         }
     }
     else
     if ((Buffer[0] & 0xF0) == 0xE0) /* Check for 1110xxxx: 1+2-byte encoded character */
     {
-        ReadTTYBytes(hInput, &Buffer[1], 2, &dwRead, lpOverlapped);
+        dwLastError = ReadTTYBytes(hInput, &Buffer[1], 2, &dwRead, dwMilliseconds, lpOverlapped);
+        if (dwLastError != ERROR_SUCCESS)
+            return dwLastError;
         dwTotalRead += 2;
 
         /* The other bytes should all start with 10xxxxxx */
         if ((Buffer[1] & 0xC0) != 0x80 ||
             (Buffer[2] & 0xC0) != 0x80)
         {
-            return FALSE;
+            return ERROR_INVALID_DATA;
         }
     }
     else
     if ((Buffer[0] & 0xE0) == 0xC0) /* Check for 110xxxxx: 1+1-byte encoded character */
     {
-        ReadTTYBytes(hInput, &Buffer[1], 1, &dwRead, lpOverlapped);
+        dwLastError = ReadTTYBytes(hInput, &Buffer[1], 1, &dwRead, dwMilliseconds, lpOverlapped);
+        if (dwLastError != ERROR_SUCCESS)
+            return dwLastError;
         ++dwTotalRead;
 
         /* The other bytes should all start with 10xxxxxx */
         if ((Buffer[1] & 0xC0) != 0x80)
-            return FALSE;
+            return ERROR_INVALID_DATA;
     }
     /* else, this is a 1-byte character */
 
     /* Convert to UTF-16 */
-    return (MultiByteToWideChar(CP_UTF8, 0, Buffer, dwTotalRead, pWChar, 1) == 1);
+    return (MultiByteToWideChar(CP_UTF8, 0, Buffer, dwTotalRead, pWChar, 1) == 1
+                ? ERROR_SUCCESS : ERROR_INVALID_DATA);
 }
 
-static BOOL
+static DWORD
 ReadTTYEscapes(
     IN HANDLE hInput,
     OUT PCHAR pEscapeType,
@@ -200,8 +229,10 @@ ReadTTYEscapes(
     IN DWORD dwParamsLength,
     OUT PSTR pszInterm OPTIONAL,
     IN DWORD dwIntermLength,
+    IN DWORD dwMilliseconds OPTIONAL,
     IN OUT LPOVERLAPPED lpOverlapped OPTIONAL)
 {
+    DWORD dwLastError;
     DWORD dwRead, dwLength;
     PCHAR p;
     CHAR bChar;
@@ -217,18 +248,20 @@ ReadTTYEscapes(
      * Possibly an escape character, check the second character.
      * Note that we only try to interpret CSI sequences.
      */
-    if (!ReadTTYBytes(hInput, &bChar, 1, NULL, lpOverlapped))
-        return FALSE;
+    dwLastError = ReadTTYBytes(hInput, &bChar, 1, NULL, dwMilliseconds, lpOverlapped);
+    if (dwLastError != ERROR_SUCCESS)
+        return dwLastError;
 
     if (bChar == 'O')
     {
         /* Single Shift Select of G3 Character Set (SS3) */
-        if (!ReadTTYBytes(hInput, &bChar, 1, NULL, lpOverlapped))
-            return FALSE;
+        dwLastError = ReadTTYBytes(hInput, &bChar, 1, NULL, dwMilliseconds, lpOverlapped);
+        if (dwLastError != ERROR_SUCCESS)
+            return dwLastError;
 
         *pEscapeType = 'O';
         *pFunctionChar = bChar;
-        return TRUE;
+        return ERROR_SUCCESS;
     }
     else
     if (bChar == '[')
@@ -240,9 +273,12 @@ ReadTTYEscapes(
         p = pszParams;
         dwRead = 0;
 
-        while ((dwRead < dwLength - 1) &&
-               ReadTTYBytes(hInput, &bChar, 1, NULL, lpOverlapped))
+        while (dwRead < dwLength - 1)
         {
+            dwLastError = ReadTTYBytes(hInput, &bChar, 1, NULL, dwMilliseconds, lpOverlapped);
+            if (dwLastError != ERROR_SUCCESS)
+                return dwLastError; // ERROR_INVALID_DATA;
+
             /* Is it a paramater? */
             if (0x30 <= bChar && bChar <= 0x3F)
             {
@@ -278,14 +314,18 @@ ReadTTYEscapes(
                     *p = 0;
                 break;
             }
-        } while (ReadTTYBytes(hInput, &bChar, 1, NULL, lpOverlapped));
+
+            dwLastError = ReadTTYBytes(hInput, &bChar, 1, NULL, dwMilliseconds, lpOverlapped);
+            if (dwLastError != ERROR_SUCCESS)
+                return dwLastError; // ERROR_INVALID_DATA;
+        } while (dwLastError == ERROR_SUCCESS);
 
         /* Check the terminating byte */
         if (0x40 <= bChar && bChar <= 0x7E)
         {
             *pEscapeType = '[';
             *pFunctionChar = bChar;
-            return TRUE;
+            return ERROR_SUCCESS;
         }
         else
         {
@@ -296,54 +336,56 @@ ReadTTYEscapes(
                 *pszParams = 0;
             if (pszInterm && dwIntermLength > 0)
                 *pszInterm = 0;
-            return FALSE;
+            return ERROR_INVALID_DATA;
         }
     }
     else
     {
         /* Unsupported escape sequence */
-        return FALSE;
+        return ERROR_INVALID_DATA;
     }
 }
 
 // Used in choice.c, cmdinput.c, misc.c
 DWORD ConInKeyTimeout(PKEY_EVENT_RECORD KeyEvent, DWORD dwMilliseconds)
 {
-    DWORD dwWaitState;
     HANDLE hInput = ConStreamGetOSHandle(StdIn);
     DWORD dwRead;
 
     if (hInput == INVALID_HANDLE_VALUE)
     {
         WARN("Invalid input handle!!!\n");
-        return FALSE; // No need to make infinite loops!
+        return ERROR_INVALID_HANDLE; // No need to make infinite loops!
     }
+
+    ConInFlush();
 
     if (IsConsoleHandle(hInput))
     {
         INPUT_RECORD ir;
+        DWORD dwWaitState;
 
         dwWaitState = WaitForSingleObject(hInput, dwMilliseconds);
         if (dwWaitState == WAIT_TIMEOUT)
-            return dwWaitState;
+            return dwWaitState;    // A timeout occurred
         if (dwWaitState != WAIT_OBJECT_0)
-            return dwWaitState; // An error happened.
+            return GetLastError(); // An unknown error happened
 
         /* Be sure there is someting in the console input queue */
         if (!PeekConsoleInput(hInput, &ir, 1, &dwRead))
         {
             /* An error happened, bail out */
             WARN("PeekConsoleInput failed\n");
-            return FALSE;
+            return GetLastError();
         }
 
         if (dwRead == 0)
-            return FALSE; // TRUE;
+            return ERROR_NO_DATA;
 
         do
         {
             if (!ReadConsoleInput(hInput, &ir, 1, &dwRead))
-                return FALSE;
+                return GetLastError();
         }
         while ((ir.EventType != KEY_EVENT) || !ir.Event.KeyEvent.bKeyDown);
 
@@ -352,11 +394,23 @@ DWORD ConInKeyTimeout(PKEY_EVENT_RECORD KeyEvent, DWORD dwMilliseconds)
     }
     else if (IsTTYHandle(hInput))
     {
+        DWORD dwLastError;
+        OVERLAPPED ovl;
         WCHAR wChar;
         WORD  VkKey; // MAKEWORD(low = vkey_code, high = shift_state);
         KEY_EVENT_RECORD KeyEvt;
 
-        if (ReadTTYChar(hInput, &wChar, NULL))
+        ovl.hEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
+
+        dwLastError = ReadTTYChar(hInput, &wChar, dwMilliseconds, &ovl);
+        if (dwLastError != ERROR_SUCCESS)
+        {
+            /* We failed, bail out */
+            CloseHandle(ovl.hEvent);
+            return dwLastError;
+        }
+
+        if (wChar != _T('\x1B'))
         {
             /* Get the key code (+ shift state) corresponding to the character */
             if (wChar == _T('\0') || wChar >= 0x20 || wChar == _T('\t') /** HACK **/ ||
@@ -392,29 +446,27 @@ DWORD ConInKeyTimeout(PKEY_EVENT_RECORD KeyEvent, DWORD dwMilliseconds)
             KeyEvt.uChar.AsciiChar = wChar;
 #endif
         }
-        else
+        else // if (wChar == _T('\x1B'))
         {
+            /* We deal with an escape sequence */
+
             CHAR EscapeType, FunctionChar;
             CHAR szParams[255];
             CHAR szInterm[255];
 
-            /* We may have failed because of an escape sequence: check this */
-            if (wChar != _T('\x1B'))
-            {
-                /* Not an escape sequence, bail out */
-                return FALSE;
-            }
-
             /*
-             * Possibly an escape character, check the second character.
-             * Note that we only try to interpret CSI sequences.
+             * Try to interpret the escape sequence, and check its type.
+             * Note that we only try to interpret a subset of CSI and SS3 sequences.
              */
-            if (!ReadTTYEscapes(hInput, &EscapeType, &FunctionChar,
-                                szParams, sizeof(szParams),
-                                szInterm, sizeof(szInterm),
-                                NULL))
+            dwLastError = ReadTTYEscapes(hInput, &EscapeType, &FunctionChar,
+                                         szParams, sizeof(szParams),
+                                         szInterm, sizeof(szInterm),
+                                         dwMilliseconds, &ovl);
+            if (dwLastError != ERROR_SUCCESS)
             {
-                return FALSE;
+                /* We failed, bail out */
+                CloseHandle(ovl.hEvent);
+                return dwLastError;
             }
 
             VkKey = 0;
@@ -466,7 +518,8 @@ DWORD ConInKeyTimeout(PKEY_EVENT_RECORD KeyEvent, DWORD dwMilliseconds)
                         break;
 
                     default: // Unknown
-                        return FALSE;
+                        CloseHandle(ovl.hEvent);
+                        return ERROR_INVALID_DATA;
                 }
             }
             else
@@ -525,7 +578,7 @@ DWORD ConInKeyTimeout(PKEY_EVENT_RECORD KeyEvent, DWORD dwMilliseconds)
                             default:
                             {
                                 if (uFnKey < 11)
-                                    return FALSE;
+                                    return ERROR_INVALID_DATA;
 
                                 uFnKey -= 11;
                                 if (uFnKey >= 6)
@@ -544,11 +597,14 @@ DWORD ConInKeyTimeout(PKEY_EVENT_RECORD KeyEvent, DWORD dwMilliseconds)
             else
             {
                 /* Unsupported escape sequence */
-                return FALSE;
+                CloseHandle(ovl.hEvent);
+                return ERROR_INVALID_DATA;
             }
 
             KeyEvt.uChar.UnicodeChar = 0;
         }
+
+        CloseHandle(ovl.hEvent);
 
         KeyEvt.bKeyDown = TRUE;
         KeyEvt.wRepeatCount = 1;
@@ -568,10 +624,10 @@ DWORD ConInKeyTimeout(PKEY_EVENT_RECORD KeyEvent, DWORD dwMilliseconds)
     else
     {
         ConOutPuts(L"Not a console input handle!!!\n");
-        return FALSE;
+        return ERROR_INVALID_HANDLE;
     }
 
-    return TRUE;
+    return ERROR_SUCCESS;
 }
 
 // Used in choice.c, cmdinput.c, misc.c
@@ -610,10 +666,19 @@ VOID ConInString(LPTSTR lpInput, DWORD dwLength)
     }
     else if (IsTTYHandle(hInput))
     {
+        DWORD dwLastError;
+        OVERLAPPED ovl;
+
+        ovl.hEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
+
         p = (PTCHAR)pBuf;
         dwRead = 0;
-        while ((dwRead < dwLength - 1) && ReadTTYChar(hInput, p, NULL))
+        while (dwRead < dwLength - 1)
         {
+            dwLastError = ReadTTYChar(hInput, p, INFINITE, &ovl);
+            if (dwLastError != ERROR_SUCCESS)
+                break;
+
             ++dwRead;
 
             /* Echo the input character */
@@ -628,6 +693,8 @@ VOID ConInString(LPTSTR lpInput, DWORD dwLength)
             }
             ++p;
         }
+
+        CloseHandle(ovl.hEvent);
     }
     else
     {
@@ -782,10 +849,6 @@ VOID GetCursorXY(PSHORT x, PSHORT y)
     {
         BOOL Success;
         HANDLE hOutputRead;
-        DWORD dwRead, dwLength;
-        PCHAR p;
-        CHAR bChar;
-        CHAR Buffer[20];
 
         /* Duplicate a handle to StdOut for reading access */
         Success = DuplicateHandle(GetCurrentProcess(),
@@ -797,16 +860,28 @@ VOID GetCursorXY(PSHORT x, PSHORT y)
                                   0);
         if (Success)
         {
+            DWORD dwLastError = ERROR_SUCCESS;
+            DWORD dwRead, dwLength;
+            PCHAR p;
+            CHAR bChar;
+            CHAR Buffer[20];
+            OVERLAPPED ovl;
+
             ConOutPuts(_T("\x1B[6n"));
+
+            ovl.hEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
 
             /* Read any number of parameters */
             dwLength = sizeof(Buffer);
             p = Buffer;
             dwRead = 0;
 
-            while ((dwRead < dwLength - 1) &&
-                   ReadTTYBytes(hOutputRead, &bChar, 1, NULL, NULL))
+            while (dwRead < dwLength - 1)
             {
+                dwLastError = ReadTTYBytes(hOutputRead, &bChar, 1, NULL, INFINITE, &ovl);
+                if (dwLastError != ERROR_SUCCESS)
+                    break;
+
                 if (bChar == 'R')
                 {
                     *p++ = bChar;
@@ -820,9 +895,14 @@ VOID GetCursorXY(PSHORT x, PSHORT y)
 
             // // ConInString(Buffer, ARRAYSIZE(Buffer));
             // dwRead = ARRAYSIZE(Buffer);
-            // ReadFile(hOutputRead, (PVOID)Buffer, dwRead, &dwRead, NULL);
+            // ReadFile(hOutputRead, (PVOID)Buffer, dwRead, &dwRead, &ovl);
+
+            CloseHandle(ovl.hEvent);
 
             CloseHandle(hOutputRead);
+
+            if (dwLastError != ERROR_SUCCESS)
+                return;
 
             sscanf(Buffer, "\x1B[%hu;%huR", y, x);
             --*x; --*y;
@@ -845,7 +925,7 @@ SHORT GetCursorY(VOID)
 }
 
 //
-// NOTE: Candidate for conutils.c
+// NOTE: Candidate for conutils.c - See ConGetScreenInfo()
 //
 VOID GetScreenSize(PSHORT maxx, PSHORT maxy)
 {
@@ -864,12 +944,6 @@ VOID GetScreenSize(PSHORT maxx, PSHORT maxy)
     {
         BOOL Success;
         HANDLE hOutputRead;
-        DWORD dwRead, dwLength;
-        PCHAR p;
-        CHAR bChar;
-        CHAR Buffer[20];
-
-        SHORT x, y;
 
         /* Duplicate a handle to StdOut for reading access */
         Success = DuplicateHandle(GetCurrentProcess(),
@@ -881,16 +955,30 @@ VOID GetScreenSize(PSHORT maxx, PSHORT maxy)
                                   0);
         if (Success)
         {
+            DWORD dwLastError = ERROR_SUCCESS;
+            DWORD dwRead, dwLength;
+            PCHAR p;
+            CHAR bChar;
+            CHAR Buffer[20];
+            OVERLAPPED ovl;
+
+            SHORT x, y;
+
             ConOutPuts(_T("\x1B[18t"));
+
+            ovl.hEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
 
             /* Read any number of parameters */
             dwLength = sizeof(Buffer);
             p = Buffer;
             dwRead = 0;
 
-            while ((dwRead < dwLength - 1) &&
-                   ReadTTYBytes(hOutputRead, &bChar, 1, NULL, NULL))
+            while (dwRead < dwLength - 1)
             {
+                dwLastError = ReadTTYBytes(hOutputRead, &bChar, 1, NULL, INFINITE, &ovl);
+                if (dwLastError != ERROR_SUCCESS)
+                    break;
+
                 if (bChar == 't')
                 {
                     *p++ = bChar;
@@ -904,9 +992,14 @@ VOID GetScreenSize(PSHORT maxx, PSHORT maxy)
 
             // // ConInString(Buffer, ARRAYSIZE(Buffer));
             // dwRead = ARRAYSIZE(Buffer);
-            // ReadFile(hOutputRead, (PVOID)Buffer, dwRead, &dwRead, NULL);
+            // ReadFile(hOutputRead, (PVOID)Buffer, dwRead, &dwRead, &ovl);
+
+            CloseHandle(ovl.hEvent);
 
             CloseHandle(hOutputRead);
+
+            if (dwLastError != ERROR_SUCCESS)
+                return;
 
             sscanf(Buffer, "\x1B[8;%hu;%hut", &y, &x);
 

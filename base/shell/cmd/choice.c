@@ -29,7 +29,7 @@
 
 
 static INT
-GetCharacterTimeout (LPTCH ch, DWORD dwMilliseconds)
+GetCharacterTimeout(LPTCH ch, DWORD dwMilliseconds)
 {
 //--------------------------------------------
 //  Get a character from standard input but with a timeout.
@@ -40,31 +40,31 @@ GetCharacterTimeout (LPTCH ch, DWORD dwMilliseconds)
 //  be set to INFINITE, so the function works like
 //  stdio.h's getchar()
 
-    DWORD Ret; // dwWaitState
-
-    HANDLE hInput;
-    DWORD  dwRead;
+    DWORD dwKeyState;
     INPUT_RECORD ir;
 
-    hInput = GetStdHandle(STD_INPUT_HANDLE);
-
-    /* If the timeout expired return GC_TIMEOUT */
-    Ret = WaitForSingleObject(hInput, dwMilliseconds);
-    if (Ret == WAIT_TIMEOUT)
-        return GC_TIMEOUT;
-
-    /* Otherwise get the event */
-    ConInKey(&ir.Event.KeyEvent);
-    /* Read the key */
+    /* Get the key press with timeout */
+    dwKeyState = ConInKeyTimeout(&ir.Event.KeyEvent, dwMilliseconds);
+    if (dwKeyState == ERROR_SUCCESS)
+    {
+        /* Get the key */
 #ifdef _UNICODE
-    *ch = ir.Event.KeyEvent.uChar.UnicodeChar;
+        *ch = ir.Event.KeyEvent.uChar.UnicodeChar;
 #else
-    *ch = ir.Event.KeyEvent.uChar.AsciiChar;
+        *ch = ir.Event.KeyEvent.uChar.AsciiChar;
 #endif
-    return GC_KEYREAD;
-
-    /* Else return no key */
-    return GC_NOKEY;
+        return GC_KEYREAD;
+    }
+    else if (dwKeyState == WAIT_TIMEOUT)
+    {
+        /* If the timeout expired return GC_TIMEOUT */
+        return GC_TIMEOUT;
+    }
+    else // ERROR_NO_DATA or any other error
+    {
+        /* Else return no key */
+        return GC_NOKEY;
+    }
 }
 
 static INT
@@ -256,27 +256,27 @@ CommandChoice (LPTSTR param)
         return 0;
     }
 
-    clk = GetTickCount ();
+    clk = GetTickCount();
     amount = nTimeout*1000;
 
 loop:
-    GCret = GetCharacterTimeout (&Ch, amount - (GetTickCount () - clk));
+    GCret = GetCharacterTimeout(&Ch, amount - (GetTickCount() - clk));
 
     switch (GCret)
     {
         case GC_TIMEOUT:
             TRACE ("GC_TIMEOUT\n");
-            TRACE ("elapsed %d msecs\n", GetTickCount () - clk);
+            TRACE ("elapsed %d msecs\n", GetTickCount() - clk);
             break;
 
         case GC_NOKEY:
             TRACE ("GC_NOKEY\n");
-            TRACE ("elapsed %d msecs\n", GetTickCount () - clk);
+            TRACE ("elapsed %d msecs\n", GetTickCount() - clk);
             goto loop;
 
         case GC_KEYREAD:
             TRACE ("GC_KEYREAD\n");
-            TRACE ("elapsed %d msecs\n", GetTickCount () - clk);
+            TRACE ("elapsed %d msecs\n", GetTickCount() - clk);
             TRACE ("read %c", Ch);
             if ((val=IsKeyInString(lpOptions,Ch,bCaseSensitive))==-1)
             {
@@ -288,7 +288,7 @@ loop:
     }
 
     TRACE ("exiting wait loop after %d msecs\n",
-                GetTickCount () - clk);
+                GetTickCount() - clk);
 
     val = IsKeyInString (lpOptions, cDefault, bCaseSensitive);
     ConOutPrintf(_T("%c\n"), lpOptions[val]);
