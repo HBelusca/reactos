@@ -42,6 +42,12 @@ typedef struct _CON_STREAM
     BOOL IsConsole;
 
     /*
+     * Structure for overlapping (asynchronous) operations,
+     * if the opened handle supports them.
+     */
+    OVERLAPPED ovl;
+
+    /*
      * The 'Mode' flag is used to know the translation mode
      * when 'hHandle' refers to a file or a pipe.
      */

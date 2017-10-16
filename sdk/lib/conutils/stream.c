@@ -170,6 +170,8 @@ ConStreamInitEx(
     Stream->hHandle   = (HANDLE)Handle;
     Stream->IsConsole = IsConsoleHandle(Stream->hHandle);
 
+    RtlZeroMemory(&Stream->ovl, sizeof(Stream->ovl));
+
 #endif /* defined(USE_CRT) */
 
     /* Set the correct file translation mode */

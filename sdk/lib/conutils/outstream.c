@@ -177,7 +177,7 @@ ConWrite(
 
             /* Write everything up to \n */
             dwNumBytes = ((PWCHAR)p - (PWCHAR)szStr) * sizeof(WCHAR);
-            WriteFile(Stream->hHandle, szStr, dwNumBytes, &dwNumBytes, NULL);
+            WriteFile(Stream->hHandle, szStr, dwNumBytes, &dwNumBytes, &Stream->ovl);
 
             /*
              * If we hit a newline and the previous character is not a carriage-return,
@@ -186,9 +186,9 @@ ConWrite(
             if (len > 0 && *(PWCHAR)p == L'\n')
             {
                 if (p == (PVOID)szStr || (p > (PVOID)szStr && *((PWCHAR)p - 1) != L'\r'))
-                    WriteFile(Stream->hHandle, L"\r\n", 2 * sizeof(WCHAR), &dwNumBytes, NULL);
+                    WriteFile(Stream->hHandle, L"\r\n", 2 * sizeof(WCHAR), &dwNumBytes, &Stream->ovl);
                 else
-                    WriteFile(Stream->hHandle, L"\n", sizeof(WCHAR), &dwNumBytes, NULL);
+                    WriteFile(Stream->hHandle, L"\n", sizeof(WCHAR), &dwNumBytes, &Stream->ovl);
 
                 /* Skip \n */
                 p = (PVOID)((PWCHAR)p + 1);
@@ -261,7 +261,7 @@ ConWrite(
 
             /* Write everything up to \n */
             dwNumBytes = ((PCHAR)p - (PCHAR)szStr) * sizeof(CHAR);
-            WriteFile(Stream->hHandle, szStr, dwNumBytes, &dwNumBytes, NULL);
+            WriteFile(Stream->hHandle, szStr, dwNumBytes, &dwNumBytes, &Stream->ovl);
 
             /*
              * If we hit a newline and the previous character is not a carriage-return,
@@ -270,9 +270,9 @@ ConWrite(
             if (len > 0 && *(PCHAR)p == '\n')
             {
                 if (p == (PVOID)szStr || (p > (PVOID)szStr && *((PCHAR)p - 1) != '\r'))
-                    WriteFile(Stream->hHandle, "\r\n", 2, &dwNumBytes, NULL);
+                    WriteFile(Stream->hHandle, "\r\n", 2, &dwNumBytes, &Stream->ovl);
                 else
-                    WriteFile(Stream->hHandle, "\n", 1, &dwNumBytes, NULL);
+                    WriteFile(Stream->hHandle, "\n", 1, &dwNumBytes, &Stream->ovl);
 
                 /* Skip \n */
                 p = (PVOID)((PCHAR)p + 1);
@@ -290,7 +290,7 @@ ConWrite(
     else // if (Stream->Mode == Binary)
     {
         /* Directly output the string */
-        WriteFile(Stream->hHandle, szStr, len, &dwNumBytes, NULL);
+        WriteFile(Stream->hHandle, szStr, len, &dwNumBytes, &Stream->ovl);
     }
 
     // FIXME!
