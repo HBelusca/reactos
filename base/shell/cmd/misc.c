@@ -424,12 +424,12 @@ cgetchar(VOID)
         return _T('\0'); // No need to make infinite loops!
     }
 
-    do
+    while (TRUE)
     {
         ConInKey(&KeyEvent);
 
         if (KeyEvent.dwControlKeyState &
-             (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED))
+            (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED))
         {
             if (KeyEvent.wVirtualKeyCode == 'C')
             {
@@ -448,7 +448,6 @@ cgetchar(VOID)
             break;
         }
     }
-    while (TRUE);
 
 #ifndef _UNICODE
     return KeyEvent.uChar.AsciiChar;

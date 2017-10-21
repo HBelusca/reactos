@@ -29,7 +29,7 @@
 
 
 static INT
-GetCharacterTimeout(LPTCH ch, DWORD dwMilliseconds)
+GetCharacterTimeout(PTCHAR ch, DWORD dwMilliseconds)
 {
 //--------------------------------------------
 //  Get a character from standard input but with a timeout.
@@ -41,17 +41,17 @@ GetCharacterTimeout(LPTCH ch, DWORD dwMilliseconds)
 //  stdio.h's getchar()
 
     DWORD dwKeyState;
-    INPUT_RECORD ir;
+    KEY_EVENT_RECORD KeyEvent;
 
     /* Get the key press with timeout */
-    dwKeyState = ConInKeyTimeout(&ir.Event.KeyEvent, dwMilliseconds);
+    dwKeyState = ConInKeyTimeout(&KeyEvent, dwMilliseconds);
     if (dwKeyState == ERROR_SUCCESS)
     {
         /* Get the key */
 #ifdef _UNICODE
-        *ch = ir.Event.KeyEvent.uChar.UnicodeChar;
+        *ch = KeyEvent.uChar.UnicodeChar;
 #else
-        *ch = ir.Event.KeyEvent.uChar.AsciiChar;
+        *ch = KeyEvent.uChar.AsciiChar;
 #endif
         return GC_KEYREAD;
     }
@@ -70,7 +70,7 @@ GetCharacterTimeout(LPTCH ch, DWORD dwMilliseconds)
 static INT
 IsKeyInString (LPTSTR lpString, TCHAR cKey, BOOL bCaseSensitive)
 {
-    LPTCH p = lpString;
+    PTCHAR p = lpString;
     INT val = 0;
 
     while (*p)
