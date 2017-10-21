@@ -99,7 +99,7 @@ BOOL SubstituteVars(TCHAR *Src, TCHAR *Dest, TCHAR Delim);
 BOOL SubstituteForVars(TCHAR *Src, TCHAR *Dest);
 LPTSTR DoDelayedExpansion(LPTSTR Line);
 INT DoCommand(LPTSTR first, LPTSTR rest, struct _PARSED_COMMAND *Cmd);
-BOOL ReadLine(TCHAR *commandline, BOOL bMore);
+BOOL ReadCommandLine(TCHAR *commandline, BOOL bMore);
 
 extern HANDLE CMD_ModuleHandle;
 

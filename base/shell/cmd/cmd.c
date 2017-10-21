@@ -1495,9 +1495,9 @@ DoDelayedExpansion(LPTSTR Line)
  * Do the prompt/input/process loop.
  */
 BOOL
-ReadLine(TCHAR *commandline, BOOL bMore)
+ReadCommandLine(TCHAR *commandline, BOOL bMore)
 {
-    TCHAR readline[CMDLINE_LENGTH];
+    TCHAR szCommandLine[CMDLINE_LENGTH];
     LPTSTR ip;
 
     /* if no batch input then... */
@@ -1518,7 +1518,7 @@ ReadLine(TCHAR *commandline, BOOL bMore)
             }
         }
 
-        if (!ReadCommand(readline, CMDLINE_LENGTH - 1))
+        if (!ReadCommand(szCommandLine, CMDLINE_LENGTH - 1))
         {
             bExit = TRUE;
             return FALSE;
@@ -1533,7 +1533,7 @@ ReadLine(TCHAR *commandline, BOOL bMore)
         if (readline[0] == _T('\0'))
             return FALSE;
 
-        ip = readline;
+        ip = szCommandLine;
     }
     else
     {

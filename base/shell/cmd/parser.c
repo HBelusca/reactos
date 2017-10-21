@@ -98,7 +98,7 @@ restart:
         ParsePos--;
         if (bLineContinuations)
         {
-            if (!ReadLine(ParseLine, TRUE))
+            if (!ReadCommandLine(ParseLine, TRUE))
             {
                 /* ^C pressed, or line was too long */
                 bParseError = TRUE;
@@ -814,7 +814,7 @@ ParseCommand(LPTSTR Line)
     }
     else
     {
-        if (!ReadLine(ParseLine, FALSE))
+        if (!ReadCommandLine(ParseLine, FALSE))
             return NULL;
         bLineContinuations = TRUE;
     }
