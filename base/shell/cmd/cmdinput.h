@@ -3,6 +3,13 @@ extern BOOL  bUseBashCompletion;
 extern TCHAR AutoCompletionChar;
 extern TCHAR PathCompletionChar;
 
+BOOL
+ReadLine(
+    IN HANDLE hInput,
+    IN HANDLE hOutput,
+    IN OUT LPTSTR str,
+    IN DWORD maxlen);
+
 BOOL ReadCommand(LPTSTR, DWORD);
 
 

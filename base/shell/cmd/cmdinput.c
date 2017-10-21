@@ -119,7 +119,7 @@ SHORT maxx;
 SHORT maxy;
 
 static VOID
-ClearCommandLine(LPTSTR str, DWORD maxlen, SHORT orgx, SHORT orgy)
+ClearLine(LPTSTR str, DWORD maxlen, SHORT orgx, SHORT orgy)
 {
     DWORD count;
 
@@ -132,9 +132,9 @@ ClearCommandLine(LPTSTR str, DWORD maxlen, SHORT orgx, SHORT orgy)
 }
 
 static VOID
-PrintPartialPrompt(IN LPTSTR str, IN DWORD charcount, IN DWORD tempscreen,
-                   IN OUT PSHORT orgx, IN OUT PSHORT orgy,
-                   OUT PSHORT curx, OUT PSHORT cury)
+PrintPartialLine(IN LPTSTR str, IN DWORD charcount, IN DWORD tempscreen,
+                 IN OUT PSHORT orgx, IN OUT PSHORT orgy,
+                 OUT PSHORT curx, OUT PSHORT cury)
 {
     //// tempscreen == old_charcount
     /**/ DWORD count; /**/
@@ -166,7 +166,7 @@ PrintPartialPrompt(IN LPTSTR str, IN DWORD charcount, IN DWORD tempscreen,
 }
 
 static BOOL
-ReadCommandFromFile(HANDLE hInput, /* HANDLE hOutput, */ LPTSTR str, DWORD maxlen)
+ReadLineFromFile(HANDLE hInput, /* HANDLE hOutput, */ LPTSTR str, DWORD maxlen)
 {
     DWORD dwRead;
     CHAR chr;
@@ -188,7 +188,7 @@ ReadCommandFromFile(HANDLE hInput, /* HANDLE hOutput, */ LPTSTR str, DWORD maxle
 }
 
 static BOOL
-ReadCommandFromTTY(HANDLE hInput, HANDLE hOutput, LPTSTR str, DWORD maxlen)
+ReadLineFromTTY(HANDLE hInput, HANDLE hOutput, LPTSTR str, DWORD maxlen)
 {
     BOOL Success;
 
@@ -252,7 +252,7 @@ static BOOL bInsert = TRUE;
                         if (str[0])
                             History(0,str);
 
-                        ClearCommandLine(str, maxlen, orgx, orgy);
+                        ClearLine(str, maxlen, orgx, orgy);
                         current = charcount = 0;
                         curx = orgx;
                         cury = orgy;
@@ -268,7 +268,7 @@ static BOOL bInsert = TRUE;
                     if (dwControlKeyState &
                         (LEFT_CTRL_PRESSED|RIGHT_CTRL_PRESSED))
                     {
-                        ClearCommandLine(str, maxlen, orgx, orgy);
+                        ClearLine(str, maxlen, orgx, orgy);
                         History_del_current_entry(str);
                         current = charcount = _tcslen(str);
                         ConOutPuts(str);
@@ -456,7 +456,7 @@ static BOOL bInsert = TRUE;
             case VK_ESCAPE:
             {
                 /* Clear str. Make this callable! */
-                ClearCommandLine(str, maxlen, orgx, orgy);
+                ClearLine(str, maxlen, orgx, orgy);
                 current = charcount = 0;
                 curx = orgx;
                 cury = orgy;
@@ -473,7 +473,7 @@ static BOOL bInsert = TRUE;
             {
 #ifdef FEATURE_HISTORY
                 /* Get previous command from buffer */
-                ClearCommandLine(str, maxlen, orgx, orgy);
+                ClearLine(str, maxlen, orgx, orgy);
                 History(-1, str);
                 current = charcount = _tcslen(str);
                 if (((charcount + orgx) / maxx) + orgy > maxy - 1)
@@ -488,7 +488,7 @@ static BOOL bInsert = TRUE;
             {
 #ifdef FEATURE_HISTORY
                 /* Get next command from buffer */
-                ClearCommandLine(str, maxlen, orgx, orgy);
+                ClearLine(str, maxlen, orgx, orgy);
                 History(1, str);
                 current = charcount = _tcslen(str);
                 if (((charcount + orgx) / maxx) + orgy > maxy - 1)
@@ -706,8 +706,8 @@ static BOOL bInsert = TRUE;
                     current = charcount = _tcslen(str);
 
                     /* Print out what we have now */
-                    PrintPartialPrompt(str, charcount, tempscreen,
-                                       &orgx, &orgy, &curx, &cury);
+                    PrintPartialLine(str, charcount, tempscreen,
+                                     &orgx, &orgy, &curx, &cury);
                 }
                 else if (Success)
                 {
@@ -730,8 +730,8 @@ static BOOL bInsert = TRUE;
                 current = charcount = _tcslen(str);
 
                 /* Print out what we have now */
-                PrintPartialPrompt(str, charcount, tempscreen,
-                                   &orgx, &orgy, &curx, &cury);
+                PrintPartialLine(str, charcount, tempscreen,
+                                 &orgx, &orgy, &curx, &cury);
             }
         }
 
@@ -787,7 +787,7 @@ static BOOL bInsert = TRUE;
 
 // static
 BOOL
-ReadCommandFromConsole(HANDLE hInput, HANDLE hOutput, LPTSTR str, DWORD maxlen)
+ReadLineFromConsole(HANDLE hInput, HANDLE hOutput, LPTSTR str, DWORD maxlen)
 {
     BOOL Success;
 #ifdef _UNICODE
@@ -809,14 +809,10 @@ ReadCommandFromConsole(HANDLE hInput, HANDLE hOutput, LPTSTR str, DWORD maxlen)
 
 #if 1 /************** For temporary CODE REUSE!!!! ********************/
     SHORT orgx, orgy;     /* origin x/y */
-    SHORT curx, cury;     /*current x/y cursor position*/
+    SHORT curx, cury;     /* current x/y cursor position */
     DWORD tempscreen;
-    DWORD current = 0;  /*the position of the cursor in the string (str)*/
+    DWORD current = 0;  /* the position of the cursor in the string (str) */
 #endif
-
-
-    // NOTE that this function is a more throughout version of ConInString!
-
 
 
     /* If autocompletion is disabled, just call directly ReadConsole */
@@ -1098,8 +1094,8 @@ ReadCommandFromConsole(HANDLE hInput, HANDLE hOutput, LPTSTR str, DWORD maxlen)
                 current = charcount = _tcslen(str);
 
                 /* Print out what we have now */
-                PrintPartialPrompt(str, charcount, tempscreen,
-                                   &orgx, &orgy, &curx, &cury);
+                PrintPartialLine(str, charcount, tempscreen,
+                                 &orgx, &orgy, &curx, &cury);
             }
             else if (Success)
             {
@@ -1123,8 +1119,8 @@ ReadCommandFromConsole(HANDLE hInput, HANDLE hOutput, LPTSTR str, DWORD maxlen)
             current = charcount = _tcslen(str);
 
             /* Print out what we have now */
-            PrintPartialPrompt(str, charcount, tempscreen,
-                               &orgx, &orgy, &curx, &cury);
+            PrintPartialLine(str, charcount, tempscreen,
+                             &orgx, &orgy, &curx, &cury);
         }
 
         InputControl.nInitialChars = _tcslen(str);
@@ -1139,38 +1135,62 @@ ReadCommandFromConsole(HANDLE hInput, HANDLE hOutput, LPTSTR str, DWORD maxlen)
     return Success;
 }
 
-/* Read a command from the command line */
-BOOL ReadCommand(LPTSTR str, DWORD maxlen)
+BOOL
+ReadLine(
+    IN HANDLE hInput,
+    IN HANDLE hOutput,
+    IN OUT LPTSTR str,
+    IN DWORD maxlen)
 {
-    HANDLE hInput  = ConStreamGetOSHandle(StdIn);
-    HANDLE hOutput = ConStreamGetOSHandle(StdOut);
+    BOOL Success = FALSE;
+    DWORD dwOldMode;
 
-    memset(str, 0, maxlen * sizeof(TCHAR));
+    GetConsoleMode(hInput, &dwOldMode);
+    SetConsoleMode(hInput, /* dwOldMode | */ ENABLE_LINE_INPUT | ENABLE_ECHO_INPUT);
+
+    ZeroMemory(str, maxlen * sizeof(TCHAR));
 
 #if 0
     if (IsConsoleHandle(hInput) && IsConsoleHandle(hOutput))
     {
-        if (!ReadCommandFromConsole(hInput, hOutput, str, maxlen))
-            return FALSE;
+        if (!ReadLineFromConsole(hInput, hOutput, str, maxlen))
+            goto Quit;
     }
     else
 #endif
     if (IsTTYHandle(hInput) && IsTTYHandle(hOutput)) // Either hInput or hOutput can be console, but not both.
     {
-        if (!ReadCommandFromTTY(hInput, hOutput, str, maxlen))
-            return FALSE;
+        if (!ReadLineFromTTY(hInput, hOutput, str, maxlen))
+            goto Quit;
     }
     else
     {
         /* No console or TTY (this is a file) */
-        if (!ReadCommandFromFile(hInput, /* hOutput, */ str, maxlen))
-            return FALSE;
-        // return TRUE;
+        if (!ReadLineFromFile(hInput, /* hOutput, */ str, maxlen))
+            goto Quit;
+    }
+
+    Success = TRUE;
+
+Quit:
+    SetConsoleMode(hInput, dwOldMode);
+    return Success;
+}
+
+/* Read a command from the command line */
+BOOL ReadCommand(LPTSTR str, DWORD maxlen)
+{
+    if (!ReadLine(ConStreamGetOSHandle(StdIn),
+                  ConStreamGetOSHandle(StdOut),
+                  str, maxlen))
+    {
+        return FALSE;
     }
 
 #ifdef FEATURE_ALIASES
     /* Expand all aliases */
     ExpandAlias(str, maxlen);
 #endif /* FEATURE_ALIAS */
+
     return TRUE;
 }
