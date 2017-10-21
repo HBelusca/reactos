@@ -56,6 +56,64 @@
 #define CON_RC_STRING_MAX_SIZE  4096
 
 
+/* static */ DWORD
+WriteBytesAsync(
+    IN HANDLE hInput,
+    IN LPCVOID pBuffer,
+    IN DWORD  nNumberOfBytesToWrite,
+    OUT LPDWORD lpNumberOfBytesWritten OPTIONAL,
+    IN DWORD dwTimeout OPTIONAL, // In milliseconds
+    IN OUT LPOVERLAPPED lpOverlapped OPTIONAL)
+{
+    DWORD dwTotalWritten = 0;
+
+    if (lpNumberOfBytesWritten)
+        *lpNumberOfBytesWritten = dwTotalWritten;
+
+    /* Write the data from the buffer to the file */
+    if (!WriteFile(hInput, pBuffer, nNumberOfBytesToWrite,
+                   /*lpNumberOfBytesWritten*/ &dwTotalWritten, lpOverlapped))
+    {
+        DWORD dwLastError = GetLastError();
+        if (dwLastError != ERROR_IO_PENDING)
+            return dwLastError;
+
+        if (lpOverlapped->hEvent)
+        {
+            DWORD dwWaitState;
+
+            dwWaitState = WaitForSingleObject(lpOverlapped->hEvent, dwTimeout);
+            if (dwWaitState == WAIT_TIMEOUT)
+            {
+                /*
+                 * Properly cancel the I/O operation and wait for the operation
+                 * to finish, otherwise the overlapped structure may become
+                 * out-of-order while I/O operations are being completed...
+                 * See https://blogs.msdn.microsoft.com/oldnewthing/20110202-00/?p=11613
+                 * for more details.
+                 * NOTE: CancelIoEx does not exist on Windows <= 2003.
+                 */
+                CancelIo(hInput);
+                // CancelIoEx(hInput, &lpOverlapped);
+                GetOverlappedResult(hInput, lpOverlapped, &dwTotalWritten, TRUE);
+                // WaitForSingleObject(lpOverlapped->hEvent, INFINITE);
+                return dwWaitState;    // A timeout occurred
+            }
+            if (dwWaitState != WAIT_OBJECT_0)
+                return GetLastError(); // An unknown error happened
+        }
+
+        if (!GetOverlappedResult(hInput, lpOverlapped, &dwTotalWritten, !lpOverlapped->hEvent))
+            return GetLastError();
+    }
+
+    if (lpNumberOfBytesWritten)
+        *lpNumberOfBytesWritten = dwTotalWritten;
+
+    return ERROR_SUCCESS;
+}
+
+
 /**
  * @name ConWrite
  *     Writes a counted string to a stream.
@@ -177,7 +235,7 @@ ConWrite(
 
             /* Write everything up to \n */
             dwNumBytes = ((PWCHAR)p - (PWCHAR)szStr) * sizeof(WCHAR);
-            WriteFile(Stream->hHandle, szStr, dwNumBytes, &dwNumBytes, &Stream->ovl);
+            WriteBytesAsync(Stream->hHandle, szStr, dwNumBytes, &dwNumBytes, INFINITE, &Stream->ovl);
 
             /*
              * If we hit a newline and the previous character is not a carriage-return,
@@ -186,9 +244,9 @@ ConWrite(
             if (len > 0 && *(PWCHAR)p == L'\n')
             {
                 if (p == (PVOID)szStr || (p > (PVOID)szStr && *((PWCHAR)p - 1) != L'\r'))
-                    WriteFile(Stream->hHandle, L"\r\n", 2 * sizeof(WCHAR), &dwNumBytes, &Stream->ovl);
+                    WriteBytesAsync(Stream->hHandle, L"\r\n", 2 * sizeof(WCHAR), &dwNumBytes, INFINITE, &Stream->ovl);
                 else
-                    WriteFile(Stream->hHandle, L"\n", sizeof(WCHAR), &dwNumBytes, &Stream->ovl);
+                    WriteBytesAsync(Stream->hHandle, L"\n", sizeof(WCHAR), &dwNumBytes, INFINITE, &Stream->ovl);
 
                 /* Skip \n */
                 p = (PVOID)((PWCHAR)p + 1);
@@ -261,7 +319,7 @@ ConWrite(
 
             /* Write everything up to \n */
             dwNumBytes = ((PCHAR)p - (PCHAR)szStr) * sizeof(CHAR);
-            WriteFile(Stream->hHandle, szStr, dwNumBytes, &dwNumBytes, &Stream->ovl);
+            WriteBytesAsync(Stream->hHandle, szStr, dwNumBytes, &dwNumBytes, INFINITE, &Stream->ovl);
 
             /*
              * If we hit a newline and the previous character is not a carriage-return,
@@ -270,9 +328,9 @@ ConWrite(
             if (len > 0 && *(PCHAR)p == '\n')
             {
                 if (p == (PVOID)szStr || (p > (PVOID)szStr && *((PCHAR)p - 1) != '\r'))
-                    WriteFile(Stream->hHandle, "\r\n", 2, &dwNumBytes, &Stream->ovl);
+                    WriteBytesAsync(Stream->hHandle, "\r\n", 2, &dwNumBytes, INFINITE, &Stream->ovl);
                 else
-                    WriteFile(Stream->hHandle, "\n", 1, &dwNumBytes, &Stream->ovl);
+                    WriteBytesAsync(Stream->hHandle, "\n", 1, &dwNumBytes, INFINITE, &Stream->ovl);
 
                 /* Skip \n */
                 p = (PVOID)((PCHAR)p + 1);
@@ -290,7 +348,7 @@ ConWrite(
     else // if (Stream->Mode == Binary)
     {
         /* Directly output the string */
-        WriteFile(Stream->hHandle, szStr, len, &dwNumBytes, &Stream->ovl);
+        WriteBytesAsync(Stream->hHandle, szStr, len, &dwNumBytes, INFINITE, &Stream->ovl);
     }
 
     // FIXME!
@@ -1507,7 +1565,7 @@ ConClearLine(IN PCON_STREAM Stream)
     }
     else if (IsTTYHandle(hOutput))
     {
-        ConPuts(Stream, L"\x1B[2K\x1B[1G"); // FIXME: Just use WriteFile
+        ConPuts(Stream, L"\x1B[2K\x1B[1G"); // FIXME: Just use WriteBytesAsync
     }
     // else, do nothing for files
 }

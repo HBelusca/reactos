@@ -44,6 +44,15 @@ typedef struct _CON_STREAM CON_STREAM, *PCON_STREAM;
 typedef INT (__stdcall *CON_WRITE_FUNC)(IN PCON_STREAM, IN PTCHAR, IN DWORD);
 
 
+/* static */ DWORD
+WriteBytesAsync(
+    IN HANDLE hInput,
+    IN LPCVOID pBuffer,
+    IN DWORD  nNumberOfBytesToWrite,
+    OUT LPDWORD lpNumberOfBytesWritten OPTIONAL,
+    IN DWORD dwTimeout OPTIONAL, // In milliseconds
+    IN OUT LPOVERLAPPED lpOverlapped OPTIONAL);
+
 INT
 __stdcall
 ConWrite(
