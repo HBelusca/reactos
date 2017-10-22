@@ -63,7 +63,9 @@ ConWritePaging(
         return TRUE;
 
     /* Get the size of the visual screen that can be printed to */
-    if (!ConGetScreenInfo(Pager->Screen, &csbi))
+    if (!ConGetScreenInfo(Pager->Screen, &csbi,
+                          CON_SCREEN_SBSIZE | CON_SCREEN_WINDOWSIZE |
+                          CON_SCREEN_CURSORPOS))
     {
         /* We assume it's a file handle */
         CON_STREAM_WRITE(Pager->Screen->Stream, szStr, len);
@@ -103,8 +105,8 @@ ConWritePaging(
             if (!PagePrompt(Pager, from, len))
                 return FALSE;
 
-            // TODO: Recalculate 'ScreenLines' in case the user redimensions
-            // the window during the prompt.
+            // TODO: Recalculate 'ScreenLines' in case the user
+            // resizes the window during the prompt.
 
             /* Reset the number of lines being printed */
             Pager->LineCount = 0;

@@ -55,10 +55,16 @@ do { \
     RtlZeroMemory(&(pScreen)->cci , sizeof((pScreen)->cci ));   \
 } while (0)
 
+
+#define CON_SCREEN_SBSIZE       1
+#define CON_SCREEN_CURSORPOS    2
+#define CON_SCREEN_WINDOWSIZE   4
+
 BOOL
 ConGetScreenInfo(
     IN PCON_SCREEN Screen,
-    OUT PCONSOLE_SCREEN_BUFFER_INFO pcsbi);
+    OUT PCONSOLE_SCREEN_BUFFER_INFO pcsbi,
+    IN DWORD dwFlags);
 
 VOID
 ConClearScreen(IN PCON_SCREEN Screen);

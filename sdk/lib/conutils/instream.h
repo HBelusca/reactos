@@ -36,9 +36,72 @@
 extern "C" {
 #endif
 
+#include <wincon.h>
+
 // Shadow type, implementation-specific
 typedef struct _CON_STREAM CON_STREAM, *PCON_STREAM;
 
+// typedef INT (__stdcall *CON_READ_FUNC)(IN PCON_STREAM, IN PTCHAR, IN DWORD);
+                                        // Stream,         szStr,     len
+typedef INT (__stdcall *CON_WRITE_FUNC)(IN PCON_STREAM, IN PTCHAR, IN DWORD);
+
+
+/* static */ DWORD
+ReadBytesAsync(
+    IN HANDLE hInput,
+    OUT LPVOID pBuffer,
+    IN DWORD  nNumberOfBytesToRead,
+    OUT LPDWORD lpNumberOfBytesRead OPTIONAL,
+    IN DWORD dwTimeout OPTIONAL, // In milliseconds
+    IN OUT LPOVERLAPPED lpOverlapped OPTIONAL);
+
+INT
+__stdcall
+ConReadBytesEx(
+    IN PCON_STREAM Stream,
+    OUT PCHAR szStr,
+    IN DWORD len,
+    IN DWORD dwTimeout OPTIONAL); // In milliseconds
+
+INT
+ConStreamReadBytesEx(
+    IN PCON_STREAM Stream,
+    OUT PCHAR szStr,
+    IN DWORD len,
+    IN DWORD dwTimeout OPTIONAL); // In milliseconds
+
+INT
+ConStreamReadBytes(
+    IN PCON_STREAM Stream,
+    OUT PCHAR szStr,
+    IN DWORD len);
+
+INT
+__stdcall
+ConReadCharsEx(
+    IN PCON_STREAM Stream,
+    OUT PTCHAR szStr,
+    IN DWORD len,   // dwLength
+    IN DWORD dwTimeout OPTIONAL); // In milliseconds
+
+INT
+ConStreamReadCharsEx(
+    IN PCON_STREAM Stream,
+    OUT PTCHAR szStr,
+    IN DWORD len,   // dwLength
+    IN DWORD dwTimeout OPTIONAL); // In milliseconds
+
+INT
+ConStreamReadChars(
+    IN PCON_STREAM Stream,
+    OUT PTCHAR szStr,
+    IN DWORD len);   // dwLength
+
+DWORD
+ConGetKeyTimeout(
+    IN PCON_STREAM Stream,
+    IN OUT PKEY_EVENT_RECORD KeyEvent,
+    IN DWORD dwTimeout); // In milliseconds
 
 #ifdef __cplusplus
 }

@@ -34,7 +34,7 @@
 
 #include "utils.h"
 #include "stream.h"
-// #include "instream.h"
+#include "instream.h"
 #include "outstream.h"
 #include "screen.h"
 #include "pager.h"

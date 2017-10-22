@@ -72,7 +72,8 @@ ConClearLine(IN PCON_STREAM Stream)
 BOOL
 ConGetScreenInfo(
     IN PCON_SCREEN Screen,
-    OUT PCONSOLE_SCREEN_BUFFER_INFO pcsbi)
+    OUT PCONSOLE_SCREEN_BUFFER_INFO pcsbi,
+    IN DWORD dwFlags)
 {
     BOOL Success;
     HANDLE hOutput;
@@ -90,7 +91,169 @@ ConGetScreenInfo(
     /* Update cached screen information */
     if (IsConsoleHandle(hOutput))
     {
+        /* Unconditionally retrieve all the information */
         Success = GetConsoleScreenBufferInfo(hOutput, &Screen->csbi);
+    }
+    else if (IsTTYHandle(hOutput))
+    {
+        HANDLE hOutputRead;
+
+        /* Duplicate a handle to StdOut for reading access */
+        Success = DuplicateHandle(GetCurrentProcess(),
+                                  hOutput,
+                                  GetCurrentProcess(),
+                                  &hOutputRead,
+                                  GENERIC_READ,
+                                  FALSE,
+                                  0);
+        if (Success)
+        {
+            DWORD dwLastError = ERROR_SUCCESS;
+            DWORD dwRead, dwLength;
+            PCHAR p;
+            CHAR bChar;
+            CHAR Buffer[20];
+            OVERLAPPED ovl;
+
+            SHORT x, y;
+
+            RtlZeroMemory(&ovl, sizeof(ovl));
+            ovl.hEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
+
+            if ((dwFlags & CON_SCREEN_SBSIZE) ||
+                /**/ (dwFlags & CON_SCREEN_WINDOWSIZE) /**/)
+            {
+                //
+                // FIXME: All of this operation must be under lock!!
+                //
+
+                ConPuts(Screen->Stream, L"\x1B[18t");
+
+                /* Read any number of parameters */
+                dwLength = sizeof(Buffer);
+                p = Buffer;
+                dwRead = 0;
+
+                /* Flush anything before the beginning of the ANSI escape sequence */
+                do
+                {
+                    dwLastError = ReadBytesAsync(hOutputRead, &bChar, 1, NULL, INFINITE, &ovl);
+                    if (dwLastError != ERROR_SUCCESS)
+                        break;
+                } while (bChar != '\x1B');
+
+                *p++ = bChar;
+                ++dwRead;
+
+                while (dwLastError == ERROR_SUCCESS && dwRead < dwLength - 1)
+                {
+                    dwLastError = ReadBytesAsync(hOutputRead, &bChar, 1, NULL, INFINITE, &ovl);
+                    if (dwLastError != ERROR_SUCCESS)
+                        break;
+
+                    if (bChar == 't')
+                    {
+                        *p++ = bChar;
+                        *p = 0;
+                        break;
+                    }
+
+                    *p++ = bChar;
+                    ++dwRead;
+                }
+
+                //
+                // END of FIXME
+                //
+
+                if (dwLastError == ERROR_SUCCESS)
+                {
+                    sscanf(Buffer, "\x1B[8;%hu;%hut", &y, &x);
+
+                    if (dwFlags & CON_SCREEN_SBSIZE)
+                    {
+                        Screen->csbi.dwSize.X = x;
+                        Screen->csbi.dwSize.Y = y;
+                    }
+                    if (dwFlags & CON_SCREEN_WINDOWSIZE)
+                    {
+                        Screen->csbi.srWindow.Left   = 0;
+                        Screen->csbi.srWindow.Top    = 0;
+                        Screen->csbi.srWindow.Right  = x - 1;
+                        Screen->csbi.srWindow.Bottom = y - 1;
+                    }
+                }
+
+                Success = (dwLastError == ERROR_SUCCESS);
+            }
+
+            if (dwFlags & CON_SCREEN_CURSORPOS)
+            {
+                //
+                // FIXME: All of this operation must be under lock!!
+                //
+
+                ConPuts(Screen->Stream, L"\x1B[6n");
+
+                /* Read any number of parameters */
+                dwLength = sizeof(Buffer);
+                p = Buffer;
+                dwRead = 0;
+
+                /* Flush anything before the beginning of the ANSI escape sequence */
+                do
+                {
+                    dwLastError = ReadBytesAsync(hOutputRead, &bChar, 1, NULL, INFINITE, &ovl);
+                    if (dwLastError != ERROR_SUCCESS)
+                        break;
+                } while (bChar != '\x1B');
+
+                *p++ = bChar;
+                ++dwRead;
+
+                while (dwLastError == ERROR_SUCCESS && dwRead < dwLength - 1)
+                {
+                    dwLastError = ReadBytesAsync(hOutputRead, &bChar, 1, NULL, INFINITE, &ovl);
+                    if (dwLastError != ERROR_SUCCESS)
+                        break;
+
+                    if (bChar == 'R')
+                    {
+                        *p++ = bChar;
+                        *p = 0;
+                        break;
+                    }
+
+                    *p++ = bChar;
+                    ++dwRead;
+                }
+
+                //
+                // END of FIXME
+                //
+
+                if (dwLastError == ERROR_SUCCESS)
+                {
+                    sscanf(Buffer, "\x1B[%hu;%huR",
+                           &Screen->csbi.dwCursorPosition.Y,
+                           &Screen->csbi.dwCursorPosition.X);
+                    --Screen->csbi.dwCursorPosition.X;
+                    --Screen->csbi.dwCursorPosition.Y;
+                }
+
+                Success = (dwLastError == ERROR_SUCCESS);
+            }
+
+#if 0
+            if (dwFlags & CON_SCREEN_WINDOWSIZE)
+            {
+            }
+#endif
+
+            CloseHandle(ovl.hEvent);
+
+            CloseHandle(hOutputRead);
+        }
     }
     else
     {
