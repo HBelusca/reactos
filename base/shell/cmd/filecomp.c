@@ -29,6 +29,7 @@
  *    The downside, of course, is that if a file/directory is created/removed
  *    between two successive autocompletion attempts, we do not notice it.
  */
+
 #include "precomp.h"
 #include <strsafe.h>
 
@@ -36,17 +37,17 @@ typedef struct _FILE_COMPLETION_CONTEXT
 {
 #define ITEMS_INCREMENT 32
 
-    DWORD TotalItems;          // Total items in list (for memory management)
-    PWIN32_FIND_DATA FileList; // List of all the files
-    DWORD NumberOfFiles;       // Real number of files enumerated in list
+    BOOL OnlyDirs;              // Only enumerate directories, not files
+    DWORD TotalItems;           // Total items in list (for memory management)
+    PWIN32_FIND_DATA FileList;  // List of all the files
+    DWORD NumberOfFiles;        // Real number of files enumerated in list
 
 } FILE_COMPLETION_CONTEXT, *PFILE_COMPLETION_CONTEXT;
 
 static BOOL
 BuildFileList(
     IN PFILE_COMPLETION_CONTEXT FileContext,
-    IN LPTSTR szSearchPathSpec,
-    IN BOOL OnlyDirs)
+    IN LPTSTR szSearchPathSpec)
 {
     PWIN32_FIND_DATA OldFileList;
     WIN32_FIND_DATA file;
@@ -67,7 +68,8 @@ BuildFileList(
         }
 
         /* Keep only directories if needed */
-        if (OnlyDirs && !(file.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY))
+        if (FileContext->OnlyDirs &&
+            !(file.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY))
         {
             continue;
         }
@@ -153,7 +155,7 @@ int __cdecl compare(const void *arg1, const void *arg2)
 
 
 /*****************************************************************************\
- **             B A S H - L I K E   A U T O C O M P L E T I O N             **
+ **            B A S H - S T Y L E   A U T O C O M P L E T I O N            **
 \*****************************************************************************/
 
 typedef BOOL (*COMPLETE_IN_FILELIST)(PCOMPLETION_CONTEXT, LPTSTR, LPTSTR);
@@ -343,7 +345,7 @@ SearchInCommandList(
 }
 
 /*
- * Returns TRUE if at least one match, else returns FALSE
+ * Returns TRUE if at least one match, otherwise returns FALSE
  */
 static BOOL
 CompleteFilenameBashEx(
@@ -381,6 +383,9 @@ CompleteFilenameBashEx(
             // ConErrFormatMessage(GetLastError());
             return FALSE;
         }
+
+        FileContext->OnlyDirs = OnlyDirs;
+
         FileContext->FileList = NULL;
         FileContext->TotalItems = 0;
         FileContext->NumberOfFiles = 0;
@@ -477,7 +482,7 @@ CompleteFilenameBashEx(
         if (hFile != INVALID_HANDLE_VALUE)
         {
             /* Build the file list for this path */
-            if (!BuildFileList((PFILE_COMPLETION_CONTEXT)FileContext, path, OnlyDirs))
+            if (!BuildFileList((PFILE_COMPLETION_CONTEXT)FileContext, path))
             {
                 /* An unexpected error happened */
                 // ConErrFormatMessage(GetLastError());
@@ -552,7 +557,7 @@ CompleteFilenameBash(
 
 
 /*****************************************************************************\
- **           N T   C M D - L I K E   A U T O C O M P L E T I O N           **
+ **           N T C M D - S T Y L E   A U T O C O M P L E T I O N           **
 \*****************************************************************************/
 
 typedef struct _FILE_COMPLETION_CMD_CONTEXT
@@ -781,6 +786,9 @@ CompleteFilenameCmd(
             // ConErrFormatMessage(GetLastError());
             return FALSE;
         }
+
+        FileContext->OnlyDirs = OnlyDirs;
+
         FileContext->FileList = NULL;
         FileContext->TotalItems = 0;
         FileContext->NumberOfFiles = 0;
@@ -864,7 +872,7 @@ CompleteFilenameCmd(
         // /* Build a list of all files names */
         /* Build the file list for this path */
         /* Don't show files when the user uses directory-related commands */
-        if (!BuildFileList((PFILE_COMPLETION_CONTEXT)FileContext, szSearchPath, OnlyDirs))
+        if (!BuildFileList((PFILE_COMPLETION_CONTEXT)FileContext, szSearchPath))
         {
             /* An unexpected error happened */
             // ConErrFormatMessage(GetLastError());
@@ -993,6 +1001,20 @@ typedef BOOL (*COMPLETE_FILENAME)(
     IN BOOL RestartCompletion);
 
 /*
+ * NOTE: Currently we only perform filename/directory autocompletion.
+ * Maybe one day we will be able to perform per-command autocompletion.
+ */
+/*
+ * FIXME: Per-command context ????
+ *
+ * TODO: When intelligent per-command auto-completion is implemented,
+ * the 'CompleterContext' may become a generic list of objects (mappable to strings)
+ * that is used by the per-command autocompleter to complete the command line.
+ * Also the following member should then be added:
+ *     LPCOMMAND cmd;
+ * being the command being completed.
+ */
+/*
  * strIN : "prefix" string that needs completion (unmodified here);
  *         everything that is after it is untouched.
  * bNext : direction flag;
@@ -1001,13 +1023,16 @@ typedef BOOL (*COMPLETE_FILENAME)(
 BOOL
 CompleteFilename(
     IN PCOMPLETION_CONTEXT Context,
-    IN OUT LPTSTR str,
+    IN PVOID CompleterParameter OPTIONAL,
+    IN OUT LPTSTR str, // == CmdLine
     IN UINT cursor,
     IN UINT charcount,
+    IN TCHAR CompletionChar,
     IN ULONG ControlKeyState,
-    IN BOOL OnlyDirs,
-    IN BOOL RestartCompletion)
+    IN OUT PBOOL RestartCompletion)
 {
+    BOOL OnlyDirs;
+
     /*
      * Set up the real filename completer the first time we run this function.
      * It will then remain the same during all this session (bUseBashCompletion
@@ -1017,98 +1042,17 @@ CompleteFilename(
     COMPLETE_FILENAME CompleteFilenameProc =
         (bUseBashCompletion ? CompleteFilenameBash : CompleteFilenameCmd);
 
-    if (RestartCompletion)
-    {
-        /* Call the completer cleaning routine */
-        if (Context->CompleterCleanup)
-            Context->CompleterCleanup(Context);
-        Context->CompleterCleanup = NULL;
+    LPTSTR line = str;
 
-        if (Context->CompleterContext)
-            cmd_free(Context->CompleterContext);
-        Context->CompleterContext = NULL;
-    }
-
-    return CompleteFilenameProc(Context, str, cursor, charcount,
-                                ControlKeyState, OnlyDirs, RestartCompletion);
-}
-
-
-
-/*****************************************************************************\
- **     G E N E R A L   A U T O C O M P L E T I O N   I N T E R F A C E     **
-\*****************************************************************************/
-
-VOID InitCompletionContext(IN PCOMPLETION_CONTEXT Context)
-{
-    Context->CmdLine = NULL;
-
-    // Context->InsertPos = 0;
-    Context->MaxSize = 0;
-    Context->OnlyDirs = FALSE;
-
-    Context->CompleterContext = NULL;
-    Context->CompleterCleanup = NULL;
-}
-
-VOID FreeCompletionContext(IN PCOMPLETION_CONTEXT Context)
-{
-    /* Call the completer cleaning routine */
-    if (Context->CompleterCleanup)
-        Context->CompleterCleanup(Context);
-    Context->CompleterCleanup = NULL;
-
-    if (Context->CompleterContext)
-        cmd_free(Context->CompleterContext);
-    Context->CompleterContext = NULL;
-
-    if (Context->CmdLine)
-        cmd_free(Context->CmdLine);
-    Context->CmdLine = NULL;
-
-    // Context->InsertPos = 0;
-    Context->MaxSize = 0;
-    Context->OnlyDirs = FALSE;
-}
-
-/*
- * strIN : String to complete, with strIN[cursor] == L'\0';
- * cursor: Insertion point in strIN, but we might edit a bit more inside strIN;
- * charcount: Maximum size of the buffer strIN;
- * bNext: Some flag.
- */
-BOOL
-DoCompletion(
-    IN PCOMPLETION_CONTEXT Context,
-    IN OUT LPTSTR CmdLine,
-    IN UINT cursor,                         // insertion_pt (null-terminated here)
-    IN UINT charcount,                      // maxlen
-    IN ULONG ControlKeyState,
-    IN BOOL OnlyDirs,
-    OUT PBOOL CompletionRestarted OPTIONAL)
-{
-    BOOL Success;
-    BOOL RestartCompletion = TRUE;
-
-    LPTSTR line = CmdLine;
-
-    // FIXME: All that stuff should be dynamic-allocated strings!
-    TCHAR szOriginal[MAX_PATH];
-    /* Editable string of what was passed in */
-    TCHAR str[MAX_PATH];
-
-    if (CompletionRestarted)
-        *CompletionRestarted = RestartCompletion;
-
-    if (!Context)
-        return FALSE;
-
-    if (!CmdLine)
-        return TRUE;
-
-
-    // FIXME: Use charcount !!
-
+    /*
+     * Since 'AutoCompletionChar' has priority over 'PathCompletionChar'
+     * (as they can be the same), we perform the checks in this order.
+     */
+    OnlyDirs = FALSE;
+    if (CompletionChar == AutoCompletionChar)
+        OnlyDirs = FALSE;
+    else if (CompletionChar == PathCompletionChar)
+        OnlyDirs = TRUE;
 
     //
     // FIXME BIG IMPROVEMENT:
@@ -1137,100 +1081,27 @@ DoCompletion(
         OnlyDirs = TRUE;
     }
 
+    if (Context->CompleterContext)
+    {
+        PFILE_COMPLETION_CONTEXT FileContext =
+            (PFILE_COMPLETION_CONTEXT)Context->CompleterContext;
 
-    // if (_tcscmp(CmdLine, Context->CmdLine) || !_tcslen(CmdLine))
-    // if (_tcscmp(str, LastReturned) || !_tcslen(str))
-#if 0
-    if (!Context->CmdLine || (Context->MaxSize != charcount + 1) ||
-        memcmp(Context->CmdLine, CmdLine, charcount*sizeof(TCHAR)) != 0
-#else
-    if (!Context->CmdLine || (Context->MaxSize != cursor + 1) ||
-        memcmp(Context->CmdLine, CmdLine, cursor*sizeof(TCHAR)) != 0
-#endif
-        || Context->OnlyDirs != OnlyDirs)
-    {
-        RestartCompletion = TRUE;
-    }
-    else
-    {
-        RestartCompletion = FALSE;
+        *RestartCompletion =
+            *RestartCompletion || (FileContext->OnlyDirs != OnlyDirs);
     }
 
-    // CompletionRestarted will be reset after...
-
-
-
-    //
-    // FIXME! FIXME! FIXME! FIXME! FIXME! FIXME! FIXME! FIXME! FIXME! FIXME!
-    //
-    // FIXME: Be sure we don't overwrite past charcount characters!!!
-    //
-    // FIXME! FIXME! FIXME! FIXME! FIXME! FIXME! FIXME! FIXME! FIXME! FIXME!
-    //
-
-    /* Copy the string, str can be edited and original should not be */
-    _tcscpy(str, CmdLine);        // Save a working copy
-    _tcscpy(szOriginal, CmdLine); // Save the original string for restoration in case of failure
-
-
-    /*
-     * NOTE: Currently we only perform filename/directory autocompletion.
-     * Maybe one day we will be able to perform per-command autocompletion.
-     */
-    Success = CompleteFilename(Context, str, cursor, charcount,
-                               ControlKeyState, OnlyDirs, RestartCompletion);
-    if (!Success)
+    if (*RestartCompletion)
     {
-        /* Restore the original string */
-        _tcscpy(CmdLine, szOriginal);
-    }
-    else
-    {
-        /* Everything is deleted, lets add it back in */
-        _tcscpy(CmdLine, str);
+        /* Call the completer cleaning routine */
+        if (Context->CompleterCleanup)
+            Context->CompleterCleanup(Context);
+        Context->CompleterCleanup = NULL;
+
+        if (Context->CompleterContext)
+            cmd_free(Context->CompleterContext);
+        Context->CompleterContext = NULL;
     }
 
-    /* If we failed we will need to restart a new completion anyway */
-    if (!Success)
-        RestartCompletion = TRUE;
-
-
-    if (CompletionRestarted)
-        *CompletionRestarted = RestartCompletion;
-
-
-    if (Context->CmdLine) cmd_free(Context->CmdLine);
-    Context->CmdLine = NULL;
-
-/**************** FIXME!!!!!!!! **********************************************/
-
-    if (Success)
-    {
-
-    //
-    // FIXME!
-    //
-    charcount = _tcslen(CmdLine) + 1;
-    //
-    //
-    Context->CmdLine = cmd_alloc(charcount * sizeof(TCHAR));
-    if (Context->CmdLine == NULL)
-    {
-        // Context->MaxSize = 0;
-        WARN("DEBUG: Cannot allocate memory for Context->CmdLine!\n");
-        // error_out_of_memory();
-        // ConErrFormatMessage(GetLastError());
-        return FALSE;
-    }
-    Context->MaxSize = charcount; /// MaxBufSize!!
-    _tcscpy(Context->CmdLine, CmdLine);
-    Context->OnlyDirs = OnlyDirs;
-
-    }
-    else
-    {
-        // ????
-    }
-
-    return Success;
+    return CompleteFilenameProc(Context, str, cursor, charcount,
+                                ControlKeyState, OnlyDirs, *RestartCompletion);
 }

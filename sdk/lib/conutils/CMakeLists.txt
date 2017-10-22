@@ -3,6 +3,7 @@ list(APPEND SOURCE
     instream.c
     outstream.c
     pager.c
+    readinput.c
     screen.c
     stream.c
     utils.c

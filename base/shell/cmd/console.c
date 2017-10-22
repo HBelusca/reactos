@@ -87,7 +87,8 @@ VOID ConInString(LPTSTR lpInput, DWORD dwLength)
     // dwRead = ConReadCharsEx(StdIn, pBuf, dwLength - 1, INFINITE);
     if (!ReadLine(ConStreamGetOSHandle(StdIn),
                   ConStreamGetOSHandle(StdOut),
-                  lpInput, dwLength - 1))
+                  lpInput, dwLength - 1,
+                  CompleteFilename, NULL))
     {
         // return FALSE;
         return;

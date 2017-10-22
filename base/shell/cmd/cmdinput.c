@@ -166,11 +166,16 @@ PrintPartialLine(IN LPTSTR str, IN DWORD charcount, IN DWORD tempscreen,
 }
 
 static BOOL
-ReadLineFromFile(HANDLE hInput, /* HANDLE hOutput, */ LPTSTR str, DWORD maxlen)
+ReadLineFromFile(
+    IN HANDLE hInput,
+    // IN HANDLE hOutput,
+    IN OUT LPTSTR str,
+    IN DWORD maxlen)
 {
     DWORD dwRead;
     CHAR chr;
     DWORD charcount = 0;/*chars in the string (str)*/
+
     do
     {
         if (!ReadFile(hInput, &chr, 1, &dwRead, NULL) || !dwRead)
@@ -183,12 +188,20 @@ ReadLineFromFile(HANDLE hInput, /* HANDLE hOutput, */ LPTSTR str, DWORD maxlen)
         // /***/ConOutChar(str[charcount-1]);/***/
         ConOutChar(chr);
     } while (chr != '\n' && charcount < maxlen); // || chr != '\r'
+
     str[charcount] = _T('\0');
+
     return TRUE;
 }
 
 static BOOL
-ReadLineFromTTY(HANDLE hInput, HANDLE hOutput, LPTSTR str, DWORD maxlen)
+ReadLineFromTTY(
+    IN HANDLE hInput,
+    IN HANDLE hOutput,
+    IN OUT LPTSTR str,
+    IN DWORD maxlen,
+    IN COMPLETER_CALLBACK CompleterCallback,
+    IN PVOID CompleterParameter OPTIONAL)
 {
     BOOL Success;
 
@@ -203,7 +216,6 @@ ReadLineFromTTY(HANDLE hInput, HANDLE hOutput, LPTSTR str, DWORD maxlen)
     KEY_EVENT_RECORD KeyEvent;
     DWORD dwControlKeyState;
 
-    BOOL CheckForDirs;
     BOOL CompletionRestarted;
     COMPLETION_CONTEXT Context;
 
@@ -227,7 +239,7 @@ static BOOL bInsert = TRUE;
     SetCursorType(bInsert, TRUE);
 
     /* Initialize the auto-completion context */
-    InitCompletionContext(&Context);
+    InitCompletionContext(&Context, CompleterCallback);
 
     do
     {
@@ -661,16 +673,6 @@ static BOOL bInsert = TRUE;
             /* Set bCharInput to FALSE so that we won't insert this character */
             bCharInput = FALSE;
 
-            /*
-             * Since 'AutoCompletionChar' has priority over 'PathCompletionChar'
-             * (as they can be the same), we perform the checks in this order.
-             */
-            CheckForDirs = FALSE;
-            if (ch == AutoCompletionChar)
-                CheckForDirs = FALSE;
-            else if (ch == PathCompletionChar)
-                CheckForDirs = TRUE;
-
             /* Expand current file name */
 
             // FIXME: We note that we perform the completion only if we
@@ -687,8 +689,9 @@ static BOOL bInsert = TRUE;
             tempscreen = charcount; // tempscreen == old_charcount
 
             CompletionRestarted = TRUE;
-            Success = DoCompletion(&Context, str, current, maxlen, // charcount,
-                                   dwControlKeyState, CheckForDirs,
+            Success = DoCompletion(&Context, CompleterParameter,
+                                   str, current, maxlen, // charcount,
+                                   ch, dwControlKeyState,
                                    &CompletionRestarted);
             if (!Success)
                 MessageBeep(-1);
@@ -787,9 +790,16 @@ static BOOL bInsert = TRUE;
 
 // static
 BOOL
-ReadLineFromConsole(HANDLE hInput, HANDLE hOutput, LPTSTR str, DWORD maxlen)
+ReadLineFromConsole(
+    IN HANDLE hInput,
+    IN HANDLE hOutput,
+    IN OUT LPTSTR str,
+    IN DWORD maxlen,
+    IN COMPLETER_CALLBACK CompleterCallback,
+    IN PVOID CompleterParameter OPTIONAL)
 {
     BOOL Success;
+
 #ifdef _UNICODE
     CONSOLE_READCONSOLE_CONTROL InputControl;
 #endif
@@ -803,9 +813,9 @@ ReadLineFromConsole(HANDLE hInput, HANDLE hOutput, LPTSTR str, DWORD maxlen)
     LPTSTR insert = NULL; // , tmp = NULL;
     SIZE_T sizeInsert, sizeAppend;
 
-    BOOL CheckForDirs;
     BOOL CompletionRestarted;
     COMPLETION_CONTEXT Context;
+    TCHAR CompletionChar;
 
 #if 1 /************** For temporary CODE REUSE!!!! ********************/
     SHORT orgx, orgy;     /* origin x/y */
@@ -877,7 +887,7 @@ ReadLineFromConsole(HANDLE hInput, HANDLE hOutput, LPTSTR str, DWORD maxlen)
         ((1 << AutoCompletionChar) | (1 << PathCompletionChar));
 
     /* Initialize the auto-completion context */
-    InitCompletionContext(&Context);
+    InitCompletionContext(&Context, CompleterCallback);
 
     do
     {
@@ -909,22 +919,13 @@ ReadLineFromConsole(HANDLE hInput, HANDLE hOutput, LPTSTR str, DWORD maxlen)
          * To find where the user pressed TAB we need to find the (first) TAB
          * character in the string.
          */
-        CheckForDirs = FALSE;
         count = charcount;
         insert = str;
         while (count)
         {
-            /*
-             * Since 'AutoCompletionChar' has priority over 'PathCompletionChar'
-             * (as they can be the same), we perform the checks in this order.
-             */
-            if (*insert == AutoCompletionChar)
+            if ((*insert == AutoCompletionChar) ||
+                (*insert == PathCompletionChar))
             {
-                break;
-            }
-            else if (*insert == PathCompletionChar)
-            {
-                CheckForDirs = TRUE;
                 break;
             }
 
@@ -935,6 +936,9 @@ ReadLineFromConsole(HANDLE hInput, HANDLE hOutput, LPTSTR str, DWORD maxlen)
         /* If the user validated the command, no autocompletion to perform */
         if (count == 0)
             break;
+
+        /* Save the completion character for later */
+        CompletionChar = *insert;
 
         /* Autocompletion is pending */
 
@@ -1060,6 +1064,9 @@ ReadLineFromConsole(HANDLE hInput, HANDLE hOutput, LPTSTR str, DWORD maxlen)
 
 #endif
 
+
+
+
         /* Setup stuff for code reuse... */
         current = insert - str;
         /* Replace the TAB by NULL, and NULL-terminate the command */
@@ -1074,8 +1081,9 @@ ReadLineFromConsole(HANDLE hInput, HANDLE hOutput, LPTSTR str, DWORD maxlen)
         tempscreen = charcount; // tempscreen == old_charcount
 
         CompletionRestarted = TRUE;
-        Success = DoCompletion(&Context, str, current, maxlen, // charcount,
-                               InputControl.dwControlKeyState, CheckForDirs,
+        Success = DoCompletion(&Context, CompleterParameter,
+                               str, current, maxlen, // charcount,
+                               CompletionChar, InputControl.dwControlKeyState,
                                &CompletionRestarted);
         if (!Success)
             MessageBeep(-1);
@@ -1140,7 +1148,9 @@ ReadLine(
     IN HANDLE hInput,
     IN HANDLE hOutput,
     IN OUT LPTSTR str,
-    IN DWORD maxlen)
+    IN DWORD maxlen,
+    IN COMPLETER_CALLBACK CompleterCallback,
+    IN PVOID CompleterParameter OPTIONAL)
 {
     BOOL Success = FALSE;
     DWORD dwOldMode;
@@ -1153,15 +1163,25 @@ ReadLine(
 #if 0
     if (IsConsoleHandle(hInput) && IsConsoleHandle(hOutput))
     {
-        if (!ReadLineFromConsole(hInput, hOutput, str, maxlen))
+        if (!ReadLineFromConsole(hInput, hOutput,
+                                 str, maxlen,
+                                 CompleterCallback,
+                                 CompleterParameter))
+        {
             goto Quit;
+        }
     }
     else
 #endif
     if (IsTTYHandle(hInput) && IsTTYHandle(hOutput)) // Either hInput or hOutput can be console, but not both.
     {
-        if (!ReadLineFromTTY(hInput, hOutput, str, maxlen))
+        if (!ReadLineFromTTY(hInput, hOutput,
+                             str, maxlen,
+                             CompleterCallback,
+                             CompleterParameter))
+        {
             goto Quit;
+        }
     }
     else
     {
@@ -1182,7 +1202,8 @@ BOOL ReadCommand(LPTSTR str, DWORD maxlen)
 {
     if (!ReadLine(ConStreamGetOSHandle(StdIn),
                   ConStreamGetOSHandle(StdOut),
-                  str, maxlen))
+                  str, maxlen,
+                  CompleteFilename, NULL))
     {
         return FALSE;
     }

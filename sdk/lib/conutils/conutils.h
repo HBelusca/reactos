@@ -38,6 +38,7 @@
 #include "outstream.h"
 #include "screen.h"
 #include "pager.h"
+#include "readinput.h"
 
 #endif  /* __CONUTILS_H__ */
 
