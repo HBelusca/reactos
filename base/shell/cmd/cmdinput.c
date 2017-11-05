@@ -133,9 +133,13 @@ ClearLine(LPTSTR str, DWORD maxlen, COORD org)
 }
 
 static VOID
-PrintPartialLine(IN LPTSTR str, IN DWORD charcount, IN DWORD tempscreen,
-                 IN OUT PCOORD org, OUT PCOORD cur)
+PrintPartialLine(
+    IN LPTSTR str,
+    IN DWORD charcount,
+    IN DWORD tempscreen,
+    IN OUT PCOORD org)
 {
+    COORD cur;
     DWORD count;
     // DWORD current;
     // current = charcount;
@@ -149,10 +153,10 @@ PrintPartialLine(IN LPTSTR str, IN DWORD charcount, IN DWORD tempscreen,
     /* Move cursor accordingly */
     if (tempscreen > charcount)
     {
-        GetCursorXY(&cur->X, &cur->Y);
+        GetCursorXY(&cur.X, &cur.Y);
         for (count = tempscreen - charcount; count--; )
             ConOutChar(_T(' '));
-        SetCursorXY(cur->X, cur->Y);
+        SetCursorXY(cur.X, cur.Y);
     }
     else
     {
@@ -847,7 +851,8 @@ ReadConsoleLine(
         PINPUT_RECORD InputRecords, pIr;
 
         dwWritten = nInitialChars + 1;
-        InputRecords = (PINPUT_RECORD)HeapAlloc(GetProcessHeap(), 0, dwWritten * sizeof(*InputRecords));
+        InputRecords = (PINPUT_RECORD)HeapAlloc(GetProcessHeap(), 0,
+                                                dwWritten * sizeof(*InputRecords));
 
         Ir.EventType = KEY_EVENT;
         Ir.Event.KeyEvent.wRepeatCount = 1;
@@ -969,28 +974,15 @@ DoCompletion2(
     IN PCOMPLETION_CONTEXT Context,
     IN PVOID CompleterParameter OPTIONAL,
     IN OUT LPTSTR CmdLine,
-    IN UINT cursor,             // Insertion point (NULL-terminated) // FIXME!!
     IN UINT charcount,          // maxlen
+    IN UINT cursor,             // Insertion point (NULL-terminated) // FIXME!!
+    IN BOOL InsertMode,
     IN TCHAR CompletionChar,
     IN ULONG ControlKeyState,   // Which keys are pressed during the completion
     OUT PBOOL CompletionRestarted OPTIONAL)
 {
-    // DWORD dwNewMode;
     SIZE_T sizeInsert, sizeAppend;
     LPTSTR insert = CmdLine + cursor, tmp = NULL;
-
-#if 0
-    /*
-     * Refresh the cached console input modes.
-     * Again, explicitely check the existing extended flags.
-     * If the extended flags are not reported, add them and explicitely enable insert mode
-     * (so that the original insert mode is reset).
-     */
-    GetConsoleMode(hInput, &dwNewMode);
-    dwNewMode |= dwNewMode & (ENABLE_EXTENDED_FLAGS | ENABLE_QUICK_EDIT_MODE | ENABLE_INSERT_MODE);
-    if (!(dwNewMode & ENABLE_EXTENDED_FLAGS))
-        dwNewMode |= (ENABLE_EXTENDED_FLAGS | ENABLE_INSERT_MODE);
-#endif
 
     /* Save the buffer after the insertion (BASH-like autocompletion) */
     sizeAppend = (charcount - (insert - CmdLine)) * sizeof(TCHAR);
@@ -1030,15 +1022,14 @@ ReadLineConsoleHelper(
 
     DWORD dwOldMode, dwNewMode;
     CONSOLE_SCREEN_BUFFER_INFO csbi;
-    COORD InitialCursorPos;
+    // COORD InitialCursorPos;
 
-    // DWORD tempscreen;
     DWORD current = 0;  /* the position of the cursor in the string (str) */
     DWORD charcount = 0;/* chars in the string (str) */
-    DWORD dwWritten;
     LPTSTR insert = NULL;
-    SIZE_T sizeInsert, sizeAppend;
+    SIZE_T /*sizeInsert,*/ sizeAppend;
 
+    BOOL InsertMode;
     BOOL CompletionRestarted;
     COMPLETION_CONTEXT Context;
     TCHAR CompletionChar;
@@ -1046,8 +1037,6 @@ ReadLineConsoleHelper(
 #if 1 /************** For temporary CODE REUSE!!!! ********************/
     /* Screen information */
     COORD org;  /* origin x/y */
-    COORD cur;  /* current x/y cursor position */
-
     DWORD tempscreen;
 #endif
 
@@ -1090,13 +1079,20 @@ ReadLineConsoleHelper(
     SetConsoleMode(hOutput, ENABLE_PROCESSED_OUTPUT | ENABLE_WRAP_AT_EOL_OUTPUT);
 
     /* Get screen size and other info */
-    // FIXME: Use ConXXX function!
-    GetConsoleScreenBufferInfo(hOutput, &csbi);
-    InitialCursorPos = csbi.dwCursorPosition;
+    // FIXME due to the fact hOutput could be != StdOutScreen
+    // GetConsoleScreenBufferInfo(hOutput, &csbi);
+    if (!ConGetScreenInfo(&StdOutScreen, &csbi,
+                          CON_SCREEN_SBSIZE | CON_SCREEN_CURSORPOS))
+    {
+        csbi.dwSize.X = 80;
+        csbi.dwSize.Y = 25;
+        csbi.dwCursorPosition.X = csbi.dwCursorPosition.Y = 0;
+    }
+    // InitialCursorPos = csbi.dwCursorPosition;
 #if 1 /************** For temporary CODE REUSE!!!! ********************/
     maxx = csbi.dwSize.X;
     maxy = csbi.dwSize.Y;
-    cur = org = csbi.dwCursorPosition; // InitialCursorPos.{X/Y}
+    org = csbi.dwCursorPosition; // InitialCursorPos.{X/Y}
 #endif
 
     InputControl.nLength = sizeof(InputControl);
@@ -1143,7 +1139,7 @@ ReadLineConsoleHelper(
 
         /* We keep the first characters, but do not take into account the TAB */
 
-        /* Replace the TAB by NULL, and NULL-terminate the command */
+        /* NULL-terminate the line */
         // *insert = _T('\0'); // str[charcount - current];
         str[charcount - 1] = _T('\0');
         /**/charcount--;/**/
@@ -1151,14 +1147,27 @@ ReadLineConsoleHelper(
 
         /* Perform the line completion */
 
+        /*
+         * Refresh the cached console input modes.
+         * Again, explicitely check the existing extended flags.
+         */
+        GetConsoleMode(hInput, &dwNewMode);
+        if (!(dwNewMode & ENABLE_EXTENDED_FLAGS))
+            dwNewMode &= ~(ENABLE_EXTENDED_FLAGS | ENABLE_QUICK_EDIT_MODE | ENABLE_INSERT_MODE);
+
+        InsertMode = ( (dwNewMode & ENABLE_INSERT_MODE) && !(GetKeyState(VK_INSERT) & 0x0001)) ||
+                     (!(dwNewMode & ENABLE_INSERT_MODE) &&  (GetKeyState(VK_INSERT) & 0x0001));
+
         /* Used later to see if we went down to the next line */
         tempscreen = charcount; // tempscreen == old_charcount
 
         CompletionRestarted = TRUE;
-        // DoCompletion
-        Success = DoCompletion2(&Context, CompleterParameter,
-                               str, current, maxlen, // charcount,
-                               CompletionChar, InputControl.dwControlKeyState,
+        // /**/bUseBashCompletion = FALSE;/**/
+        // DoCompletion2
+        Success = DoCompletion(&Context, CompleterParameter,
+                               str, maxlen /* charcount */, current,
+                               InsertMode, CompletionChar,
+                               InputControl.dwControlKeyState,
                                &CompletionRestarted);
 
         if (bUseBashCompletion)
@@ -1175,7 +1184,7 @@ ReadLineConsoleHelper(
                 current = charcount = _tcslen(str);
 
                 /* Print out what we have now */
-                PrintPartialLine(str, charcount, tempscreen, &org, &cur);
+                PrintPartialLine(str, charcount, tempscreen, &org);
             }
             // else if (bUseBashCompletion && !CompletionRestarted && Success)
             else if (Success)
@@ -1194,44 +1203,20 @@ ReadLineConsoleHelper(
             current = charcount = _tcslen(str);
 
             /* Print out what we have now */
-            PrintPartialLine(str, charcount, tempscreen, &org, &cur);
+            PrintPartialLine(str, charcount, tempscreen, &org);
         }
 
         /* Reset cursor position */
         SetCursorXY((org.X + current) % maxx,
                     org.Y + (org.X + current) / maxx);
-        GetCursorXY(&cur.X, &cur.Y);
 
+        /*
+         * Update the number of characters to keep.
+         * Do not take the NULL terminator into account.
+         */
         InputControl.nInitialChars = _tcslen(str);
-
-
-#if 00000000000000000000 /****** My NEW method *******/ // 000000000000000000000
-
-        /* Update the number of characters to keep. Do not take the NULL terminator into account. */
-        // InputControl.nInitialChars = (old_insert - str) + (sizeInsert + possible_erased_char + sizeAppend)/sizeof(TCHAR);
-        InputControl.nInitialChars = charcount + sizeInsert/sizeof(TCHAR) - 1;
-
-        //
-        // FIXME: NOTE: The redrawing code + cursor stuff may behave strangely
-        // if the string contains embedded control characters (for example,
-        // 0x0D, 0x0A and so on...)
-        //
-
-        /* Update the string on screen */
-        SetConsoleCursorPosition(hOutput, InitialCursorPos);
-        WriteConsole(hOutput, str, InputControl.nInitialChars, &dwWritten, NULL);
-        /* Fill with whitespace *iif* completed string is smaller than original string */
-        if (/*iCompletionCh*/charcount > dwWritten)
-        {
-            csbi.dwCursorPosition = InitialCursorPos;
-            csbi.dwCursorPosition.X += (SHORT)dwWritten;
-            FillConsoleOutputCharacter(hOutput, _T(' '),
-                                       /*iCompletionCh*/charcount - dwWritten,
-                                       csbi.dwCursorPosition,
-                                       &dwWritten);
-        }
-
-#endif
+        // // InputControl.nInitialChars = (old_insert - str) + (sizeInsert + possible_erased_char + sizeAppend)/sizeof(TCHAR);
+        // InputControl.nInitialChars = charcount + sizeInsert/sizeof(TCHAR) - 1;
 
     }
 
@@ -1260,7 +1245,7 @@ ReadLine(
 
     ZeroMemory(str, maxlen * sizeof(TCHAR));
 
-#if 1
+#if 0
     if (IsConsoleHandle(hInput) && IsConsoleHandle(hOutput))
     {
         if (!ReadLineConsoleHelper(hInput, hOutput,
