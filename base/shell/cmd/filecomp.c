@@ -553,7 +553,7 @@ CompleteFilenameBash(
     if (RestartCompletion)
     {
         INT curplace = 0;
-        BOOL  found_dot = FALSE;
+        BOOL found_dot = FALSE;
         TCHAR path[MAX_PATH];
 
         /* extract directory from word */
@@ -716,13 +716,14 @@ FindPrefixAndSuffix_Cmd(
     }
 
     /* Find the prefix and suffix */
+
+    /* Odd number of quotes */
     if (nQuotes % 2)
     {
         /*
          * Odd number of quotes. Just start from the last quote.
          * This is the way MS does it, and is an easy way out.
          */
-
         ASSERT(InsideQuotes);
 
         szSearch = str + LastQuote; // _tcsrchr(str, _T('\"'));
@@ -733,8 +734,8 @@ FindPrefixAndSuffix_Cmd(
 
         /* Find the one closest to end */
         szSearch1 = _tcsrchr(szSearch + 1, _T('\\'));
-        szSearch2 = _tcsrchr(szSearch + 1, _T('.'));
-        if (szSearch1 != NULL) // '\\' has precedence over '.'
+        szSearch2 = _tcsrchr(szSearch + 1, _T('/'));
+        if (szSearch1 != NULL) // '\\' has precedence over '/'
             szSearch = szSearch1;
         else if (szSearch2 != NULL)
             szSearch = szSearch2;
@@ -748,10 +749,12 @@ FindPrefixAndSuffix_Cmd(
         return;
     }
 
-    /*
-     * Even number of quotes.
-     */
+    /* Even number of quotes */
 
+    // szSearch = _tcsrchr(str, _T(' '));
+
+    /* No spaces */
+    // if (!szSearch)
     if (!_tcschr(str, _T(' ')))
     {
         /* No spaces, everything goes to Suffix */
@@ -760,7 +763,13 @@ FindPrefixAndSuffix_Cmd(
         // _tcsncpy(szPrefix, str, charcount);
 
         /* Look for a slash just in case */
-        szSearch = _tcsrchr(str, _T('\\'));
+        szSearch1 = _tcsrchr(str, _T('\\'));
+        szSearch2 = _tcsrchr(str, _T('/'));
+        if (szSearch1 != NULL) // '\\' has precedence over '/'
+            szSearch = szSearch1;
+        else if (szSearch2 != NULL)
+            szSearch = szSearch2;
+
         if (szSearch)
         {
             /* Move one char past */
@@ -772,13 +781,14 @@ FindPrefixAndSuffix_Cmd(
         }
         else
         {
-            // We know that "prefix" starts from 'str' to 'str' (i.e. empty)
+            // We know that "prefix" is empty
             szPrefix[0] = _T('\0');
         }
 
         return;
     }
 
+    /* Zero quotes */
     if (!nQuotes)
     {
         /* No quotes, and there is a space. Take it after the last space. */
@@ -804,9 +814,11 @@ FindPrefixAndSuffix_Cmd(
         return;
     }
 
-    /* All else fails and there is a lot of quotes, spaces and |
-       Then we search through and find the last space or \ that is
-        not inside a quotes */
+    /*
+     * All else fails: we have an even and non-zero number of quotes
+     * and spaces. Then we search through and find the last space or \
+     * that is not inside quotes.
+     */
     InsideQuotes = FALSE;
     for (i = 0; i < charcount /*_tcslen(str)*/; i++)
     {
@@ -814,7 +826,7 @@ FindPrefixAndSuffix_Cmd(
             InsideQuotes = !InsideQuotes;
         if (str[i] == _T(' ') && !InsideQuotes)
             SBreak = i;
-        if ((str[i] == _T(' ') || str[i] == _T('\\')) && !InsideQuotes)
+        if ((str[i] == _T(' ') || str[i] == _T('\\') || str[i] == _T('/')) && !InsideQuotes)
             PBreak = i;
     }
     SBreak++;
@@ -824,13 +836,12 @@ FindPrefixAndSuffix_Cmd(
 
     _tcsncpy(szPrefix, str, PBreak);
     szPrefix[PBreak] = _T('\0');
-    i = PBreak; // _tcslen(szPrefix);
-    if (i >= 2 && szPrefix[i - 2] == _T('\"') && szPrefix[i - 1] != _T(' '))
+    if (PBreak >= 2 && szPrefix[PBreak - 2] == _T('\"') && szPrefix[PBreak - 1] != _T(' '))
     {
         /* need to remove the " right before a \ at the end to
            allow the next stuff to stay inside one set of quotes
            otherwise you would have multiple sets of quotes */
-        _tcscpy(&szPrefix[i - 2], _T("\\"));
+        _tcscpy(&szPrefix[PBreak - 2], _T("\\"));
     }
 }
 
