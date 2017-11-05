@@ -69,18 +69,35 @@ FreeCompletionContext(
     Context->MaxSize = 0;
 }
 
+
 /*
- * CmdLine : String to complete, with CmdLine[cursor] == L'\0';
- * cursor: Insertion point in CmdLine, but we might edit a bit more inside CmdLine;
- * charcount: Maximum size of the buffer CmdLine.
+ * TODO:
+ * - Call the "BASH-like" mode: "Advanced" / list mode;
+ * - Call the "CMD-like" mode : "Simple" / enum mode.
+ * In both cases, we also have either "insert" or "overwrite" mode.
+ * In the former mode, the completions are inserted, while in the latter
+ * the completions replace and thus, erase, the end of the command-line.
+ *
+ * For example, BASH works in advanced/list + insert mode,
+ * while cmd.exe works in simple/enum + overwrite mode.
+ */
+
+/*
+ * CmdLine : String to complete. /// , with CmdLine[cursor] == L'\0';
+ * charcount: Maximum size of the buffer CmdLine;
+ * cursor: Insertion point in CmdLine, but we might edit a bit more inside it.
  */
 BOOL
 DoCompletion(
     IN PCOMPLETION_CONTEXT Context,
     IN PVOID CompleterParameter OPTIONAL,
     IN OUT LPTSTR CmdLine,
-    IN UINT cursor,             // Insertion point (NULL-terminated)
     IN UINT charcount,          // maxlen
+    IN UINT cursor,             // Insertion point (NULL-terminated) -- "hint" // FIXME!!
+/*
+    IN BOOL AdvancedCompletionMode, // TRUE: à la BASH ; FALSE: à la CMD
+*/
+    IN BOOL InsertMode,     // TRUE: insert ; FALSE: overwrite
     IN TCHAR CompletionChar,
     IN ULONG ControlKeyState,   // Which keys are pressed during the completion
     OUT PBOOL CompletionRestarted OPTIONAL)
@@ -93,16 +110,21 @@ DoCompletion(
     /* Editable string of what was passed in */
     TCHAR str[MAX_PATH];
 
+    /*
+     * Suppose we are going to restart a new completion.
+     * This is what will happen if we fail somewhere in the process.
+     * Otherwise the real completion state will be returned afterwards.
+     */
     if (CompletionRestarted)
         *CompletionRestarted = RestartCompletion;
 
+    /* Sanity checks */
     if (!Context)
         return FALSE;
-
-    if (!CmdLine)
+    if (!CmdLine /* || charcount == 0 */)
         return TRUE;
-
-    // FIXME: Use charcount !!
+    if (cursor >= charcount)
+        return FALSE;
 
     //
     // FIXME BIG IMPROVEMENT:
@@ -121,7 +143,7 @@ DoCompletion(
 #if 0
     if (!Context->CmdLine || (Context->MaxSize != charcount + 1) ||
         memcmp(Context->CmdLine, CmdLine, charcount*sizeof(TCHAR)) != 0)
-#else
+#else // Looks broken... // Actually we should just care about what's *before* the insertion point, and not what's after :-)
     if (!Context->CmdLine || (Context->MaxSize != cursor + 1) ||
         memcmp(Context->CmdLine, CmdLine, cursor*sizeof(TCHAR)) != 0)
 #endif
@@ -132,8 +154,6 @@ DoCompletion(
     {
         RestartCompletion = FALSE;
     }
-
-    // CompletionRestarted will be reset after...
 
 
     //
@@ -154,7 +174,7 @@ DoCompletion(
      * in case other criteria are met...
      */
     Success = Context->CompleterCallback(Context, CompleterParameter,
-                                         str, cursor, charcount,
+                                         str, charcount, cursor,
                                          CompletionChar, ControlKeyState,
                                          &RestartCompletion);
     if (!Success)
@@ -168,11 +188,17 @@ DoCompletion(
         _tcscpy(CmdLine, str);
     }
 
+    //
+    // TODO: *WE* (and only us) MUST complete the command line string.
+    // The completer callback just should compute the possible completions
+    // and insert one (or part of) if we can.
+    //
+
     /* If we failed we will need to restart a new completion anyway */
     if (!Success)
         RestartCompletion = TRUE;
 
-
+    /* Return the actual state of the completion */
     if (CompletionRestarted)
         *CompletionRestarted = RestartCompletion;
 
@@ -184,23 +210,21 @@ DoCompletion(
 
     if (Success)
     {
-
-    //
-    // FIXME!
-    //
-    charcount = _tcslen(CmdLine) + 1;
-    //
-    //
-    Context->CmdLine = HeapAlloc(GetProcessHeap(), 0, charcount * sizeof(TCHAR));
-    if (Context->CmdLine == NULL)
-    {
-        // Context->MaxSize = 0;
-        DPRINT("DEBUG: Cannot allocate memory for Context->CmdLine!\n");
-        return FALSE;
-    }
-    Context->MaxSize = charcount; /// MaxBufSize!!
-    _tcscpy(Context->CmdLine, CmdLine);
-
+        //
+        // FIXME!
+        //
+        charcount = _tcslen(CmdLine) + 1;
+        //
+        //
+        Context->CmdLine = HeapAlloc(GetProcessHeap(), 0, charcount * sizeof(TCHAR));
+        if (Context->CmdLine == NULL)
+        {
+            // Context->MaxSize = 0;
+            DPRINT("DEBUG: Cannot allocate memory for Context->CmdLine!\n");
+            return FALSE;
+        }
+        Context->MaxSize = charcount; /// MaxBufSize!!
+        _tcscpy(Context->CmdLine, CmdLine);
     }
     else
     {

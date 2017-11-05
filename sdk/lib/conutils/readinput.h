@@ -28,8 +28,8 @@ typedef BOOL (*COMPLETER_CALLBACK)(
     IN OUT struct _COMPLETION_CONTEXT* Context,
     IN PVOID CompleterParameter OPTIONAL,
     IN OUT LPTSTR str,
-    IN UINT cursor,
     IN UINT charcount,
+    IN UINT cursor,
     IN TCHAR CompletionChar,
     IN ULONG ControlKeyState,
     IN OUT PBOOL RestartCompletion);
@@ -38,9 +38,21 @@ typedef VOID (*COMPLETER_CLEANUP)(IN OUT struct _COMPLETION_CONTEXT* Context);
 
 typedef struct _COMPLETION_CONTEXT
 {
+    /* Pointer to original string, also marking its start */
     LPTSTR CmdLine;         // --> String / TextLine
     // UINT InsertPos;
     UINT MaxSize;
+
+    // LPTSTR Start;
+
+#if 0
+    /* Pointer to start of word to complete, inside the string */
+    LPTSTR Word;
+    UINT WordSize;
+
+    /* Pointer to start of the end of the string */
+    LPTSTR End;
+#endif
 
     PVOID CompleterContext;
     COMPLETER_CALLBACK CompleterCallback;
@@ -62,8 +74,9 @@ DoCompletion(
     IN PCOMPLETION_CONTEXT Context,
     IN PVOID CompleterParameter OPTIONAL,
     IN OUT LPTSTR CmdLine,      // --> String / TextLine
-    IN UINT cursor,
     IN UINT charcount,
+    IN UINT cursor,
+    IN BOOL InsertMode,     // TRUE: insert ; FALSE: overwrite
     IN TCHAR CompletionChar,
     IN ULONG ControlKeyState,
     OUT PBOOL CompletionRestarted OPTIONAL);
