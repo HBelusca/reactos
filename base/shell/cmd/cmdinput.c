@@ -102,6 +102,66 @@
 
 #include "precomp.h"
 
+#include <strsafe.h>
+
+/*
+ * Inserts a NULL-terminated string pszSrc starting position nPos
+ * into the NULL-terminated string pszDest of maximum buffer size cchDest.
+ * Note that this a generalization of StringCchCat(), where in the latter case
+ * the string is "inserted" (appended) at the end.
+ */
+HRESULT
+StringCchInsertStringEx(
+    _Inout_   LPTSTR  pszDest,
+    _In_      size_t  cchDest,
+    _In_      LPCTSTR pszSrc,
+    _In_      size_t  nPos,
+    _Out_opt_ LPTSTR  *ppszDestEnd,
+    _Out_opt_ size_t  *pcchRemaining
+    // , _In_      DWORD   dwFlags
+    )
+{
+    size_t cchSrc = _tcslen(pszSrc);
+    size_t cchDestOld = _tcslen(pszDest);
+
+    /* Parameters validation */
+    if ((cchDest == 0) || (cchDest > STRSAFE_MAX_CCH))
+        return STRSAFE_E_INVALID_PARAMETER;
+    if (nPos > cchDestOld)
+        return STRSAFE_E_INVALID_PARAMETER;
+    if (cchDestOld + cchSrc + 1 > cchDest)
+        return STRSAFE_E_INSUFFICIENT_BUFFER;
+
+    /* Perform the insertion */
+    pszDest += nPos;
+    memmove(pszDest + cchSrc, pszDest,
+            (cchDestOld + 1) * sizeof(TCHAR));
+    memmove(pszDest, pszSrc,
+            cchSrc * sizeof(TCHAR));
+
+    if (ppszDestEnd)
+        *ppszDestEnd = pszDest + cchSrc;
+    if (pcchRemaining)
+        *pcchRemaining = cchDest - cchSrc;
+
+    return S_OK;
+}
+
+HRESULT
+StringCchInsertString(
+    _Inout_ LPTSTR  pszDest,
+    _In_    size_t  cchDest,
+    _In_    LPCTSTR pszSrc,
+    _In_    size_t  nPos)
+{
+    return StringCchInsertStringEx(pszDest, cchDest,
+                                   pszSrc, nPos,
+                                   NULL, NULL);
+}
+
+
+
+
 /* Set to TRUE to use BASH-like completion instead of default CMD one */
 BOOL bUseBashCompletion = FALSE;
 
@@ -836,41 +896,52 @@ ReadConsoleLine(
     nInsertPoint = min(nInsertPoint, nInitialChars);
 
     /*
-     * Simulate Left-Arrow key presses so as to move the cursor back to our
+     * Simulate direction key presses so as to move the cursor back to our
      * wanted position. We cannot use SetConsoleCursorPosition here because
      * we would loose cursor position synchronization with the position
      * inside the string buffer held by Read/WriteConsole.
      * The simulation is done at once in a packed way, so that we are not
      * interrupted by other inputs that could mess up the cursor position.
      */
-    /* Now, nInitialChars contains the remaining characters */
-    nInitialChars = nInitialChars - nInsertPoint;
-    if (nInitialChars > 0)
+    if (nInsertPoint >= 0)
     {
         INPUT_RECORD Ir;
         PINPUT_RECORD InputRecords, pIr;
 
-        dwWritten = nInitialChars + 1;
+        /* Prepare the common data */
+        Ir.EventType = KEY_EVENT;
+        Ir.Event.KeyEvent.wRepeatCount = 1;
+        Ir.Event.KeyEvent.uChar.UnicodeChar = 0;
+        Ir.Event.KeyEvent.dwControlKeyState = 0;
+
+        /* Initialize the key presses */
+        dwWritten = 1 + nInsertPoint + 1;
         InputRecords = (PINPUT_RECORD)HeapAlloc(GetProcessHeap(), 0,
                                                 dwWritten * sizeof(*InputRecords));
 
-        Ir.EventType = KEY_EVENT;
-        Ir.Event.KeyEvent.wRepeatCount = 1;
-        Ir.Event.KeyEvent.wVirtualKeyCode = VK_LEFT;
-        Ir.Event.KeyEvent.wVirtualScanCode = MapVirtualKeyW(VK_LEFT, MAPVK_VK_TO_CHAR);
-        Ir.Event.KeyEvent.uChar.UnicodeChar = 0;
-        Ir.Event.KeyEvent.dwControlKeyState = 0;
-        Ir.Event.KeyEvent.bKeyDown = TRUE;
-
         pIr = InputRecords;
-        while (nInitialChars--)
+
+        /* Go to the beginning of the line */
+        Ir.Event.KeyEvent.wVirtualKeyCode = VK_HOME;
+        Ir.Event.KeyEvent.wVirtualScanCode = MapVirtualKeyW(VK_HOME, MAPVK_VK_TO_CHAR);
+        Ir.Event.KeyEvent.bKeyDown = TRUE;
+        *pIr++ = Ir;
+
+#if 0 // If enabled, add + 1 to dwWritten above.
+        Ir.Event.KeyEvent.bKeyDown = FALSE;
+        *pIr++ = Ir;
+#endif
+
+        /* Press the right-arrow key as many times as needed to go to the insertion point */
+        Ir.Event.KeyEvent.wVirtualKeyCode = VK_RIGHT;
+        Ir.Event.KeyEvent.wVirtualScanCode = MapVirtualKeyW(VK_RIGHT, MAPVK_VK_TO_CHAR);
+        Ir.Event.KeyEvent.bKeyDown = TRUE;
+        while (nInsertPoint--)
         {
-            *pIr = Ir;
-            // pIr->Event.KeyEvent.bKeyDown = TRUE;
-            ++pIr;
+            *pIr++ = Ir;
         }
+        Ir.Event.KeyEvent.bKeyDown = FALSE;
         *pIr = Ir;
-        pIr->Event.KeyEvent.bKeyDown = FALSE;
 
         WriteConsoleInput(hConsoleInput, InputRecords, dwWritten, &dwWritten);
 
@@ -907,8 +978,8 @@ ReadConsoleLine(
      *
      * '*lpNumberOfCharsRead' always contains the total number of characters
      * in 'lpBuffer'.
-     * To find where the user entered the control character we just have
-     * to find the (first) control character in the string.
+     * In order to know where the user entered the control character we just
+     * have to find the (first) control character in the string.
      */
     dwWritten = *lpNumberOfCharsRead;
     while (dwWritten > 0)
@@ -967,7 +1038,7 @@ ReadConsoleLine(
 
 
 //
-// FIXME: This is a (buggy) test function only!!
+// FIXME: This is a test function only!!
 //
 BOOL
 DoCompletion2(
@@ -976,31 +1047,42 @@ DoCompletion2(
     IN OUT LPTSTR CmdLine,
     IN UINT charcount,          // maxlen
     IN UINT cursor,             // Insertion point (NULL-terminated) // FIXME!!
-    IN BOOL InsertMode,
+    IN BOOL InsertMode,     // TRUE: insert ; FALSE: overwrite
     IN TCHAR CompletionChar,
     IN ULONG ControlKeyState,   // Which keys are pressed during the completion
     OUT PBOOL CompletionRestarted OPTIONAL)
 {
-    SIZE_T sizeInsert, sizeAppend;
-    LPTSTR insert = CmdLine + cursor, tmp = NULL;
+static const LPCTSTR CompletingStrings[] =
+{
+    _T("CompleteString1"),
+    _T("Short2"),
+    _T("MediumStrg3"),
+};
 
-    /* Save the buffer after the insertion (BASH-like autocompletion) */
-    sizeAppend = (charcount - (insert - CmdLine)) * sizeof(TCHAR);
-    tmp = (LPTSTR)HeapAlloc(GetProcessHeap(), 0, sizeAppend);
-    memcpy(tmp, insert, sizeAppend);
+static UINT index = 0;
+
+    HRESULT hr;
 
     /* Insert the arbitrary string */
-    // FIXME: Take into account the fact that the full buffer (starting from 'str') is 'maxlen' long!
-    // NOTE: InputControl.dwControlKeyState can be used to know
-    // how to perform the autocompletion...
-    sizeInsert = sizeof(L"HI!") - sizeof(TCHAR);
-    memcpy(insert, (PVOID)L"HI!", sizeInsert);
-    insert += sizeInsert/sizeof(TCHAR);
+    if (InsertMode)
+    {
+        hr = StringCchInsertString(CmdLine + cursor, charcount - cursor,
+                                   CompletingStrings[index],
+                                   0);
+    }
+    else
+    {
+        hr = StringCchCopy(CmdLine + cursor, charcount - cursor,
+                           CompletingStrings[index]);
+    }
+    if (FAILED(hr))
+    {
+        MessageBeep(-1);
+        return FALSE;
+    }
 
-    /* Insert the saved buffer part */
-    memcpy(insert, tmp, sizeAppend);
-
-    HeapFree(GetProcessHeap(), 0, tmp);
+    index++;
+    index %= ARRAYSIZE(CompletingStrings);
 
     return TRUE;
 }
@@ -1024,15 +1106,12 @@ ReadLineConsoleHelper(
     CONSOLE_SCREEN_BUFFER_INFO csbi;
     // COORD InitialCursorPos;
 
-    DWORD current = 0;  /* the position of the cursor in the string (str) */
-    DWORD charcount = 0;/* chars in the string (str) */
-    LPTSTR insert = NULL;
-    SIZE_T /*sizeInsert,*/ sizeAppend;
-
+    DWORD charcount = 0; /* chars in the string (str) */
+    DWORD ControlPoint = 0; // current // count /* the position of the cursor in the string (str) */
+    TCHAR CompletionChar;
     BOOL InsertMode;
     BOOL CompletionRestarted;
     COMPLETION_CONTEXT Context;
-    TCHAR CompletionChar;
 
 #if 1 /************** For temporary CODE REUSE!!!! ********************/
     /* Screen information */
@@ -1041,7 +1120,12 @@ ReadLineConsoleHelper(
 #endif
 
 
+    if (!str || maxlen == 0)
+        return TRUE;
+
+
     /* If autocompletion is disabled, just call directly ReadConsole */
+
     if (IS_COMPLETION_DISABLED(AutoCompletionChar) &&
         IS_COMPLETION_DISABLED(PathCompletionChar))
     {
@@ -1097,7 +1181,7 @@ ReadLineConsoleHelper(
 
     InputControl.nLength = sizeof(InputControl);
     InputControl.nInitialChars = 0; // Initially zero, but will change during autocompletion.
-    sizeAppend = 0;
+    ControlPoint = 0;
 
     /*
      * Now, Da Magicks: initialize the wakeup mask with the characters
@@ -1117,8 +1201,8 @@ ReadLineConsoleHelper(
                                       str, maxlen,
                                       &charcount,
                                       &InputControl,
-                                      InputControl.nInitialChars - sizeAppend/sizeof(TCHAR),
-                                      &current,
+                                      ControlPoint,
+                                      &ControlPoint,
                                       &CompletionChar);
 
         // FIXME: Check for Ctrl-C / Ctrl-Break !!
@@ -1126,13 +1210,9 @@ ReadLineConsoleHelper(
         if (!Success || charcount == 0)
             break;
 
-        // 'charcount' always contains the total number of characters of 'str'.
-
         /* If the user validated the command, no autocompletion to perform */
-        if (!CompletionChar /* && current == 0 */)
+        if (!CompletionChar /* && ControlPoint == 0 */)
             break;
-
-        insert = str + current;
 
 
         /* Autocompletion is pending */
@@ -1140,9 +1220,10 @@ ReadLineConsoleHelper(
         /* We keep the first characters, but do not take into account the TAB */
 
         /* NULL-terminate the line */
-        // *insert = _T('\0'); // str[charcount - current];
+        // 'charcount' always contains the total number of characters of 'str'.
         str[charcount - 1] = _T('\0');
         /**/charcount--;/**/
+        InputControl.nInitialChars = charcount; // - 1;
 
 
         /* Perform the line completion */
@@ -1155,6 +1236,7 @@ ReadLineConsoleHelper(
         if (!(dwNewMode & ENABLE_EXTENDED_FLAGS))
             dwNewMode &= ~(ENABLE_EXTENDED_FLAGS | ENABLE_QUICK_EDIT_MODE | ENABLE_INSERT_MODE);
 
+        /* Determine the current insertion mode */
         InsertMode = ( (dwNewMode & ENABLE_INSERT_MODE) && !(GetKeyState(VK_INSERT) & 0x0001)) ||
                      (!(dwNewMode & ENABLE_INSERT_MODE) &&  (GetKeyState(VK_INSERT) & 0x0001));
 
@@ -1162,13 +1244,29 @@ ReadLineConsoleHelper(
         tempscreen = charcount; // tempscreen == old_charcount
 
         CompletionRestarted = TRUE;
-        // /**/bUseBashCompletion = FALSE;/**/
-        // DoCompletion2
-        Success = DoCompletion(&Context, CompleterParameter,
-                               str, maxlen /* charcount */, current,
+        /**/bUseBashCompletion = FALSE;/**/
+        // DoCompletion
+        Success = DoCompletion2(&Context, CompleterParameter,
+                               str, maxlen /* charcount */, ControlPoint,
                                InsertMode, CompletionChar,
                                InputControl.dwControlKeyState,
                                &CompletionRestarted);
+
+        InputControl.nInitialChars = _tcslen(str);
+
+        if (Success)
+        {
+            /*
+             * Update the number of characters to keep;
+             * do not take the NULL terminator into account.
+             */
+            InputControl.nInitialChars = _tcslen(str);
+
+            if (InsertMode && InputControl.nInitialChars + 1 >= charcount)
+                ControlPoint += InputControl.nInitialChars + 1 - charcount;
+            else
+                ControlPoint = InputControl.nInitialChars + 1;
+        }
 
         if (bUseBashCompletion)
         {
@@ -1181,7 +1279,7 @@ ReadLineConsoleHelper(
                 // tempscreen = charcount; // tempscreen == old_charcount
 
                 /* Figure out where the cursor is going to be after we print it */
-                current = charcount = _tcslen(str);
+                ControlPoint = charcount = InputControl.nInitialChars;
 
                 /* Print out what we have now */
                 PrintPartialLine(str, charcount, tempscreen, &org);
@@ -1200,24 +1298,15 @@ ReadLineConsoleHelper(
         else
         {
             /* Figure out where the cursor is going to be after we print it */
-            current = charcount = _tcslen(str);
+            ControlPoint = charcount = InputControl.nInitialChars;
 
             /* Print out what we have now */
             PrintPartialLine(str, charcount, tempscreen, &org);
         }
 
         /* Reset cursor position */
-        SetCursorXY((org.X + current) % maxx,
-                    org.Y + (org.X + current) / maxx);
-
-        /*
-         * Update the number of characters to keep.
-         * Do not take the NULL terminator into account.
-         */
-        InputControl.nInitialChars = _tcslen(str);
-        // // InputControl.nInitialChars = (old_insert - str) + (sizeInsert + possible_erased_char + sizeAppend)/sizeof(TCHAR);
-        // InputControl.nInitialChars = charcount + sizeInsert/sizeof(TCHAR) - 1;
-
+        SetCursorXY((org.X + ControlPoint) % maxx,
+                    org.Y + (org.X + ControlPoint) / maxx);
     }
 
     /* Free the auto-completion context */
@@ -1245,7 +1334,7 @@ ReadLine(
 
     ZeroMemory(str, maxlen * sizeof(TCHAR));
 
-#if 0
+#if 1
     if (IsConsoleHandle(hInput) && IsConsoleHandle(hOutput))
     {
         if (!ReadLineConsoleHelper(hInput, hOutput,

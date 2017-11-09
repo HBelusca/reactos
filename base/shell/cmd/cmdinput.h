@@ -1,4 +1,25 @@
 
+#pragma once
+
+HRESULT
+StringCchInsertStringEx(
+    _Inout_   LPTSTR  pszDest,
+    _In_      size_t  cchDest,
+    _In_      LPCTSTR pszSrc,
+    _In_      size_t  nPos,
+    _Out_opt_ LPTSTR  *ppszDestEnd,
+    _Out_opt_ size_t  *pcchRemaining
+    // , _In_      DWORD   dwFlags
+    );
+
+HRESULT
+StringCchInsertString(
+    _Inout_ LPTSTR  pszDest,
+    _In_    size_t  cchDest,
+    _In_    LPCTSTR pszSrc,
+    _In_    size_t  nPos);
+
+
 extern BOOL  bUseBashCompletion;
 extern TCHAR AutoCompletionChar;
 extern TCHAR PathCompletionChar;
