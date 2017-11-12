@@ -176,6 +176,8 @@ static NtReadVirtualMemoryProc       NtReadVirtualMemoryPtr = NULL;
  */
 CON_STREAM_MODE OutputStreamMode = UTF8Text; // AnsiText;
 
+DWORD dwOrgInputMode = 0, dwOrgOutputMode = 0;
+
 #ifdef INCLUDE_CMD_COLOR
 WORD wDefColor = 0;     /* Default color */
 #endif
@@ -428,6 +430,9 @@ Execute(LPTSTR Full, LPTSTR First, LPTSTR Rest, PARSED_COMMAND *Cmd)
     }
     else
     {
+        HANDLE hIn, hOut;
+        DWORD dwOldInputMode = 0, dwOldOutputMode = 0;
+
         /* exec the program */
         PROCESS_INFORMATION prci;
         STARTUPINFO stui;
@@ -453,9 +458,12 @@ Execute(LPTSTR Full, LPTSTR First, LPTSTR Rest, PARSED_COMMAND *Cmd)
         stui.dwFlags = STARTF_USESHOWWINDOW;
         stui.wShowWindow = SW_SHOWDEFAULT;
 
-        /* Set the console to standard mode */
-        SetConsoleMode(ConStreamGetOSHandle(StdIn),
-                       ENABLE_PROCESSED_INPUT | ENABLE_LINE_INPUT | ENABLE_ECHO_INPUT);
+        /* Set the console to standard modes */
+        hIn  = ConStreamGetOSHandle(StdIn);
+        hOut = ConStreamGetOSHandle(StdOut);
+        GetConsoleMode(hIn , &dwOldInputMode);
+        GetConsoleMode(hOut, &dwOldOutputMode);
+        SetConsoleMode(hIn, ENABLE_PROCESSED_INPUT | ENABLE_LINE_INPUT | ENABLE_ECHO_INPUT);
 
         if (CreateProcess(szFullName,
                           szFullCmdLine,
@@ -506,11 +514,9 @@ Execute(LPTSTR Full, LPTSTR First, LPTSTR Rest, PARSED_COMMAND *Cmd)
             dwExitCode = 1;
         }
 
-        /* Restore our default console mode */
-        SetConsoleMode(ConStreamGetOSHandle(StdIn),
-                       ENABLE_PROCESSED_INPUT | ENABLE_LINE_INPUT | ENABLE_ECHO_INPUT);
-        SetConsoleMode(ConStreamGetOSHandle(StdOut),
-                       ENABLE_PROCESSED_OUTPUT | ENABLE_WRAP_AT_EOL_OUTPUT);
+        /* Restore our default console modes */
+        SetConsoleMode(hIn , dwOldInputMode);
+        SetConsoleMode(hOut, dwOldOutputMode);
     }
 
     /* Update our local codepage cache */
@@ -1978,12 +1984,14 @@ Initialize(VOID)
     /* Add ctrl break handler */
     AddBreakHandler();
 
-    /* Set our default console mode */
-    hOut = ConStreamGetOSHandle(StdOut);
+    /* Set our default console modes */
     hIn  = ConStreamGetOSHandle(StdIn);
-    SetConsoleMode(hOut, 0); // Reinitialize the console output mode
+    hOut = ConStreamGetOSHandle(StdOut);
+    GetConsoleMode(hIn , &dwOrgInputMode);
+    GetConsoleMode(hOut, &dwOrgOutputMode);
+    SetConsoleMode(hIn , dwOrgInputMode | ENABLE_PROCESSED_INPUT | ENABLE_LINE_INPUT | ENABLE_ECHO_INPUT);
+    SetConsoleMode(hOut, 0); // Reinitialize the console output modes
     SetConsoleMode(hOut, ENABLE_PROCESSED_OUTPUT | ENABLE_WRAP_AT_EOL_OUTPUT);
-    SetConsoleMode(hIn , ENABLE_PROCESSED_INPUT | ENABLE_LINE_INPUT | ENABLE_ECHO_INPUT);
 
     cmdLine = GetCommandLine();
     TRACE ("[command args: %s]\n", debugstr_aw(cmdLine));
@@ -2142,11 +2150,9 @@ static VOID Cleanup(VOID)
     /* Remove ctrl break handler */
     RemoveBreakHandler();
 
-    /* Restore the default console mode */
-    SetConsoleMode(ConStreamGetOSHandle(StdIn),
-                   ENABLE_PROCESSED_INPUT | ENABLE_LINE_INPUT | ENABLE_ECHO_INPUT);
-    SetConsoleMode(ConStreamGetOSHandle(StdOut),
-                   ENABLE_PROCESSED_OUTPUT | ENABLE_WRAP_AT_EOL_OUTPUT);
+    /* Restore the default console modes */
+    SetConsoleMode(ConStreamGetOSHandle(StdIn) , dwOrgInputMode);
+    SetConsoleMode(ConStreamGetOSHandle(StdOut), dwOrgOutputMode);
 
     DeleteCriticalSection(&ChildProcessRunningLock);
 }
