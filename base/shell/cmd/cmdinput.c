@@ -347,6 +347,14 @@ static BOOL bInsert = TRUE;
 
     cur = org;
 
+#if 1
+    /* Reset cursor position */
+    SetCursorXY((org.X + current) % maxx,
+                org.Y + (org.X + current) / maxx);
+    GetCursorXY(&cur.X, &cur.Y);
+#endif
+
+
     /* Initialize the control character values */
     if (pControlPoint)
         *pControlPoint = 0;
@@ -1124,43 +1132,47 @@ ReadLineConsoleHelper(
         return TRUE;
 
 
-    /* If autocompletion is disabled, just call directly ReadConsole */
-
-    if (IS_COMPLETION_DISABLED(AutoCompletionChar) &&
-        IS_COMPLETION_DISABLED(PathCompletionChar))
-    {
-        return ReadConsoleLineProc(hInput, hOutput,
-                                   str, maxlen,
-                                   &charcount,
-                                   NULL, 0,
-                                   NULL, NULL);
-    }
-
-
-    /* Autocompletion is enabled */
-
-    /* Retrieve the original console input modes */
-    GetConsoleMode(hInput, &dwOldMode);
-
     /*
-     * Set new console line-input modes, and keep only the existing extended modes.
-     * For the latter to be valid, the explicit presence of ENABLE_EXTENDED_FLAGS
-     * is required.
+     * Retrieve the original console input modes, and check explicitely
+     * the existing extended modes. For these to be valid,  the explicit
+     * presence of ENABLE_EXTENDED_FLAGS is required.
      */
+    GetConsoleMode(hInput, &dwOldMode);
+    if (!(dwOldMode & ENABLE_EXTENDED_FLAGS))
+        dwOldMode &= ~(ENABLE_EXTENDED_FLAGS | ENABLE_QUICK_EDIT_MODE | ENABLE_INSERT_MODE);
+
+    /* Set new console line-input modes, keeping only the existing extended modes */
     /*
      * ENABLE_LINE_INPUT: Enable line-editing features of ReadConsole;
      * ENABLE_ECHO_INPUT: Echo what we are typing;
      * ENABLE_PROCESSED_INPUT: The console deals with editing characters.
      */
     dwNewMode = ENABLE_LINE_INPUT | ENABLE_ECHO_INPUT | ENABLE_PROCESSED_INPUT;
-    if (!(dwNewMode & ENABLE_EXTENDED_FLAGS))
-        dwNewMode &= ~(ENABLE_EXTENDED_FLAGS | ENABLE_QUICK_EDIT_MODE | ENABLE_INSERT_MODE);
     dwNewMode |= dwOldMode & (ENABLE_EXTENDED_FLAGS | ENABLE_QUICK_EDIT_MODE | ENABLE_INSERT_MODE);
 
     SetConsoleMode(hInput, dwNewMode);
 
+
+    /* If autocompletion is disabled, just call directly ReadConsole */
+
+    if (IS_COMPLETION_DISABLED(AutoCompletionChar) &&
+        IS_COMPLETION_DISABLED(PathCompletionChar))
+    {
+        Success = ReadConsoleLineProc(hInput, hOutput,
+                                      str, maxlen,
+                                      &charcount,
+                                      NULL, 0,
+                                      NULL, NULL);
+        goto Quit;
+    }
+
+
+    /* Autocompletion is enabled */
+
+
     // HACK!!!!
     SetConsoleMode(hOutput, ENABLE_PROCESSED_OUTPUT | ENABLE_WRAP_AT_EOL_OUTPUT);
+    //
 
     /* Get screen size and other info */
     // FIXME due to the fact hOutput could be != StdOutScreen
@@ -1197,6 +1209,12 @@ ReadLineConsoleHelper(
     {
         InputControl.dwControlKeyState = 0;
 
+        /*
+         * Current cursor position is expected to be at (orig) + InputControl.nInitialChars
+         * so that the ReadConsole procedure knows the line starts at (orig)
+         * while keeping nInitialChars initial characters of the text line,
+         * and the cursor be placed at ControlPoint.
+         */
         Success = ReadConsoleLineProc(hInput, hOutput,
                                       str, maxlen,
                                       &charcount,
@@ -1230,7 +1248,7 @@ ReadLineConsoleHelper(
 
         /*
          * Refresh the cached console input modes.
-         * Again, explicitely check the existing extended flags.
+         * Again, check explicitely the existing extended modes.
          */
         GetConsoleMode(hInput, &dwNewMode);
         if (!(dwNewMode & ENABLE_EXTENDED_FLAGS))
@@ -1245,8 +1263,8 @@ ReadLineConsoleHelper(
 
         CompletionRestarted = TRUE;
         /**/bUseBashCompletion = FALSE;/**/
-        // DoCompletion
-        Success = DoCompletion2(&Context, CompleterParameter,
+        // DoCompletion2
+        Success = DoCompletion(&Context, CompleterParameter,
                                str, maxlen /* charcount */, ControlPoint,
                                InsertMode, CompletionChar,
                                InputControl.dwControlKeyState,
@@ -1262,10 +1280,19 @@ ReadLineConsoleHelper(
              */
             InputControl.nInitialChars = _tcslen(str);
 
-            if (InsertMode && InputControl.nInitialChars + 1 >= charcount)
-                ControlPoint += InputControl.nInitialChars + 1 - charcount;
+            ++charcount; // Just because charcount has already been decremented before!
+
+            if (InsertMode)
+            {
+                if (InputControl.nInitialChars + 1 >= charcount)
+                    ControlPoint += InputControl.nInitialChars + 1 - charcount;
+                else
+                    ControlPoint -= charcount - (InputControl.nInitialChars + 1);
+            }
             else
+            {
                 ControlPoint = InputControl.nInitialChars + 1;
+            }
         }
 
         if (bUseBashCompletion)
@@ -1279,10 +1306,10 @@ ReadLineConsoleHelper(
                 // tempscreen = charcount; // tempscreen == old_charcount
 
                 /* Figure out where the cursor is going to be after we print it */
-                ControlPoint = charcount = InputControl.nInitialChars;
+                // ControlPoint = charcount = InputControl.nInitialChars;
 
                 /* Print out what we have now */
-                PrintPartialLine(str, charcount, tempscreen, &org);
+                PrintPartialLine(str, /*charcount*/ InputControl.nInitialChars, tempscreen, &org);
             }
             // else if (bUseBashCompletion && !CompletionRestarted && Success)
             else if (Success)
@@ -1294,24 +1321,73 @@ ReadLineConsoleHelper(
                 GetCursorXY(&org.X, &org.Y);
                 ConOutPuts(str);
             }
+#if 0
+            /* Reset cursor position */
+            SetCursorXY((org.X + ControlPoint) % maxx,
+                        org.Y + (org.X + ControlPoint) / maxx);
+#endif
         }
         else
         {
             /* Figure out where the cursor is going to be after we print it */
-            ControlPoint = charcount = InputControl.nInitialChars;
+            // ControlPoint = charcount = InputControl.nInitialChars;
 
             /* Print out what we have now */
-            PrintPartialLine(str, charcount, tempscreen, &org);
+            // PrintPartialLine(str, charcount, tempscreen, &org);
+
+            // if (Success)
+            {
+                DWORD dwWritten;
+
+
+        //
+        // FIXME: NOTE: The redrawing code + cursor stuff may behave strangely
+        // if the string contains embedded control characters (for example,
+        // 0x0D, 0x0A and so on...)
+        //
+
+        /* Update the string on screen */
+        SetConsoleCursorPosition(hOutput, org /*InitialCursorPos*/);
+        WriteConsole(hOutput, str, InputControl.nInitialChars, &dwWritten, NULL);
+        /* Fill with whitespace *iif* the completed string is smaller than the original one */
+        if (charcount > dwWritten)
+        {
+            csbi.dwCursorPosition = org /*InitialCursorPos*/;
+            csbi.dwCursorPosition.X += (SHORT)dwWritten;
+            FillConsoleOutputCharacter(hOutput, _T(' '),
+                                       charcount - dwWritten,
+                                       csbi.dwCursorPosition,
+                                       &dwWritten);
+        }
+#if 0
+        /*
+         * Place the cursor where ReadConsole() expects it to be:
+         *     CurrentPosition = InitialNumChars;
+         *     OriginalCursorPosition = TextInfo.CursorPosition;
+         *     OriginalCursorPosition.X -= CurrentPosition;
+         */
+        csbi.dwCursorPosition = org /*InitialCursorPos*/;
+        csbi.dwCursorPosition.X += InputControl.nInitialChars;
+        SetConsoleCursorPosition(hOutput, csbi.dwCursorPosition);
+#endif
+
+
+            }
+
+
         }
 
+#if 0
         /* Reset cursor position */
         SetCursorXY((org.X + ControlPoint) % maxx,
                     org.Y + (org.X + ControlPoint) / maxx);
+#endif
     }
 
     /* Free the auto-completion context */
     FreeCompletionContext(&Context);
 
+Quit:
     /* Restore the original console input modes */
     SetConsoleMode(hInput, dwOldMode);
     return Success;
@@ -1327,14 +1403,14 @@ ReadLine(
     IN PVOID CompleterParameter OPTIONAL)
 {
     BOOL Success = FALSE;
-    DWORD dwOldMode;
+    // DWORD dwOldMode;
 
-    GetConsoleMode(hInput, &dwOldMode);
-    SetConsoleMode(hInput, /* dwOldMode | */ ENABLE_LINE_INPUT | ENABLE_ECHO_INPUT);
+    // GetConsoleMode(hInput, &dwOldMode);
+    // SetConsoleMode(hInput, /* dwOldMode | */ ENABLE_LINE_INPUT | ENABLE_ECHO_INPUT);
 
     ZeroMemory(str, maxlen * sizeof(TCHAR));
 
-#if 1
+#if 0
     if (IsConsoleHandle(hInput) && IsConsoleHandle(hOutput))
     {
         if (!ReadLineConsoleHelper(hInput, hOutput,
@@ -1369,7 +1445,7 @@ ReadLine(
     Success = TRUE;
 
 Quit:
-    SetConsoleMode(hInput, dwOldMode);
+    // SetConsoleMode(hInput, dwOldMode);
     return Success;
 }
 
