@@ -15,7 +15,6 @@
  *    30-Apr-2004 (Filip Navara <xnavara@volny.cz>)
  *       Make the file listing readable when there is a lot of long names.
  *
-
  *    05-Jul-2004 (Jens Collin <jens.collin@lakhei.com>)
  *       Now expands lfn even when trailing " is omitted.
  */
@@ -91,8 +90,6 @@ BuildFileList(
     HANDLE hFile;
     PWIN32_FIND_DATA OldFileList;
     WIN32_FIND_DATA file;
-
-    // MessageBox(NULL, szSearchPathSpec, _T("BuildFileList"), MB_OK);
 
     ASSERT(FileContext->FileList == NULL);
     // FileContext->FileList = NULL;
@@ -231,7 +228,10 @@ FileNameContainsSpecialCharacters(IN LPCTSTR pszFileName)
 typedef struct _FILE_COMPLETION_BASH_CONTEXT
 {
     FILE_COMPLETION_CONTEXT;
+
     UINT start;
+    TCHAR directory[MAX_PATH];
+
 } FILE_COMPLETION_BASH_CONTEXT, *PFILE_COMPLETION_BASH_CONTEXT;
 
 static BOOL
@@ -242,7 +242,7 @@ ShowFileList(
         (PFILE_COMPLETION_BASH_CONTEXT)Context->CompleterContext;
 
     UINT i, count;
-    SHORT screenwidth;
+    // SHORT screenwidth;
     UINT longestfname = 0;
     TCHAR fname[MAX_PATH];
 
@@ -259,8 +259,8 @@ ShowFileList(
         }
     }
 
-    /* Count the highest number of columns */
-    GetScreenSize(&screenwidth, NULL);
+    // /* Count the highest number of columns */
+    // GetScreenSize(&screenwidth, NULL);
 
     /* For counting columns of output */
     count = 0;
@@ -378,13 +378,20 @@ CompleteFromFileList(
      * the completed part will be erased. If we are in insertion mode,
      * this erased part will be restored by our caller.
      */
-    Context->Touched = TRUE;
 
-    // /* Only quote if the filename contains spaces */
-    // if (_tcschr(directory, _T(' ')) || _tcschr(maxmatch, _T(' ')))
     /* Only quote if the filename contains special characters */
-    if (FileNameContainsSpecialCharacters(directory))
+    if (FileNameContainsSpecialCharacters(directory) ||
+        FileNameContainsSpecialCharacters(maxmatch))
     {
+        /*
+         * Check whether we have enough space for completion before doing anything.
+         * Take into account for the NULL-termination.
+         */
+        if (1 + _tcslen(directory) + _tcslen(maxmatch) + 1 + 1 > charcount)
+            return FALSE;
+
+        Context->Touched = TRUE;
+
         StringCchCopy(str, charcount, _T("\""));
         StringCchCat(str, charcount, directory);
         StringCchCat(str, charcount, maxmatch);
@@ -392,6 +399,15 @@ CompleteFromFileList(
     }
     else
     {
+        /*
+         * Check whether we have enough space for completion before doing anything.
+         * Take into account for the NULL-termination.
+         */
+        if (_tcslen(directory) + _tcslen(maxmatch) + 1 > charcount)
+            return FALSE;
+
+        Context->Touched = TRUE;
+
         StringCchCopy(str, charcount, directory);
         StringCchCat(str, charcount, maxmatch);
     }
@@ -408,6 +424,7 @@ CompleteFromCommandList(
     OUT LPTSTR str,
     IN UINT charcount)
 {
+    HRESULT hr;
     LPCOMMAND cmdptr;
 
     for (cmdptr = cmds; cmdptr->name; ++cmdptr)
@@ -422,8 +439,10 @@ CompleteFromCommandList(
                  * the completed part will be erased. If we are in insertion mode,
                  * this erased part will be restored by our caller.
                  */
+                hr = StringCchCopy(str, charcount, cmdptr->name);
+                if (FAILED(hr))
+                    return FALSE;
                 Context->Touched = TRUE;
-                StringCchCopy(str, charcount, cmdptr->name);
             }
             // break;
             return TRUE;
@@ -436,41 +455,39 @@ CompleteFromCommandList(
 
 
 static BOOL
-PrepareCompletion_Bash(
-    IN PCOMPLETION_CONTEXT Context,
+PrepareCompletionContext_Bash(
+    IN OUT PCOMPLETION_CONTEXT Context,
     IN BOOL RestartCompletion,
-    IN BOOL OnlyDirs,
-    OUT PFILE_COMPLETION_BASH_CONTEXT* pFileContext)
+    IN ULONG ControlKeyState,
+    IN BOOL OnlyDirs)
 {
     PFILE_COMPLETION_BASH_CONTEXT FileContext;
 
-    if (RestartCompletion)
+    if (!RestartCompletion)
     {
-        Context->CompleterCleanup = FreeFileCompletionContext;
-
-        FileContext = cmd_alloc(sizeof(FILE_COMPLETION_BASH_CONTEXT));
-        if (FileContext == NULL)
-        {
-            WARN("DEBUG: Cannot allocate memory for Context->CompleterContext!\n");
-            // error_out_of_memory();
-            // ConErrFormatMessage(GetLastError());
-            return FALSE;
-        }
-
-        FileContext->OnlyDirs = OnlyDirs;
-
-        FileContext->FileList = NULL;
-        FileContext->TotalItems = 0;
-        FileContext->NumberOfFiles = 0;
-
-        Context->CompleterContext = FileContext;
-    }
-    else
-    {
-        FileContext = (PFILE_COMPLETION_BASH_CONTEXT)Context->CompleterContext;
+        ASSERT(Context->CompleterContext);
+        return TRUE;
     }
 
-    *pFileContext = FileContext;
+    Context->CompleterCleanup = FreeFileCompletionContext;
+
+    FileContext = cmd_alloc(sizeof(FILE_COMPLETION_BASH_CONTEXT));
+    if (FileContext == NULL)
+    {
+        WARN("DEBUG: Cannot allocate memory for Context->CompleterContext!\n");
+        // error_out_of_memory();
+        // ConErrFormatMessage(GetLastError());
+        return FALSE;
+    }
+
+    FileContext->OnlyDirs = OnlyDirs;
+
+    FileContext->FileList = NULL;
+    FileContext->TotalItems = 0;
+    FileContext->NumberOfFiles = 0;
+
+    Context->CompleterContext = FileContext;
+
     return TRUE;
 }
 
@@ -528,15 +545,24 @@ FindPrefixAndSuffix_Bash(
 }
 #endif
 
+/*
+ * Returns TRUE if at least one match, otherwise returns FALSE
+ */
 static BOOL
-AttemptCompletion_Bash(
+CompleteFilename_Bash(
     IN PCOMPLETION_CONTEXT Context,
-    IN PFILE_COMPLETION_BASH_CONTEXT FileContext, // This is actually stored within Context...
     IN BOOL RestartCompletion,
     OUT LPTSTR str,
-    IN UINT charcount,
-    IN LPTSTR directory)
+    IN UINT charcount)
 {
+    PFILE_COMPLETION_BASH_CONTEXT FileContext =
+        (PFILE_COMPLETION_BASH_CONTEXT)Context->CompleterContext;
+
+    ASSERT(FileContext);
+
+    str += FileContext->start;
+    charcount -= FileContext->start;
+
     /*
      * Check if the file list contains files or not, and perform the completion
      * accordingly (using the file list or falling back to the command list).
@@ -545,7 +571,7 @@ AttemptCompletion_Bash(
     {
         /* Attempt to search and complete the command, or show the file list */
         if (RestartCompletion)  // CompleteFilename
-            return CompleteFromFileList(Context, str, charcount, directory);
+            return CompleteFromFileList(Context, str, charcount, FileContext->directory);
         else                    // ShowCompletionMatches
             return ShowFileList(Context);
     }
@@ -562,120 +588,76 @@ AttemptCompletion_Bash(
     }
 }
 
-/*
- * Returns TRUE if at least one match, otherwise returns FALSE
- */
-static BOOL
-CompleteFilenameBash(
-    IN PCOMPLETION_CONTEXT Context,
-    IN OUT LPTSTR str,
+static VOID
+PrepareCompletion_Bash(
+    IN PFILE_COMPLETION_CONTEXT FileContext,
+    IN LPCTSTR str,
     IN UINT charcount,
     IN UINT nPrefixLength,
     IN LPCTSTR pszSuffix,
     IN UINT nSuffixLength,
     IN UINT cursor,
-    IN ULONG ControlKeyState, // Unused for bash mode (yet...)
-    IN BOOL OnlyDirs,
-    IN BOOL RestartCompletion)
+    OUT LPTSTR pszSearchPath,
+    IN UINT nSearchPathLength)
 {
-    PFILE_COMPLETION_BASH_CONTEXT FileContext;
+    PFILE_COMPLETION_BASH_CONTEXT pFileContext =
+        (PFILE_COMPLETION_BASH_CONTEXT)FileContext;
 
-    UINT start;
-    TCHAR directory[MAX_PATH];
-
-    /* Prepare completion */
-    if (!PrepareCompletion_Bash(Context, RestartCompletion,
-                                OnlyDirs, &FileContext))
-    {
-        return FALSE;
-    }
-
-    /* Check whether the user hits TAB again, if so cut off the diff length */
-    if (RestartCompletion)
-    {
-        UINT count = pszSuffix - str;
-        INT curplace = 0;
-        BOOL found_dot = FALSE;
-        TCHAR path[MAX_PATH];
+    UINT count = pszSuffix - str;
+    INT curplace = 0;
+    BOOL found_dot = FALSE;
 
 #if 0
-        /*
-         * Check whether we are inside quotes or not...
-         * See also FindPrefixAndSuffix().
-         */
-        FindPrefixAndSuffix_Bash(str, cursor, &count);
+    /*
+     * Check whether we are inside quotes or not...
+     * See also FindPrefixAndSuffix().
+     */
+    FindPrefixAndSuffix_Bash(str, cursor, &count);
 #endif
 
-        FileContext->start = start = count;
+    pFileContext->start = count;
 
-        if (str[count] == _T('"'))
-        {
-            count++;    /* don't increment start */
-            nSuffixLength--;
-        }
-
-        /* extract directory from word */
-        StringCchCopyN(directory, ARRAYSIZE(directory), str + count, nSuffixLength);
-        curplace = _tcslen(directory) - 1;
-
-        /* remove one possible trailing quote */
-        if (curplace >= 0 && directory[curplace] == _T('"'))
-            directory[curplace--] = _T('\0');
-
-        _tcscpy(path, directory);
-
-        while (curplace >= 0 &&
-               directory[curplace] != _T('\\') &&
-               directory[curplace] != _T('/') &&
-               directory[curplace] != _T(':'))
-        {
-            directory[curplace--] = _T('\0');
-        }
-
-        /* look for a '.' in the filename */
-        for (count = _tcslen(directory); path[count] != _T('\0'); count++)
-        {
-            if (path[count] == _T('.'))
-            {
-                found_dot = TRUE;
-                break;
-            }
-        }
-
-        if (found_dot)
-            _tcscat(path, _T("*"));
-        else
-            _tcscat(path, _T("*.*"));
-
-        /* Purge the old file list */
-        FreeFileList((PFILE_COMPLETION_CONTEXT)FileContext);
-
-        /* Build the file list for this path */
-        if (!BuildFileList((PFILE_COMPLETION_CONTEXT)FileContext, path))
-        {
-            /* An unexpected error happened */
-            // ConErrFormatMessage(GetLastError());
-            return FALSE;
-        }
-
-        /* Check the size of the list to see if we have found any matches */
-        if (FileContext->NumberOfFiles == 0)
-        {
-            /* No files were found, we will list commands instead */
-            FreeFileList((PFILE_COMPLETION_CONTEXT)FileContext);
-        }
-    }
-    else
+    if (str[count] == _T('"'))
     {
-        /* Restore previous context */
-        start = FileContext->start;
+        count++;    /* don't increment start */
+        nSuffixLength--;
     }
 
-    /* Perform the completion */
-    return AttemptCompletion_Bash(Context, FileContext,
-                                  RestartCompletion,
-                                  str + start, charcount - start,
-                                  directory);
+    /* extract directory from word */
+    StringCchCopyN(pFileContext->directory,
+                   ARRAYSIZE(pFileContext->directory),
+                   str + count, nSuffixLength);
+    curplace = _tcslen(pFileContext->directory) - 1;
+
+    /* remove one possible trailing quote */
+    if (curplace >= 0 && pFileContext->directory[curplace] == _T('"'))
+        pFileContext->directory[curplace--] = _T('\0');
+
+    StringCchCopy(pszSearchPath, nSearchPathLength, pFileContext->directory);
+
+    while (curplace >= 0 &&
+           pFileContext->directory[curplace] != _T('\\') &&
+           pFileContext->directory[curplace] != _T('/') &&
+           pFileContext->directory[curplace] != _T(':'))
+    {
+        pFileContext->directory[curplace--] = _T('\0');
+    }
+
+    /* look for a '.' in the filename */
+    for (count = _tcslen(pFileContext->directory);
+         pszSearchPath[count] != _T('\0'); count++)
+    {
+        if (pszSearchPath[count] == _T('.'))
+        {
+            found_dot = TRUE;
+            break;
+        }
+    }
+
+    if (found_dot)
+        StringCchCat(pszSearchPath, nSearchPathLength, _T("*"));
+    else
+        StringCchCat(pszSearchPath, nSearchPathLength, _T("*.*"));
 }
 
 
@@ -698,44 +680,47 @@ typedef struct _FILE_COMPLETION_CMD_CONTEXT
 } FILE_COMPLETION_CMD_CONTEXT, *PFILE_COMPLETION_CMD_CONTEXT;
 
 static BOOL
-PrepareCompletion_Cmd(
+PrepareCompletionContext_Cmd(
     IN PCOMPLETION_CONTEXT Context,
     IN BOOL RestartCompletion,
-    IN BOOL OnlyDirs,
-    OUT PFILE_COMPLETION_CMD_CONTEXT* pFileContext)
+    IN ULONG ControlKeyState,
+    IN BOOL OnlyDirs)
 {
     PFILE_COMPLETION_CMD_CONTEXT FileContext;
 
-    if (RestartCompletion)
+    if (!RestartCompletion)
     {
-        Context->CompleterCleanup = FreeFileCompletionContext;
+        ASSERT(Context->CompleterContext);
 
-        FileContext = cmd_alloc(sizeof(FILE_COMPLETION_CMD_CONTEXT));
-        if (FileContext == NULL)
-        {
-            WARN("DEBUG: Cannot allocate memory for Context->CompleterContext!\n");
-            // error_out_of_memory();
-            // ConErrFormatMessage(GetLastError());
-            return FALSE;
-        }
-
-        FileContext->OnlyDirs = OnlyDirs;
-
-        FileContext->FileList = NULL;
-        FileContext->TotalItems = 0;
-        FileContext->NumberOfFiles = 0;
-
-        FileContext->LastPrefix[0] = _T('\0');
-        FileContext->Sel = 0;
-
-        Context->CompleterContext = FileContext;
-    }
-    else
-    {
         FileContext = (PFILE_COMPLETION_CMD_CONTEXT)Context->CompleterContext;
+        FileContext->bNext = !(ControlKeyState & SHIFT_PRESSED);
+        return TRUE;
     }
 
-    *pFileContext = FileContext;
+    Context->CompleterCleanup = FreeFileCompletionContext;
+
+    FileContext = cmd_alloc(sizeof(FILE_COMPLETION_CMD_CONTEXT));
+    if (FileContext == NULL)
+    {
+        WARN("DEBUG: Cannot allocate memory for Context->CompleterContext!\n");
+        // error_out_of_memory();
+        // ConErrFormatMessage(GetLastError());
+        return FALSE;
+    }
+
+    FileContext->OnlyDirs = OnlyDirs;
+
+    FileContext->FileList = NULL;
+    FileContext->TotalItems = 0;
+    FileContext->NumberOfFiles = 0;
+
+    FileContext->LastPrefix[0] = _T('\0');
+    FileContext->Sel = 0;
+
+    FileContext->bNext = !(ControlKeyState & SHIFT_PRESSED);
+
+    Context->CompleterContext = FileContext;
+
     return TRUE;
 }
 
@@ -926,19 +911,26 @@ FindPrefixAndSuffix(
 }
 
 static BOOL
-AttemptCompletion_Cmd(
+CompleteFilename_Cmd(
     IN PCOMPLETION_CONTEXT Context,
-    IN PFILE_COMPLETION_CMD_CONTEXT FileContext, // This is actually stored within Context...
     IN BOOL RestartCompletion,
     OUT LPTSTR str,
-    IN UINT charcount,
-    IN OUT LPTSTR szPrefix)
+    IN UINT charcount)
 {
+    PFILE_COMPLETION_CMD_CONTEXT FileContext =
+        (PFILE_COMPLETION_CMD_CONTEXT)Context->CompleterContext;
+
+    /* Used to find and assemble the string that is returned */
+    TCHAR szPrefix[MAX_PATH];
+
     /* Used for loops */
     UINT count;
     UINT i;
     BOOL NeededQuote = FALSE;
 
+    ASSERT(FileContext);
+
+    /* Check the size of the list to see if we have found any matches */
     if (FileContext->NumberOfFiles == 0)
         return FALSE;
 
@@ -969,6 +961,9 @@ AttemptCompletion_Cmd(
         else
             FileContext->Sel = FileContext->NumberOfFiles - 1;
     }
+
+    /* Restore previous context */
+    StringCchCopy(szPrefix, ARRAYSIZE(szPrefix), FileContext->LastPrefix);
 
     /* Special character in the name */
     if (FileNameContainsSpecialCharacters(FileContext->FileList[FileContext->Sel].cFileName))
@@ -1039,171 +1034,130 @@ AttemptCompletion_Cmd(
     return TRUE;
 }
 
-/*
- * strIN : "prefix" string that needs completion (unmodified here);
- *         everything that is after it is untouched.
- * strOut: resulting string.
- */
-static BOOL
-CompleteFilenameCmd(
-    IN PCOMPLETION_CONTEXT Context,
-    IN OUT LPTSTR str,
+static VOID
+PrepareCompletion_Cmd(
+    IN PFILE_COMPLETION_CONTEXT FileContext,
+    IN LPCTSTR str,
     IN UINT charcount,
     IN UINT nPrefixLength,
     IN LPCTSTR pszSuffix,
     IN UINT nSuffixLength,
     IN UINT cursor,
-    IN ULONG ControlKeyState,
-    IN BOOL OnlyDirs,
-    IN BOOL RestartCompletion)
+    OUT LPTSTR pszSearchPath,
+    IN UINT nSearchPathLength)
 {
-    PFILE_COMPLETION_CMD_CONTEXT FileContext;
+    PFILE_COMPLETION_CMD_CONTEXT pFileContext =
+        (PFILE_COMPLETION_CMD_CONTEXT)FileContext;
 
     /* Used for loops */
     UINT i;
+    UINT count;
 
-    /* Used to find and assemble the string that is returned */
-    TCHAR szPrefix[MAX_PATH];
-
-    /* Prepare completion */
-    if (!PrepareCompletion_Cmd(Context, RestartCompletion,
-                               OnlyDirs, &FileContext))
-    {
-        return FALSE;
-    }
-
-    /* Check whether the user hits TAB again, if so cut off the diff length */
-    if (RestartCompletion)
-    {
-        UINT count;
-
-        /* Used to search for files */
-        TCHAR szBaseWord[MAX_PATH];
-        TCHAR szSearchPath[MAX_PATH];
+    /* Used to search for files */
+    TCHAR szBaseWord[MAX_PATH];
 
 #if 0
-        /* Length of string before we complete it */
-        /* We need to know how many chars we added from the start */
-        SIZE_T StartLength;
-        // StartLength = _tcslen(str);
-        StartLength = cursor;
+    /* Length of string before we complete it */
+    /* We need to know how many chars we added from the start */
+    SIZE_T StartLength;
+    // StartLength = _tcslen(str);
+    StartLength = cursor;
 #endif
 
-        /* No string, we need all files in that directory */
-        // if (!StartLength)
-            // _tcscat(str, _T("*")); // FIXME: Is it really needed????
+    /* No string, we need all files in that directory */
+    // if (!StartLength)
+        // _tcscat(str, _T("*")); // FIXME: Is it really needed????
 
-        StringCchCopyN(szPrefix, ARRAYSIZE(szPrefix), str, nPrefixLength);
-        if (nPrefixLength >= 2 &&
-            szPrefix[nPrefixLength - 2] == _T('\"') &&
-            // szPrefix[nPrefixLength - 1] != _T(' ')
-            (szPrefix[nPrefixLength - 1]  == _T('\\') || szPrefix[nPrefixLength - 1] == _T('/')))
-        {
-            /*
-             * Need to remove the " right before a \ at the end to allow
-             * the next stuff to stay inside one set of quotes, otherwise
-             * you would have multiple sets of quotes.
-             */
-            _tcscpy(&szPrefix[nPrefixLength - 2], _T("\\"));
-        }
-
-        /* Save for future usage */
-        StringCchCopy(FileContext->LastPrefix, ARRAYSIZE(FileContext->LastPrefix), szPrefix);
-
-        StringCchCopyN(szBaseWord, ARRAYSIZE(szBaseWord), pszSuffix, nSuffixLength);
-
-        /* Strip quotes */
-        for (i = 0, count = _tcslen(szBaseWord); i < count; )
-        {
-            if (szBaseWord[i] == _T('\"'))
-            {
-                memmove(&szBaseWord[i], &szBaseWord[i + 1],
-                        _tcslen(&szBaseWord[i]) * sizeof(TCHAR));
-                count = _tcslen(szBaseWord);
-            }
-            else
-            {
-                i++;
-            }
-        }
-
-        /* Clear it out */
-        memset(szSearchPath, 0, sizeof(szSearchPath));
-
-#if 0
-        /* Start the search for all the files */
-        GetFullPathName(szBaseWord, ARRAYSIZE(szSearchPath), szSearchPath, NULL);
-        //
-        // Known pitfall: when running on e.g. "..\\cmd\\a ", with a space,
-        // the space is not taken into account!
-        //
-
+    StringCchCopyN(pFileContext->LastPrefix,
+                   ARRAYSIZE(pFileContext->LastPrefix),
+                   str, nPrefixLength);
+    if (nPrefixLength >= 2 &&
+        pFileContext->LastPrefix[nPrefixLength - 2] == _T('\"') &&
+        // pFileContext->LastPrefix[nPrefixLength - 1] != _T(' ')
+        (pFileContext->LastPrefix[nPrefixLength - 1]  == _T('\\') ||
+         pFileContext->LastPrefix[nPrefixLength - 1] == _T('/')))
+    {
         /*
-         * Corner case: Have we got a device path?
-         * If so, fall back to the the current dir plus the short path.
+         * Need to remove the " right before a \ at the end to allow
+         * the next stuff to stay inside one set of quotes, otherwise
+         * you would have multiple sets of quotes.
          */
-        if (!_tcsnicmp(szSearchPath, _T("\\\\.\\"), 4))
+        _tcscpy(&pFileContext->LastPrefix[nPrefixLength - 2], _T("\\"));
+    }
+
+    StringCchCopyN(szBaseWord, ARRAYSIZE(szBaseWord), pszSuffix, nSuffixLength);
+
+    /* Strip quotes */
+    for (i = 0, count = _tcslen(szBaseWord); i < count; )
+    {
+        if (szBaseWord[i] == _T('\"'))
         {
-            GetCurrentDirectory(ARRAYSIZE(szSearchPath), szSearchPath);
-            StringCchCat(szSearchPath, ARRAYSIZE(szSearchPath), _T("\\"));
-            StringCchCat(szSearchPath, ARRAYSIZE(szSearchPath), szBaseWord);
+            memmove(&szBaseWord[i], &szBaseWord[i + 1],
+                    _tcslen(&szBaseWord[i]) * sizeof(TCHAR));
+            count = _tcslen(szBaseWord);
         }
+        else
+        {
+            i++;
+        }
+    }
+
+    /* Clear it out */
+    memset(pszSearchPath, 0, nSearchPathLength * sizeof(TCHAR));
+
+#if 0
+    /* Start the search for all the files */
+    GetFullPathName(szBaseWord, nSearchPathLength, pszSearchPath, NULL);
+    //
+    // Known pitfall: when running on e.g. "..\\cmd\\a ", with a space,
+    // the space is not taken into account!
+    //
+
+    /*
+     * Corner case: Have we got a device path?
+     * If so, fall back to the the current dir plus the short path.
+     */
+    if (!_tcsnicmp(pszSearchPath, _T("\\\\.\\"), 4))
+    {
+        GetCurrentDirectory(nSearchPathLength, pszSearchPath);
+        StringCchCat(pszSearchPath, nSearchPathLength, _T("\\"));
+        StringCchCat(pszSearchPath, nSearchPathLength, szBaseWord);
+    }
 #else
-        StringCchCopy(szSearchPath, ARRAYSIZE(szSearchPath), szBaseWord);
+    StringCchCopy(pszSearchPath, nSearchPathLength, szBaseWord);
 #endif
 
-        // if (StartLength > 0)
-            StringCchCat(szSearchPath, ARRAYSIZE(szSearchPath), _T("*"));
-
-        /* Purge the old file list */
-        FreeFileList((PFILE_COMPLETION_CONTEXT)FileContext);
-
-        /* Build the file list for this path */
-        if (!BuildFileList((PFILE_COMPLETION_CONTEXT)FileContext, szSearchPath))
-        {
-            /* An unexpected error happened */
-            // ConErrFormatMessage(GetLastError());
-            return FALSE;
-        }
-
-        /* Check the size of the list to see if we have found any matches */
-        if (FileContext->NumberOfFiles == 0)
-        {
-            FreeFileList((PFILE_COMPLETION_CONTEXT)FileContext);
-        }
-    }
-    else
-    {
-        /* Restore previous context */
-        StringCchCopy(szPrefix, ARRAYSIZE(szPrefix), FileContext->LastPrefix);
-    }
-
-    /* Perform the completion */
-    FileContext->bNext = !(ControlKeyState & SHIFT_PRESSED);
-    return AttemptCompletion_Cmd(Context, FileContext,
-                                 RestartCompletion,
-                                 str, charcount, szPrefix);
+    // if (StartLength > 0)
+        StringCchCat(pszSearchPath, nSearchPathLength, _T("*"));
 }
 
 
-typedef BOOL (*COMPLETE_FILENAME)(
+typedef BOOL (*PREPARE_COMPLETION_CONTEXT)(
     IN PCOMPLETION_CONTEXT Context,
-    IN OUT LPTSTR str,
+    IN BOOL RestartCompletion,
+    IN ULONG ControlKeyState,
+    IN BOOL OnlyDirs);
+
+typedef VOID (*PREPARE_COMPLETION)(
+    IN PFILE_COMPLETION_CONTEXT FileContext,
+    IN LPCTSTR str,
     IN UINT charcount,
     IN UINT nPrefixLength,
     IN LPCTSTR pszSuffix,
     IN UINT nSuffixLength,
     IN UINT cursor,
-    IN ULONG ControlKeyState,
-    IN BOOL OnlyDirs,
-    IN BOOL RestartCompletion);
+    OUT LPTSTR pszSearchPath,
+    IN UINT nSearchPathLength);
+
+typedef BOOL (*COMPLETE_FILENAME)(
+    IN PCOMPLETION_CONTEXT Context,
+    IN BOOL RestartCompletion,
+    IN OUT LPTSTR str,
+    IN UINT charcount);
 
 /*
  * NOTE: Currently we only perform filename/directory autocompletion.
  * Maybe one day we will be able to perform per-command autocompletion.
- */
-/*
- * FIXME: Per-command context ????
  *
  * TODO: When intelligent per-command auto-completion is implemented,
  * the 'CompleterContext' may become a generic list of objects (mappable to strings)
@@ -1235,9 +1189,15 @@ CompleteFilename(
      * It will then remain the same during all this session (bUseBashCompletion
      * must not change either).
      */
-    // static
+    PREPARE_COMPLETION_CONTEXT PrepareCompletionContext =
+        (bUseBashCompletion ? PrepareCompletionContext_Bash : PrepareCompletionContext_Cmd);
+    PREPARE_COMPLETION PrepareCompletion =
+        (bUseBashCompletion ? PrepareCompletion_Bash : PrepareCompletion_Cmd);
     COMPLETE_FILENAME CompleteFilenameProc =
-        (bUseBashCompletion ? CompleteFilenameBash : CompleteFilenameCmd);
+        (bUseBashCompletion ? CompleteFilename_Bash : CompleteFilename_Cmd);
+
+    PFILE_COMPLETION_CONTEXT FileContext;
+
 
     BOOL Success;
     BOOL OnlyDirs;
@@ -1256,10 +1216,20 @@ CompleteFilename(
      * (as they can be the same), we perform the checks in this order.
      */
     OnlyDirs = FALSE;
-    if (CompletionChar == AutoCompletionChar)
-        OnlyDirs = FALSE;
-    else if (CompletionChar == PathCompletionChar)
-        OnlyDirs = TRUE;
+    if (Context->CompleterContext)
+    {
+        PFILE_COMPLETION_CONTEXT FileContext =
+            (PFILE_COMPLETION_CONTEXT)Context->CompleterContext;
+
+        OnlyDirs = FileContext->OnlyDirs;
+    }
+    else
+    {
+        if (CompletionChar == AutoCompletionChar)
+            OnlyDirs = FALSE;
+        else if (CompletionChar == PathCompletionChar)
+            OnlyDirs = TRUE;
+    }
 
     /*
      * Do the splitting only if the text line has changed
@@ -1267,7 +1237,7 @@ CompleteFilename(
      */
     if (*RestartCompletion)
     {
-        LPTSTR line;
+        LPCTSTR line;
 
         /* What comes out of this needs to be:
            szBaseWord = path no quotes to the object;
@@ -1288,9 +1258,13 @@ CompleteFilename(
          */
         //
         // NOTE / FIXME? :
-        // CmdLine and charcount must then be readjusted internally.
+        // CmdLine and charcount must then be readjusted internally?
         //
-        line = str + (nPrefixLength > 0 ? nPrefixLength - 1 : 0);
+        line = str;
+        if (nPrefixLength > 0)
+            line += nPrefixLength - 1;
+        if (str < pszSuffix && nSuffixLength > 0)
+            line = min(line, pszSuffix - 1);
 
         /* Skip any whitespace / separator */
         while (str < line && _istspace(*line) /* or another separator?? */)
@@ -1327,19 +1301,10 @@ CompleteFilename(
 #endif
     }
 
-    if (Context->CompleterContext)
-    {
-        PFILE_COMPLETION_CONTEXT FileContext =
-            (PFILE_COMPLETION_CONTEXT)Context->CompleterContext;
-
-        *RestartCompletion =
-            *RestartCompletion || (FileContext->OnlyDirs != OnlyDirs);
-    }
-
     /* Cleanup the existing file completion context if we restart a new completion */
     if (*RestartCompletion)
     {
-#if 0
+#if 1
         /* Call the completer cleaning routine */
         if (Context->CompleterCleanup)
             Context->CompleterCleanup(Context);
@@ -1350,10 +1315,49 @@ CompleteFilename(
 #endif
     }
 
-    Success = CompleteFilenameProc(Context, str, charcount,
-                                   nPrefixLength, pszSuffix, nSuffixLength,
-                                   cursor, ControlKeyState, OnlyDirs,
-                                   *RestartCompletion);
+
+
+    /* Prepare the completion */
+    if (!PrepareCompletionContext(Context, *RestartCompletion,
+                                  ControlKeyState, OnlyDirs))
+    {
+        Success = FALSE;
+        goto Quit;
+    }
+    ASSERT(Context->CompleterContext);
+    FileContext = (PFILE_COMPLETION_CONTEXT)Context->CompleterContext;
+
+    /* Check whether the user hits TAB again, if so cut off the diff length */
+    if (*RestartCompletion)
+    {
+        /* Used to search for files */
+        TCHAR szSearchPath[MAX_PATH];
+
+        PrepareCompletion(FileContext,
+                          str, charcount,
+                          nPrefixLength,
+                          pszSuffix, nSuffixLength,
+                          cursor,
+                          szSearchPath, ARRAYSIZE(szSearchPath));
+
+        /* Purge the old file list */
+        FreeFileList(FileContext);
+
+        /* Build the file list for this path */
+        if (!BuildFileList(FileContext, szSearchPath))
+        {
+            /* An unexpected error happened */
+            // ConErrFormatMessage(GetLastError());
+            Success = FALSE;
+            goto Quit;
+        }
+    }
+
+    /* Perform the completion */
+    Success = CompleteFilenameProc(Context, *RestartCompletion,
+                                   str, charcount);
+
+Quit:
     if (!Success)
         MessageBeep(-1);
 
