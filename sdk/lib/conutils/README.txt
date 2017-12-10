@@ -42,3 +42,17 @@ CONTENTS
 3. "PAGER" (pager.c and pager.h): Console Pager API (CON_PAGER):
    Implements core console/terminal paging functionality around console screens.
    Depends on "SCREEN", and indirectly on "STREAM" and "BASE".
+
+
+-- ReadInput Library --
+
+4. "READINPUT" (readinput.c and readinput.h): Offers line-editing functionality
+   around the ReadConsole() API or the STREAM functions, with support for
+   auto-completion. This library depends on "BASE" and "STREAM".
+
+
+-- Console History & Aliases Library --
+
+5. "HISTORY" (history.c and history.h): Text-line History and Aliases management
+   helper functions for console applications. This is a standalone library,
+   independent from "BASE", "STREAM", "SCREEN" or "PAGER".
