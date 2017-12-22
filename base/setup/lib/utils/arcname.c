@@ -281,12 +281,14 @@ ArcMatchToken_UStr(
     while (TokenTable[Index])
     {
 #if 0
-        Length = wcslen(TokenTable[Index])*sizeof(WCHAR);
-        if (RtlCompareMemory(CandidateToken->Buffer, TokenTable[Index], Length) == Length)
+        Length = wcslen(TokenTable[Index]);
+        if ((Length == CandidateToken->Length / sizeof(WCHAR)) &&
+            (_wcsnicmp(CandidateToken->Buffer, TokenTable[Index], Length) == 0))
+        {
             break;
+        }
 #else
         RtlInitUnicodeString(&Token, TokenTable[Index]);
-        // if (RtlCompareUnicodeString(CandidateToken, &Token, TRUE) == 0)
         if (RtlEqualUnicodeString(CandidateToken, &Token, TRUE))
             break;
 #endif
@@ -771,7 +773,7 @@ ResolveArcNameManually(
                                     L"\\Device\\Harddisk%lu\\Partition%lu",
                                     DiskEntry->DiskNumber, PartitionNumber);
     }
-#if 0
+#if 0 // FIXME: Not implemented yet!
     else
     if (PeripheralType == VDiskPeripheral)
     {
@@ -877,7 +879,7 @@ ArcPathToNtPath(
     return TRUE;
 }
 
-#if 0
+#if 0 // FIXME: Not implemented yet!
 PWSTR
 NtPathToArcPath(
     IN PWSTR NtPath)
