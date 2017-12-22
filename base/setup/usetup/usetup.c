@@ -4000,7 +4000,7 @@ FileCopyPage(PINPUT_RECORD Ir)
 
 
 static VOID
-NTAPI
+__cdecl
 RegistryStatus(IN REGISTRY_STATUS RegStatus, ...)
 {
     /* WARNING: Please keep this lookup table in sync with the resources! */
