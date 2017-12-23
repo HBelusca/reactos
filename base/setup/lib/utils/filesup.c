@@ -136,7 +136,6 @@ SetupCopyFile(
     LARGE_INTEGER ByteOffset;
 
     RtlInitUnicodeString(&FileName, SourceFileName);
-
     InitializeObjectAttributes(&ObjectAttributes,
                                &FileName,
                                OBJ_CASE_INSENSITIVE,
@@ -207,7 +206,6 @@ SetupCopyFile(
     }
 
     RtlInitUnicodeString(&FileName, DestinationFileName);
-
     InitializeObjectAttributes(&ObjectAttributes,
                                &FileName,
                                OBJ_CASE_INSENSITIVE,
@@ -595,7 +593,6 @@ DoesPathExist(
     IO_STATUS_BLOCK IoStatusBlock;
 
     RtlInitUnicodeString(&Name, PathName);
-
     InitializeObjectAttributes(&ObjectAttributes,
                                &Name,
                                OBJ_CASE_INSENSITIVE,
@@ -753,7 +750,6 @@ OpenAndMapFile(
     /* Open the file */
 
     RtlInitUnicodeString(&FileName, PathNameToFile);
-
     InitializeObjectAttributes(&ObjectAttributes,
                                &FileName,
                                OBJ_CASE_INSENSITIVE,

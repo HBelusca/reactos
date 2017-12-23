@@ -337,6 +337,7 @@ EnumerateReactOSEntries(
     IN PBOOT_STORE_ENTRY BootEntry,
     IN PVOID Parameter OPTIONAL)
 {
+    NTSTATUS Status;
     PENUM_REACTOS_ENTRIES_DATA Data = (PENUM_REACTOS_ENTRIES_DATA)Parameter;
     PNTOS_OPTIONS Options = (PNTOS_OPTIONS)&BootEntry->OsOptions;
     WCHAR SystemPath[MAX_PATH];
@@ -368,16 +369,19 @@ EnumerateReactOSEntries(
         goto SkipThisEntry;
     }
 
-    RtlStringCchPrintfW(SystemPath, ARRAYSIZE(SystemPath), L"\"%s\"", Data->ArcPath);
-    if ((_wcsicmp(Options->OsLoadPath, Data->ArcPath) != 0) &&
-        (_wcsicmp(Options->OsLoadPath, SystemPath)    != 0))
+    if (_wcsicmp(Options->OsLoadPath, Data->ArcPath) != 0)
     {
-        /*
-         * This entry is a ReactOS entry, but the SystemRoot
-         * does not match the one we are looking for.
-         */
-        /* Continue the enumeration */
-        goto SkipThisEntry;
+        /* Not found, retry with a quoted path */
+        Status = RtlStringCchPrintfW(SystemPath, ARRAYSIZE(SystemPath), L"\"%s\"", Data->ArcPath);
+        if (!NT_SUCCESS(Status) || _wcsicmp(Options->OsLoadPath, SystemPath) != 0)
+        {
+            /*
+             * This entry is a ReactOS entry, but the SystemRoot
+             * does not match the one we are looking for.
+             */
+            /* Continue the enumeration */
+            goto SkipThisEntry;
+        }
     }
 
     DPRINT1("    Found a candidate Win2k3 install '%S' with ARC path '%S'\n",
@@ -664,10 +668,9 @@ SaveBootSector(
 
     /* Write bootsector to DstPath */
     RtlInitUnicodeString(&Name, DstPath);
-
     InitializeObjectAttributes(&ObjectAttributes,
                                &Name,
-                               0,
+                               OBJ_CASE_INSENSITIVE,
                                NULL,
                                NULL);
 
@@ -776,7 +779,6 @@ InstallMbrBootCodeToDiskHelper(
 
     /* Read new bootsector from SrcPath */
     RtlInitUnicodeString(&Name, SrcPath);
-
     InitializeObjectAttributes(&ObjectAttributes,
                                &Name,
                                OBJ_CASE_INSENSITIVE,
@@ -827,10 +829,9 @@ InstallMbrBootCodeToDiskHelper(
 
     /* Write new bootsector to RootPath */
     RtlInitUnicodeString(&Name, RootPath);
-
     InitializeObjectAttributes(&ObjectAttributes,
                                &Name,
-                               0,
+                               OBJ_CASE_INSENSITIVE,
                                NULL,
                                NULL);
 
@@ -876,6 +877,12 @@ InstallMbrBootCodeToDisk(
     WCHAR DstPath[MAX_PATH];
 
 #if 0
+    /*
+     * The DestinationDevicePathBuffer parameter has been built with
+     * the following instruction by the caller; I'm not yet sure whether
+     * I actually want this function to build the path instead, hence
+     * I keep this code here but disabled for now...
+     */
     WCHAR DestinationDevicePathBuffer[MAX_PATH];
     RtlStringCchPrintfW(DestinationDevicePathBuffer, ARRAYSIZE(DestinationDevicePathBuffer),
                         L"\\Device\\Harddisk%d\\Partition0",
@@ -1028,10 +1035,9 @@ InstallFat12BootCodeToFloppy(
 
     /* Write new bootsector to RootPath */
     RtlInitUnicodeString(&Name, RootPath);
-
     InitializeObjectAttributes(&ObjectAttributes,
                                &Name,
-                               0,
+                               OBJ_CASE_INSENSITIVE,
                                NULL,
                                NULL);
 
@@ -1119,6 +1125,7 @@ InstallFat16BootCode(
                                OBJ_CASE_INSENSITIVE,
                                NULL,
                                NULL);
+
     Status = NtOpenFile(&FileHandle,
                         GENERIC_READ | SYNCHRONIZE,
                         &ObjectAttributes,
@@ -1203,6 +1210,7 @@ InstallFat16BootCodeToFile(
                                OBJ_CASE_INSENSITIVE,
                                NULL,
                                NULL);
+
     Status = NtOpenFile(&PartitionHandle,
                         GENERIC_READ | SYNCHRONIZE,
                         &ObjectAttributes,
@@ -1216,9 +1224,10 @@ InstallFat16BootCodeToFile(
     RtlInitUnicodeString(&Name, DstPath);
     InitializeObjectAttributes(&ObjectAttributes,
                                &Name,
-                               0, // OBJ_CASE_INSENSITIVE,
+                               OBJ_CASE_INSENSITIVE,
                                NULL,
                                NULL);
+
     Status = NtCreateFile(&FileHandle,
                           GENERIC_WRITE | SYNCHRONIZE,
                           &ObjectAttributes,
@@ -1272,6 +1281,7 @@ InstallFat16BootCodeToDisk(
                                OBJ_CASE_INSENSITIVE,
                                NULL,
                                NULL);
+
     Status = NtOpenFile(&PartitionHandle,
                         GENERIC_READ | GENERIC_WRITE | SYNCHRONIZE,
                         &ObjectAttributes,
@@ -1345,6 +1355,7 @@ InstallFat32BootCode(
                                OBJ_CASE_INSENSITIVE,
                                NULL,
                                NULL);
+
     Status = NtOpenFile(&FileHandle,
                         GENERIC_READ | SYNCHRONIZE,
                         &ObjectAttributes,
@@ -1495,6 +1506,7 @@ InstallFat32BootCodeToFile(
                                OBJ_CASE_INSENSITIVE,
                                NULL,
                                NULL);
+
     Status = NtOpenFile(&PartitionHandle,
                         GENERIC_READ | SYNCHRONIZE,
                         &ObjectAttributes,
@@ -1508,9 +1520,10 @@ InstallFat32BootCodeToFile(
     RtlInitUnicodeString(&Name, DstPath);
     InitializeObjectAttributes(&ObjectAttributes,
                                &Name,
-                               0, // OBJ_CASE_INSENSITIVE,
+                               OBJ_CASE_INSENSITIVE,
                                NULL,
                                NULL);
+
     Status = NtCreateFile(&FileHandle,
                           GENERIC_WRITE | SYNCHRONIZE,
                           &ObjectAttributes,
@@ -1564,6 +1577,7 @@ InstallFat32BootCodeToDisk(
                                OBJ_CASE_INSENSITIVE,
                                NULL,
                                NULL);
+
     Status = NtOpenFile(&PartitionHandle,
                         GENERIC_READ | GENERIC_WRITE | SYNCHRONIZE,
                         &ObjectAttributes,
@@ -1713,7 +1727,7 @@ InstallExt2BootCodeToDisk(
 
     InitializeObjectAttributes(&ObjectAttributes,
                                &Name,
-                               0,
+                               OBJ_CASE_INSENSITIVE,
                                NULL,
                                NULL);
 
