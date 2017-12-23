@@ -423,7 +423,7 @@ DefaultProcessEntry(
     }
 
     wcscpy((PWCHAR)*UserData, KeyName);
-    StringCbCopyW(DisplayText, DisplayTextSize, KeyValue);
+    RtlStringCbCopyW(DisplayText, DisplayTextSize, KeyValue);
 
     *Current = (CompareKey ? !_wcsicmp(KeyName, CompareKey) : FALSE);
 
@@ -484,7 +484,7 @@ CreateComputerTypeList(
         }
 
         DPRINT("Computer key: %S\n", KeyName);
-        StringCchCopyW(ComputerKey, ARRAYSIZE(ComputerKey), KeyName);
+        RtlStringCchCopyW(ComputerKey, ARRAYSIZE(ComputerKey), KeyName);
         INF_FreeData(KeyName);
     } while (SetupFindNextLine(&Context, &Context));
 
@@ -549,7 +549,7 @@ GetDisplayIdentifier(
     BusInstance = 0;
     while (TRUE)
     {
-        StringCchPrintfW(Buffer, ARRAYSIZE(Buffer), L"%lu", BusInstance);
+        RtlStringCchPrintfW(Buffer, ARRAYSIZE(Buffer), L"%lu", BusInstance);
         RtlInitUnicodeString(&KeyName, Buffer);
         InitializeObjectAttributes(&ObjectAttributes,
                                    &KeyName,
@@ -585,7 +585,7 @@ GetDisplayIdentifier(
             while (TRUE)
             {
                 /* Open the pointer controller instance key */
-                StringCchPrintfW(Buffer, ARRAYSIZE(Buffer), L"%lu", ControllerInstance);
+                RtlStringCchPrintfW(Buffer, ARRAYSIZE(Buffer), L"%lu", ControllerInstance);
                 RtlInitUnicodeString(&KeyName, Buffer);
                 InitializeObjectAttributes(&ObjectAttributes,
                                            &KeyName,
@@ -720,7 +720,7 @@ CreateDisplayDriverList(
         }
 
         DPRINT("Display key: %S\n", KeyName);
-        StringCchCopyW(DisplayKey, ARRAYSIZE(DisplayKey), KeyName);
+        RtlStringCchCopyW(DisplayKey, ARRAYSIZE(DisplayKey), KeyName);
         INF_FreeData(KeyName);
     } while (SetupFindNextLine(&Context, &Context));
 
@@ -765,8 +765,8 @@ ProcessComputerFiles(
         return FALSE;
     }
 
-    StringCchPrintfW(SectionName, ARRAYSIZE(SectionName),
-                     L"Files.%s", (PCWSTR)GetListEntryUserData(Entry));
+    RtlStringCchPrintfW(SectionName, ARRAYSIZE(SectionName),
+                        L"Files.%s", (PCWSTR)GetListEntryUserData(Entry));
     *AdditionalSectionName = SectionName;
 
     return TRUE;
@@ -814,9 +814,9 @@ ProcessDisplayRegistry(
     ASSERT(wcslen(ServiceName) < 10);
     DPRINT1("Service name: '%S'\n", ServiceName);
 
-    StringCchPrintfW(RegPath, ARRAYSIZE(RegPath),
-                     L"System\\CurrentControlSet\\Services\\%s",
-                     ServiceName);
+    RtlStringCchPrintfW(RegPath, ARRAYSIZE(RegPath),
+                        L"System\\CurrentControlSet\\Services\\%s",
+                        ServiceName);
     RtlInitUnicodeString(&KeyName, RegPath);
     InitializeObjectAttributes(&ObjectAttributes,
                                &KeyName,
@@ -853,9 +853,9 @@ ProcessDisplayRegistry(
         return FALSE;
     }
 
-    StringCchPrintfW(RegPath, ARRAYSIZE(RegPath),
-                     L"System\\CurrentControlSet\\Hardware Profiles\\Current\\System\\CurrentControlSet\\Services\\%s\\Device0",
-                     ServiceName);
+    RtlStringCchPrintfW(RegPath, ARRAYSIZE(RegPath),
+                        L"System\\CurrentControlSet\\Hardware Profiles\\Current\\System\\CurrentControlSet\\Services\\%s\\Device0",
+                        ServiceName);
     DPRINT1("RegPath: '%S'\n", RegPath);
     RtlInitUnicodeString(&KeyName, RegPath);
     InitializeObjectAttributes(&ObjectAttributes,
@@ -1113,7 +1113,7 @@ ProcessLangEntry(
     }
 
     wcscpy((PWCHAR)*UserData, KeyName);
-    StringCbCopyW(DisplayText, DisplayTextSize, KeyValue);
+    RtlStringCbCopyW(DisplayText, DisplayTextSize, KeyValue);
 
     *Current = FALSE;
 

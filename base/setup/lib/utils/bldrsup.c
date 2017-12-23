@@ -998,13 +998,13 @@ AddBootStoreEntry(
             return STATUS_INSUFFICIENT_RESOURCES;
 
         *Buffer = UNICODE_NULL;
-        if (IsNameNotQuoted) StringCchCatW(Buffer, BufferLength, L"\"");
-        StringCchCatW(Buffer, BufferLength, InstallName);
-        if (IsNameNotQuoted) StringCchCatW(Buffer, BufferLength, L"\"");
+        if (IsNameNotQuoted) RtlStringCchCatW(Buffer, BufferLength, L"\"");
+        RtlStringCchCatW(Buffer, BufferLength, InstallName);
+        if (IsNameNotQuoted) RtlStringCchCatW(Buffer, BufferLength, L"\"");
         if (OsOptions)
         {
-            StringCchCatW(Buffer, BufferLength, L" ");
-            StringCchCatW(Buffer, BufferLength, OsOptions);
+            RtlStringCchCatW(Buffer, BufferLength, L" ");
+            RtlStringCchCatW(Buffer, BufferLength, OsOptions);
         }
 
         /* Insert the entry into the "Operating Systems" section */
@@ -1234,7 +1234,7 @@ SetBootStoreOptions(
                       NULL, INSERT_LAST,
                       L"DefaultOS", (PWCHAR)BootOptions->CurrentBootEntryKey);
 
-    StringCchPrintfW(TimeoutStr, ARRAYSIZE(TimeoutStr), L"%d", BootOptions->Timeout);
+    RtlStringCchPrintfW(TimeoutStr, ARRAYSIZE(TimeoutStr), L"%d", BootOptions->Timeout);
     IniCacheInsertKey(((PBOOT_STORE_INI_CONTEXT)BootStore)->OptionsIniSection,
                       NULL, INSERT_LAST,
                       L"TimeOut", TimeoutStr);

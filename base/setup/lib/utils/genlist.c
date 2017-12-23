@@ -76,7 +76,7 @@ AppendGenericListEntry(
     if (Entry == NULL)
         return FALSE;
 
-    StringCbCopyW(Entry->Text, TextSize, Text);
+    RtlStringCbCopyW(Entry->Text, TextSize, Text);
     Entry->List = List;
     Entry->UserData = UserData;
 

@@ -145,9 +145,9 @@ CheckUnattendedSetup(
             goto Quit;
         }
 
-        StringCchCopyW(pSetupData->InstallationDirectory,
-                       ARRAYSIZE(pSetupData->InstallationDirectory),
-                       Value);
+        RtlStringCchCopyW(pSetupData->InstallationDirectory,
+                          ARRAYSIZE(pSetupData->InstallationDirectory),
+                          Value);
 
         INF_FreeData(Value);
     }
@@ -190,9 +190,9 @@ CheckUnattendedSetup(
         if (INF_GetData(&Context, NULL, &Value))
         {
             LONG Id = wcstol(Value, NULL, 16);
-            StringCchPrintfW(pSetupData->LocaleID,
-                             ARRAYSIZE(pSetupData->LocaleID),
-                             L"%08lx", Id);
+            RtlStringCchPrintfW(pSetupData->LocaleID,
+                                ARRAYSIZE(pSetupData->LocaleID),
+                                L"%08lx", Id);
             INF_FreeData(Value);
        }
     }
@@ -236,8 +236,8 @@ InstallSetupInfFile(
     if (IniSection)
     {
         /* Key "skipmissingfiles" */
-        // StringCchPrintfW(PathBuffer, ARRAYSIZE(PathBuffer),
-                         // L"\"%s\"", L"WinNt5.2");
+        // RtlStringCchPrintfW(PathBuffer, ARRAYSIZE(PathBuffer),
+                            // L"\"%s\"", L"WinNt5.2");
         // IniCacheInsertKey(IniSection, NULL, INSERT_LAST,
                           // L"Version", PathBuffer);
     }
@@ -245,20 +245,20 @@ InstallSetupInfFile(
     IniSection = IniCacheAppendSection(IniCache, L"Data");
     if (IniSection)
     {
-        StringCchPrintfW(PathBuffer, ARRAYSIZE(PathBuffer),
-                         L"\"%s\"", IsUnattendedSetup ? L"yes" : L"no");
+        RtlStringCchPrintfW(PathBuffer, ARRAYSIZE(PathBuffer),
+                            L"\"%s\"", IsUnattendedSetup ? L"yes" : L"no");
         IniCacheInsertKey(IniSection, NULL, INSERT_LAST,
                           L"UnattendedInstall", PathBuffer);
 
         // "floppylessbootpath" (yes/no)
 
-        StringCchPrintfW(PathBuffer, ARRAYSIZE(PathBuffer),
-                         L"\"%s\"", L"winnt");
+        RtlStringCchPrintfW(PathBuffer, ARRAYSIZE(PathBuffer),
+                            L"\"%s\"", L"winnt");
         IniCacheInsertKey(IniSection, NULL, INSERT_LAST,
                           L"ProductType", PathBuffer);
 
-        StringCchPrintfW(PathBuffer, ARRAYSIZE(PathBuffer),
-                         L"\"%s\\\"", pSetupData->SourceRootPath.Buffer);
+        RtlStringCchPrintfW(PathBuffer, ARRAYSIZE(PathBuffer),
+                            L"\"%s\\\"", pSetupData->SourceRootPath.Buffer);
         IniCacheInsertKey(IniSection, NULL, INSERT_LAST,
                           L"SourcePath", PathBuffer);
 
@@ -564,9 +564,9 @@ LoadSetupInf(
         if (!INF_GetData(&Context, NULL, &Value))
             return ERROR_CORRUPT_TXTSETUPSIF;
 
-        StringCchCopyW(pSetupData->InstallationDirectory,
-                       ARRAYSIZE(pSetupData->InstallationDirectory),
-                       Value);
+        RtlStringCchCopyW(pSetupData->InstallationDirectory,
+                          ARRAYSIZE(pSetupData->InstallationDirectory),
+                          Value);
 
         INF_FreeData(Value);
     }

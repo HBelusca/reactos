@@ -198,14 +198,19 @@ EnumerateInstallations(
     if (PartEntry && PartEntry->DriveLetter)
     {
         /* We have retrieved a partition that is mounted */
-        StringCchPrintfW(InstallNameW, ARRAYSIZE(InstallNameW), L"%C:%s  \"%s\"",
-                         PartEntry->DriveLetter, PathComponent, BootEntry->FriendlyName);
+        RtlStringCchPrintfW(InstallNameW, ARRAYSIZE(InstallNameW),
+                            L"%C:%s  \"%s\"",
+                            PartEntry->DriveLetter,
+                            PathComponent,
+                            BootEntry->FriendlyName);
     }
     else
     {
         /* We failed somewhere, just show the NT path */
-        StringCchPrintfW(InstallNameW, ARRAYSIZE(InstallNameW), L"%wZ  \"%s\"",
-                         &SystemRootPath, BootEntry->FriendlyName);
+        RtlStringCchPrintfW(InstallNameW, ARRAYSIZE(InstallNameW),
+                            L"%wZ  \"%s\"",
+                            &SystemRootPath,
+                            BootEntry->FriendlyName);
     }
     AddNTOSInstallation(Data->List, Options->OsLoadPath,
                         &SystemRootPath, PathComponent,
@@ -305,9 +310,9 @@ CheckForValidPEAndVendor(
         wCodePage = LOWORD(*(ULONG*)pvData);
         wLangID   = HIWORD(*(ULONG*)pvData);
 
-        StringCchPrintfW(FileInfo, ARRAYSIZE(FileInfo),
-                         L"StringFileInfo\\%04X%04X\\CompanyName",
-                         wCodePage, wLangID);
+        RtlStringCchPrintfW(FileInfo, ARRAYSIZE(FileInfo),
+                            L"StringFileInfo\\%04X%04X\\CompanyName",
+                            wCodePage, wLangID);
 
         Status = NtVerQueryValue(VersionBuffer, FileInfo, &pvData, &BufLen);
 
@@ -320,8 +325,8 @@ CheckForValidPEAndVendor(
             /* BufLen includes the NULL terminator count */
             DPRINT1("Found version vendor: \"%S\" for file '%S'\n", pvData, PathNameToFile);
 
-            StringCbCopyNW(VendorName->Buffer, VendorName->MaximumLength,
-                           pvData, BufLen * sizeof(WCHAR));
+            RtlStringCbCopyNW(VendorName->Buffer, VendorName->MaximumLength,
+                              pvData, BufLen * sizeof(WCHAR));
             VendorName->Length = wcslen(VendorName->Buffer) * sizeof(WCHAR);
 
             Success = TRUE;
@@ -615,7 +620,9 @@ AddNTOSInstallation(
     NtOsInstall->PathComponent = NtOsInstall->SystemNtPath.Buffer +
                                     (PathComponent - SystemRootNtPath->Buffer);
 
-    StringCchCopyW(NtOsInstall->InstallationName, ARRAYSIZE(NtOsInstall->InstallationName), InstallationName);
+    RtlStringCchCopyW(NtOsInstall->InstallationName,
+                      ARRAYSIZE(NtOsInstall->InstallationName),
+                      InstallationName);
 
     // Having the GENERIC_LIST storing the display item string plainly sucks...
     AppendGenericListEntry(List, InstallationName, NtOsInstall, FALSE);
@@ -643,9 +650,9 @@ FindNTOSInstallations(
     WCHAR PathBuffer[MAX_PATH];
 
     /* Set PartitionRootPath */
-    StringCchPrintfW(PathBuffer, ARRAYSIZE(PathBuffer),
-                     L"\\Device\\Harddisk%lu\\Partition%lu\\",
-                     DiskNumber, PartitionNumber);
+    RtlStringCchPrintfW(PathBuffer, ARRAYSIZE(PathBuffer),
+                        L"\\Device\\Harddisk%lu\\Partition%lu\\",
+                        DiskNumber, PartitionNumber);
     RtlInitUnicodeString(&PartitionRootPath, PathBuffer);
     DPRINT1("FindNTOSInstallations: PartitionRootPath: '%wZ'\n", &PartitionRootPath);
 
