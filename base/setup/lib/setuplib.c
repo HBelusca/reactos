@@ -516,7 +516,7 @@ LoadSetupInf(
 
     *SetupInf = SetupOpenInfFileExW(FileNameBuffer,
                                    NULL,
-                                   INF_STYLE_WIN4 | INF_STYLE_OLDNT,
+                                   /* INF_STYLE_WIN4 | */ INF_STYLE_OLDNT,
                                    pSetupData->LanguageId,
                                    &ErrorLine);
 
@@ -588,7 +588,7 @@ UpdateRegistry(
     /**/IN BOOLEAN RepairUpdateFlag,     /* HACK HACK! */
     /**/IN PPARTLIST PartitionList,      /* HACK HACK! */
     /**/IN WCHAR DestinationDriveLetter, /* HACK HACK! */
-    /**/IN PWCHAR SelectedLanguageId,    /* HACK HACK! */
+    /**/IN PCWSTR SelectedLanguageId,    /* HACK HACK! */
     IN PGENERIC_LIST DisplayList,
     IN PGENERIC_LIST LayoutList,
     IN PGENERIC_LIST LanguageList,

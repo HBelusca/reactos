@@ -293,7 +293,7 @@ WriteConsoleOutputCharacterW(
 
     UnicodeString.Length = nLength * sizeof(WCHAR);
     UnicodeString.MaximumLength = nLength * sizeof(WCHAR);
-    UnicodeString.Buffer = (LPWSTR)lpCharacter;
+    UnicodeString.Buffer = (PWSTR)lpCharacter;
 
     OemLength = RtlUnicodeStringToOemSize(&UnicodeString);
 
