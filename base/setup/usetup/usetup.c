@@ -3419,6 +3419,29 @@ InstallDirectoryPage(PINPUT_RECORD Ir)
 }
 
 
+// PSETUP_ERROR_ROUTINE
+static VOID
+__cdecl
+USetupErrorRoutine(
+    IN PUSETUP_DATA pSetupData,
+    ...)
+{
+    INPUT_RECORD Ir;
+    va_list arg_ptr;
+
+    va_start(arg_ptr, pSetupData);
+
+    if (pSetupData->LastErrorNumber >= ERROR_SUCCESS &&
+        pSetupData->LastErrorNumber <  ERROR_LAST_ERROR_CODE)
+    {
+        // Note: the "POPUP_WAIT_ENTER" actually depends on the LastErrorNumber...
+        MUIDisplayErrorV(pSetupData->LastErrorNumber, &Ir, POPUP_WAIT_ENTER, arg_ptr);
+    }
+
+    va_end(arg_ptr);
+}
+
+
 static BOOLEAN
 AddSectionToCopyQueueCab(HINF InfFile,
                          PWCHAR SectionName,
@@ -3876,9 +3899,15 @@ PrepareCopyPage(PINPUT_RECORD Ir)
     return FILE_COPY_PAGE;
 }
 
+typedef struct _COPYCONTEXT
+{
+    ULONG TotalOperations;
+    ULONG CompletedOperations;
+    PPROGRESSBAR ProgressBar;
+    PPROGRESSBAR MemoryBars[4];
+} COPYCONTEXT, *PCOPYCONTEXT;
 
-VOID
-NTAPI
+static VOID
 SetupUpdateMemoryInfo(IN PCOPYCONTEXT CopyContext,
                       IN BOOLEAN First)
 {
@@ -3905,7 +3934,6 @@ SetupUpdateMemoryInfo(IN PCOPYCONTEXT CopyContext,
     ProgressSetStep(CopyContext->MemoryBars[2], PerfInfo.AvailablePages);
 }
 
-
 static UINT
 CALLBACK
 FileCopyCallback(PVOID Context,
@@ -3913,26 +3941,78 @@ FileCopyCallback(PVOID Context,
                  UINT_PTR Param1,
                  UINT_PTR Param2)
 {
-    PCOPYCONTEXT CopyContext;
-
-    CopyContext = (PCOPYCONTEXT)Context;
+    PCOPYCONTEXT CopyContext = (PCOPYCONTEXT)Context;
+    PFILEPATHS_W FilePathInfo;
+    PCWSTR SrcFileName, DstFileName;
 
     switch (Notification)
     {
         case SPFILENOTIFY_STARTSUBQUEUE:
+        {
             CopyContext->TotalOperations = (ULONG)Param2;
+            CopyContext->CompletedOperations = 0;
             ProgressSetStepCount(CopyContext->ProgressBar,
                                  CopyContext->TotalOperations);
             SetupUpdateMemoryInfo(CopyContext, TRUE);
             break;
+        }
 
+        case SPFILENOTIFY_STARTDELETE:
+        case SPFILENOTIFY_STARTRENAME:
         case SPFILENOTIFY_STARTCOPY:
-            /* Display copy message */
-            CONSOLE_SetStatusText(MUIGetString(STRING_COPYING), (PWSTR)Param1);
+        {
+            FilePathInfo = (PFILEPATHS_W)Param1;
+
+            if (Notification == SPFILENOTIFY_STARTDELETE)
+            {
+                /* Display delete message */
+                ASSERT(Param2 == FILEOP_DELETE);
+
+                DstFileName = wcsrchr(FilePathInfo->Target, L'\\');
+                if (DstFileName) ++DstFileName;
+                else DstFileName = FilePathInfo->Target;
+
+                CONSOLE_SetStatusText(MUIGetString(STRING_DELETING),
+                                      DstFileName);
+            }
+            else if (Notification == SPFILENOTIFY_STARTRENAME)
+            {
+                /* Display move/rename message */
+                ASSERT(Param2 == FILEOP_RENAME);
+
+                SrcFileName = wcsrchr(FilePathInfo->Source, L'\\');
+                if (SrcFileName) ++SrcFileName;
+                else SrcFileName = FilePathInfo->Source;
+
+                DstFileName = wcsrchr(FilePathInfo->Target, L'\\');
+                if (DstFileName) ++DstFileName;
+                else DstFileName = FilePathInfo->Target;
+
+                // TODO: Determine whether using STRING_RENAMING or STRING_MOVING
+                CONSOLE_SetStatusText(MUIGetString(STRING_MOVING),
+                                      SrcFileName, DstFileName);
+            }
+            else if (Notification == SPFILENOTIFY_STARTCOPY)
+            {
+                /* Display copy message */
+                ASSERT(Param2 == FILEOP_COPY);
+
+                SrcFileName = wcsrchr(FilePathInfo->Source, L'\\');
+                if (SrcFileName) ++SrcFileName;
+                else SrcFileName = FilePathInfo->Source;
+
+                CONSOLE_SetStatusText(MUIGetString(STRING_COPYING),
+                                      SrcFileName);
+            }
+
             SetupUpdateMemoryInfo(CopyContext, FALSE);
             break;
+        }
 
+        case SPFILENOTIFY_ENDDELETE:
+        case SPFILENOTIFY_ENDRENAME:
         case SPFILENOTIFY_ENDCOPY:
+        {
             CopyContext->CompletedOperations++;
 
             /* SYSREG checkpoint */
@@ -3942,9 +4022,10 @@ FileCopyCallback(PVOID Context,
             ProgressNextStep(CopyContext->ProgressBar);
             SetupUpdateMemoryInfo(CopyContext, FALSE);
             break;
+        }
     }
 
-    return 0;
+    return FILEOP_DOIT;
 }
 
 
@@ -3965,13 +4046,11 @@ static PAGE_NUMBER
 FileCopyPage(PINPUT_RECORD Ir)
 {
     COPYCONTEXT CopyContext;
-    unsigned int mem_bar_width;
+    UINT MemBarWidth;
 
     MUIDisplayPage(FILE_COPY_PAGE);
 
     /* Create context for the copy process */
-    CopyContext.DestinationRootPath = USetupData.DestinationRootPath.Buffer;
-    CopyContext.InstallPath = InstallPath.Buffer;
     CopyContext.TotalOperations = 0;
     CopyContext.CompletedOperations = 0;
 
@@ -3986,13 +4065,13 @@ FileCopyPage(PINPUT_RECORD Ir)
                                                 MUIGetString(STRING_SETUPCOPYINGFILES));
 
     // fit memory bars to screen width, distribute them uniform
-    mem_bar_width = (xScreen - 26) / 5;
-    mem_bar_width -= mem_bar_width % 2;  // make even
+    MemBarWidth = (xScreen - 26) / 5;
+    MemBarWidth -= MemBarWidth % 2;  // make even
     /* ATTENTION: The following progress bars are debug stuff, which should not be translated!! */
     /* Create the paged pool progress bar */
     CopyContext.MemoryBars[0] = CreateProgressBar(13,
                                                   40,
-                                                  13 + mem_bar_width,
+                                                  13 + MemBarWidth,
                                                   43,
                                                   13,
                                                   44,
@@ -4000,21 +4079,21 @@ FileCopyPage(PINPUT_RECORD Ir)
                                                   "Kernel Pool");
 
     /* Create the non paged pool progress bar */
-    CopyContext.MemoryBars[1] = CreateProgressBar((xScreen / 2)- (mem_bar_width / 2),
+    CopyContext.MemoryBars[1] = CreateProgressBar((xScreen / 2)- (MemBarWidth / 2),
                                                   40,
-                                                  (xScreen / 2) + (mem_bar_width / 2),
+                                                  (xScreen / 2) + (MemBarWidth / 2),
                                                   43,
-                                                  (xScreen / 2)- (mem_bar_width / 2),
+                                                  (xScreen / 2)- (MemBarWidth / 2),
                                                   44,
                                                   FALSE,
                                                   "Kernel Cache");
 
     /* Create the global memory progress bar */
-    CopyContext.MemoryBars[2] = CreateProgressBar(xScreen - 13 - mem_bar_width,
+    CopyContext.MemoryBars[2] = CreateProgressBar(xScreen - 13 - MemBarWidth,
                                                   40,
                                                   xScreen - 13,
                                                   43,
-                                                  xScreen - 13 - mem_bar_width,
+                                                  xScreen - 13 - MemBarWidth,
                                                   44,
                                                   FALSE,
                                                   "Free Memory");
