@@ -25,6 +25,8 @@
 extern HANDLE ProcessHeap;
 
 #include "errorcode.h"
+#include "spapisup/fileqsup.h"
+#include "spapisup/infsupp.h"
 #include "utils/linklist.h"
 #include "utils/ntverrsrc.h"
 // #include "utils/arcname.h"
@@ -33,7 +35,6 @@ extern HANDLE ProcessHeap;
 #include "utils/filesup.h"
 #include "fsutil.h"
 #include "utils/genlist.h"
-#include "utils/infsupp.h"
 #include "utils/inicache.h"
 #include "utils/partlist.h"
 #include "utils/arcname.h"
@@ -42,6 +43,8 @@ extern HANDLE ProcessHeap;
 #include "registry.h"
 #include "mui.h"
 #include "settings.h"
+
+// #include "install.h" // See at the end...
 
 
 /* DEFINES ******************************************************************/
@@ -122,6 +125,10 @@ typedef struct _USETUP_DATA
     ULONG RequiredPartitionDiskSpace;
     WCHAR InstallationDirectory[MAX_PATH];
 } USETUP_DATA, *PUSETUP_DATA;
+
+
+#include "install.h"
+
 
 // HACK!!
 extern BOOLEAN IsUnattendedSetup;
