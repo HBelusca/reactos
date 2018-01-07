@@ -189,8 +189,8 @@ typedef VOID
 
 ERROR_NUMBER
 UpdateRegistry(
-    IN HINF SetupInf,
     IN OUT PUSETUP_DATA pSetupData,
+    IN HINF SetupInf,
     /**/IN BOOLEAN RepairUpdateFlag,     /* HACK HACK! */
     /**/IN PPARTLIST PartitionList,      /* HACK HACK! */
     /**/IN WCHAR DestinationDriveLetter, /* HACK HACK! */

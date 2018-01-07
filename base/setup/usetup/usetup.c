@@ -21,7 +21,8 @@
  * PROJECT:         ReactOS text-mode setup
  * FILE:            base/setup/usetup/usetup.c
  * PURPOSE:         Text-mode setup
- * PROGRAMMER:      Casper S. Hornstrup (chorns@users.sourceforge.net)
+ * PROGRAMMERS:     Eric Kohl
+ *                  Casper S. Hornstrup (chorns@users.sourceforge.net)
  *                  Hervé Poussineau (hpoussin@reactos.org)
  */
 
@@ -3441,358 +3442,6 @@ USetupErrorRoutine(
     va_end(arg_ptr);
 }
 
-
-static BOOLEAN
-AddSectionToCopyQueueCab(HINF InfFile,
-                         PWCHAR SectionName,
-                         PWCHAR SourceCabinet,
-                         PCUNICODE_STRING DestinationPath,
-                         PINPUT_RECORD Ir)
-{
-    INFCONTEXT FilesContext;
-    INFCONTEXT DirContext;
-    PWCHAR FileKeyName;
-    PWCHAR FileKeyValue;
-    PWCHAR DirKeyValue;
-    PWCHAR TargetFileName;
-
-    /*
-     * This code enumerates the list of files in reactos.dff / reactos.inf
-     * that need to be extracted from reactos.cab and be installed in their
-     * respective directories.
-     */
-
-    /* Search for the SectionName section */
-    if (!SetupFindFirstLineW(InfFile, SectionName, NULL, &FilesContext))
-    {
-        MUIDisplayError(ERROR_TXTSETUP_SECTION, Ir, POPUP_WAIT_ENTER, SectionName);
-        return FALSE;
-    }
-
-    /*
-     * Enumerate the files in the section and add them to the file queue.
-     */
-    do
-    {
-        /* Get source file name and target directory id */
-        if (!INF_GetData(&FilesContext, &FileKeyName, &FileKeyValue))
-        {
-            /* FIXME: Handle error! */
-            DPRINT1("INF_GetData() failed\n");
-            break;
-        }
-
-        /* Get optional target file name */
-        if (!INF_GetDataField(&FilesContext, 2, &TargetFileName))
-            TargetFileName = NULL;
-
-        DPRINT("FileKeyName: '%S'  FileKeyValue: '%S'\n", FileKeyName, FileKeyValue);
-
-        /* Lookup target directory */
-        if (!SetupFindFirstLineW(InfFile, L"Directories", FileKeyValue, &DirContext))
-        {
-            /* FIXME: Handle error! */
-            DPRINT1("SetupFindFirstLine() failed\n");
-            INF_FreeData(FileKeyName);
-            INF_FreeData(FileKeyValue);
-            INF_FreeData(TargetFileName);
-            break;
-        }
-
-        INF_FreeData(FileKeyValue);
-
-        if (!INF_GetData(&DirContext, NULL, &DirKeyValue))
-        {
-            /* FIXME: Handle error! */
-            DPRINT1("INF_GetData() failed\n");
-            INF_FreeData(FileKeyName);
-            INF_FreeData(TargetFileName);
-            break;
-        }
-
-        if (!SetupQueueCopy(SetupFileQueue,
-                            SourceCabinet,
-                            USetupData.SourceRootPath.Buffer,
-                            USetupData.SourceRootDir.Buffer,
-                            FileKeyName,
-                            DirKeyValue,
-                            TargetFileName))
-        {
-            /* FIXME: Handle error! */
-            DPRINT1("SetupQueueCopy() failed\n");
-        }
-
-        INF_FreeData(FileKeyName);
-        INF_FreeData(TargetFileName);
-        INF_FreeData(DirKeyValue);
-    } while (SetupFindNextLine(&FilesContext, &FilesContext));
-
-    return TRUE;
-}
-
-
-static BOOLEAN
-AddSectionToCopyQueue(HINF InfFile,
-                      PWCHAR SectionName,
-                      PWCHAR SourceCabinet,
-                      PCUNICODE_STRING DestinationPath,
-                      PINPUT_RECORD Ir)
-{
-    INFCONTEXT FilesContext;
-    INFCONTEXT DirContext;
-    PWCHAR FileKeyName;
-    PWCHAR FileKeyValue;
-    PWCHAR DirKeyValue;
-    PWCHAR TargetFileName;
-    WCHAR CompleteOrigDirName[512]; // FIXME: MAX_PATH is not enough?
-
-    if (SourceCabinet)
-        return AddSectionToCopyQueueCab(InfFile, L"SourceFiles", SourceCabinet, DestinationPath, Ir);
-
-    /*
-     * This code enumerates the list of files in txtsetup.sif
-     * that need to be installed in their respective directories.
-     */
-
-    /* Search for the SectionName section */
-    if (!SetupFindFirstLineW(InfFile, SectionName, NULL, &FilesContext))
-    {
-        MUIDisplayError(ERROR_TXTSETUP_SECTION, Ir, POPUP_WAIT_ENTER, SectionName);
-        return FALSE;
-    }
-
-    /*
-     * Enumerate the files in the section and add them to the file queue.
-     */
-    do
-    {
-        /* Get source file name */
-        if (!INF_GetDataField(&FilesContext, 0, &FileKeyName))
-        {
-            /* FIXME: Handle error! */
-            DPRINT1("INF_GetData() failed\n");
-            break;
-        }
-
-        /* Get target directory id */
-        if (!INF_GetDataField(&FilesContext, 13, &FileKeyValue))
-        {
-            /* FIXME: Handle error! */
-            DPRINT1("INF_GetData() failed\n");
-            INF_FreeData(FileKeyName);
-            break;
-        }
-
-        /* Get optional target file name */
-        if (!INF_GetDataField(&FilesContext, 11, &TargetFileName))
-            TargetFileName = NULL;
-        else if (!*TargetFileName)
-            TargetFileName = NULL;
-
-        DPRINT("FileKeyName: '%S'  FileKeyValue: '%S'\n", FileKeyName, FileKeyValue);
-
-        /* Lookup target directory */
-        if (!SetupFindFirstLineW(InfFile, L"Directories", FileKeyValue, &DirContext))
-        {
-            /* FIXME: Handle error! */
-            DPRINT1("SetupFindFirstLine() failed\n");
-            INF_FreeData(FileKeyName);
-            INF_FreeData(FileKeyValue);
-            INF_FreeData(TargetFileName);
-            break;
-        }
-
-        INF_FreeData(FileKeyValue);
-
-        if (!INF_GetData(&DirContext, NULL, &DirKeyValue))
-        {
-            /* FIXME: Handle error! */
-            DPRINT1("INF_GetData() failed\n");
-            INF_FreeData(FileKeyName);
-            INF_FreeData(TargetFileName);
-            break;
-        }
-
-        if ((DirKeyValue[0] == UNICODE_NULL) || (DirKeyValue[0] == L'\\' && DirKeyValue[1] == UNICODE_NULL))
-        {
-            /* Installation path */
-            DPRINT("InstallationPath: '%S'\n", DirKeyValue);
-
-            RtlStringCchCopyW(CompleteOrigDirName, ARRAYSIZE(CompleteOrigDirName),
-                              USetupData.SourceRootDir.Buffer);
-
-            DPRINT("InstallationPath(2): '%S'\n", CompleteOrigDirName);
-        }
-        else if (DirKeyValue[0] == L'\\')
-        {
-            /* Absolute path */
-            DPRINT("AbsolutePath: '%S'\n", DirKeyValue);
-
-            RtlStringCchCopyW(CompleteOrigDirName, ARRAYSIZE(CompleteOrigDirName),
-                              DirKeyValue);
-
-            DPRINT("AbsolutePath(2): '%S'\n", CompleteOrigDirName);
-        }
-        else // if (DirKeyValue[0] != L'\\')
-        {
-            /* Path relative to the installation path */
-            DPRINT("RelativePath: '%S'\n", DirKeyValue);
-
-            CombinePaths(CompleteOrigDirName, ARRAYSIZE(CompleteOrigDirName), 2,
-                         USetupData.SourceRootDir.Buffer, DirKeyValue);
-
-            DPRINT("RelativePath(2): '%S'\n", CompleteOrigDirName);
-        }
-
-        if (!SetupQueueCopy(SetupFileQueue,
-                            SourceCabinet,
-                            USetupData.SourceRootPath.Buffer,
-                            CompleteOrigDirName,
-                            FileKeyName,
-                            DirKeyValue,
-                            TargetFileName))
-        {
-            /* FIXME: Handle error! */
-            DPRINT1("SetupQueueCopy() failed\n");
-        }
-
-        INF_FreeData(FileKeyName);
-        INF_FreeData(TargetFileName);
-        INF_FreeData(DirKeyValue);
-    } while (SetupFindNextLine(&FilesContext, &FilesContext));
-
-    return TRUE;
-}
-
-
-static BOOLEAN
-PrepareCopyPageInfFile(HINF InfFile,
-                       PWCHAR SourceCabinet,
-                       PINPUT_RECORD Ir)
-{
-    NTSTATUS Status;
-    INFCONTEXT DirContext;
-    PWCHAR AdditionalSectionName = NULL;
-    PWCHAR DirKeyValue;
-    WCHAR PathBuffer[MAX_PATH];
-
-    /* Add common files */
-    if (!AddSectionToCopyQueue(InfFile, L"SourceDisksFiles", SourceCabinet, &USetupData.DestinationPath, Ir))
-        return FALSE;
-
-    /* Add specific files depending of computer type */
-    if (SourceCabinet == NULL)
-    {
-        if (!ProcessComputerFiles(InfFile, ComputerList, &AdditionalSectionName))
-            return FALSE;
-
-        if (AdditionalSectionName)
-        {
-            if (!AddSectionToCopyQueue(InfFile, AdditionalSectionName, SourceCabinet, &USetupData.DestinationPath, Ir))
-                return FALSE;
-        }
-    }
-
-    /* Create directories */
-
-    /*
-     * FIXME:
-     * Copying files to USetupData.DestinationRootPath should be done from within
-     * the SystemPartitionFiles section.
-     * At the moment we check whether we specify paths like '\foo' or '\\' for that.
-     * For installing to USetupData.DestinationPath specify just '\' .
-     */
-
-    /* Get destination path */
-    RtlStringCchCopyW(PathBuffer, ARRAYSIZE(PathBuffer), USetupData.DestinationPath.Buffer);
-
-    DPRINT("FullPath(1): '%S'\n", PathBuffer);
-
-    /* Create the install directory */
-    Status = SetupCreateDirectory(PathBuffer);
-    if (!NT_SUCCESS(Status) && Status != STATUS_OBJECT_NAME_COLLISION)
-    {
-        DPRINT1("Creating directory '%S' failed: Status = 0x%08lx\n", PathBuffer, Status);
-        MUIDisplayError(ERROR_CREATE_INSTALL_DIR, Ir, POPUP_WAIT_ENTER);
-        return FALSE;
-    }
-
-    /* Search for the 'Directories' section */
-    if (!SetupFindFirstLineW(InfFile, L"Directories", NULL, &DirContext))
-    {
-        if (SourceCabinet)
-            MUIDisplayError(ERROR_CABINET_SECTION, Ir, POPUP_WAIT_ENTER, L"Directories");
-        else
-            MUIDisplayError(ERROR_TXTSETUP_SECTION, Ir, POPUP_WAIT_ENTER, L"Directories");
-
-        return FALSE;
-    }
-
-    /* Enumerate the directory values and create the subdirectories */
-    do
-    {
-        if (!INF_GetData(&DirContext, NULL, &DirKeyValue))
-        {
-            DPRINT1("break\n");
-            break;
-        }
-
-        if ((DirKeyValue[0] == UNICODE_NULL) || (DirKeyValue[0] == L'\\' && DirKeyValue[1] == UNICODE_NULL))
-        {
-            /* Installation path */
-            DPRINT("InstallationPath: '%S'\n", DirKeyValue);
-
-            RtlStringCchCopyW(PathBuffer, ARRAYSIZE(PathBuffer),
-                              USetupData.DestinationPath.Buffer);
-
-            DPRINT("InstallationPath(2): '%S'\n", PathBuffer);
-        }
-        else if (DirKeyValue[0] == L'\\')
-        {
-            /* Absolute path */
-            DPRINT("AbsolutePath: '%S'\n", DirKeyValue);
-
-            CombinePaths(PathBuffer, ARRAYSIZE(PathBuffer), 2,
-                         USetupData.DestinationRootPath.Buffer, DirKeyValue);
-
-            DPRINT("AbsolutePath(2): '%S'\n", PathBuffer);
-
-            Status = SetupCreateDirectory(PathBuffer);
-            if (!NT_SUCCESS(Status) && Status != STATUS_OBJECT_NAME_COLLISION)
-            {
-                INF_FreeData(DirKeyValue);
-                DPRINT("Creating directory '%S' failed: Status = 0x%08lx", PathBuffer, Status);
-                MUIDisplayError(ERROR_CREATE_DIR, Ir, POPUP_WAIT_ENTER);
-                return FALSE;
-            }
-        }
-        else // if (DirKeyValue[0] != L'\\')
-        {
-            /* Path relative to the installation path */
-            DPRINT("RelativePath: '%S'\n", DirKeyValue);
-
-            CombinePaths(PathBuffer, ARRAYSIZE(PathBuffer), 2,
-                         USetupData.DestinationPath.Buffer, DirKeyValue);
-
-            DPRINT("RelativePath(2): '%S'\n", PathBuffer);
-
-            Status = SetupCreateDirectory(PathBuffer);
-            if (!NT_SUCCESS(Status) && Status != STATUS_OBJECT_NAME_COLLISION)
-            {
-                INF_FreeData(DirKeyValue);
-                DPRINT("Creating directory '%S' failed: Status = 0x%08lx", PathBuffer, Status);
-                MUIDisplayError(ERROR_CREATE_DIR, Ir, POPUP_WAIT_ENTER);
-                return FALSE;
-            }
-        }
-
-        INF_FreeData(DirKeyValue);
-    } while (SetupFindNextLine(&DirContext, &DirContext));
-
-    return TRUE;
-}
-
-
 /*
  * Displays the PrepareCopyPage.
  *
@@ -3801,8 +3450,7 @@ PrepareCopyPageInfFile(HINF InfFile,
  *  QuitPage
  *
  * SIDEEFFECTS
- * Inits SetupFileQueue
- * Calls PrepareCopyPageInfFile
+ * Calls PrepareCopyInfFile
  *
  * RETURNS
  *   Number of the next page.
@@ -3810,91 +3458,16 @@ PrepareCopyPageInfFile(HINF InfFile,
 static PAGE_NUMBER
 PrepareCopyPage(PINPUT_RECORD Ir)
 {
-    HINF InfHandle;
-    WCHAR PathBuffer[MAX_PATH];
-    INFCONTEXT CabinetsContext;
-    ULONG InfFileSize;
-    PWCHAR KeyValue;
-    UINT ErrorLine;
-    PVOID InfFileData;
+    ERROR_NUMBER ErrorNumber;
 
     MUIDisplayPage(PREPARE_COPY_PAGE);
 
-    /* Create the file queue */
-    SetupFileQueue = SetupOpenFileQueue();
-    if (SetupFileQueue == NULL)
+    ErrorNumber = PrepareCopy(&USetupData, NULL);
+    if (ErrorNumber != ERROR_SUCCESS)
     {
-        MUIDisplayError(ERROR_COPY_QUEUE, Ir, POPUP_WAIT_ENTER);
+        MUIDisplayError(ErrorNumber, Ir, POPUP_WAIT_ENTER);
         return QUIT_PAGE;
     }
-
-    if (!PrepareCopyPageInfFile(SetupInf, NULL, Ir))
-    {
-        /* FIXME: show an error dialog */
-        return QUIT_PAGE;
-    }
-
-    /* Search for the 'Cabinets' section */
-    if (!SetupFindFirstLineW(SetupInf, L"Cabinets", NULL, &CabinetsContext))
-    {
-        return FILE_COPY_PAGE;
-    }
-
-    /*
-     * Enumerate the directory values in the 'Cabinets'
-     * section and parse their inf files.
-     */
-    do
-    {
-        if (!INF_GetData(&CabinetsContext, NULL, &KeyValue))
-            break;
-
-        CombinePaths(PathBuffer, ARRAYSIZE(PathBuffer), 2,
-                     USetupData.SourcePath.Buffer, KeyValue);
-
-        CabinetInitialize();
-        CabinetSetEventHandlers(NULL, NULL, NULL);
-        CabinetSetCabinetName(PathBuffer);
-
-        if (CabinetOpen() == CAB_STATUS_SUCCESS)
-        {
-            DPRINT("Cabinet %S\n", CabinetGetCabinetName());
-
-            InfFileData = CabinetGetCabinetReservedArea(&InfFileSize);
-            if (InfFileData == NULL)
-            {
-                MUIDisplayError(ERROR_CABINET_SCRIPT, Ir, POPUP_WAIT_ENTER);
-                return QUIT_PAGE;
-            }
-        }
-        else
-        {
-            DPRINT("Cannot open cabinet: %S.\n", CabinetGetCabinetName());
-            MUIDisplayError(ERROR_CABINET_MISSING, Ir, POPUP_WAIT_ENTER);
-            return QUIT_PAGE;
-        }
-
-        InfHandle = INF_OpenBufferedFileA((PSTR)InfFileData,
-                                          InfFileSize,
-                                          NULL,
-                                          INF_STYLE_WIN4,
-                                          USetupData.LanguageId,
-                                          &ErrorLine);
-
-        if (InfHandle == INVALID_HANDLE_VALUE)
-        {
-            MUIDisplayError(ERROR_INVALID_CABINET_INF, Ir, POPUP_WAIT_ENTER);
-            return QUIT_PAGE;
-        }
-
-        CabinetCleanup();
-
-        if (!PrepareCopyPageInfFile(InfHandle, KeyValue, Ir))
-        {
-            /* FIXME: show an error dialog */
-            return QUIT_PAGE;
-        }
-    } while (SetupFindNextLine(&CabinetsContext, &CabinetsContext));
 
     return FILE_COPY_PAGE;
 }
@@ -3988,8 +3561,12 @@ FileCopyCallback(PVOID Context,
                 if (DstFileName) ++DstFileName;
                 else DstFileName = FilePathInfo->Target;
 
-                // TODO: Determine whether using STRING_RENAMING or STRING_MOVING
-                CONSOLE_SetStatusText(MUIGetString(STRING_MOVING),
+                if (!wcsicmp(SrcFileName, DstFileName))
+                    Param2 = STRING_MOVING;
+                else
+                    Param2 = STRING_RENAMING;
+
+                CONSOLE_SetStatusText(MUIGetString(Param2),
                                       SrcFileName, DstFileName);
             }
             else if (Notification == SPFILENOTIFY_STARTCOPY)
@@ -3997,12 +3574,13 @@ FileCopyCallback(PVOID Context,
                 /* Display copy message */
                 ASSERT(Param2 == FILEOP_COPY);
 
-                SrcFileName = wcsrchr(FilePathInfo->Source, L'\\');
-                if (SrcFileName) ++SrcFileName;
-                else SrcFileName = FilePathInfo->Source;
+                /* NOTE: When extracting from CABs the Source is the CAB name */
+                DstFileName = wcsrchr(FilePathInfo->Target, L'\\');
+                if (DstFileName) ++DstFileName;
+                else DstFileName = FilePathInfo->Target;
 
                 CONSOLE_SetStatusText(MUIGetString(STRING_COPYING),
-                                      SrcFileName);
+                                      DstFileName);
             }
 
             SetupUpdateMemoryInfo(CopyContext, FALSE);
@@ -4036,8 +3614,7 @@ FileCopyCallback(PVOID Context,
  *  RegistryPage(At once)
  *
  * SIDEEFFECTS
- *  Calls SetupCommitFileQueueW
- *  Calls SetupCloseFileQueue
+ *  Calls DoCopy
  *
  * RETURNS
  *   Number of the next page.
@@ -4099,13 +3676,9 @@ FileCopyPage(PINPUT_RECORD Ir)
                                                   "Free Memory");
 
     /* Do the file copying */
-    SetupCommitFileQueueW(NULL,
-                          SetupFileQueue,
-                          FileCopyCallback,
-                          &CopyContext);
+    DoCopy(&USetupData, FileCopyCallback, &CopyContext);
 
-    /* If we get here, we're done, so cleanup the queue and progress bar */
-    SetupCloseFileQueue(SetupFileQueue);
+    /* If we get here, we're done, so cleanup the progress bar */
     DestroyProgressBar(CopyContext.ProgressBar);
     DestroyProgressBar(CopyContext.MemoryBars[0]);
     DestroyProgressBar(CopyContext.MemoryBars[1]);
@@ -4171,8 +3744,8 @@ RegistryPage(PINPUT_RECORD Ir)
 
     MUIDisplayPage(REGISTRY_PAGE);
 
-    Error = UpdateRegistry(USetupData.SetupInf,
-                           &USetupData,
+    Error = UpdateRegistry(&USetupData,
+                           USetupData.SetupInf,
                            RepairUpdateFlag,
                            PartitionList,
                            DestinationDriveLetter,

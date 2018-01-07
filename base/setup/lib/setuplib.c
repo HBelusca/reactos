@@ -391,7 +391,7 @@ GetSourcePaths(
     OUT PUNICODE_STRING SourceRootDir)
 {
     NTSTATUS Status;
-    HANDLE Handle;
+    HANDLE LinkHandle;
     OBJECT_ATTRIBUTES ObjectAttributes;
     UCHAR ImageFileBuffer[sizeof(UNICODE_STRING) + MAX_PATH * sizeof(WCHAR)];
     PUNICODE_STRING InstallSourcePath = (PUNICODE_STRING)&ImageFileBuffer;
@@ -439,7 +439,7 @@ GetSourcePaths(
                                NULL,
                                NULL);
 
-    Status = NtOpenSymbolicLinkObject(&Handle,
+    Status = NtOpenSymbolicLinkObject(&LinkHandle,
                                       SYMBOLIC_LINK_QUERY,
                                       &ObjectAttributes);
     if (!NT_SUCCESS(Status))
@@ -458,10 +458,11 @@ GetSourcePaths(
                               SystemRootBuffer,
                               sizeof(SystemRootBuffer));
 
-    Status = NtQuerySymbolicLinkObject(Handle,
+    /* Resolve the link and close its handle */
+    Status = NtQuerySymbolicLinkObject(LinkHandle,
                                        &SystemRootPath,
                                        &BufferSize);
-    NtClose(Handle);
+    NtClose(LinkHandle);
 
     if (!NT_SUCCESS(Status))
         return Status; // Unexpected error
@@ -794,8 +795,8 @@ FinishSetup(
  */
 ERROR_NUMBER
 UpdateRegistry(
-    IN HINF SetupInf,
     IN OUT PUSETUP_DATA pSetupData,
+    IN HINF SetupInf,
     /**/IN BOOLEAN RepairUpdateFlag,     /* HACK HACK! */
     /**/IN PPARTLIST PartitionList,      /* HACK HACK! */
     /**/IN WCHAR DestinationDriveLetter, /* HACK HACK! */
