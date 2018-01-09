@@ -816,6 +816,39 @@ FileCopyCallback(PVOID Context,
     return FILEOP_DOIT;
 }
 
+#if 0
+static VOID
+__cdecl
+RegistryStatus(IN REGISTRY_STATUS RegStatus, ...)
+{
+    /* WARNING: Please keep this lookup table in sync with the resources! */
+    static const UINT StringIDs[] =
+    {
+        STRING_DONE,                    /* Success */
+        STRING_REGHIVEUPDATE,           /* RegHiveUpdate */
+        STRING_IMPORTFILE,              /* ImportRegHive */
+        STRING_DISPLAYSETTINGSUPDATE,   /* DisplaySettingsUpdate */
+        STRING_LOCALESETTINGSUPDATE,    /* LocaleSettingsUpdate */
+        STRING_ADDKBLAYOUTS,            /* KeybLayouts */
+        STRING_KEYBOARDSETTINGSUPDATE,  /* KeybSettingsUpdate */
+        STRING_CODEPAGEINFOUPDATE,      /* CodePageInfoUpdate */
+    };
+
+    va_list args;
+
+    if (RegStatus < ARRAYSIZE(StringIDs))
+    {
+        va_start(args, RegStatus);
+        CONSOLE_SetStatusTextV(MUIGetString(StringIDs[RegStatus]), args);
+        va_end(args);
+    }
+    else
+    {
+        CONSOLE_SetStatusText("Unknown status %d", RegStatus);
+    }
+}
+#endif
+
 static DWORD
 WINAPI
 PrepareAndDoCopyThread(
@@ -831,12 +864,17 @@ PrepareAndDoCopyThread(
     /* Retrieve pointer to the global setup data */
     pSetupData = (PSETUPDATA)GetWindowLongPtrW(hwndDlg, GWLP_USERDATA);
 
+    /* Get the progress handle */
+    hWndProgress = GetDlgItem(hwndDlg, IDC_PROCESSPROGRESS);
+
+
+    /*
+     * Preparation of the list of files to be copied
+     */
+
     /* Set status text */
     SetDlgItemTextW(hwndDlg, IDC_ACTIVITY, L"Preparing the list of files to be copied, please wait...");
     SetDlgItemTextW(hwndDlg, IDC_ITEM, L"");
-
-    /* Get the progress handle */
-    hWndProgress = GetDlgItem(hwndDlg, IDC_PROCESSPROGRESS);
 
     /* Set progress marquee style */
     dwStyle = GetWindowLongPtrW(hWndProgress, GWL_STYLE);
@@ -875,8 +913,14 @@ PrepareAndDoCopyThread(
     /* Restore progress style */
     SetWindowLongPtrW(hWndProgress, GWL_STYLE, dwStyle);
 
+
+    /*
+     * Perform the file copy
+     */
+
     /* Set status text */
     SetDlgItemTextW(hwndDlg, IDC_ACTIVITY, L"Copying the files...");
+    SetDlgItemTextW(hwndDlg, IDC_ITEM, L"");
 
     /* Create context for the copy process */
     CopyContext.pSetupData = pSetupData;
@@ -909,6 +953,26 @@ PrepareAndDoCopyThread(
     /* Create the $winnt$.inf file */
     InstallSetupInfFile(&pSetupData->USetupData);
 
+
+    /*
+     * Create or update the registry hives
+     */
+
+    /* Set status text */
+    SetDlgItemTextW(hwndDlg, IDC_ACTIVITY,
+                    pSetupData->RepairUpdateFlag
+                        ? L"Updating the registry..."
+                        : L"Creating the registry...");
+    SetDlgItemTextW(hwndDlg, IDC_ITEM, L"");
+
+    ErrorNumber = UpdateRegistry(&pSetupData->USetupData,
+                                 pSetupData->RepairUpdateFlag,
+                                 pSetupData->PartitionList,
+                                 L'D', // DestinationDriveLetter,   // FIXME!!
+                                 pSetupData->SelectedLanguageId,
+                                 NULL /*RegistryStatus*/);
+
+
     /* We are done! Switch to the Terminate page */
     PropSheet_SetCurSelByID(GetParent(hwndDlg), IDD_RESTARTPAGE);
     return 0;
@@ -936,8 +1000,8 @@ ProcessDlgProc(
             // FIXME: This is my disk encoding!
             DISKENTRY DiskEntry;
             PARTENTRY PartEntry;
-            DiskEntry.DiskNumber = 1;
-            DiskEntry.BiosDiskNumber = 1;
+            DiskEntry.DiskNumber = 0;
+            DiskEntry.BiosDiskNumber = 0;
             PartEntry.PartitionNumber = 4;
             /****/
 
@@ -1191,37 +1255,99 @@ BOOL LoadSetupData(
     return ret;
 }
 
+VOID
+InitNtToWin32PathMappingList(
+    IN OUT PNT_WIN32_PATH_MAPPING_LIST MappingList)
+{
+    InitializeListHead(&MappingList->List);
+    MappingList->MappingsCount = 0;
+}
+
+VOID
+FreeNtToWin32PathMappingList(
+    IN OUT PNT_WIN32_PATH_MAPPING_LIST MappingList)
+{
+    PLIST_ENTRY ListEntry;
+    PVOID Entry;
+
+    while (!IsListEmpty(&MappingList->List))
+    {
+        ListEntry = RemoveHeadList(&MappingList->List);
+        Entry = (PVOID)CONTAINING_RECORD(ListEntry, NT_WIN32_PATH_MAPPING, ListEntry);
+        HeapFree(ProcessHeap, 0, Entry);
+    }
+
+    MappingList->MappingsCount = 0;
+}
+
 /*
  * Attempts to convert a pure NT file path into a corresponding Win32 path.
  * Adapted from GetInstallSourceWin32() in dll/win32/syssetup/wizard.c
  */
 BOOL
 ConvertNtPathToWin32Path(
+    IN OUT PNT_WIN32_PATH_MAPPING_LIST MappingList,
     OUT PWSTR pwszPath,
     IN DWORD cchPathMax,
     IN PCWSTR pwszNTPath)
 {
     BOOL FoundDrive = FALSE, RetryOnce = FALSE;
+    PLIST_ENTRY ListEntry;
+    PNT_WIN32_PATH_MAPPING Entry;
+    PCWSTR pwszNtPathToMap = pwszNTPath;
+    PCWSTR pwszRemaining = NULL;
     DWORD cchDrives;
     PWCHAR pwszDrive;
-    PCWSTR pwszRemaining = NULL;
     WCHAR wszDrives[512];
     WCHAR wszNTPath[MAX_PATH];
-    WCHAR TargetPath[MAX_PATH] = L"";
+    WCHAR TargetPath[MAX_PATH];
 
     *pwszPath = UNICODE_NULL;
+
+    /*
+     * We find first a mapping inside the MappingList. If one is found, use it
+     * to build the Win32 path. If there is none, we need to create one by
+     * checking the Win32 drives (and possibly NT symlinks too).
+     * In case of success, add the newly found mapping to the list and use it
+     * to build the Win32 path.
+     */
+
+    for (ListEntry = MappingList->List.Flink;
+         ListEntry != &MappingList->List;
+         ListEntry = ListEntry->Flink)
+    {
+        Entry = CONTAINING_RECORD(ListEntry, NT_WIN32_PATH_MAPPING, ListEntry);
+
+        DPRINT("Testing '%S' --> '%S'\n", Entry->Win32Path, Entry->NtPath);
+
+        /* Check whether the queried NT path prefixes the user-provided NT path */
+        if (!_wcsnicmp(Entry->NtPath, pwszNtPathToMap, wcslen(Entry->NtPath)))
+        {
+            /* Found it! */
+            FoundDrive = TRUE;
+
+            /* Set the pointers and go build the Win32 path */
+            pwszDrive = Entry->Win32Path;
+            pwszRemaining = pwszNTPath + wcslen(Entry->NtPath);
+            goto Quit;
+        }
+    }
+
+    /*
+     * No mapping exists for this path yet: try to find one now.
+     */
 
     /* Retrieve the mounted drives (available drive letters) */
     cchDrives = GetLogicalDriveStringsW(_countof(wszDrives) - 1, wszDrives);
     if (cchDrives == 0 || cchDrives >= _countof(wszDrives))
     {
         /* Buffer too small or failure */
-        DPRINT1("GetLogicalDriveStringsW failed\n");
+        DPRINT1("ConvertNtPathToWin32Path: GetLogicalDriveStringsW failed\n");
         return FALSE;
     }
 
-
-Retry: // We go back there once if RetryOnce == TRUE
+/* We go back there once if RetryOnce == TRUE */
+Retry:
 
     /* Enumerate the mounted drives */
     for (pwszDrive = wszDrives; *pwszDrive; pwszDrive += wcslen(pwszDrive) + 1)
@@ -1234,25 +1360,41 @@ Retry: // We go back there once if RetryOnce == TRUE
         DPRINT("Testing '%S' --> '%S'\n", pwszDrive, wszNTPath);
 
         /* Check whether the queried NT path prefixes the user-provided NT path */
-        if (!_wcsnicmp(wszNTPath, pwszNTPath, wcslen(wszNTPath)))
+        if (!_wcsnicmp(wszNTPath, pwszNtPathToMap, wcslen(wszNTPath)))
         {
             /* Found it! */
             FoundDrive = TRUE;
-            if (!RetryOnce && pwszNTPath != TargetPath)
+            pwszDrive[2] = UNICODE_NULL; // Remove the backslash
+
+            if (pwszNtPathToMap == pwszNTPath)
+            {
+                ASSERT(!RetryOnce && pwszNTPath != TargetPath);
                 pwszRemaining = pwszNTPath + wcslen(wszNTPath);
+            }
             break;
         }
     }
 
     if (FoundDrive)
     {
-        pwszDrive[2] = UNICODE_NULL; // Remove the backslash
-        StringCchPrintfW(pwszPath, cchPathMax,
-                         L"%s%s",
-                         pwszDrive,
-                         pwszRemaining);
-        DPRINT1("ConvertNtPathToWin32Path: %S\n", pwszPath);
-        return TRUE;
+        /* A mapping was found, add it to the cache */
+        Entry = HeapAlloc(ProcessHeap, HEAP_ZERO_MEMORY, sizeof(*Entry));
+        if (!Entry)
+        {
+            DPRINT1("ConvertNtPathToWin32Path: Cannot allocate memory\n");
+            return FALSE;
+        }
+        StringCchCopyNW(Entry->NtPath, _countof(Entry->NtPath),
+                        pwszNTPath, pwszRemaining - pwszNTPath);
+        StringCchCopyW(Entry->Win32Path, _countof(Entry->Win32Path), pwszDrive);
+
+        /* Insert it as the most recent entry */
+        InsertHeadList(&MappingList->List, &Entry->ListEntry);
+        MappingList->MappingsCount++;
+
+        /* Set the pointers and go build the Win32 path */
+        pwszDrive = Entry->Win32Path;
+        goto Quit;
     }
 
     /*
@@ -1308,10 +1450,12 @@ Retry: // We go back there once if RetryOnce == TRUE
         if (!NT_SUCCESS(Status))
         {
             /* Not a symlink, or something else happened: bail out */
-            DPRINT1("NtOpenSymbolicLinkObject(%wZ) failed, Status 0x%08lx\n", &SymLink, Status);
+            DPRINT1("ConvertNtPathToWin32Path: NtOpenSymbolicLinkObject(%wZ) failed, Status 0x%08lx\n",
+                    &SymLink, Status);
             return FALSE;
         }
 
+        *TargetPath = UNICODE_NULL;
         RtlInitEmptyUnicodeString(&Target, TargetPath, sizeof(TargetPath));
 
         /* Resolve the link and close its handle */
@@ -1322,17 +1466,31 @@ Retry: // We go back there once if RetryOnce == TRUE
         if (!NT_SUCCESS(Status))
         {
             /* Not a symlink, or something else happened: bail out */
-            DPRINT1("NtQuerySymbolicLinkObject(%wZ) failed, Status 0x%08lx\n", &SymLink, Status);
+            DPRINT1("ConvertNtPathToWin32Path: NtQuerySymbolicLinkObject(%wZ) failed, Status 0x%08lx\n",
+                    &SymLink, Status);
             return FALSE;
         }
 
-        /* Set pointers */
+        /* Set the pointers */
         pwszRemaining = pwszNTPath + Length;
-        pwszNTPath = TargetPath;
+        pwszNtPathToMap = TargetPath; // Point to our local buffer
 
         /* Retry once */
         RetryOnce = TRUE;
         goto Retry;
+    }
+
+    ASSERT(!FoundDrive);
+
+Quit:
+    if (FoundDrive)
+    {
+        StringCchPrintfW(pwszPath, cchPathMax,
+                         L"%s%s",
+                         pwszDrive,
+                         pwszRemaining);
+        DPRINT("ConvertNtPathToWin32Path: %S\n", pwszPath);
+        return TRUE;
     }
 
     return FALSE;
@@ -1340,7 +1498,9 @@ Retry: // We go back there once if RetryOnce == TRUE
 
 /* Used to enable and disable the shutdown privilege */
 /* static */ BOOL
-EnablePrivilege(LPCWSTR lpszPrivilegeName, BOOL bEnablePrivilege)
+EnablePrivilege(
+    IN LPCWSTR lpszPrivilegeName,
+    IN BOOL bEnablePrivilege)
 {
     BOOL   Success;
     HANDLE hToken;
@@ -1381,6 +1541,14 @@ _tWinMain(HINSTANCE hInst,
 
     ProcessHeap = GetProcessHeap();
 
+    SetupData.hInstance = hInst;
+    SetupData.hInstallThread = NULL;
+    SetupData.hHaltInstallEvent = NULL;
+    SetupData.bStopInstall = FALSE;
+
+    /* Initialize the NT to Win32 path prefix mapping list */
+    InitNtToWin32PathMappingList(&SetupData.MappingList);
+
     /* Initialize Setup, phase 0 */
     InitializeSetup(&SetupData.USetupData, 0);
 
@@ -1404,11 +1572,6 @@ _tWinMain(HINSTANCE hInst,
     /* Load extra setup data (HW lists etc...) */
     if (!LoadSetupData(&SetupData))
         goto Quit;
-
-    SetupData.hInstance = hInst;
-    SetupData.hInstallThread = NULL;
-    SetupData.hHaltInstallEvent = NULL;
-    SetupData.bStopInstall = FALSE;
 
     CheckUnattendedSetup(&SetupData.USetupData);
     SetupData.bUnattend = IsUnattendedSetup; // FIXME :-)
@@ -1542,6 +1705,9 @@ Quit:
 
     /* Setup has finished */
     FinishSetup(&SetupData.USetupData);
+
+    /* Free the NT to Win32 path prefix mapping list */
+    FreeNtToWin32PathMappingList(&SetupData.MappingList);
 
 #if 0 // NOTE: Disabled for testing purposes only!
     EnablePrivilege(SE_SHUTDOWN_NAME, TRUE);
