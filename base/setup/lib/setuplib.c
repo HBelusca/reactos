@@ -796,14 +796,10 @@ FinishSetup(
 ERROR_NUMBER
 UpdateRegistry(
     IN OUT PUSETUP_DATA pSetupData,
-    IN HINF SetupInf,
     /**/IN BOOLEAN RepairUpdateFlag,     /* HACK HACK! */
     /**/IN PPARTLIST PartitionList,      /* HACK HACK! */
     /**/IN WCHAR DestinationDriveLetter, /* HACK HACK! */
     /**/IN PCWSTR SelectedLanguageId,    /* HACK HACK! */
-    IN PGENERIC_LIST DisplayList,
-    IN PGENERIC_LIST LayoutList,
-    IN PGENERIC_LIST LanguageList,
     IN PREGISTRY_STATUS_ROUTINE StatusRoutine OPTIONAL)
 {
     ERROR_NUMBER ErrorNumber;
@@ -865,9 +861,9 @@ DoUpdate:
          * "repair" (aka. recreate: ShouldRepairRegistry == TRUE).
          */
 
-        Success = SpInfFindFirstLine(SetupInf, L"HiveInfs.Fresh", NULL, &InfContext);       // Windows-compatible
+        Success = SpInfFindFirstLine(pSetupData->SetupInf, L"HiveInfs.Fresh", NULL, &InfContext);       // Windows-compatible
         if (!Success)
-            Success = SpInfFindFirstLine(SetupInf, L"HiveInfs.Install", NULL, &InfContext); // ReactOS-specific
+            Success = SpInfFindFirstLine(pSetupData->SetupInf, L"HiveInfs.Install", NULL, &InfContext); // ReactOS-specific
 
         if (!Success)
         {
@@ -884,7 +880,7 @@ DoUpdate:
          * we only update the hives.
          */
 
-        Success = SpInfFindFirstLine(SetupInf, L"HiveInfs.Upgrade", NULL, &InfContext);
+        Success = SpInfFindFirstLine(pSetupData->SetupInf, L"HiveInfs.Upgrade", NULL, &InfContext);
         if (!Success)
         {
             /* Nothing to do for update! */
@@ -944,7 +940,7 @@ DoUpdate:
 
         /* Update display registry settings */
         if (StatusRoutine) StatusRoutine(DisplaySettingsUpdate);
-        if (!ProcessDisplayRegistry(SetupInf, DisplayList))
+        if (!ProcessDisplayRegistry(pSetupData->SetupInf, pSetupData->DisplayList))
         {
             ErrorNumber = ERROR_UPDATE_DISPLAY_SETTINGS;
             goto Cleanup;
@@ -952,7 +948,7 @@ DoUpdate:
 
         /* Set the locale */
         if (StatusRoutine) StatusRoutine(LocaleSettingsUpdate);
-        if (!ProcessLocaleRegistry(LanguageList))
+        if (!ProcessLocaleRegistry(pSetupData->LanguageList))
         {
             ErrorNumber = ERROR_UPDATE_LOCALESETTINGS;
             goto Cleanup;
@@ -977,7 +973,7 @@ DoUpdate:
         {
             /* Update keyboard layout settings */
             if (StatusRoutine) StatusRoutine(KeybSettingsUpdate);
-            if (!ProcessKeyboardLayoutRegistry(LayoutList, SelectedLanguageId))
+            if (!ProcessKeyboardLayoutRegistry(pSetupData->LayoutList, SelectedLanguageId))
             {
                 ErrorNumber = ERROR_UPDATE_KBSETTINGS;
                 goto Cleanup;

@@ -3745,14 +3745,10 @@ RegistryPage(PINPUT_RECORD Ir)
     MUIDisplayPage(REGISTRY_PAGE);
 
     Error = UpdateRegistry(&USetupData,
-                           USetupData.SetupInf,
                            RepairUpdateFlag,
                            PartitionList,
                            DestinationDriveLetter,
                            SelectedLanguageId,
-                           USetupData.DisplayList,
-                           USetupData.LayoutList,
-                           USetupData.LanguageList,
                            RegistryStatus);
     if (Error != ERROR_SUCCESS)
     {
