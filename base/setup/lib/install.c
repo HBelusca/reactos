@@ -210,7 +210,7 @@ GetSourceFileAndTargetLocation(
     else if (!*TargetFileName)
         TargetFileName = NULL;
 
-    DPRINT1("GetSourceFileAndTargetLocation(%S) = "
+    DPRINT("GetSourceFileAndTargetLocation(%S) = "
            "SrcRootDir: '%S', SrcRelPath: '%S' --> TargetDir: '%S', TargetFileName: '%S'\n",
            SourceFileName, SourceRootDir, SourceRelativePath, TargetDir, TargetFileName);
 
@@ -228,7 +228,6 @@ GetSourceFileAndTargetLocation(
 
     return STATUS_SUCCESS;
 }
-
 
 static NTSTATUS
 BuildFullDirectoryPath(
@@ -341,7 +340,7 @@ AddSectionToCopyQueueCab(
             break;
         }
 
-        DPRINT1("GetSourceTargetFromCab(%S) = "
+        DPRINT("GetSourceTargetFromCab(%S) = "
                "SrcRootDir: '%S', SrcRelPath: '%S' --> TargetDir: '%S', TargetFileName: '%S'\n",
                SourceFileName,
                pSetupData->SourcePath.Buffer,
@@ -352,7 +351,7 @@ AddSectionToCopyQueueCab(
                               pSetupData->DestinationPath.Buffer,
                               TargetDir);
         UNREFERENCED_PARAMETER(Status);
-        DPRINT1("  --> FileDstPath = '%S'\n", FileDstPath);
+        DPRINT("  --> FileDstPath = '%S'\n", FileDstPath);
 
         INF_FreeData(TargetDir);
 
@@ -395,7 +394,6 @@ AddSectionToCopyQueue(
     IN PUSETUP_DATA pSetupData,
     IN HINF InfFile,
     IN PCWSTR SectionName,
-    IN PCWSTR SourceCabinet,
     IN PCUNICODE_STRING DestinationPath)
 {
     NTSTATUS Status;
@@ -407,14 +405,6 @@ AddSectionToCopyQueue(
     PCWSTR TargetFileName;
     WCHAR FileSrcRootPath[MAX_PATH];
     WCHAR FileDstPath[MAX_PATH];
-
-    if (SourceCabinet)
-    {
-        return AddSectionToCopyQueueCab(pSetupData, InfFile, L"SourceFiles",
-                                        SourceCabinet, DestinationPath);
-    }
-
-    ASSERT(SourceCabinet == NULL);
 
     /*
      * This code enumerates the list of files in txtsetup.sif
@@ -472,7 +462,7 @@ AddSectionToCopyQueue(
                               SourceRootPath);
         UNREFERENCED_PARAMETER(Status);
         // DPRINT1("Could not build the full path for '%S', skipping...\n", SourceRootPath);
-        DPRINT1("  --> FileSrcRootPath = '%S'\n", FileSrcRootPath);
+        DPRINT("  --> FileSrcRootPath = '%S'\n", FileSrcRootPath);
 
         INF_FreeData(SourceRootPath);
 
@@ -481,7 +471,7 @@ AddSectionToCopyQueue(
                               TargetDirectory);
         UNREFERENCED_PARAMETER(Status);
         // DPRINT1("Could not build the full path for '%S', skipping...\n", TargetDirectory);
-        DPRINT1("  --> FileDstPath = '%S'\n", FileDstPath);
+        DPRINT("  --> FileDstPath = '%S'\n", FileDstPath);
 
         INF_FreeData(TargetDirectory);
 
@@ -490,7 +480,7 @@ AddSectionToCopyQueue(
                              SourcePath,
                              SourceFileName,
                              NULL,
-                             NULL, // SourceCabinet == NULL
+                             NULL, // No SourceCabinet
                              NULL,
                              FileDstPath,
                              TargetFileName,
@@ -513,7 +503,7 @@ BOOLEAN // ERROR_NUMBER
 PrepareCopyInfFile(
     IN OUT PUSETUP_DATA pSetupData,
     IN HINF InfFile,
-    IN PCWSTR SourceCabinet)
+    IN PCWSTR SourceCabinet OPTIONAL)
 {
     BOOLEAN Success;
     NTSTATUS Status;
@@ -522,47 +512,57 @@ PrepareCopyInfFile(
     PCWSTR DirKeyValue;
     WCHAR PathBuffer[MAX_PATH];
 
-    /* Add common files -- Search for the SourceDisksFiles section */
-    /* Search in the platform-specific first (currently hardcoded; make it runtime-dependent?) */
-    Success = AddSectionToCopyQueue(pSetupData, InfFile,
-                                    L"SourceDisksFiles." INF_ARCH,
-                                    SourceCabinet,
-                                    &pSetupData->DestinationPath);
-    if (!Success)
-    {
-        DPRINT1("AddSectionToCopyQueue(%S) failed!\n", L"SourceDisksFiles." INF_ARCH);
-    }
-    /* Search in the global section */
-    Success = AddSectionToCopyQueue(pSetupData, InfFile,
-                                    L"SourceDisksFiles",
-                                    SourceCabinet,
-                                    &pSetupData->DestinationPath);
-    if (!Success)
-    {
-        DPRINT1("AddSectionToCopyQueue(%S) failed!\n", L"SourceDisksFiles");
-        // pSetupData->LastErrorNumber = ERROR_TXTSETUP_SECTION;
-        // if (pSetupData->ErrorRoutine)
-            // pSetupData->ErrorRoutine(pSetupData, SectionName);
-        return FALSE;
-    }
-
-    /* Add specific files depending of computer type */
     if (SourceCabinet == NULL)
     {
+        /* Add common files -- Search for the SourceDisksFiles section */
+        /* Search in the platform-specific first (currently hardcoded; make it runtime-dependent?) */
+        Success = AddSectionToCopyQueue(pSetupData, InfFile,
+                                        L"SourceDisksFiles." INF_ARCH,
+                                        &pSetupData->DestinationPath);
+        if (!Success)
+        {
+            DPRINT1("AddSectionToCopyQueue(%S) failed!\n", L"SourceDisksFiles." INF_ARCH);
+        }
+        /* Search in the global section */
+        Success = AddSectionToCopyQueue(pSetupData, InfFile,
+                                        L"SourceDisksFiles",
+                                        &pSetupData->DestinationPath);
+        if (!Success)
+        {
+            DPRINT1("AddSectionToCopyQueue(%S) failed!\n", L"SourceDisksFiles");
+            // pSetupData->LastErrorNumber = ERROR_TXTSETUP_SECTION;
+            // if (pSetupData->ErrorRoutine)
+                // pSetupData->ErrorRoutine(pSetupData, SectionName);
+            return FALSE;
+        }
+
+        /* Add specific files depending of computer type */
         if (!ProcessComputerFiles(InfFile, pSetupData->ComputerList, &AdditionalSectionName))
             // return ERROR_LOAD_COMPUTER;
             return FALSE;
 
-        if (AdditionalSectionName)
+        if (AdditionalSectionName &&
+            !AddSectionToCopyQueue(pSetupData, InfFile,
+                                   AdditionalSectionName,
+                                   &pSetupData->DestinationPath))
         {
-            ASSERT(SourceCabinet == NULL);
-            if (!AddSectionToCopyQueue(pSetupData, InfFile,
-                                       AdditionalSectionName,
-                                       NULL,
-                                       &pSetupData->DestinationPath))
-            {
-                return FALSE;
-            }
+            return FALSE;
+        }
+    }
+    else
+    {
+        /* Process a cabinet INF */
+        Success = AddSectionToCopyQueueCab(pSetupData, InfFile,
+                                           L"SourceFiles",
+                                           SourceCabinet,
+                                           &pSetupData->DestinationPath);
+        if (!Success)
+        {
+            DPRINT1("AddSectionToCopyQueueCab(%S) failed!\n", SourceCabinet);
+            // pSetupData->LastErrorNumber = ERROR_TXTSETUP_SECTION;
+            // if (pSetupData->ErrorRoutine)
+                // pSetupData->ErrorRoutine(pSetupData, SectionName);
+            return FALSE;
         }
     }
 
@@ -677,7 +677,7 @@ PrepareCopy(
     // ERROR_NUMBER ErrorNumber;
     HINF InfHandle;
     INFCONTEXT CabinetsContext;
-    PCWSTR KeyValue;
+    PCWSTR CabinetName;
     UINT ErrorLine;
 #if defined(__REACTOS__) && defined(USE_CABINET_INF)
     ULONG InfFileSize;
@@ -716,13 +716,15 @@ PrepareCopy(
      */
     do
     {
-        if (!INF_GetData(&CabinetsContext, NULL, &KeyValue))
+        if (!INF_GetData(&CabinetsContext, NULL, &CabinetName))
             break;
 
         CombinePaths(PathBuffer, ARRAYSIZE(PathBuffer), 2,
-                     pSetupData->SourcePath.Buffer, KeyValue);
+                     pSetupData->SourcePath.Buffer, CabinetName);
 
 #if defined(__REACTOS__) && defined(USE_CABINET_INF)
+        INF_FreeData(CabinetName);
+
         CabinetInitialize(&CabinetContext);
         CabinetSetEventHandlers(&CabinetContext, NULL, NULL, NULL);
         CabinetSetCabinetName(&CabinetContext, PathBuffer);
@@ -764,9 +766,17 @@ PrepareCopy(
 #else
         {
         PWCHAR ptr;
-        ptr = wcsrchr(PathBuffer, L'.');
+
+        /* First find the filename */
+        ptr = wcsrchr(PathBuffer, L'\\');
+        if (!ptr) ptr = PathBuffer;
+
+        /* Then find its extension */
+        ptr = wcsrchr(ptr, L'.');
         if (!ptr)
             ptr = PathBuffer + wcslen(PathBuffer);
+
+        /* Replace it by '.inf' */
         wcscpy(ptr, L".inf");
 
         InfHandle = SpInfOpenInfFile(PathBuffer,
@@ -785,7 +795,7 @@ PrepareCopy(
             return ERROR_INVALID_CABINET_INF;
         }
 
-        if (!PrepareCopyInfFile(pSetupData, InfHandle, KeyValue))
+        if (!PrepareCopyInfFile(pSetupData, InfHandle, CabinetName))
         {
 #if !(defined(__REACTOS__) && defined(USE_CABINET_INF))
             SpInfCloseInfFile(InfHandle);
