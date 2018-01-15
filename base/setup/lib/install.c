@@ -781,7 +781,7 @@ PrepareCopy(
 
         InfHandle = SpInfOpenInfFile(PathBuffer,
                                      NULL,
-                                     INF_STYLE_OLDNT, // INF_STYLE_WIN4,
+                                     INF_STYLE_WIN4,
                                      pSetupData->LanguageId,
                                      &ErrorLine);
         }
