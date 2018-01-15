@@ -1321,10 +1321,10 @@ ConvertNtPathToWin32Path(
         DPRINT("Testing '%S' --> '%S'\n", Entry->Win32Path, Entry->NtPath);
 
         /* Check whether the queried NT path prefixes the user-provided NT path */
-        if (!_wcsnicmp(Entry->NtPath, pwszNtPathToMap, wcslen(Entry->NtPath)))
+        FoundDrive = !_wcsnicmp(pwszNtPathToMap, Entry->NtPath, wcslen(Entry->NtPath));
+        if (FoundDrive)
         {
             /* Found it! */
-            FoundDrive = TRUE;
 
             /* Set the pointers and go build the Win32 path */
             pwszDrive = Entry->Win32Path;
@@ -1360,10 +1360,56 @@ Retry:
         DPRINT("Testing '%S' --> '%S'\n", pwszDrive, wszNTPath);
 
         /* Check whether the queried NT path prefixes the user-provided NT path */
-        if (!_wcsnicmp(wszNTPath, pwszNtPathToMap, wcslen(wszNTPath)))
+        FoundDrive = !_wcsnicmp(pwszNtPathToMap, wszNTPath, wcslen(wszNTPath));
+        if (!FoundDrive)
+        {
+            PWCHAR ptr, ptr2;
+
+            /*
+             * Check whether this was a network share that has a drive letter,
+             * but the user-provided NT path points to this share without
+             * mentioning the drive letter.
+             *
+             * The format is: \Device\<network_redirector>\;X:<data>\share\path
+             * The corresponding drive letter is 'X'.
+             * A system-provided network redirector (LanManRedirector or Mup)
+             * or a 3rd-party one may be used.
+             *
+             * We check whether the user-provided NT path has the form:
+             * \Device\<network_redirector>\<data>\share\path
+             * as it obviously did not have the full form (the previous check
+             * would have been OK otherwise).
+             */
+            if (!_wcsnicmp(wszNTPath, L"\\Device\\", _countof(L"\\Device\\")-1) &&
+                (ptr = wcschr(wszNTPath + _countof(L"\\Device\\")-1, L'\\')) &&
+                wcslen(++ptr) >= 3 && ptr[0] == L';' && ptr[2] == L':')
+            {
+                /*
+                 * Normally the specified drive letter should correspond
+                 * to the one used for the mapping. But we will ignore
+                 * if it happens not to be the case.
+                 */
+                if (pwszDrive[0] != ptr[1])
+                {
+                    DPRINT1("Peculiar: expected network share drive letter %C different from actual one %C\n",
+                            pwszDrive[0], ptr[1]);
+                }
+
+                /* Remove the drive letter from the NT network share path */
+                ptr2 = ptr + 3;
+                /* Swallow as many possible consecutive backslashes as there could be */
+                while (*ptr2 == L'\\') ++ptr2;
+
+                memmove(ptr, ptr2, (wcslen(ptr2) + 1) * sizeof(WCHAR));
+
+                /* Now do the check again */
+                FoundDrive = !_wcsnicmp(pwszNtPathToMap, wszNTPath, wcslen(wszNTPath));
+            }
+        }
+        if (FoundDrive)
         {
             /* Found it! */
-            FoundDrive = TRUE;
+
             pwszDrive[2] = UNICODE_NULL; // Remove the backslash
 
             if (pwszNtPathToMap == pwszNTPath)
