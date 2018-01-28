@@ -37,6 +37,7 @@ static const PCWSTR KnownVendors[] = { VENDOR_REACTOS, VENDOR_MICROSOFT };
 static BOOLEAN
 IsValidNTOSInstallation(
     IN PUNICODE_STRING SystemRootPath,
+    OUT PUSHORT Machine OPTIONAL,
     OUT PUNICODE_STRING VendorName OPTIONAL);
 
 static PNTOS_INSTALLATION
@@ -50,6 +51,7 @@ static PNTOS_INSTALLATION
 AddNTOSInstallation(
     IN PGENERIC_LIST List,
     IN PCWSTR InstallationName,
+    IN USHORT Machine,
     IN PCWSTR VendorName,
     IN PCWSTR SystemRootArcPath,
     IN PUNICODE_STRING SystemRootNtPath, // or PCWSTR ?
@@ -85,6 +87,7 @@ EnumerateInstallations(
     UNICODE_STRING SystemRootPath;
     WCHAR SystemRoot[MAX_PATH];
 
+    USHORT Machine;
     UNICODE_STRING VendorName;
     WCHAR VendorNameBuffer[MAX_PATH];
 
@@ -169,7 +172,7 @@ EnumerateInstallations(
 
     /* Check if this is a valid NTOS installation; stop there if it isn't one */
     RtlInitEmptyUnicodeString(&VendorName, VendorNameBuffer, sizeof(VendorNameBuffer));
-    if (!IsValidNTOSInstallation(&SystemRootPath, &VendorName))
+    if (!IsValidNTOSInstallation(&SystemRootPath, &Machine, &VendorName))
     {
         /* Continue the enumeration */
         return STATUS_SUCCESS;
@@ -199,6 +202,7 @@ EnumerateInstallations(
     /* Add the discovered NTOS installation into the list */
     AddNTOSInstallation(Data->List,
                         BootEntry->FriendlyName,
+                        Machine,
                         VendorName.Buffer, // FIXME: What if it's not NULL-terminated?
                         Options->OsLoadPath,
                         &SystemRootPath, PathComponent,
@@ -242,14 +246,15 @@ static BOOLEAN
 CheckForValidPEAndVendor(
     IN HANDLE RootDirectory OPTIONAL,
     IN PCWSTR PathNameToFile,
-    OUT PUNICODE_STRING VendorName
-    )
+    OUT PUSHORT Machine,
+    OUT PUNICODE_STRING VendorName)
 {
     BOOLEAN Success = FALSE;
     NTSTATUS Status;
     HANDLE FileHandle, SectionHandle;
     // SIZE_T ViewSize;
     PVOID ViewBase;
+    PIMAGE_NT_HEADERS NtHeader;
     PVOID VersionBuffer = NULL; // Read-only
     PVOID pvData = NULL;
     UINT BufLen = 0;
@@ -269,13 +274,17 @@ CheckForValidPEAndVendor(
         return FALSE; // Status;
     }
 
-    /* Make sure it's a valid PE file */
-    if (!RtlImageNtHeader(ViewBase))
+    /* Make sure it's a valid NT PE file */
+    NtHeader = RtlImageNtHeader(ViewBase);
+    if (!NtHeader)
     {
-        DPRINT1("File '%S' does not seem to be a valid PE, bail out\n", PathNameToFile);
+        DPRINT1("File '%S' does not seem to be a valid NT PE file, bail out\n", PathNameToFile);
         Status = STATUS_INVALID_IMAGE_FORMAT;
         goto UnmapCloseFile;
     }
+
+    /* Retrieve the target architecture of this PE module */
+    *Machine = NtHeader->FileHeader.Machine;
 
     /*
      * Search for a valid executable version and vendor.
@@ -339,11 +348,13 @@ UnmapCloseFile:
 static BOOLEAN
 IsValidNTOSInstallationByHandle(
     IN HANDLE SystemRootDirectory,
+    OUT PUSHORT Machine OPTIONAL,
     OUT PUNICODE_STRING VendorName OPTIONAL)
 {
     BOOLEAN Success = FALSE;
     PCWSTR PathName;
     USHORT i;
+    USHORT LocalMachine;
     UNICODE_STRING LocalVendorName;
     WCHAR VendorNameBuffer[MAX_PATH];
 
@@ -407,11 +418,17 @@ IsValidNTOSInstallationByHandle(
 
     /* Check for the existence of \SystemRoot\System32\ntoskrnl.exe and retrieves its vendor name */
     PathName = L"System32\\ntoskrnl.exe";
-    Success = CheckForValidPEAndVendor(SystemRootDirectory, PathName, &LocalVendorName);
+    Success = CheckForValidPEAndVendor(SystemRootDirectory, PathName, &LocalMachine, &LocalVendorName);
     if (!Success)
         DPRINT1("Kernel executable '%S' is either not a PE file, or does not have any vendor?\n", PathName);
 
-    /* The kernel gives the OS its flavour */
+    /*
+     * The kernel gives the OS its flavour. If we failed due to the absence of
+     * ntoskrnl.exe this might be due to the fact this particular installation
+     * uses a custom kernel that has a different name, overridden in the boot
+     * parameters. We then rely on the existence of ntdll.dll, which cannot be
+     * renamed on a valid NT system.
+     */
     if (Success)
     {
         for (i = 0; i < ARRAYSIZE(KnownVendors); ++i)
@@ -424,23 +441,32 @@ IsValidNTOSInstallationByHandle(
                 break;
             }
         }
-    }
 
-    /* Return the vendor name */
-    if (VendorName)
-    {
-        /* Copy the string and invalidate the pointer */
-        RtlCopyUnicodeString(VendorName, &LocalVendorName);
-        VendorName = NULL;
+        /* Return the target architecture */
+        if (Machine)
+        {
+            /* Copy the value and invalidate the pointer */
+            *Machine = LocalMachine;
+            Machine = NULL;
+        }
+
+        /* Return the vendor name */
+        if (VendorName)
+        {
+            /* Copy the string and invalidate the pointer */
+            RtlCopyUnicodeString(VendorName, &LocalVendorName);
+            VendorName = NULL;
+        }
     }
 
     /* OPTIONAL: Check for the existence of \SystemRoot\System32\ntkrnlpa.exe */
 
     /* Check for the existence of \SystemRoot\System32\ntdll.dll and retrieves its vendor name */
     PathName = L"System32\\ntdll.dll";
-    Success = CheckForValidPEAndVendor(SystemRootDirectory, PathName, &LocalVendorName);
+    Success = CheckForValidPEAndVendor(SystemRootDirectory, PathName, &LocalMachine, &LocalVendorName);
     if (!Success)
         DPRINT1("User-mode DLL '%S' is either not a PE file, or does not have any vendor?\n", PathName);
+
     if (Success)
     {
         for (i = 0; i < ARRAYSIZE(KnownVendors); ++i)
@@ -452,14 +478,22 @@ IsValidNTOSInstallationByHandle(
                 break;
             }
         }
-    }
 
-    /* Return the vendor name if not already obtained */
-    if (VendorName)
-    {
-        /* Copy the string and invalidate the pointer */
-        RtlCopyUnicodeString(VendorName, &LocalVendorName);
-        VendorName = NULL;
+        /* Return the target architecture if not already obtained */
+        if (Machine)
+        {
+            /* Copy the value and invalidate the pointer */
+            *Machine = LocalMachine;
+            Machine = NULL;
+        }
+
+        /* Return the vendor name if not already obtained */
+        if (VendorName)
+        {
+            /* Copy the string and invalidate the pointer */
+            RtlCopyUnicodeString(VendorName, &LocalVendorName);
+            VendorName = NULL;
+        }
     }
 
     return Success;
@@ -468,6 +502,7 @@ IsValidNTOSInstallationByHandle(
 static BOOLEAN
 IsValidNTOSInstallation(
     IN PUNICODE_STRING SystemRootPath,
+    OUT PUSHORT Machine,
     OUT PUNICODE_STRING VendorName OPTIONAL)
 {
     NTSTATUS Status;
@@ -494,7 +529,8 @@ IsValidNTOSInstallation(
         return FALSE;
     }
 
-    Success = IsValidNTOSInstallationByHandle(SystemRootDirectory, VendorName);
+    Success = IsValidNTOSInstallationByHandle(SystemRootDirectory,
+                                              Machine, VendorName);
 
     /* Done! */
     NtClose(SystemRootDirectory);
@@ -574,6 +610,7 @@ static PNTOS_INSTALLATION
 AddNTOSInstallation(
     IN PGENERIC_LIST List,
     IN PCWSTR InstallationName,
+    IN USHORT Machine,
     IN PCWSTR VendorName,
     IN PCWSTR SystemRootArcPath,
     IN PUNICODE_STRING SystemRootNtPath, // or PCWSTR ?
@@ -613,6 +650,8 @@ AddNTOSInstallation(
     NtOsInstall->DiskNumber = DiskNumber;
     NtOsInstall->PartitionNumber = PartitionNumber;
     NtOsInstall->PartEntry = PartEntry;
+
+    NtOsInstall->Machine = Machine;
 
     RtlInitEmptyUnicodeString(&NtOsInstall->SystemArcPath,
                               (PWCHAR)(NtOsInstall + 1),
