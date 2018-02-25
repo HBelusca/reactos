@@ -1247,10 +1247,11 @@ RControlService(
         }
 
         /* Send control code to the service */
-        dwError = ScmControlService(lpService->lpImage->hControlPipe,
-                                    lpService->lpServiceName,
+        dwError = ScmControlService(lpService->lpServiceName,
+                                    dwControl,
+                                    lpService->lpImage->hControlPipe,
                                     (SERVICE_STATUS_HANDLE)lpService,
-                                    dwControl);
+                                    0, NULL);
 
         /* Return service status information */
         RtlCopyMemory(lpServiceStatus,
@@ -1763,10 +1764,11 @@ RSetServiceStatus(
         if (lpService->lpImage->dwImageRunCount == 0)
         {
             /* Stop the dispatcher thread */
-            ScmControlService(lpService->lpImage->hControlPipe,
-                              L"",
+            ScmControlService(L"",
+                              SERVICE_CONTROL_STOP,
+                              lpService->lpImage->hControlPipe,
                               (SERVICE_STATUS_HANDLE)lpService,
-                              SERVICE_CONTROL_STOP);
+                              0, NULL);
 
             /* Remove the service image */
             ScmRemoveServiceImage(lpService->lpImage);

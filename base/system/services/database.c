@@ -1311,23 +1311,29 @@ ScmGetBootAndSystemDriverState(VOID)
 
 
 DWORD
-ScmControlService(HANDLE hControlPipe,
-                  PWSTR pServiceName,
+ScmControlService(PCWSTR pServiceName,
+                  DWORD dwControl,
+                  HANDLE hControlPipe,
                   SERVICE_STATUS_HANDLE hServiceStatus,
-                  DWORD dwControl)
+                  DWORD argc,
+                  LPWSTR* argv)
 {
+    DWORD dwError = ERROR_SUCCESS;
     PSCM_CONTROL_PACKET ControlPacket;
     SCM_REPLY_PACKET ReplyPacket;
 
-    DWORD dwWriteCount = 0;
-    DWORD dwReadCount = 0;
+    DWORD i;
+    PWSTR *pOffPtr;
+    PWSTR pArgPtr;
+
     DWORD PacketSize;
     PWSTR Ptr;
-    DWORD dwError = ERROR_SUCCESS;
     BOOL bResult;
+    DWORD dwWriteCount = 0;
+    DWORD dwReadCount = 0;
     OVERLAPPED Overlapped = {0};
 
-    DPRINT("ScmControlService() called\n");
+    DPRINT("ScmControlService('%S', dwControl = %d) called\n", pServiceName, dwControl);
 
     /* Acquire the service control critical section, to synchronize requests */
     EnterCriticalSection(&ControlServiceCriticalSection);
@@ -1336,9 +1342,29 @@ ScmControlService(HANDLE hControlPipe,
     PacketSize = sizeof(SCM_CONTROL_PACKET);
     PacketSize += (DWORD)((wcslen(pServiceName) + 1) * sizeof(WCHAR));
 
-    ControlPacket = HeapAlloc(GetProcessHeap(),
-                              HEAP_ZERO_MEMORY,
-                              PacketSize);
+    /*
+     * Calculate the required packet size for the start argument vector 'argv',
+     * composed of the list of pointer offsets, followed by UNICODE strings.
+     * The strings are stored continuously after the vector of offsets, with
+     * the offsets being relative to the beginning of the vector, as in the
+     * following layout (with N == argc):
+     *     [argOff(0)]...[argOff(N-1)][str(0)]...[str(N-1)] .
+     */
+    if (argc > 0 && argv != NULL)
+    {
+        PacketSize = ALIGN_UP(PacketSize, PWSTR);
+        PacketSize += (argc * sizeof(PWSTR));
+
+        DPRINT("Argc: %lu\n", argc);
+        for (i = 0; i < argc; i++)
+        {
+            DPRINT("Argv[%lu]: %S\n", i, argv[i]);
+            PacketSize += (DWORD)((wcslen(argv[i]) + 1) * sizeof(WCHAR));
+        }
+    }
+
+    /* Allocate a control packet */
+    ControlPacket = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, PacketSize);
     if (ControlPacket == NULL)
     {
         LeaveCriticalSection(&ControlServiceCriticalSection);
@@ -1348,14 +1374,37 @@ ScmControlService(HANDLE hControlPipe,
     ControlPacket->dwSize = PacketSize;
     ControlPacket->dwControl = dwControl;
     ControlPacket->hServiceStatus = hServiceStatus;
+    ControlPacket->dwServiceTag = Service->dwTag;
 
+    /* Copy the start command line */
     ControlPacket->dwServiceNameOffset = sizeof(SCM_CONTROL_PACKET);
-
-    Ptr = (PWSTR)((PBYTE)ControlPacket + ControlPacket->dwServiceNameOffset);
+    Ptr = (PWSTR)((ULONG_PTR)ControlPacket + ControlPacket->dwServiceNameOffset);
     wcscpy(Ptr, pServiceName);
 
-    ControlPacket->dwArgumentsCount = 0;
+    ControlPacket->dwArgumentsCount  = 0;
     ControlPacket->dwArgumentsOffset = 0;
+
+    /* Copy the argument vector */
+    if (argc > 0 && argv != NULL)
+    {
+        Ptr += wcslen(pServiceName) + 1;
+        pOffPtr = (PWSTR*)ALIGN_UP_POINTER(Ptr, PWSTR);
+        pArgPtr = (PWSTR)((ULONG_PTR)pOffPtr + argc * sizeof(PWSTR));
+
+        ControlPacket->dwArgumentsCount  = argc;
+        ControlPacket->dwArgumentsOffset = (DWORD)((ULONG_PTR)pOffPtr - (ULONG_PTR)ControlPacket);
+
+        DPRINT("dwArgumentsCount: %lu\n", ControlPacket->dwArgumentsCount);
+        DPRINT("dwArgumentsOffset: %lu\n", ControlPacket->dwArgumentsOffset);
+
+        for (i = 0; i < argc; i++)
+        {
+            wcscpy(pArgPtr, argv[i]);
+            pOffPtr[i] = (PWSTR)((ULONG_PTR)pArgPtr - (ULONG_PTR)pOffPtr);
+            DPRINT("offset[%lu]: %p\n", i, pOffPtr[i]);
+            pArgPtr += wcslen(argv[i]) + 1;
+        }
+    }
 
     bResult = WriteFile(hControlPipe,
                         ControlPacket,
@@ -1396,7 +1445,6 @@ ScmControlService(HANDLE hControlPipe,
                 {
                     dwError = GetLastError();
                     DPRINT1("GetOverlappedResult() failed (Error %lu)\n", dwError);
-
                     goto Done;
                 }
             }
@@ -1409,7 +1457,7 @@ ScmControlService(HANDLE hControlPipe,
     }
 
     /* Read the reply */
-    Overlapped.hEvent = (HANDLE) NULL;
+    Overlapped.hEvent = (HANDLE)NULL;
 
     bResult = ReadFile(hControlPipe,
                        &ReplyPacket,
@@ -1464,9 +1512,7 @@ ScmControlService(HANDLE hControlPipe,
 
 Done:
     /* Release the control packet */
-    HeapFree(GetProcessHeap(),
-             0,
-             ControlPacket);
+    HeapFree(GetProcessHeap(), 0, ControlPacket);
 
     if (dwReadCount == sizeof(SCM_REPLY_PACKET))
     {
@@ -1486,207 +1532,13 @@ ScmSendStartCommand(PSERVICE Service,
                     DWORD argc,
                     LPWSTR* argv)
 {
-    DWORD dwError = ERROR_SUCCESS;
-    PSCM_CONTROL_PACKET ControlPacket;
-    SCM_REPLY_PACKET ReplyPacket;
-    DWORD PacketSize;
-    DWORD i;
-    PWSTR Ptr;
-    PWSTR *pOffPtr;
-    PWSTR pArgPtr;
-    BOOL bResult;
-    DWORD dwWriteCount = 0;
-    DWORD dwReadCount = 0;
-    OVERLAPPED Overlapped = {0};
-
-    DPRINT("ScmSendStartCommand() called\n");
-
-    /* Calculate the total length of the start command line */
-    PacketSize = sizeof(SCM_CONTROL_PACKET);
-    PacketSize += (DWORD)((wcslen(Service->lpServiceName) + 1) * sizeof(WCHAR));
-
-    /*
-     * Calculate the required packet size for the start argument vector 'argv',
-     * composed of the list of pointer offsets, followed by UNICODE strings.
-     * The strings are stored continuously after the vector of offsets, with
-     * the offsets being relative to the beginning of the vector, as in the
-     * following layout (with N == argc):
-     *     [argOff(0)]...[argOff(N-1)][str(0)]...[str(N-1)] .
-     */
-    if (argc > 0 && argv != NULL)
-    {
-        PacketSize = ALIGN_UP(PacketSize, PWSTR);
-        PacketSize += (argc * sizeof(PWSTR));
-
-        DPRINT("Argc: %lu\n", argc);
-        for (i = 0; i < argc; i++)
-        {
-            DPRINT("Argv[%lu]: %S\n", i, argv[i]);
-            PacketSize += (DWORD)((wcslen(argv[i]) + 1) * sizeof(WCHAR));
-        }
-    }
-
-    /* Allocate a control packet */
-    ControlPacket = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, PacketSize);
-    if (ControlPacket == NULL)
-        return ERROR_NOT_ENOUGH_MEMORY;
-
-    ControlPacket->dwSize = PacketSize;
-    ControlPacket->dwControl = (Service->Status.dwServiceType & SERVICE_WIN32_OWN_PROCESS)
-                               ? SERVICE_CONTROL_START_OWN
-                               : SERVICE_CONTROL_START_SHARE;
-    ControlPacket->hServiceStatus = (SERVICE_STATUS_HANDLE)Service;
-    ControlPacket->dwServiceTag = Service->dwTag;
-
-    /* Copy the start command line */
-    ControlPacket->dwServiceNameOffset = sizeof(SCM_CONTROL_PACKET);
-    Ptr = (PWSTR)((ULONG_PTR)ControlPacket + ControlPacket->dwServiceNameOffset);
-    wcscpy(Ptr, Service->lpServiceName);
-
-    ControlPacket->dwArgumentsCount  = 0;
-    ControlPacket->dwArgumentsOffset = 0;
-
-    /* Copy the argument vector */
-    if (argc > 0 && argv != NULL)
-    {
-        Ptr += wcslen(Service->lpServiceName) + 1;
-        pOffPtr = (PWSTR*)ALIGN_UP_POINTER(Ptr, PWSTR);
-        pArgPtr = (PWSTR)((ULONG_PTR)pOffPtr + argc * sizeof(PWSTR));
-
-        ControlPacket->dwArgumentsCount  = argc;
-        ControlPacket->dwArgumentsOffset = (DWORD)((ULONG_PTR)pOffPtr - (ULONG_PTR)ControlPacket);
-
-        DPRINT("dwArgumentsCount: %lu\n", ControlPacket->dwArgumentsCount);
-        DPRINT("dwArgumentsOffset: %lu\n", ControlPacket->dwArgumentsOffset);
-
-        for (i = 0; i < argc; i++)
-        {
-            wcscpy(pArgPtr, argv[i]);
-            pOffPtr[i] = (PWSTR)((ULONG_PTR)pArgPtr - (ULONG_PTR)pOffPtr);
-            DPRINT("offset[%lu]: %p\n", i, pOffPtr[i]);
-            pArgPtr += wcslen(argv[i]) + 1;
-        }
-    }
-
-    bResult = WriteFile(Service->lpImage->hControlPipe,
-                        ControlPacket,
-                        PacketSize,
-                        &dwWriteCount,
-                        &Overlapped);
-    if (bResult == FALSE)
-    {
-        DPRINT("WriteFile() returned FALSE\n");
-
-        dwError = GetLastError();
-        if (dwError == ERROR_IO_PENDING)
-        {
-            DPRINT("dwError: ERROR_IO_PENDING\n");
-
-            dwError = WaitForSingleObject(Service->lpImage->hControlPipe,
-                                          PipeTimeout);
-            DPRINT("WaitForSingleObject() returned %lu\n", dwError);
-
-            if (dwError == WAIT_TIMEOUT)
-            {
-                bResult = CancelIo(Service->lpImage->hControlPipe);
-                if (bResult == FALSE)
-                {
-                    DPRINT1("CancelIo() failed (Error: %lu)\n", GetLastError());
-                }
-
-                dwError = ERROR_SERVICE_REQUEST_TIMEOUT;
-                goto Done;
-            }
-            else if (dwError == WAIT_OBJECT_0)
-            {
-                bResult = GetOverlappedResult(Service->lpImage->hControlPipe,
-                                              &Overlapped,
-                                              &dwWriteCount,
-                                              TRUE);
-                if (bResult == FALSE)
-                {
-                    dwError = GetLastError();
-                    DPRINT1("GetOverlappedResult() failed (Error %lu)\n", dwError);
-
-                    goto Done;
-                }
-            }
-        }
-        else
-        {
-            DPRINT1("WriteFile() failed (Error %lu)\n", dwError);
-            goto Done;
-        }
-    }
-
-    /* Read the reply */
-    Overlapped.hEvent = (HANDLE) NULL;
-
-    bResult = ReadFile(Service->lpImage->hControlPipe,
-                       &ReplyPacket,
-                       sizeof(SCM_REPLY_PACKET),
-                       &dwReadCount,
-                       &Overlapped);
-    if (bResult == FALSE)
-    {
-        DPRINT("ReadFile() returned FALSE\n");
-
-        dwError = GetLastError();
-        if (dwError == ERROR_IO_PENDING)
-        {
-            DPRINT("dwError: ERROR_IO_PENDING\n");
-
-            dwError = WaitForSingleObject(Service->lpImage->hControlPipe,
-                                          PipeTimeout);
-            DPRINT("WaitForSingleObject() returned %lu\n", dwError);
-
-            if (dwError == WAIT_TIMEOUT)
-            {
-                bResult = CancelIo(Service->lpImage->hControlPipe);
-                if (bResult == FALSE)
-                {
-                    DPRINT1("CancelIo() failed (Error: %lu)\n", GetLastError());
-                }
-
-                dwError = ERROR_SERVICE_REQUEST_TIMEOUT;
-                goto Done;
-            }
-            else if (dwError == WAIT_OBJECT_0)
-            {
-                bResult = GetOverlappedResult(Service->lpImage->hControlPipe,
-                                              &Overlapped,
-                                              &dwReadCount,
-                                              TRUE);
-                if (bResult == FALSE)
-                {
-                    dwError = GetLastError();
-                    DPRINT1("GetOverlappedResult() failed (Error %lu)\n", dwError);
-
-                    goto Done;
-                }
-            }
-        }
-        else
-        {
-            DPRINT1("ReadFile() failed (Error %lu)\n", dwError);
-            goto Done;
-        }
-    }
-
-Done:
-    /* Release the control packet */
-    HeapFree(GetProcessHeap(),
-             0,
-             ControlPacket);
-
-    if (dwReadCount == sizeof(SCM_REPLY_PACKET))
-    {
-        dwError = ReplyPacket.dwError;
-    }
-
-    DPRINT("ScmSendStartCommand() done\n");
-
-    return dwError;
+    /* Send the start command and return */
+    return ScmControlService(Service->lpServiceName,
+                             (Service->Status.dwServiceType & SERVICE_WIN32_OWN_PROCESS)
+                                ? SERVICE_CONTROL_START_OWN : SERVICE_CONTROL_START_SHARE,
+                             Service->lpImage->hControlPipe,
+                             (SERVICE_STATUS_HANDLE)Service,
+                             argc, argv);
 }
 
 
@@ -2400,10 +2252,11 @@ ScmAutoShutdownServices(VOID)
         {
             /* Send the shutdown notification */
             DPRINT("Shutdown service: %S\n", CurrentService->lpServiceName);
-            ScmControlService(CurrentService->lpImage->hControlPipe,
-                              CurrentService->lpServiceName,
+            ScmControlService(CurrentService->lpServiceName,
+                              SERVICE_CONTROL_SHUTDOWN,
+                              CurrentService->lpImage->hControlPipe,
                               (SERVICE_STATUS_HANDLE)CurrentService,
-                              SERVICE_CONTROL_SHUTDOWN);
+                              0, NULL);
         }
 
         ServiceEntry = ServiceEntry->Flink;

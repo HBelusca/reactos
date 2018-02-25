@@ -18,10 +18,12 @@
 #include <winreg.h>
 #include <winuser.h>
 #include <netevent.h>
+
 #define NTOS_MODE_USER
 #include <ndk/setypes.h>
 #include <ndk/obfuncs.h>
 #include <ndk/rtlfuncs.h>
+
 #include <services/services.h>
 #include <svcctl_s.h>
 
@@ -194,10 +196,13 @@ DWORD ScmCreateNewServiceRecord(LPCWSTR lpServiceName,
 VOID ScmDeleteServiceRecord(PSERVICE lpService);
 DWORD ScmMarkServiceForDelete(PSERVICE pService);
 
-DWORD ScmControlService(HANDLE hControlPipe,
-                        PWSTR pServiceName,
-                        SERVICE_STATUS_HANDLE hServiceStatus,
-                        DWORD dwControl);
+DWORD
+ScmControlService(PCWSTR pServiceName,
+                  DWORD dwControl,
+                  HANDLE hControlPipe,
+                  SERVICE_STATUS_HANDLE hServiceStatus,
+                  DWORD argc,
+                  LPWSTR* argv);
 
 BOOL ScmLockDatabaseExclusive(VOID);
 BOOL ScmLockDatabaseShared(VOID);
