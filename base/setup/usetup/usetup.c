@@ -96,6 +96,9 @@ static HINF SetupInf;
 
 static HSPFILEQ SetupFileQueue = NULL;
 
+static PNTOS_INSTALLATION CurrentInstallation = NULL;
+static PGENERIC_LIST NtOsInstallsList = NULL;
+
 static PGENERIC_LIST ComputerList = NULL;
 static PGENERIC_LIST DisplayList = NULL;
 static PGENERIC_LIST KeyboardList = NULL;
@@ -931,7 +934,7 @@ SetupStartPage(PINPUT_RECORD Ir)
  *
  * Next pages:
  *  InstallIntroPage (default)
- *  RepairIntroPage
+ *  RecoveryPage
  *  LicensePage
  *  QuitPage
  *
@@ -961,7 +964,7 @@ WelcomePage(PINPUT_RECORD Ir)
         }
         else if (toupper(Ir->Event.KeyEvent.uChar.AsciiChar) == 'R') /* R */
         {
-            return REPAIR_INTRO_PAGE;
+            return RECOVERY_PAGE;
         }
         else if (toupper(Ir->Event.KeyEvent.uChar.AsciiChar) == 'L') /* L */
         {
@@ -1002,48 +1005,127 @@ LicensePage(PINPUT_RECORD Ir)
 
 
 /*
- * Displays the RepairIntroPage.
+ * Displays the UpgradeRepairPage.
  *
  * Next pages:
  *  RebootPage (default)
  *  InstallIntroPage
  *  RecoveryPage
- *  IntroPage
+ *  WelcomePage
  *
  * RETURNS
  *   Number of the next page.
  */
 static PAGE_NUMBER
-RepairIntroPage(PINPUT_RECORD Ir)
+UpgradeRepairPage(PINPUT_RECORD Ir)
 {
-    MUIDisplayPage(REPAIR_INTRO_PAGE);
+    GENERIC_LIST_UI ListUi;
 
-    while(TRUE)
+/*** HACK!! ***/
+    if (PartitionList == NULL)
+    {
+        PartitionList = CreatePartitionList();
+        if (PartitionList == NULL)
+        {
+            /* FIXME: show an error dialog */
+            MUIDisplayError(ERROR_DRIVE_INFORMATION, Ir, POPUP_WAIT_ENTER);
+            return QUIT_PAGE;
+        }
+        else if (IsListEmpty(&PartitionList->DiskListHead))
+        {
+            MUIDisplayError(ERROR_NO_HDD, Ir, POPUP_WAIT_ENTER);
+            return QUIT_PAGE;
+        }
+
+        TempPartition = NULL;
+        FormatState = Start;
+    }
+/**************/
+
+    NtOsInstallsList = CreateNTOSInstallationsList(PartitionList);
+    if (!NtOsInstallsList)
+        DPRINT1("Failed to get a list of NTOS installations; continue installation...\n");
+    if (!NtOsInstallsList || GetNumberOfListEntries(NtOsInstallsList) == 0)
+    {
+        RepairUpdateFlag = FALSE;
+
+        // return INSTALL_INTRO_PAGE;
+        return DEVICE_SETTINGS_PAGE;
+        // return SCSI_CONTROLLER_PAGE;
+    }
+
+    MUIDisplayPage(UPGRADE_REPAIR_PAGE);
+
+    InitGenericListUi(&ListUi, NtOsInstallsList);
+    DrawGenericList(&ListUi,
+                    2, 23,
+                    xScreen - 3,
+                    yScreen - 3);
+
+    SaveGenericListState(NtOsInstallsList);
+
+    // return HandleGenericList(&ListUi, DEVICE_SETTINGS_PAGE, Ir);
+    while (TRUE)
     {
         CONSOLE_ConInKey(Ir);
 
-        if (Ir->Event.KeyEvent.uChar.AsciiChar == 0x0D)  /* ENTER */
+        if ((Ir->Event.KeyEvent.uChar.AsciiChar == 0x00) &&
+            (Ir->Event.KeyEvent.wVirtualKeyCode == VK_DOWN))  /* DOWN */
         {
-            return REBOOT_PAGE;
+            ScrollDownGenericList(&ListUi);
         }
-        else if (toupper(Ir->Event.KeyEvent.uChar.AsciiChar) == 'U')  /* U */
+        else if ((Ir->Event.KeyEvent.uChar.AsciiChar == 0x00) &&
+                 (Ir->Event.KeyEvent.wVirtualKeyCode == VK_UP))  /* UP */
         {
-            RepairUpdateFlag = TRUE;
-            return INSTALL_INTRO_PAGE;
+            ScrollUpGenericList(&ListUi);
         }
-        else if (toupper(Ir->Event.KeyEvent.uChar.AsciiChar) == 'R')  /* R */
+        else if ((Ir->Event.KeyEvent.uChar.AsciiChar == 0x00) &&
+                 (Ir->Event.KeyEvent.wVirtualKeyCode == VK_NEXT))  /* PAGE DOWN */
         {
-            return RECOVERY_PAGE;
+            ScrollPageDownGenericList(&ListUi);
+        }
+        else if ((Ir->Event.KeyEvent.uChar.AsciiChar == 0x00) &&
+                 (Ir->Event.KeyEvent.wVirtualKeyCode == VK_PRIOR))  /* PAGE UP */
+        {
+            ScrollPageUpGenericList(&ListUi);
+        }
+        else if ((Ir->Event.KeyEvent.uChar.AsciiChar == 0x00) &&
+                 (Ir->Event.KeyEvent.wVirtualKeyCode == VK_F3))  /* F3 */
+        {
+            if (ConfirmQuit(Ir) == TRUE)
+                return QUIT_PAGE;
+            else
+                RedrawGenericList(&ListUi);
         }
         else if ((Ir->Event.KeyEvent.uChar.AsciiChar == 0x00) &&
                  (Ir->Event.KeyEvent.wVirtualKeyCode == VK_ESCAPE))  /* ESC */
         {
-            return WELCOME_PAGE;
+            RestoreGenericListState(NtOsInstallsList);
+            // return nextPage;    // prevPage;
+        }
+        // else if (Ir->Event.KeyEvent.uChar.AsciiChar == 0x0D) /* ENTER */
+        else if (toupper(Ir->Event.KeyEvent.uChar.AsciiChar) == 'U')  /* U */
+        {
+            /* Retrieve the current installation */
+            CurrentInstallation = (PNTOS_INSTALLATION)GetListEntryUserData(GetCurrentListEntry(NtOsInstallsList));
+            DPRINT1("Selected installation for repair: \"%S\" ; DiskNumber = %d , PartitionNumber = %d\n",
+                    CurrentInstallation->InstallationName, CurrentInstallation->DiskNumber, CurrentInstallation->PartitionNumber);
+
+            RepairUpdateFlag = TRUE;
+
+            // return nextPage;
+            /***/return INSTALL_INTRO_PAGE;/***/
+        }
+        else if ((Ir->Event.KeyEvent.uChar.AsciiChar > 0x60) && (Ir->Event.KeyEvent.uChar.AsciiChar < 0x7b))
+        {
+            /* a-z */
+            GenericListKeyPress(&ListUi, Ir->Event.KeyEvent.uChar.AsciiChar);
         }
     }
 
-    return REPAIR_INTRO_PAGE;
+    return UPGRADE_REPAIR_PAGE;
 }
+
 
 /*
  * Displays the InstallIntroPage.
@@ -1062,8 +1144,17 @@ InstallIntroPage(PINPUT_RECORD Ir)
 {
     if (RepairUpdateFlag)
     {
-        //return SELECT_PARTITION_PAGE;
+#if 1 /* Old code that looks good */
+
+        // return SELECT_PARTITION_PAGE;
         return DEVICE_SETTINGS_PAGE;
+
+#else /* Possible new code? */
+
+        return DEVICE_SETTINGS_PAGE;
+        // return SCSI_CONTROLLER_PAGE;
+
+#endif
     }
 
     if (IsUnattendedSetup)
@@ -1085,8 +1176,7 @@ InstallIntroPage(PINPUT_RECORD Ir)
         }
         else if (Ir->Event.KeyEvent.uChar.AsciiChar == 0x0D) /* ENTER */
         {
-            return DEVICE_SETTINGS_PAGE;
-            // return SCSI_CONTROLLER_PAGE;
+            return UPGRADE_REPAIR_PAGE;
         }
     }
 
@@ -1553,6 +1643,22 @@ SelectPartitionPage(PINPUT_RECORD Ir)
 
         TempPartition = NULL;
         FormatState = Start;
+    }
+
+    if (RepairUpdateFlag)
+    {
+        /* Determine the selected installation disk & partition */
+        if (!SelectPartition(PartitionList,
+                             CurrentInstallation->DiskNumber,
+                             CurrentInstallation->PartitionNumber))
+        {
+            DPRINT1("Whaaaaaat?!?! ASSERT!\n");
+            ASSERT(FALSE);
+        }
+
+        DestinationDriveLetter = (WCHAR)PartitionList->CurrentPartition->DriveLetter;
+
+        return SELECT_FILE_SYSTEM_PAGE;
     }
 
     MUIDisplayPage(SELECT_PARTITION_PAGE);
@@ -3248,7 +3354,7 @@ BuildInstallPaths(PWSTR InstallDir,
  * Displays the InstallDirectoryPage.
  *
  * Next pages:
- *  PrepareCopyPage (As the direct result of InstallDirectoryPage1)
+ *  PrepareCopyPage
  *  QuitPage
  *
  * RETURNS
@@ -3281,6 +3387,20 @@ InstallDirectoryPage(PINPUT_RECORD Ir)
     DiskEntry = PartitionList->CurrentDisk;
     PartEntry = PartitionList->CurrentPartition;
 
+    if (RepairUpdateFlag)
+    {
+        if (!IsValidPath(CurrentInstallation->SystemRoot))
+        {
+            /* FIXME: Log the error? */
+            return QUIT_PAGE;
+        }
+
+        BuildInstallPaths(CurrentInstallation->SystemRoot,
+                          DiskEntry,
+                          PartEntry);
+
+        return PREPARE_COPY_PAGE;
+    }
     if (IsUnattendedSetup)
     {
         if (!IsValidPath(UnattendInstallationDirectory))
@@ -4547,6 +4667,13 @@ QuitPage(PINPUT_RECORD Ir)
 {
     MUIDisplayPage(QUIT_PAGE);
 
+    /* Destroy the NTOS installations list */
+    if (NtOsInstallsList != NULL)
+    {
+        DestroyGenericList(NtOsInstallsList, TRUE);
+        NtOsInstallsList = NULL;
+    }
+
     /* Destroy the partition list */
     if (PartitionList != NULL)
     {
@@ -4853,8 +4980,8 @@ RunUSetup(VOID)
                 break;
 
             /* Repair pages */
-            case REPAIR_INTRO_PAGE:
-                Page = RepairIntroPage(&Ir);
+            case UPGRADE_REPAIR_PAGE:
+                Page = UpgradeRepairPage(&Ir);
                 break;
 
             case SUCCESS_PAGE:
