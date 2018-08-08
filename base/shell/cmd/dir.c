@@ -1626,16 +1626,17 @@ ResolvePattern(
      * This is mandatory in order to use the correct file search criterion.
      *
      * One particular case is when the pattern specifies a dots-only directory
-     * followed by either the "." or ".." special directories. In this case the
-     * GetFullPathName() function may completely miss the dots-only directory.
+     * or a directory with trailing dots, followed by either the "." or ".."
+     * special directories. In this case the GetFullPathName() function may
+     * completely miss the directory.
      * An example is given by the pattern (C-string notation) "\\...\\." .
      * To cope with this problem we need to partially canonicalize the pattern
      * by collapsing any "." or ".." special directory that immediately follows
-     * a dots-only directory. We collapse in addition consecutive backslashes.
+     * the directory. We collapse in addition consecutive backslashes.
      *
-     * Finally, trailing dots are skipped by GetFullPathName(). Therefore
-     * a pattern that matches files with no extension, for example: "*." ,
-     * or: "dir\\noextfile." , are reduced to simply "*" or "dir\\noextfile",
+     * Finally, because trailing dots are skipped by GetFullPathName(),
+     * a pattern that matches files with no extension, for example: "*."
+     * or: "dir\\noextfile." are reduced to simply "*" or "dir\\noextfile",
      * that match files with extensions. Or, a pattern specifying a trailing
      * dots-only directory: "dir\\..." gets completely ignored and only the
      * full path to "dir" is returned.
@@ -1659,72 +1660,83 @@ ResolvePattern(
         *pNextDir++ = _T('\\');
 
     /*
-     * Find any dots-only directory and collapse any "." or ".." special
-     * directory that immediately follows it.
+     * Find any directory with trailing dots and collapse any "." or ".."
+     * special directory that immediately follows it.
      * Note that we just start looking after the first path separator. Indeed,
-     * dots-only directories that are not preceded by a path separator, and so
-     * appear first in the pattern, for example: "...\dir", or: "..." , are
-     * either correctly handled by GetFullPathName() because they are followed
-     * by a non-pathological directory, or because they are handled when we
-     * restore the trailing dots pattern piece in the next step.
+     * trailing-dots directories that are not preceded by a path separator,
+     * and so appear first in the pattern, for example: "...\dir", or: "..." ,
+     * are either correctly handled by GetFullPathName() because they are
+     * followed by a non-pathological directory, or because they are handled
+     * when we restore the trailing dots pattern piece during the next step.
      */
-    pNextDir = pszPattern;
-    while (pNextDir)
+    pCurDir = pszPattern;
+    //
+    // FIXME: Skip any UNC or other path prefix.
+    //
+    // FIXME! "dir .\...\yahoo\..\." should check "<current_dir>\..." .
+    //
+    while (pCurDir && *pCurDir)
     {
-        pCurDir = pNextDir;
+        /* Restart with the current directory */
+        pNextDir = pCurDir;
 
         /* Find the next path separator in the pattern */
         pNextDir = _tcschr(pNextDir, _T('\\'));
         if (!pNextDir)
             break;
 
-        /* Ignore the special "." and ".." directories that are correctly handled */
-        if ((pNextDir - pCurDir == 0) || IsDotDirectoryN(pCurDir, pNextDir - pCurDir))
+        /* Skip any consecutive separators */
+        for (ptr = pNextDir + 1; *ptr == _T('\\'); ++ptr) ;
+
+        /* Collapse consecutive separators, keeping only the first one */
+        if (ptr > pNextDir + 1)
+            memmove(pNextDir + 1, ptr, (_tcslen(ptr) + 1) * sizeof(TCHAR));
+
+        /* Skip the path separator */
+        ptr = pNextDir + 1;
+
+        /* Ignore any first separator and the special "." and ".." directories that are correctly handled */
+        if ((pNextDir - pCurDir <= 0) /*|| IsDotDirectoryN(pCurDir, pNextDir - pCurDir)*/)
         {
-            /* Found such a directory, ignore */
-            ++pNextDir;
+            /* Found such a directory, ignore and go to the next directory */
+            pCurDir = ptr;
             continue;
         }
 
-        /* Check whether this is a dots-only directory */
-        for (ptr = pCurDir; ptr < pNextDir; ++ptr)
-        {
-            if (*ptr != _T('.'))
-                break;
-        }
-        if (ptr < pNextDir)
-        {
-            /* Not a dots-only directory, ignore */
-            ++pNextDir;
-            continue;
-        }
-
-        /* Skip any consecutive backslashes */
-        for (ptr = pNextDir; *ptr == _T('\\'); ++ptr) ;
-
-        /* pCurDir is a dots-only directory, perform partial canonicalization */
+        /* Perform partial canonicalization */
 
         /* Remove any following "." directory */
         if (ptr[0] == _T('.') && (ptr[1] == _T('\\') || ptr[1] == 0))
         {
-            memmove(pNextDir, ptr + 1, (_tcslen(ptr + 1) + 1) * sizeof(TCHAR));
+            ++ptr;
+            memmove(pNextDir, ptr, (_tcslen(ptr) + 1) * sizeof(TCHAR));
         }
         /* Remove any following ".." directory */
         else if (ptr[0] == _T('.') && ptr[1] == _T('.') && (ptr[2] == _T('\\') || ptr[2] == 0))
         {
-            /* Skip any consecutive backslashes before the next directory */
-            for (ptr = ptr + 2; *ptr == _T('\\'); ++ptr) ;
+            /* Skip any consecutive separators before the next directory */
+            for (ptr += 2; *ptr == _T('\\'); ++ptr) ;
 
             memmove(pCurDir, ptr, (_tcslen(ptr) + 1) * sizeof(TCHAR));
-            pNextDir = pCurDir;
+
+            /* Rewind to the previous directory */
+            ptr = pCurDir;
+            if (ptr >= pszPattern + 2)
+            {
+                ASSERT(ptr[-1] == _T('\\'));
+                ptr -= 2;
+            }
+            for (; ptr > pszPattern && *ptr != _T('\\'); --ptr) ;
+            /* Skip any path separator */
+            if (*ptr == _T('\\'))
+                ++ptr;
+
+            pCurDir = ptr;
         }
         else
         {
-            ++pNextDir;
-
-            /* Collapse consecutive backslashes */
-            if (ptr > pNextDir)
-                memmove(pNextDir, ptr, (_tcslen(ptr) + 1) * sizeof(TCHAR));
+            /* Go to the next directory */
+            pCurDir = ptr;
         }
     }
 
@@ -1749,7 +1761,7 @@ ResolvePattern(
      * trailing dots that have been skipped by GetFullPathName().
      */
 
-    /* Find the last path separator in the original szPath */
+    /* Find the last path separator in the original pattern */
     pNextDir = _tcsrchr(pszPattern, _T('\\'));
     if (pNextDir)
     {
@@ -1949,15 +1961,27 @@ CommandDir(LPTSTR rest)
         /* Resolve the pattern */
         ResolvePattern(params[loop], ARRAYSIZE(szFullPath), szFullPath, &pszFilePart);
 
-        /* Print the header */
+        /* Truncate to directory name only */
         cPathSep = pszFilePart[-1];
-        pszFilePart[-1] = _T('\0'); /* Truncate to directory name only */
+        pszFilePart[-1] = _T('\0');
+
+        /* Verify that the parent directory does exist */
+        if (!IsExistingDirectory(szFullPath))
+        {
+            ConOutResPuts(STRING_ERROR_PATH_NOT_FOUND);
+            nErrorLevel = 1;
+            goto cleanup;
+        }
+
+        /* Print the header */
         if (ChangedVolume && !stFlags.bBareFormat &&
             !PrintDirectoryHeader(szFullPath, &stFlags))
         {
             nErrorLevel = 1;
             goto cleanup;
         }
+
+        /* Restore the file part */
         pszFilePart[-1] = cPathSep;
 
         /* Perform the actual directory listing */
