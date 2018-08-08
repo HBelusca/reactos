@@ -1,3 +1,4 @@
+PROJECT(CMD)
 
 add_definitions(-D_DEBUG_MEM)
 
