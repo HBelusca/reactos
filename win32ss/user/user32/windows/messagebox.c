@@ -33,6 +33,7 @@
 #include <ndk/exfuncs.h>
 
 #include <ntstrsafe.h>
+#include <strsafe.h>
 
 WINE_DEFAULT_DEBUG_CHANNEL(user32);
 
@@ -56,7 +57,6 @@ WINE_DEFAULT_DEBUG_CHANNEL(user32);
 #define MSGBOXEX_SPACING        (16)
 #define MSGBOXEX_BUTTONSPACING  (6)
 #define MSGBOXEX_MARGIN         (12)
-#define MSGBOXEX_MAXBTNSTR      (32)
 #define MSGBOXEX_MAXBTNS        (4)
 
 /* Rescale logical coordinates */
@@ -143,94 +143,147 @@ LoadAllocStringW(
 
 static VOID MessageBoxTextToClipboard(HWND DialogWindow)
 {
-    HWND hwndText;
     PMSGBOXDATA mbd;
-    int cchTotal, cchTitle, cchText, cchButton, i, n, cchBuffer;
-    LPWSTR pszBuffer, pszBufferPos, pMessageBoxText, pszTitle, pszText, pszButton;
-    WCHAR szButton[MSGBOXEX_MAXBTNSTR];
+    size_t cchTitle, cchText, cchButtons, cchTotal, cchBuffer;
+    DWORD i;
+    LPCWSTR pszText, pszButton;
+    LPWSTR pszBufferOrg, pszBuffer, pszBufferPos;
     HGLOBAL hGlobal;
 
-    static const WCHAR szLine[] = L"---------------------------\r\n";
+    static const LPCWSTR szLine = L"---------------------------\r\n";
 
     mbd = (PMSGBOXDATA)GetPropW(DialogWindow, L"ROS_MSGBOX");
-    hwndText = GetDlgItem(DialogWindow, MSGBOX_IDTEXT);
-    cchTitle = GetWindowTextLengthW(DialogWindow) + 1;
-    cchText = GetWindowTextLengthW(hwndText) + 1;
-
     if (!mbd)
-        return;
-
-    pMessageBoxText = (LPWSTR)RtlAllocateHeap(GetProcessHeap(), 0, (cchTitle + cchText) * sizeof(WCHAR));
-
-    if (pMessageBoxText == NULL)
     {
-        RtlFreeHeap(GetProcessHeap(), 0, pMessageBoxText);
+        ERR("Failed to retrieve MSGBOXDATA!\n");
         return;
     }
 
-    pszTitle = pMessageBoxText;
-    pszText = pMessageBoxText + cchTitle;
-
-    if (GetWindowTextW(DialogWindow, pszTitle, cchTitle) == 0 ||
-        GetWindowTextW(hwndText, pszText, cchText) == 0)
-    {
-        RtlFreeHeap(GetProcessHeap(), 0, pMessageBoxText);
-        return;
-    }
+    /*
+     * The format of the copied text is as follows:
+     *
+     * ---------------------------
+     * Title
+     * ---------------------------
+     * Text
+     * ---------------------------
+     * Button1   ...   ButtonN
+     * ---------------------------
+     */
 
     /*
      * Calculate the total buffer size.
      */
-    cchTotal = 6 + cchTitle + cchText + (lstrlenW(szLine) * 4) + (mbd->dwButtons * MSGBOXEX_MAXBTNSTR + 3);
 
-    hGlobal = GlobalAlloc(GHND, cchTotal * sizeof(WCHAR));
+    cchTitle = (mbd->mbp.lpszCaption ? wcslen(mbd->mbp.lpszCaption) : 0);
 
-    pszBuffer = (LPWSTR)GlobalLock(hGlobal);
-
-    if (pszBuffer == NULL)
+    /* Convert all single \n to \r\n in the text */
+    pszText = mbd->mbp.lpszText;
+    cchText = (pszText ? wcslen(pszText) : 0);
+    while (*pszText)
     {
-        RtlFreeHeap(GetProcessHeap(), 0, pMessageBoxText);
+        if (*pszText == L'\n' &&
+            (pszText == mbd->mbp.lpszText ||
+            (pszText  > mbd->mbp.lpszText && *(pszText-1) != L'\r')))
+        {
+            /* Count an additional character for the missing \r */
+            ++cchText;
+        }
+        ++pszText;
+    }
+
+    cchButtons = 0;
+    for (i = 0; i < mbd->dwButtons; i++)
+    {
+        /* Add the 3-space separation */
+        cchButtons += wcslen(mbd->ppszButtonText[i]) +
+                      ((i + 1 < mbd->dwButtons) ? 3 : 0);
+    }
+
+    cchTotal = (wcslen(szLine) * 4) +       /* Four separating lines with their \r\n */
+               cchTitle + 2 + cchText + 2 + /* Title and text with their \r\n */
+               cchButtons + 2 +             /* Buttons with 3-space separation and \r\n */
+               1;                           /* Terminating NULL */
+    cchBuffer = cchTotal;
+
+    TRACE("Allocating %lu characters\n", cchBuffer);
+    hGlobal = GlobalAlloc(GHND, cchBuffer * sizeof(WCHAR));
+    pszBufferOrg = pszBuffer = (LPWSTR)GlobalLock(hGlobal);
+    if (!pszBufferOrg)
+    {
+        ERR("GlobalLock() failed (error %lu)\n", GetLastError());
         GlobalFree(hGlobal);
         return;
     }
 
-    /*
-     * First format title and text.
-     * ------------------
-     * Title
-     * ------------------
-     * Text
-     * ------------------
-     */
-    cchBuffer = wsprintfW(pszBuffer, L"%s%s\r\n%s%s\r\n%s", szLine, pszTitle, szLine, pszText, szLine);
-    pszBufferPos = pszBuffer + cchBuffer;
+    StringCchPrintfExW(pszBuffer, cchBuffer,
+                       &pszBufferPos, &cchBuffer, STRSAFE_IGNORE_NULLS,
+                       L"%s%s\r\n%s",
+                       szLine, mbd->mbp.lpszCaption, szLine);
+    pszBuffer = pszBufferPos;
 
+    /* Copy lpszText and convert all \n's to \r\n's */
+    pszText = mbd->mbp.lpszText;
+    while (*pszText)
+    {
+        if (*pszText == L'\n' &&
+            (pszText == mbd->mbp.lpszText ||
+            (pszText  > mbd->mbp.lpszText && *(pszText-1) != L'\r')))
+        {
+            /* Add the missing \r */
+            *(pszBufferPos++) = L'\r';
+        }
+        *(pszBufferPos++) = *(pszText++);
+    }
+    cchBuffer -= (pszBufferPos - pszBuffer);
+    pszBuffer = pszBufferPos;
+
+    /* Add line separator */
+    StringCchPrintfExW(pszBuffer, cchBuffer,
+                       &pszBufferPos, &cchBuffer, 0,
+                       L"\r\n%s", szLine);
+    pszBuffer = pszBufferPos;
+
+    /* Copy the buttons */
     for (i = 0; i < mbd->dwButtons; i++)
     {
-        GetDlgItemTextW(DialogWindow, mbd->pidButton[i], szButton, MSGBOXEX_MAXBTNSTR);
-
-        cchButton = strlenW(szButton);
-        pszButton = szButton;
-
-        /* Skip '&' character. */
-        if (szButton[0] == '&')
+        pszButton = mbd->ppszButtonText[i];
+        while (*pszButton)
         {
-            pszButton = pszButton + 1;
-            cchButton = cchButton - 1;
+            /* Skip any keyboard accelerator '&' character */
+            if (*pszButton != L'&')
+                *(pszBufferPos++) = *pszButton;
+            ++pszButton;
         }
 
-        for (n = 0; n < cchButton; n++)
-            *(pszBufferPos++) = pszButton[n];
-
-        /* Add spaces. */
-        *(pszBufferPos++) = L' ';
-        *(pszBufferPos++) = L' ';
-        *(pszBufferPos++) = L' ';
+        /* Add the 3-space separation */
+        if (i + 1 < mbd->dwButtons)
+        {
+            *(pszBufferPos++) = L' ';
+            *(pszBufferPos++) = L' ';
+            *(pszBufferPos++) = L' ';
+        }
     }
+    cchBuffer -= (pszBufferPos - pszBuffer);
+    pszBuffer = pszBufferPos;
 
-    wsprintfW(pszBufferPos, L"\r\n%s", szLine);
+    /* Add line separator and NULL-terminate */
+    StringCchPrintfExW(pszBuffer, cchBuffer,
+                       &pszBufferPos, &cchBuffer, 0,
+                       L"\r\n%s", szLine);
+
+    TRACE("Buffer is now:\n\n%S\n\n", pszBufferOrg);
 
     GlobalUnlock(hGlobal);
+
+    /* Compactify the buffer if it has been calculated too large */
+    if (cchBuffer > 0)
+    {
+        /* NOTE: Both cchTotal and cchBuffer include the NULL terminator */
+        HGLOBAL hTemp = GlobalReAlloc(hGlobal, (cchTotal - cchBuffer + 1) * sizeof(WCHAR), 0);
+        TRACE("Trying to reallocate buffer\n");
+        if (hTemp) hGlobal = hTemp;
+    }
 
     if (OpenClipboard(DialogWindow))
     {
@@ -242,7 +295,6 @@ static VOID MessageBoxTextToClipboard(HWND DialogWindow)
     {
         GlobalFree(hGlobal);
     }
-    RtlFreeHeap(GetProcessHeap(), 0, pMessageBoxText);
 }
 
 static INT_PTR CALLBACK MessageBoxProc(
