@@ -384,4 +384,15 @@ GetNextUncheckedPartition(
     OUT PDISKENTRY *pDiskEntry OPTIONAL,
     OUT PPARTENTRY *pPartEntry);
 
+
+//
+// Bootsector routines
+//
+
+NTSTATUS
+InstallMbrBootCode(
+    IN PCWSTR SrcPath,
+    IN HANDLE DstPath,
+    IN HANDLE DiskHandle);
+
 /* EOF */
