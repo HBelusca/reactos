@@ -4149,4 +4149,73 @@ GetNextUncheckedPartition(
     return FALSE;
 }
 
+
+//
+// Bootsector routines
+//
+
+NTSTATUS
+InstallMbrBootCode(
+    IN PCWSTR SrcPath,      // MBR source file (on the installation medium)
+    IN HANDLE DstPath,      // Where to save the bootsector built from the source + disk information
+    IN HANDLE DiskHandle)   // Disk holding the (old) MBR information
+{
+    NTSTATUS Status;
+    UNICODE_STRING Name;
+    IO_STATUS_BLOCK IoStatusBlock;
+    LARGE_INTEGER FileOffset;
+    BOOTCODE OrigBootSector = {0};
+    BOOTCODE NewBootSector  = {0};
+
+C_ASSERT(sizeof(PARTITION_SECTOR) == SECTORSIZE);
+
+    /* Allocate and read the current original MBR bootsector */
+    Status = ReadBootCodeByHandle(&OrigBootSector,
+                                  DiskHandle,
+                                  sizeof(PARTITION_SECTOR));
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    /* Allocate and read the new bootsector from SrcPath */
+    RtlInitUnicodeString(&Name, SrcPath);
+    Status = ReadBootCodeFromFile(&NewBootSector,
+                                  &Name,
+                                  sizeof(PARTITION_SECTOR));
+    if (!NT_SUCCESS(Status))
+    {
+        FreeBootCode(&OrigBootSector);
+        return Status;
+    }
+
+    /*
+     * Copy the disk signature, the reserved fields and
+     * the partition table from the old MBR to the new one.
+     */
+    RtlCopyMemory(&((PPARTITION_SECTOR)NewBootSector.BootCode)->Signature,
+                  &((PPARTITION_SECTOR)OrigBootSector.BootCode)->Signature,
+                  sizeof(PARTITION_SECTOR) -
+                  FIELD_OFFSET(PARTITION_SECTOR, Signature)
+                  /* Length of partition table */);
+
+    /* Free the original bootsector */
+    FreeBootCode(&OrigBootSector);
+
+    /* Write the new bootsector to DstPath */
+    FileOffset.QuadPart = 0ULL;
+    Status = NtWriteFile(DstPath,
+                         NULL,
+                         NULL,
+                         NULL,
+                         &IoStatusBlock,
+                         NewBootSector.BootCode,
+                         NewBootSector.Length,
+                         &FileOffset,
+                         NULL);
+
+    /* Free the new bootsector */
+    FreeBootCode(&NewBootSector);
+
+    return Status;
+}
+
 /* EOF */
