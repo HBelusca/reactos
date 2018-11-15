@@ -753,7 +753,7 @@ VfatMount(
     ReadVolumeLabel(DeviceExt, 0, vfatVolumeIsFatX(DeviceExt), &VolumeLabelU);
     Vpb->VolumeLabelLength = VolumeLabelU.Length;
 
-    /* read dirty bit status */
+    /* Read dirty bit status */
     Status = GetDirtyStatus(DeviceExt, &Dirty);
     if (NT_SUCCESS(Status))
     {
@@ -762,15 +762,15 @@ VfatMount(
         {
             /* Mark it dirty now! */
             SetDirtyStatus(DeviceExt, TRUE);
-            VolumeFcb->Flags |= VCB_CLEAR_DIRTY;
+            SetFlag(VolumeFcb->Flags, VCB_CLEAR_DIRTY);
         }
         else
         {
             DPRINT1("Mounting a dirty volume\n");
         }
     }
+    SetFlag(VolumeFcb->Flags, VCB_IS_DIRTY);
 
-    VolumeFcb->Flags |= VCB_IS_DIRTY;
     if (BooleanFlagOn(Vpb->RealDevice->Flags, DO_SYSTEM_BOOT_PARTITION))
     {
         SetFlag(DeviceExt->Flags, VCB_IS_SYS_OR_HAS_PAGE);
@@ -1074,8 +1074,7 @@ VfatMarkVolumeDirty(
     {
         Status = SetDirtyStatus(DeviceExt, TRUE);
     }
-
-    DeviceExt->VolumeFcb->Flags &= ~VCB_CLEAR_DIRTY;
+    ClearFlag(DeviceExt->VolumeFcb->Flags, VCB_CLEAR_DIRTY);
 
     return Status;
 }
@@ -1300,7 +1299,7 @@ VfatDismountVolume(
     {
         /* Drop the dirty bit */
         if (NT_SUCCESS(SetDirtyStatus(DeviceExt, FALSE)))
-            DeviceExt->VolumeFcb->Flags &= ~VCB_IS_DIRTY;
+            ClearFlag(DeviceExt->VolumeFcb->Flags, VCB_IS_DIRTY);
     }
 
     /* Rebrowse the FCB in order to free them now */
