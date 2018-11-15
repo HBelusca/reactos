@@ -83,7 +83,7 @@ VfatShutdown(
             {
                 /* Drop the dirty bit */
                 if (NT_SUCCESS(SetDirtyStatus(DeviceExt, FALSE)))
-                    DeviceExt->VolumeFcb->Flags &= ~VCB_IS_DIRTY;
+                    ClearFlag(DeviceExt->VolumeFcb->Flags, VCB_IS_DIRTY);
             }
 
             if (NT_SUCCESS(Status))
