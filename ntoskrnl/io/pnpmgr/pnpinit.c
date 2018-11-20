@@ -9,6 +9,8 @@
 /* INCLUDES *******************************************************************/
 
 #include <ntoskrnl.h>
+#include "../pnpio.h"
+
 #define NDEBUG
 #include <debug.h>
 
@@ -33,6 +35,13 @@ NTSTATUS NTAPI IopMemInitialize(VOID);
 NTSTATUS NTAPI IopDmaInitialize(VOID);
 NTSTATUS NTAPI IopIrqInitialize(VOID);
 NTSTATUS NTAPI IopBusNumberInitialize(VOID);
+
+KSPIN_LOCK IopPnPSpinLock;
+LIST_ENTRY IopPnpEnumerationRequestList;
+KEVENT PiEnumerationLock;
+
+ERESOURCE PiEngineLock;
+ERESOURCE PiDeviceTreeLock;
 
 /* FUNCTIONS ******************************************************************/
 
@@ -294,10 +303,15 @@ IopInitializePlugPlayServices(VOID)
     PDEVICE_OBJECT Pdo;
 
     /* Initialize locks and such */
+    KeInitializeSpinLock(&IopPnPSpinLock);
     KeInitializeSpinLock(&IopDeviceTreeLock);
     KeInitializeSpinLock(&IopDeviceActionLock);
     InitializeListHead(&IopDeviceActionRequestList);
+    // InitializeListHead(&IopPnpEnumerationRequestList);
     KeInitializeEvent(&PiEnumerationFinished, NotificationEvent, TRUE);
+    // KeInitializeEvent(&PiEnumerationLock, NotificationEvent, TRUE);
+    ExInitializeResourceLite(&PiEngineLock);
+    ExInitializeResourceLite(&PiDeviceTreeLock);
 
     /* Get the default interface */
     PnpDefaultInterfaceType = IopDetermineDefaultInterfaceType();
