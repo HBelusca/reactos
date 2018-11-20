@@ -1592,6 +1592,17 @@ USBH_PdoQueryId(IN PUSBHUB_PORT_PDO_EXTENSION PortExtension,
                                      0,
                                      L"USB\\Vid_0000&Pid_0000");
             }
+            else if (USBH_IsVidPidFromBlackList(DeviceDescriptor->idVendor,
+                                                DeviceDescriptor->idProduct,
+                                                DeviceDescriptor->bcdDevice))
+            {
+                RtlStringCbPrintfExW(Buffer,
+                                     Remaining,
+                                     NULL,
+                                     &Remaining,
+                                     0,
+                                     L"USB\\Vid_0000&Pid_0000");
+            }
             else
             {
                 RtlStringCbPrintfExW(Buffer,
@@ -1624,6 +1635,17 @@ USBH_PdoQueryId(IN PUSBHUB_PORT_PDO_EXTENSION PortExtension,
             {
                 DPRINT("USBH_PdoQueryId: USBHUB_PDO_FLAG_INIT_PORT_FAILED\n");
 
+                RtlStringCbPrintfExW(Buffer,
+                                     Remaining,
+                                     NULL,
+                                     &Remaining,
+                                     0,
+                                     L"USB\\UNKNOWN");
+            }
+            else if (USBH_IsVidPidFromBlackList(DeviceDescriptor->idVendor,
+                                                DeviceDescriptor->idProduct,
+                                                DeviceDescriptor->bcdDevice))
+            {
                 RtlStringCbPrintfExW(Buffer,
                                      Remaining,
                                      NULL,
@@ -1685,6 +1707,17 @@ USBH_PdoQueryId(IN PUSBHUB_PORT_PDO_EXTENSION PortExtension,
             {
                 DPRINT("USBH_PdoQueryId: USBHUB_PDO_FLAG_INIT_PORT_FAILED\n");
 
+                RtlStringCbPrintfExW(Buffer,
+                                     Remaining,
+                                     NULL,
+                                     &Remaining,
+                                     0,
+                                     L"USB\\UNKNOWN");
+            }
+            else if (USBH_IsVidPidFromBlackList(DeviceDescriptor->idVendor,
+                                                DeviceDescriptor->idProduct,
+                                                DeviceDescriptor->bcdDevice))
+            {
                 RtlStringCbPrintfExW(Buffer,
                                      Remaining,
                                      NULL,
