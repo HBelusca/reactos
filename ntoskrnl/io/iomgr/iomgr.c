@@ -566,9 +566,6 @@ IoInitSystem(IN PLOADER_PARAMETER_BLOCK LoaderBlock)
         IopStartRamdisk(LoaderBlock);
     }
 
-    /* No one should need loader block any longer */
-    IopLoaderBlock = NULL;
-
     /* Create ARC names for boot devices */
     Status = IopCreateArcNames(LoaderBlock);
     if (!NT_SUCCESS(Status))
@@ -583,6 +580,9 @@ IoInitSystem(IN PLOADER_PARAMETER_BLOCK LoaderBlock)
         DPRINT1("IopMarkBootPartition failed!\n");
         return FALSE;
     }
+
+    /* No one should need loader block any longer */
+    IopLoaderBlock = NULL;
 
     /* The disk subsystem is initialized here and the SystemRoot is set too.
      * We can finally load other drivers from the boot volume. */
