@@ -582,6 +582,21 @@ PiAttachFilterDrivers(
     return Status;
 }
 
+static
+NTSTATUS
+SetClassGuidValueKey(
+    _In_ HANDLE ClassGuidHandle,
+    _In_ PUNICODE_STRING KeyName,
+    _In_ PUNICODE_STRING Key)
+{
+    return ZwSetValueKey(ClassGuidHandle,
+                         KeyName,
+                         0,
+                         REG_SZ,
+                         Key->Buffer,
+                         Key->Length + sizeof(UNICODE_NULL));
+}
+
 /**
  * @brief      Loads all drivers for a device node (actual service and filters)
  *             and calls their AddDevice routine
@@ -603,6 +618,8 @@ PiCallDriverAddDevice(
     static UNICODE_STRING ccsControlClass =
     RTL_CONSTANT_STRING(L"\\Registry\\Machine\\System\\CurrentControlSet\\Control\\Class");
     PKEY_VALUE_FULL_INFORMATION kvInfo = NULL;
+    UNICODE_STRING ServiceName;
+    LONG DevType = -1;
 
     PAGED_CODE();
 
@@ -623,6 +640,236 @@ PiCallDriverAddDevice(
                 &DeviceNode->InstancePath, Status);
         return Status;
     }
+
+
+    RtlInitUnicodeString(&ServiceName, L"i8042prt");
+
+    if (ExpInTextModeSetup)
+    {
+        if (wcsstr(DeviceNode->InstancePath.Buffer, L"PNP0303"))
+        {
+            DevType = 1; // keyboard ps\2
+        }
+        else if (wcsstr(DeviceNode->InstancePath.Buffer, L"PNP0F03"))
+        {
+            DevType = 2; // mouse ps\2
+        }
+        else if (wcsstr(DeviceNode->ServiceName.Buffer, L"kbdhid"))
+        {
+            DevType = 3; // usb keyboard
+        }
+        else if (wcsstr(DeviceNode->ServiceName.Buffer, L"mouhid"))
+        {
+            DevType = 4; // usb mouse
+        }
+    }
+
+    if (DevType > 0)
+    {
+        UNICODE_STRING KeyName = RTL_CONSTANT_STRING(L"ClassGUID");
+        UNICODE_STRING Key;
+        ULONG Disposition = 0;
+        HANDLE ClassHandle=NULL;
+        HANDLE ClassGuidHandle=NULL;
+
+        DPRINT1("PiCallDriverAddDevice: InstancePath -'%wZ'\n", &DeviceNode->InstancePath);
+        DPRINT1("PiCallDriverAddDevice: ServiceName -'%wZ'\n", &DeviceNode->ServiceName);
+
+        /* Create subkey ClassGUID for Device Instance key */
+        if (DevType == 1 || DevType == 3)
+        {
+            RtlInitUnicodeString(&ClassGuid, L"{4D36E96B-E325-11CE-BFC1-08002BE10318}\0");
+        }
+        else if (DevType == 2 || DevType == 4)
+        {
+            RtlInitUnicodeString(&ClassGuid, L"{4D36E96F-E325-11CE-BFC1-08002BE10318}\0");
+        }
+
+        Status = ZwSetValueKey(SubKey,
+                               &KeyName,
+                               0,
+                               REG_SZ,
+                               ClassGuid.Buffer,
+                               ClassGuid.Length + sizeof(UNICODE_NULL));
+
+        if (!NT_SUCCESS(Status))
+        {
+            DPRINT("PiCallDriverAddDevice: Status -'%X'\n", Status);
+            goto Cleanup;
+        }
+
+        /* Open the key */
+        Status = IopOpenRegistryKeyEx(&ControlKey,
+                                      NULL,
+                                      &ControlClass,
+                                      KEY_READ);
+
+        if (!NT_SUCCESS(Status))
+        {
+            /* No class key */
+            DPRINT1("PiCallDriverAddDevice: No key for '%wZ'\n", &ControlClass);
+
+            /* Create class key */
+            Status = IopCreateRegistryKeyEx(&ClassHandle,
+                                            NULL,
+                                            &ControlClass,
+                                            KEY_ALL_ACCESS,
+                                            REG_OPTION_NON_VOLATILE,
+                                            &Disposition);
+            if (!NT_SUCCESS(Status))
+            {
+                DPRINT("PiCallDriverAddDevice: Status -'%X'\n", Status);
+                goto Cleanup;
+            }
+
+            if (DevType == 1 || DevType == 3)
+            {
+                RtlInitUnicodeString(&ClassGuid, L"\\Registry\\Machine\\System\\CurrentControlSet\\Control\\Class\\{4D36E96B-E325-11CE-BFC1-08002BE10318}");
+            }
+            else if (DevType == 2 || DevType == 4)
+            {
+                RtlInitUnicodeString(&ClassGuid, L"\\Registry\\Machine\\System\\CurrentControlSet\\Control\\Class\\{4D36E96F-E325-11CE-BFC1-08002BE10318}");
+            }
+
+            Status = IopCreateRegistryKeyEx(&ClassGuidHandle,
+                                            NULL,
+                                            &ClassGuid,
+                                            KEY_ALL_ACCESS,
+                                            REG_OPTION_NON_VOLATILE,
+                                            &Disposition);
+            if (!NT_SUCCESS(Status))
+            {
+                DPRINT("PiCallDriverAddDevice: Status -'%X'\n", Status);
+                goto Cleanup;
+            }
+
+            if (DevType == 1 || DevType == 3)
+            {
+                //HKLM,"SYSTEM\CurrentControlSet\Control\Class\{4D36E96B-E325-11CE-BFC1-08002BE10318}",,0x00000000,"Keyboard"
+                RtlInitUnicodeString(&KeyName, L"");
+                RtlInitUnicodeString(&Key, L"Keyboard");
+                Status = SetClassGuidValueKey(ClassGuidHandle, &KeyName, &Key);
+                if (!NT_SUCCESS(Status))
+                {
+                    DPRINT("PiCallDriverAddDevice: Status -'%X'\n", Status);
+                    goto Cleanup;
+                }
+
+                //HKLM,"SYSTEM\CurrentControlSet\Control\Class\{4D36E96B-E325-11CE-BFC1-08002BE10318}","Class",0x00000000,"Keyboard"
+                RtlInitUnicodeString(&KeyName, L"Class");
+                RtlInitUnicodeString(&Key, L"Keyboard");
+                Status = SetClassGuidValueKey(ClassGuidHandle, &KeyName, &Key);
+                if (!NT_SUCCESS(Status))
+                {
+                    DPRINT("PiCallDriverAddDevice: Status -'%X'\n", Status);
+                    goto Cleanup;
+                }
+
+                //HKLM,"SYSTEM\CurrentControlSet\Control\Class\{4D36E96B-E325-11CE-BFC1-08002BE10318}","Icon",0x00000000,"-3"
+                RtlInitUnicodeString(&KeyName, L"Icon");
+                RtlInitUnicodeString(&Key, L"-3");
+                Status = SetClassGuidValueKey(ClassGuidHandle, &KeyName, &Key);
+                if (!NT_SUCCESS(Status))
+                {
+                    DPRINT("PiCallDriverAddDevice: Status -'%X'\n", Status);
+                    goto Cleanup;
+                }
+
+                //HKLM,"SYSTEM\CurrentControlSet\Control\Class\{4D36E96B-E325-11CE-BFC1-08002BE10318}","Installer32",0x00000000,"SysSetup.Dll,KeyboardClassInstaller"
+                RtlInitUnicodeString(&KeyName, L"Installer32");
+                RtlInitUnicodeString(&Key, L"SysSetup.Dll,KeyboardClassInstaller");
+                Status = SetClassGuidValueKey(ClassGuidHandle, &KeyName, &Key);
+                if (!NT_SUCCESS(Status))
+                {
+                    DPRINT("PiCallDriverAddDevice: Status -'%X'\n", Status);
+                    goto Cleanup;
+                }
+
+                //HKLM,"SYSTEM\CurrentControlSet\Control\Class\{4D36E96B-E325-11CE-BFC1-08002BE10318}","NoInstallClass",0x00000000,"1"
+                RtlInitUnicodeString(&KeyName, L"NoInstallClass");
+                RtlInitUnicodeString(&Key, L"1");
+                Status = SetClassGuidValueKey(ClassGuidHandle, &KeyName, &Key);
+                if (!NT_SUCCESS(Status))
+                {
+                    DPRINT("PiCallDriverAddDevice: Status -'%X'\n", Status);
+                    goto Cleanup;
+                }
+
+                //HKLM,"SYSTEM\CurrentControlSet\Control\Class\{4D36E96B-E325-11CE-BFC1-08002BE10318}","UpperFilters",0x00010000,"kbdclass"
+                RtlInitUnicodeString(&KeyName, L"UpperFilters");
+                RtlInitUnicodeString(&Key, L"kbdclass");
+                Status = SetClassGuidValueKey(ClassGuidHandle, &KeyName, &Key);
+                if (!NT_SUCCESS(Status))
+                {
+                    DPRINT("PiCallDriverAddDevice: Status -'%X'\n", Status);
+                    goto Cleanup;
+                }
+            }
+            else if (DevType == 2 || DevType == 4)
+            {
+                //HKLM,"SYSTEM\CurrentControlSet\Control\Class\{4D36E96F-E325-11CE-BFC1-08002BE10318}",,0x00000000,"Mouse"
+                RtlInitUnicodeString(&KeyName, L"");
+                RtlInitUnicodeString(&Key, L"Mouse");
+                Status = SetClassGuidValueKey(ClassGuidHandle, &KeyName, &Key);
+                if (!NT_SUCCESS(Status))
+                {
+                    DPRINT("PiCallDriverAddDevice: Status -'%X'\n", Status);
+                    goto Cleanup;
+                }
+
+                //HKLM,"SYSTEM\CurrentControlSet\Control\Class\{4D36E96F-E325-11CE-BFC1-08002BE10318}","Class",0x00000000,"Mouse"
+                RtlInitUnicodeString(&KeyName, L"Class");
+                RtlInitUnicodeString(&Key, L"Mouse");
+                Status = SetClassGuidValueKey(ClassGuidHandle, &KeyName, &Key);
+                if (!NT_SUCCESS(Status))
+                {
+                    DPRINT("PiCallDriverAddDevice: Status -'%X'\n", Status);
+                    goto Cleanup;
+                }
+
+                //HKLM,"SYSTEM\CurrentControlSet\Control\Class\{4D36E96F-E325-11CE-BFC1-08002BE10318}","Icon",0x00000000,"-2"
+                RtlInitUnicodeString(&KeyName, L"Icon");
+                RtlInitUnicodeString(&Key, L"-2");
+                Status = SetClassGuidValueKey(ClassGuidHandle, &KeyName, &Key);
+                if (!NT_SUCCESS(Status))
+                {
+                    DPRINT("PiCallDriverAddDevice: Status -'%X'\n", Status);
+                    goto Cleanup;
+                }
+
+                //HKLM,"SYSTEM\CurrentControlSet\Control\Class\{4D36E96F-E325-11CE-BFC1-08002BE10318}","Installer32",0x00000000,"SysSetup.Dll,MouseClassInstaller"
+                RtlInitUnicodeString(&KeyName, L"Installer32");
+                RtlInitUnicodeString(&Key, L"SysSetup.Dll,MouseClassInstaller");
+                Status = SetClassGuidValueKey(ClassGuidHandle, &KeyName, &Key);
+                if (!NT_SUCCESS(Status))
+                {
+                    DPRINT("PiCallDriverAddDevice: Status -'%X'\n", Status);
+                    goto Cleanup;
+                }
+
+                //HKLM,"SYSTEM\CurrentControlSet\Control\Class\{4D36E96F-E325-11CE-BFC1-08002BE10318}","NoInstallClass",0x00000000,"1"
+                RtlInitUnicodeString(&KeyName, L"NoInstallClass");
+                RtlInitUnicodeString(&Key, L"1");
+                Status = SetClassGuidValueKey(ClassGuidHandle, &KeyName, &Key);
+                if (!NT_SUCCESS(Status))
+                {
+                    DPRINT("PiCallDriverAddDevice: Status -'%X'\n", Status);
+                    goto Cleanup;
+                }
+
+                //HKLM,"SYSTEM\CurrentControlSet\Control\Class\{4D36E96F-E325-11CE-BFC1-08002BE10318}","UpperFilters",0x00010000,"mouclass"
+                RtlInitUnicodeString(&KeyName, L"UpperFilters");
+                RtlInitUnicodeString(&Key, L"mouclass");
+                Status = SetClassGuidValueKey(ClassGuidHandle, &KeyName, &Key);
+                if (!NT_SUCCESS(Status))
+                {
+                    DPRINT("PiCallDriverAddDevice: Status -'%X'\n", Status);
+                    goto Cleanup;
+                }
+            }
+        }
+    }
+
 
     // try to get the class GUID of an instance and its registry key
     Status = IopGetRegistryValue(SubKey, REGSTR_VAL_CLASSGUID, &kvInfo);
