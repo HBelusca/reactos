@@ -2055,9 +2055,11 @@ xHalIoReadPartitionTable(IN PDEVICE_OBJECT DeviceObject,
                     UInt32x32To64(GET_PARTITION_LENGTH(PartitionDescriptor),
                                   SectorSize);
 
+#if 1
                 /* Get the partition number */
                 /* FIXME: REACTOS HACK -- Needed for xHalIoAssignDriveLetters() */
                 PartitionInfo->PartitionNumber = (!IsContainerPartition(PartitionType)) ? i + 1 : 0;
+#endif
             }
             else
             {
@@ -2068,8 +2070,10 @@ xHalIoReadPartitionTable(IN PDEVICE_OBJECT DeviceObject,
                 PartitionInfo->PartitionLength.QuadPart = 0;
                 PartitionInfo->HiddenSectors = 0;
 
+#if 1
                 /* FIXME: REACTOS HACK -- Needed for xHalIoAssignDriveLetters() */
                 PartitionInfo->PartitionNumber = 0;
+#endif
             }
         }
 
@@ -2162,8 +2166,10 @@ xHalIoReadPartitionTable(IN PDEVICE_OBJECT DeviceObject,
                 PartitionInfo->StartingOffset.QuadPart = 0;
                 PartitionInfo->PartitionLength = DiskGeometryEx.DiskSize;
 
+#if 1
                 /* FIXME: REACTOS HACK -- Needed for xHalIoAssignDriveLetters() */
                 PartitionInfo->PartitionNumber = 0;
+#endif
 
                 /* Set the signature and set the count back to 0 */
                 (*PartitionBuffer)->Signature = 1;
@@ -2536,6 +2542,9 @@ xHalIoWritePartitionTable(IN PDEVICE_OBJECT DeviceObject,
             PartitionTable = &DiskLayout->PartitionTable[i];
             for (j = 0; j < NUM_PARTITION_TABLE_ENTRIES; j++)
             {
+                // if (i * NUM_PARTITION_TABLE_ENTRIES + j >= xxxxxxx) ---> xxxxxxx - i*NUM_PARTITION_TABLE_ENTRIES > j : continue the loop
+                    // break;
+
                 /* Get the current entry and type */
                 TableEntry = &PartitionTable->PartitionEntry[j];
                 PartitionType = TableEntry->PartitionType;
