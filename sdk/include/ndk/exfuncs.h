@@ -138,7 +138,7 @@ NTAPI
 NtAddAtom(
     _In_ PWSTR AtomName,
     _In_ ULONG AtomNameLength,
-    _Inout_ PRTL_ATOM Atom
+    _Out_opt_ PRTL_ATOM Atom
 );
 
 NTSYSCALLAPI
@@ -246,8 +246,8 @@ NTSYSCALLAPI
 NTSTATUS
 NTAPI
 NtFindAtom(
-    _In_  PWSTR AtomName,
-    _In_  ULONG AtomNameLength,
+    _In_ PWSTR AtomName,
+    _In_ ULONG AtomNameLength,
     _Out_opt_ PRTL_ATOM Atom
 );
 
