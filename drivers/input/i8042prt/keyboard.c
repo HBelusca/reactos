@@ -344,8 +344,10 @@ i8042KbdDpcRoutine(
 	}
 
 	i8042PacketDpc(PortDeviceExtension);
+
 	if (!DeviceExtension->KeyComplete)
 		return;
+
 	/* We got the interrupt as it was being enabled, too bad */
 	if (!PortDeviceExtension->HighestDIRQLInterrupt)
 		return;

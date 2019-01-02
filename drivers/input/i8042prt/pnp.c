@@ -309,6 +309,7 @@ i8042ConnectKeyboardInterrupt(
 
     if (DirqlMax == PortDeviceExtension->KeyboardInterrupt.Dirql)
         PortDeviceExtension->HighestDIRQLInterrupt = PortDeviceExtension->KeyboardInterrupt.Object;
+
     PortDeviceExtension->Flags |= KEYBOARD_INITIALIZED;
     return STATUS_SUCCESS;
 }
@@ -482,6 +483,7 @@ StartProcedure(
         }
 
         /* Start the mouse */
+        ASSERT(DeviceExtension->HighestDIRQLInterrupt);
         Irql = KeAcquireInterruptSpinLock(DeviceExtension->HighestDIRQLInterrupt);
         /* HACK: the mouse has already been reset in i8042DetectMouse. This second
            reset prevents some touchpads/mice from working (Dell D531, D600).
