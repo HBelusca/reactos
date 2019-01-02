@@ -336,6 +336,8 @@ i8042StartPacket(
 	KIRQL Irql;
 	NTSTATUS Status;
 
+	ASSERT(DeviceExtension->HighestDIRQLInterrupt);
+
 	Irql = KeAcquireInterruptSpinLock(DeviceExtension->HighestDIRQLInterrupt);
 
 	if (DeviceExtension->Packet.State != Idle)

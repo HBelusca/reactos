@@ -314,6 +314,10 @@ i8042MouDpcRoutine(
 	if (!DeviceExtension->MouseComplete)
 		return;
 
+	/* We got the interrupt as it was being enabled, too bad */
+	if (!PortDeviceExtension->HighestDIRQLInterrupt)
+		return;
+
 	Irql = KeAcquireInterruptSpinLock(PortDeviceExtension->HighestDIRQLInterrupt);
 
 	DeviceExtension->MouseComplete = FALSE;
@@ -365,6 +369,10 @@ i8042DpcRoutineMouseTimeout(
 	__analysis_assume(DeferredContext != NULL);
 	DeviceExtension = DeferredContext;
 	PortDeviceExtension = DeviceExtension->Common.PortDeviceExtension;
+
+	/* We got the interrupt as it was being enabled, too bad */
+	if (!PortDeviceExtension->HighestDIRQLInterrupt)
+		return;
 
 	Irql = KeAcquireInterruptSpinLock(PortDeviceExtension->HighestDIRQLInterrupt);
 
