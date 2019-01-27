@@ -139,16 +139,19 @@ ProbeArrayForWrite(IN OUT PVOID ArrayPtr,
 
 static __inline
 NTSTATUS
-ProbeAndCaptureUnicodeString(OUT PUNICODE_STRING Dest,
-                             IN KPROCESSOR_MODE CurrentMode,
-                             IN const UNICODE_STRING *UnsafeSrc)
+ProbeAndCaptureUnicodeStringEx(
+    _Out_ PUNICODE_STRING Dest,
+    _In_  KPROCESSOR_MODE CurrentMode,
+    _In_  const UNICODE_STRING *UnsafeSrc,
+    _In_  POOL_TYPE PoolType,
+    _In_  ULONG Tag)
 {
     NTSTATUS Status = STATUS_SUCCESS;
     PWCHAR Buffer = NULL;
     ASSERT(Dest != NULL);
 
     /* Probe the structure and buffer*/
-    if(CurrentMode != KernelMode)
+    if (CurrentMode != KernelMode)
     {
         _SEH2_TRY
         {
@@ -158,16 +161,16 @@ ProbeAndCaptureUnicodeString(OUT PUNICODE_STRING Dest,
 #else
             *Dest = ProbeForReadUnicodeString(UnsafeSrc);
 #endif
-            if(Dest->Buffer != NULL)
+            if (Dest->Buffer != NULL)
             {
                 if (Dest->Length != 0)
                 {
                     ProbeForRead(Dest->Buffer, Dest->Length, sizeof(WCHAR));
 
                     /* Allocate space for the buffer */
-                    Buffer = (PWCHAR)ExAllocatePoolWithTag(PagedPool,
+                    Buffer = (PWCHAR)ExAllocatePoolWithTag(PoolType,
                                                    Dest->Length + sizeof(WCHAR),
-                                                   'RTSU');
+                                                   Tag);
                     if (Buffer == NULL)
                     {
                         Status = STATUS_INSUFFICIENT_RESOURCES;
@@ -212,7 +215,7 @@ ProbeAndCaptureUnicodeString(OUT PUNICODE_STRING Dest,
             /* Free allocated resources and zero the destination string */
             if (Buffer != NULL)
             {
-                ExFreePoolWithTag(Buffer, 'RTSU');
+                ExFreePoolWithTag(Buffer, Tag);
             }
             Dest->Length = 0;
             Dest->MaximumLength = 0;
@@ -235,18 +238,43 @@ ProbeAndCaptureUnicodeString(OUT PUNICODE_STRING Dest,
 }
 
 static __inline
-VOID
-ReleaseCapturedUnicodeString(IN PUNICODE_STRING CapturedString,
-                             IN KPROCESSOR_MODE CurrentMode)
+NTSTATUS
+ProbeAndCaptureUnicodeString(
+    _Out_ PUNICODE_STRING Dest,
+    _In_  KPROCESSOR_MODE CurrentMode,
+    _In_  const UNICODE_STRING *UnsafeSrc)
 {
-    if(CurrentMode != KernelMode && CapturedString->Buffer != NULL)
+    return ProbeAndCaptureUnicodeStringEx(Dest,
+                                          CurrentMode,
+                                          UnsafeSrc,
+                                          PagedPool,
+                                          'RTSU');
+}
+
+static __inline
+VOID
+ReleaseCapturedUnicodeStringEx(
+    _In_ PUNICODE_STRING CapturedString,
+    _In_ KPROCESSOR_MODE CurrentMode,
+    _In_ ULONG Tag)
+{
+    if (CurrentMode != KernelMode && CapturedString->Buffer != NULL)
     {
-        ExFreePoolWithTag(CapturedString->Buffer, 'RTSU');
+        ExFreePoolWithTag(CapturedString->Buffer, Tag);
     }
 
     CapturedString->Length = 0;
     CapturedString->MaximumLength = 0;
     CapturedString->Buffer = NULL;
+}
+
+static __inline
+VOID
+ReleaseCapturedUnicodeString(
+    _In_ PUNICODE_STRING CapturedString,
+    _In_ KPROCESSOR_MODE CurrentMode)
+{
+    ReleaseCapturedUnicodeStringEx(CapturedString, CurrentMode, 'RTSU');
 }
 
 #endif /* INCLUDE_REACTOS_CAPTURE_H */
