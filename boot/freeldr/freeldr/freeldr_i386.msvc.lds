@@ -44,6 +44,47 @@
 
 #include <asm.inc>
 
+
+#ifdef _M_AMD64
+_TEXT SEGMENT 'CODE'
+
+/*
+__declspec(noreturn) __forceinline
+void __fastfail(unsigned int Code) // __cdecl
+*/
+PUBLIC __fastfail
+__fastfail:
+
+#ifdef _M_IX86 // _X86_
+    push ebp
+    mov  ebp, esp
+    mov  ecx, [ebp+8/*Code*/]
+#elif defined(_M_AMD64)
+    /* First argument already in rcx */
+#else
+#error Unsupported architecture
+#endif
+
+    int HEX(29)
+
+/* Never return */
+    cli
+die:
+    hlt
+    jmp die
+
+#ifdef _M_IX86 // _X86_
+    pop ebp
+#elif !defined(_M_AMD64)
+#error Unsupported architecture
+#endif
+    ret
+
+_TEXT ENDS
+#endif // _M_AMD64
+
+
+
 /*
 #pragma bss_seg(".bss")
 // __declspec(allocate(".bss"))
