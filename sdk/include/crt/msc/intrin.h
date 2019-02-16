@@ -279,6 +279,7 @@ void __fastfail(unsigned int Code)
     }
 }
 #else
+__declspec(noreturn) __forceinline
 void __fastfail(unsigned int Code);
 #endif // defined(_M_IX86)
 #endif
@@ -356,6 +357,7 @@ void _sgdt(void *Destination)
     }
 }
 #else
+__forceinline
 void _sgdt(void *Destination);
 #endif // defined(_M_IX86)
 #endif

@@ -9,6 +9,9 @@
 #ifndef __ASM_INC__
 #define __ASM_INC__
 
+// /* Makes "x" a global variable or label */
+// #define EXTERN(x)    .global x; x:
+
 /*
  * Common definitions for the FPO macro.
  * See https://docs.microsoft.com/en-us/windows/desktop/api/winnt/ns-winnt-_fpo_data
@@ -99,7 +102,9 @@ ENDM
 
 .code32 MACRO
     .code
+#ifdef _M_IX86
     .586P
+#endif
 ENDM
 
 .code16 MACRO
