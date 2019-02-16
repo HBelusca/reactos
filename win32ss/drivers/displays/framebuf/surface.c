@@ -20,6 +20,24 @@
 
 #include "framebuf.h"
 
+
+#ifndef NDEBUG
+#define DPRINT DbgPrint
+#else
+#define DPRINT
+#endif
+#define DPRINT1 DbgPrint
+
+ULONG DbgPrint(PCCH Format,...)
+{
+    va_list ap;
+    va_start(ap, Format);
+    EngDebugPrint("VGADDI", (PCHAR)Format, ap);
+    va_end(ap);
+    return 0;
+}
+
+
 /*
  * DrvEnableSurface
  *
@@ -50,6 +68,8 @@ DrvEnableSurface(
                           &(ppdev->ModeIndex), sizeof(ULONG), NULL, 0,
                           &ulTemp))
    {
+       DPRINT1("DrvEnableSurface - EngDeviceIoControl(IOCTL_VIDEO_SET_CURRENT_MODE ModeIndex = %lu) failing\n", ppdev->ModeIndex);
+__debugbreak();
       return NULL;
    }
 
@@ -63,6 +83,7 @@ DrvEnableSurface(
                           &VideoMemoryInfo, sizeof(VIDEO_MEMORY_INFORMATION),
                           &ulTemp))
    {
+       DPRINT1("DrvEnableSurface - EngDeviceIoControl(IOCTL_VIDEO_MAP_VIDEO_MEMORY) failing\n");
       return NULL;
    }
 
@@ -101,6 +122,7 @@ DrvEnableSurface(
                                      ppdev->ScreenPtr);
    if (hSurface == NULL)
    {
+       DPRINT1("DrvEnableSurface - EngCreateBitmap() failing\n");
       return NULL;
    }
 
@@ -110,6 +132,7 @@ DrvEnableSurface(
 
    if (!EngAssociateSurface(hSurface, ppdev->hDevEng, 0))
    {
+       DPRINT1("DrvEnableSurface - EngAssociateSurface() failing\n");
       EngDeleteSurface(hSurface);
       return NULL;
    }

@@ -75,7 +75,7 @@ InitDisplayDriver(
     HKEY hkey;
     DWORD dwVga;
 
-    TRACE("InitDisplayDriver(%S, %S);\n",
+    ERR("InitDisplayDriver(%S, %S);\n",
           pwszDeviceName, pwszRegKey);
 
     /* Open the driver's registry key */
@@ -153,7 +153,7 @@ InitVideo(VOID)
     NTSTATUS Status;
     HKEY hkey;
 
-    TRACE("----------------------------- InitVideo() -------------------------------\n");
+    ERR("----------------------------- InitVideo() -------------------------------\n");
 
     /* Check if VGA mode is requested, by finding the special volatile key created by VIDEOPRT */
     Status = RegOpenKey(L"\\Registry\\Machine\\System\\CurrentControlSet\\Control\\GraphicsDrivers\\BaseVideo", &hkey);
@@ -176,6 +176,7 @@ InitVideo(VOID)
         {
             /* There is, use the VGA device */
             gpPrimaryGraphicsDevice = gpVgaGraphicsDevice;
+            ERR("Using VGA device...\n");
         }
         else
         {
