@@ -236,7 +236,11 @@ EngpUpdateGraphicsDeviceList(VOID)
 
         /* Initialize the driver for this device */
         pGraphicsDevice = InitDisplayDriver(awcDeviceName, awcBuffer);
-        if (!pGraphicsDevice) continue;
+        if (!pGraphicsDevice)
+        {
+            ERR("InitDisplayDriver(%S, %S) failed!\n", awcDeviceName, awcDeviceName);
+            continue;
+        }
 
         /* Check if this is a VGA compatible adapter */
         if (pGraphicsDevice->StateFlags & DISPLAY_DEVICE_VGA_COMPATIBLE)
@@ -245,7 +249,7 @@ EngpUpdateGraphicsDeviceList(VOID)
             if (!gpVgaGraphicsDevice || !EngpHasVgaDriver(gpVgaGraphicsDevice))
             {
                 gpVgaGraphicsDevice = pGraphicsDevice;
-                TRACE("gpVgaGraphicsDevice = %p\n", gpVgaGraphicsDevice);
+                ERR("gpVgaGraphicsDevice = %p\n", gpVgaGraphicsDevice);
             }
         }
         bFoundNewDevice = TRUE;
@@ -254,7 +258,7 @@ EngpUpdateGraphicsDeviceList(VOID)
         if (!gpPrimaryGraphicsDevice || EngpHasVgaDriver(gpPrimaryGraphicsDevice))
         {
             gpPrimaryGraphicsDevice = pGraphicsDevice;
-            TRACE("gpPrimaryGraphicsDevice = %p\n", gpPrimaryGraphicsDevice);
+            ERR("gpPrimaryGraphicsDevice = %p\n", gpPrimaryGraphicsDevice);
         }
     }
 
@@ -268,9 +272,10 @@ EngpUpdateGraphicsDeviceList(VOID)
         !gpPrimaryGraphicsDevice->pVgaDevice)
     {
         /* Yes. Remove VGA device from global list, and attach it to primary device */
-        TRACE("Linking VGA device %S to primary device %S\n", gpVgaGraphicsDevice->szNtDeviceName, gpPrimaryGraphicsDevice->szNtDeviceName);
+        ERR("Linking VGA device %S to primary device %S\n", gpVgaGraphicsDevice->szNtDeviceName, gpPrimaryGraphicsDevice->szNtDeviceName);
         EngpUnlinkGraphicsDevice(gpVgaGraphicsDevice);
         gpPrimaryGraphicsDevice->pVgaDevice = gpVgaGraphicsDevice;
+        ERR("Using VGA device...\n");
     }
 
     if (bFoundNewDevice && gbBaseVideo)
@@ -288,7 +293,7 @@ EngpUpdateGraphicsDeviceList(VOID)
             {
                 /* Not base-video device. Remove it */
                 pToDelete = pGraphicsDevice;
-                TRACE("Removing non-base-video device %S (%S)\n", pToDelete->szWinDeviceName, pToDelete->szNtDeviceName);
+                ERR("Removing non-base-video device %S (%S)\n", pToDelete->szWinDeviceName, pToDelete->szNtDeviceName);
 
                 EngpUnlinkGraphicsDevice(pGraphicsDevice);
                 pGraphicsDevice = pGraphicsDevice->pNextGraphicsDevice;
@@ -508,7 +513,7 @@ EngpRegisterGraphicsDevice(
     PWSTR pwsz;
     ULONG cj;
 
-    TRACE("EngpRegisterGraphicsDevice(%wZ)\n", pustrDeviceName);
+    ERR("EngpRegisterGraphicsDevice(%wZ)\n", pustrDeviceName);
 
     /* Allocate a GRAPHICS_DEVICE structure */
     pGraphicsDevice = ExAllocatePoolZero(PagedPool,
@@ -620,7 +625,7 @@ EngpRegisterGraphicsDevice(
 
     /* Unlock loader */
     EngReleaseSemaphore(ghsemGraphicsDeviceList);
-    TRACE("Prepared %lu modes for %ls\n", pGraphicsDevice->cDevModes, pGraphicsDevice->pwszDescription);
+    ERR("Prepared %lu modes for %ls\n", pGraphicsDevice->cDevModes, pGraphicsDevice->pwszDescription);
 
     /* HACK: already in graphic mode; display wallpaper on this new display */
     if (ScreenDeviceContext)
@@ -645,7 +650,8 @@ EngpFindGraphicsDevice(
     UNICODE_STRING ustrCurrent;
     PGRAPHICS_DEVICE pGraphicsDevice;
     ULONG i;
-    TRACE("EngpFindGraphicsDevice('%wZ', %lu)\n",
+
+    ERR("EngpFindGraphicsDevice('%wZ', %lu)\n",
            pustrDevice, iDevNum);
 
     /* Lock list */

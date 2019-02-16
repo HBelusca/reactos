@@ -265,6 +265,8 @@ co_IntInitializeDesktopGraphics(VOID)
     UNICODE_STRING DriverName = RTL_CONSTANT_STRING(L"DISPLAY");
     PDESKTOP pdesk;
 
+DbgBreakPoint();
+
     if (PDEVOBJ_lChangeDisplaySettings(NULL, NULL, NULL, &gpmdev, TRUE) != DISP_CHANGE_SUCCESSFUL)
     {
         ERR("PDEVOBJ_lChangeDisplaySettings() failed.\n");
