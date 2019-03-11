@@ -1520,6 +1520,8 @@ SelectPartitionPage(PINPUT_RECORD Ir)
     PARTLIST_UI ListUi;
     ULONG Error;
 
+DbgBreakPoint();
+
     if (PartitionList == NULL)
     {
         PartitionList = CreatePartitionList();
@@ -2546,6 +2548,8 @@ SelectFileSystemPage(PINPUT_RECORD Ir)
         return QUIT_PAGE;
     }
 
+DbgBreakPoint();
+
     /* Find or set the active system partition when starting formatting */
     if (FormatState == Start)
     {
@@ -3038,6 +3042,8 @@ FormatPartitionPage(PINPUT_RECORD Ir)
             MUIClearStyledText(FORMAT_PARTITION_PAGE, TEXT_ID_FORMAT_PROMPT, TEXT_TYPE_REGULAR);
             CONSOLE_SetStatusText(MUIGetString(STRING_PLEASEWAIT));
 
+DbgBreakPoint();
+
             /* Format the partition */
             Status = DoFormat(PartEntry,
                               SelectedFileSystem->FileSystem,
@@ -3146,6 +3152,8 @@ CheckFileSystemPage(PINPUT_RECORD Ir)
         /* FIXME: show an error dialog */
         return QUIT_PAGE;
     }
+
+DbgBreakPoint();
 
     if (!GetNextUncheckedPartition(PartitionList, NULL, &PartEntry))
     {

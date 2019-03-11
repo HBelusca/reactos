@@ -667,7 +667,7 @@ InitDestinationPaths(
     {
         if (DiskEntry->BiosFound)
         {
-#if 1
+#if 0
             Status = RtlStringCchPrintfW(PathBuffer, ARRAYSIZE(PathBuffer),
                              L"multi(0)disk(0)rdisk(%lu)partition(%lu)\\",
                              DiskEntry->HwFixedDiskNumber,
@@ -695,7 +695,7 @@ InitDestinationPaths(
     }
     else // if (DiskEntry->MediaType == RemovableMedia)
     {
-#if 1
+#if 0
         Status = RtlStringCchPrintfW(PathBuffer, ARRAYSIZE(PathBuffer),
                          L"multi(0)disk(0)rdisk(%lu)partition(%lu)\\",
                          0, 1);

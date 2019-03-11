@@ -460,6 +460,8 @@ EnumerateBiosDiskEntries(
 
                         InsertTailList(&PartList->BiosDiskListHead, &BiosDiskEntry->ListEntry);
 
+#undef DPRINT
+#define DPRINT DPRINT1
                         DPRINT("--->\n");
                         DPRINT("AdapterNumber:     %lu\n", BiosDiskEntry->AdapterNumber);
                         DPRINT("ControllerNumber:  %lu\n", BiosDiskEntry->ControllerNumber);
@@ -475,6 +477,8 @@ EnumerateBiosDiskEntries(
                         DPRINT("MaxHeads:          %d\n", BiosDiskEntry->Int13DiskData.MaxHeads);
                         DPRINT("NumberDrives:      %d\n", BiosDiskEntry->Int13DiskData.NumberDrives);
                         DPRINT("<---\n");
+#undef DPRINT
+#define DPRINT
                     }
                 }
             }
@@ -561,6 +565,97 @@ IsSuperFloppy(
 
     return TRUE;
 }
+
+
+#if 0
+
+static BOOLEAN
+UninitializeDisk(
+    IN PDISKENTRY DiskEntry)
+{
+    /* Do nothing if the disk is already uninitialized */
+    if (DiskEntry->DiskStyle == PARTITION_STYLE_RAW)
+        return TRUE;
+
+    // TODO: Patch MBR/GPT to uninitialize the disk, or call
+    // IOCTL_DISK_CREATE_DISK with PARTITION_STYLE_RAW
+    // which does the job. Alternatively, IOCTL_DISK_DELETE_DRIVE_LAYOUT
+    // does the same thing.
+
+    DiskEntry->DiskStyle = PARTITION_STYLE_RAW;
+    return TRUE;
+}
+
+static BOOLEAN
+InitializeDiskSuperFloppy(
+    IN PDISKENTRY DiskEntry)
+{
+    /* Fail if the disk is already initialized */
+    if (DiskEntry->DiskStyle != PARTITION_STYLE_RAW)
+        return FALSE;
+
+    UNIMPLEMENTED;
+    return FALSE;
+}
+
+static NTSTATUS
+InitializeDiskMBR(
+    IN PDISKENTRY DiskEntry)
+{
+    NTSTATUS Status;
+    CREATE_DISK CreateDiskInfo;
+
+    /* Fail if the disk is already initialized */
+    if (DiskEntry->DiskStyle != PARTITION_STYLE_RAW)
+        return STATUS_PARTITION_FAILURE;
+
+    CreateDiskInfo.PartitionStyle = PARTITION_STYLE_MBR;
+    CreateDiskInfo.Mbr.Signature = xxxxxxxxx;
+
+    Status = NtDeviceIoControlFile(FileHandle,
+                                   NULL,
+                                   NULL,
+                                   NULL,
+                                   &Iosb,
+                                   IOCTL_DISK_CREATE_DISK,
+                                   CreateDiskInfo,
+                                   sizeof(CreateDiskInfo),
+                                   NULL,
+                                   0);
+
+    return Status;
+}
+
+static NTSTATUS
+InitializeDiskGPT(
+    IN PDISKENTRY DiskEntry)
+{
+    NTSTATUS Status;
+    CREATE_DISK CreateDiskInfo;
+
+    /* Fail if the disk is already initialized */
+    if (DiskEntry->DiskStyle != PARTITION_STYLE_RAW)
+        return STATUS_PARTITION_FAILURE;
+
+    CreateDiskInfo.PartitionStyle = PARTITION_STYLE_GPT;
+    CreateDiskInfo.Gpt.DiskId = xxxxx;
+    CreateDiskInfo.Gpt.MaxPartitionCount = 128; // Minimum required.
+
+    Status = NtDeviceIoControlFile(FileHandle,
+                                   NULL,
+                                   NULL,
+                                   NULL,
+                                   &Iosb,
+                                   IOCTL_DISK_CREATE_DISK,
+                                   CreateDiskInfo,
+                                   sizeof(CreateDiskInfo),
+                                   NULL,
+                                   0);
+
+    return Status;
+}
+
+#endif
 
 
 /*
@@ -1419,7 +1514,6 @@ AddDiskToList(
 
     DiskEntry->PartList = List;
 
-#if 0
     {
         FILE_FS_DEVICE_INFORMATION FileFsDevice;
 
@@ -1439,7 +1533,6 @@ AddDiskToList(
         }
     }
     // NOTE: We may also use NtQueryVolumeInformationFile(FileFsDeviceInformation).
-#endif
     DiskEntry->MediaType = DiskGeometry.MediaType;
     if (DiskEntry->MediaType == RemovableMedia)
     {
