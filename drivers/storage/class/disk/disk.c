@@ -46,6 +46,32 @@ typedef struct _DISK_DATA {
     PDEVICE_EXTENSION NextPartition;
 
     //
+    // Partition number of this device object
+    //
+    // This field is set during driver initialization or when the partition
+    // is created to identify a partition to the system.
+    //
+
+    ULONG PartitionNumber;
+
+    //
+    // This field is the ordinal of a partition as it appears on a disk.
+    //
+
+    ULONG PartitionOrdinal;
+
+#ifdef __REACTOS__
+    //
+    // How has this disk been partitioned? Either EFI or MBR.
+    //
+
+    PARTITION_STYLE PartitionStyle;
+
+    union {
+    struct {
+#endif
+
+    //
     // Disk signature (from MBR)
     //
 
@@ -62,21 +88,6 @@ typedef struct _DISK_DATA {
     //
 
     ULONG HiddenSectors;
-
-    //
-    // Partition number of this device object
-    //
-    // This field is set during driver initialization or when the partition
-    // is created to identify a partition to the system.
-    //
-
-    ULONG PartitionNumber;
-
-    //
-    // This field is the ordinal of a partition as it appears on a disk.
-    //
-
-    ULONG PartitionOrdinal;
 
     //
     // Partition type of this device object
@@ -102,6 +113,46 @@ typedef struct _DISK_DATA {
     //
 
     BOOLEAN BootIndicator;
+
+#ifdef __REACTOS__
+    } ; // Mbr;
+
+    struct {
+
+        //
+        // The DiskGUID field from the EFI partition header.
+        //
+
+        GUID DiskId;
+
+        //
+        // Partition type of this device object.
+        //
+
+        GUID PartitionType;
+
+        //
+        // Unique partition identifier for this partition.
+        //
+
+        GUID PartitionId;
+
+        //
+        // EFI partition attributes for this partition.
+        //
+
+        ULONG64 Attributes;
+
+        //
+        // EFI partition name of this partition.
+        //
+
+        WCHAR PartitionName[36];
+
+    } Efi;
+
+    };  // unnamed union
+#endif // __REACTOS__
 
     //
     // DriveNotReady - indicates that the this device is currently not ready
@@ -335,6 +386,191 @@ ScsiDiskFileSystemControl(PDEVICE_OBJECT DeviceObject,
 #pragma alloc_text(PAGE, ScsiDiskDeviceControl)
 #pragma alloc_text(PAGE, ScsiDiskModeSelect)
 #endif
+
+
+PDRIVE_LAYOUT_INFORMATION
+NTAPI
+DiskConvertExtendedToLayout(
+    IN CONST PDRIVE_LAYOUT_INFORMATION_EX LayoutEx
+    )
+{
+    ULONG i;
+    ULONG LayoutSize;
+    PDRIVE_LAYOUT_INFORMATION Layout;
+    PPARTITION_INFORMATION Partition;
+    PPARTITION_INFORMATION_EX PartitionEx;
+
+    PAGED_CODE ();
+
+    ASSERT ( LayoutEx );
+
+
+    //
+    // The only valid conversion is from an MBR extended layout structure to
+    // the old structure.
+    //
+
+    if (LayoutEx->PartitionStyle != PARTITION_STYLE_MBR) {
+        ASSERT ( FALSE );
+        return NULL;
+    }
+
+    LayoutSize = FIELD_OFFSET (DRIVE_LAYOUT_INFORMATION, PartitionEntry[0]) +
+                 LayoutEx->PartitionCount * sizeof (PARTITION_INFORMATION);
+
+    Layout = ExAllocatePoolWithTag (
+                    NonPagedPool,
+                    LayoutSize,
+                    DISK_TAG_PART_LIST
+                    );
+
+    if ( Layout == NULL ) {
+        return NULL;
+    }
+
+    Layout->Signature = LayoutEx->Mbr.Signature;
+    Layout->PartitionCount = LayoutEx->PartitionCount;
+
+    for (i = 0; i < LayoutEx->PartitionCount; i++) {
+
+        Partition = &Layout->PartitionEntry[i];
+        PartitionEx = &LayoutEx->PartitionEntry[i];
+
+        Partition->StartingOffset = PartitionEx->StartingOffset;
+        Partition->PartitionLength = PartitionEx->PartitionLength;
+        Partition->RewritePartition = PartitionEx->RewritePartition;
+        Partition->PartitionNumber = PartitionEx->PartitionNumber;
+
+        Partition->PartitionType = PartitionEx->Mbr.PartitionType;
+        Partition->BootIndicator = PartitionEx->Mbr.BootIndicator;
+        Partition->RecognizedPartition = PartitionEx->Mbr.RecognizedPartition;
+        Partition->HiddenSectors = PartitionEx->Mbr.HiddenSectors;
+    }
+
+    return Layout;
+}
+
+VOID
+NTAPI
+DiskConvertPartitionToExtended(
+    IN PPARTITION_INFORMATION Partition,
+    OUT PPARTITION_INFORMATION_EX PartitionEx
+    )
+
+/*++
+
+Routine Description:
+
+    Convert a PARTITION_INFORMATION structure to a PARTITION_INFORMATION_EX
+    structure.
+
+Arguments:
+
+    Partition - A pointer to the PARTITION_INFORMATION structure to convert.
+
+    PartitionEx - A pointer to a buffer where the converted
+        PARTITION_INFORMATION_EX structure is to be stored.
+
+Return Values:
+
+    None.
+
+--*/
+
+{
+    PAGED_CODE ();
+
+    ASSERT ( PartitionEx != NULL );
+    ASSERT ( Partition != NULL );
+
+    PartitionEx->PartitionStyle = PARTITION_STYLE_MBR;
+    PartitionEx->StartingOffset = Partition->StartingOffset;
+    PartitionEx->PartitionLength = Partition->PartitionLength;
+    PartitionEx->RewritePartition = Partition->RewritePartition;
+    PartitionEx->PartitionNumber = Partition->PartitionNumber;
+
+    PartitionEx->Mbr.PartitionType = Partition->PartitionType;
+    PartitionEx->Mbr.BootIndicator = Partition->BootIndicator;
+    PartitionEx->Mbr.RecognizedPartition = Partition->RecognizedPartition;
+    PartitionEx->Mbr.HiddenSectors = Partition->HiddenSectors;
+}
+
+PDRIVE_LAYOUT_INFORMATION_EX
+NTAPI
+DiskConvertLayoutToExtended(
+    IN CONST PDRIVE_LAYOUT_INFORMATION Layout
+    )
+
+/*++
+
+Routine Description:
+
+    Convert a DRIVE_LAYOUT_INFORMATION structure into a
+    DRIVE_LAYOUT_INFORMATION_EX structure.
+
+Arguments:
+
+    Layout - The source DRIVE_LAYOUT_INFORMATION structure.
+
+Return Values:
+
+    The resultant DRIVE_LAYOUT_INFORMATION_EX structure. This buffer must
+    be freed by the callee using ExFreePool.
+
+--*/
+
+{
+    ULONG i;
+    ULONG size;
+    PDRIVE_LAYOUT_INFORMATION_EX layoutEx;
+
+    PAGED_CODE ();
+
+    ASSERT ( Layout != NULL );
+
+
+    //
+    // Allocate enough space for a DRIVE_LAYOUT_INFORMATION_EX structure
+    // plus as many PARTITION_INFORMATION_EX structures as are in the
+    // source array.
+    //
+
+    size = FIELD_OFFSET (DRIVE_LAYOUT_INFORMATION_EX, PartitionEntry[0]) +
+            Layout->PartitionCount * sizeof ( PARTITION_INFORMATION_EX );
+
+    layoutEx = ExAllocatePoolWithTag(
+                            NonPagedPool,
+                            size,
+                            DISK_TAG_PART_LIST
+                            );
+
+    if ( layoutEx == NULL ) {
+        return NULL;
+    }
+
+    //
+    // Convert the disk information.
+    //
+
+    layoutEx->PartitionStyle = PARTITION_STYLE_MBR;
+    layoutEx->PartitionCount = Layout->PartitionCount;
+    layoutEx->Mbr.Signature = Layout->Signature;
+
+    for (i = 0; i < Layout->PartitionCount; i++) {
+
+        //
+        // Convert each entry.
+        //
+
+        DiskConvertPartitionToExtended (
+                &Layout->PartitionEntry[i],
+                &layoutEx->PartitionEntry[i]
+                );
+    }
+
+    return layoutEx;
+}
+
 
 
 NTSTATUS
@@ -1727,6 +1963,254 @@ Return Value:
 
 } // end ScsiDiskReadWrite()
 
+
+#ifdef __REACTOS__
+
+NTSTATUS
+NTAPI
+DiskReadPartitionTableEx(
+    IN PDEVICE_EXTENSION DeviceExtension,
+    IN BOOLEAN BypassCache,
+    OUT PDRIVE_LAYOUT_INFORMATION_EX* DriveLayout
+    )
+/*++
+
+Routine Description:
+
+    This routine will return the current layout information for the disk.
+    If the cached information is still valid then it will be returned,
+    otherwise the layout will be retrieved from the kernel and cached for
+    future use.
+
+    This routine must be called with the partitioning lock held.  The
+    partition list which is returned is not guaranteed to remain valid
+    once the lock has been released.
+
+Arguments:
+
+    Fdo - a pointer to the FDO for the disk.
+
+    DriveLayout - a location to store a pointer to the drive layout information.
+
+Return Value:
+
+    STATUS_SUCCESS if successful or an error status indicating what failed.
+
+--*/
+{
+    // PDISK_DATA diskData = (PDISK_DATA)(deviceExtension + 1);
+    NTSTATUS status;
+    PDRIVE_LAYOUT_INFORMATION_EX layoutEx;
+
+    layoutEx = NULL;
+
+#if 0
+    if(BypassCache) {
+        diskData->CachedPartitionTableValid = FALSE;
+        DebugPrint((PtCache, "DiskRPTEx: cache bypassed and invalidated for "
+                             "FDO %#p\n", Fdo));
+    }
+
+    //
+    // If the cached partition table is present then return a copy of it.
+    //
+
+    if (diskData->CachedPartitionTableValid != FALSE) {
+
+        ULONG partitionNumber;
+        PDRIVE_LAYOUT_INFORMATION_EX layout = diskData->CachedPartitionTable;
+
+        //
+        // Clear the partition numbers from the list entries
+        //
+
+        for(partitionNumber = 0;
+            partitionNumber < layout->PartitionCount;
+            partitionNumber++) {
+            layout->PartitionEntry[partitionNumber].PartitionNumber = 0;
+        }
+
+        *DriveLayout = diskData->CachedPartitionTable;
+
+        DebugPrint((PtCache, "DiskRPTEx: cached PT returned (%#p) for "
+                             "FDO %#p\n",
+                    *DriveLayout, Fdo));
+
+        return STATUS_SUCCESS;
+    }
+
+    ASSERTMSG("DiskReadPartitionTableEx is not using cached partition table",
+              (DiskBreakOnPtInval == FALSE));
+
+    //
+    // If there's a cached partition table still around then free it.
+    //
+
+    if(diskData->CachedPartitionTable) {
+        DebugPrint((PtCache, "DiskRPTEx: cached PT (%#p) freed for FDO %#p\n",
+                    diskData->CachedPartitionTable, Fdo));
+
+        ExFreePool(diskData->CachedPartitionTable);
+        diskData->CachedPartitionTable = NULL;
+    }
+#endif
+
+    //
+    // By default, X86 disables recognition of GPT disks. Instead we
+    // return the protective MBR partition. Use IoReadPartitionTable
+    // to get this.
+    //
+
+    status = IoReadPartitionTableEx(Fdo->DeviceObject, &layoutEx);
+
+    if (DiskDisableGpt) {
+        PDRIVE_LAYOUT_INFORMATION layout;
+
+        if (NT_SUCCESS (status) &&
+            layoutEx->PartitionStyle == PARTITION_STYLE_GPT) {
+
+            //
+            // ISSUE - 2000/29/08 - math: Remove from final product.
+            // Leave this debug print in for a while until everybody
+            // has had a chance to convert their GPT disks to MBR.
+            //
+
+            DbgPrint ("DISK: Disk %p recognized as a GPT disk on a system without GPT support.\n"
+                      "      Disk will appear as RAW.\n",
+                      Fdo->DeviceObject);
+
+            ExFreePool (layoutEx);
+            status = IoReadPartitionTable(Fdo->DeviceObject,
+                                          Fdo->DiskGeometry.BytesPerSector,
+                                          FALSE,
+                                          &layout);
+            if (NT_SUCCESS (status)) {
+                layoutEx = DiskConvertLayoutToExtended(layout);
+                ExFreePool (layout);
+            }
+        }
+    }
+
+    diskData->CachedPartitionTable = layoutEx;
+
+    //
+    // If the routine fails make sure we don't have a stale partition table
+    // pointer.  Otherwise indicate that the table is now valid.
+    //
+
+    if(!NT_SUCCESS(status)) {
+        diskData->CachedPartitionTable = NULL;
+    } else {
+        diskData->CachedPartitionTableValid = TRUE;
+    }
+
+    *DriveLayout = diskData->CachedPartitionTable;
+
+    DebugPrint((PtCache, "DiskRPTEx: returning PT %#p for FDO %#p with status "
+                         "%#08lx.  PT is %scached\n",
+                *DriveLayout,
+                Fdo,
+                status,
+                (diskData->CachedPartitionTableValid ? "" : "not ")));
+
+
+    return status;
+}
+
+NTSTATUS
+NTAPI
+DiskWritePartitionTableEx(
+    IN PDEVICE_EXTENSION DeviceExtension,
+    IN PDRIVE_LAYOUT_INFORMATION_EX DriveLayout
+    )
+/*++
+
+Routine Description:
+
+    This routine will invalidate the cached partition table.  It will then
+    write the new drive layout to disk.
+
+Arguments:
+
+    Fdo - the FDO for the disk getting the new partition table.
+
+    DriveLayout - the new drive layout.
+
+Return Value:
+
+    status
+
+--*/
+{
+    PDISK_DATA diskData = Fdo->CommonExtension.DriverData;
+
+    //
+    // Invalidate the cached partition table.  Do not free it as it may be
+    // the very drive layout that was passed in to us.
+    //
+
+    diskData->CachedPartitionTableValid = FALSE;
+
+    DebugPrint((PtCache, "DiskWPTEx: Invalidating PT cache for FDO %#p\n",
+                Fdo));
+
+    if (DiskDisableGpt) {
+        if (DriveLayout->PartitionStyle == PARTITION_STYLE_GPT) {
+            return STATUS_NOT_SUPPORTED;
+        }
+    }
+
+    return IoWritePartitionTableEx(Fdo->DeviceObject, DriveLayout);
+}
+
+NTSTATUS
+NTAPI
+DiskSetPartitionInformationEx(
+    IN PDEVICE_EXTENSION DeviceExtension,
+    IN ULONG PartitionNumber,
+    IN struct _SET_PARTITION_INFORMATION_EX* PartitionInfo
+    )
+{
+    // PDISK_DATA diskData = (PDISK_DATA)(deviceExtension + 1);
+
+    // diskData->CachedPartitionTableValid = FALSE;
+    DebugPrint((PtCache, "DiskSPIEx: Invalidating PT cache for FDO %#p\n",
+                DeviceExtension));
+
+    if (DiskDisableGpt) {
+        if (PartitionInfo->PartitionStyle == PARTITION_STYLE_GPT) {
+            return STATUS_NOT_SUPPORTED;
+        }
+    }
+
+    return IoSetPartitionInformationEx(DeviceExtension->PhysicalDevice,
+                                       PartitionNumber,
+                                       PartitionInfo);
+}
+
+NTSTATUS
+NTAPI
+DiskSetPartitionInformation(
+    IN PDEVICE_EXTENSION DeviceExtension,
+    IN ULONG SectorSize,
+    IN ULONG PartitionNumber,
+    IN ULONG PartitionType
+    )
+{
+    // PDISK_DATA diskData = (PDISK_DATA)(deviceExtension + 1);
+
+    // diskData->CachedPartitionTableValid = FALSE;
+    DebugPrint((PtCache, "DiskSPI: Invalidating PT cache for FDO %#p\n",
+                DeviceExtension));
+
+    return IoSetPartitionInformation(DeviceExtension->PhysicalDevice,
+                                     SectorSize,
+                                     PartitionNumber,
+                                     PartitionType);
+}
+#endif
+
+
 
 NTSTATUS
 NTAPI
@@ -2197,6 +2681,9 @@ Return Value:
 
     }
 
+//
+// FIXME: TODO: Improve for GPT support!!
+//
     case IOCTL_DISK_GET_DRIVE_GEOMETRY:
     case IOCTL_DISK_GET_DRIVE_GEOMETRY_EX:
         {
@@ -2294,7 +2781,6 @@ Return Value:
         }
 
     case IOCTL_DISK_VERIFY:
-
         {
 
         PVERIFY_INFORMATION verifyInfo = Irp->AssociatedIrp.SystemBuffer;
@@ -2374,7 +2860,7 @@ Return Value:
         }
 
     case IOCTL_DISK_GET_PARTITION_INFO:
-
+        {
         //
         // Return the information about the partition specified by the device
         // object.  Note that no information is ever returned about the size
@@ -2414,6 +2900,11 @@ Return Value:
         //
         // Handle the case were we query the whole disk
         //
+        // Partition zero, the partition representing the entire disk, is
+        // special cased. The logic below allows for sending this ioctl to
+        // a GPT disk only for partition zero. This allows us to obtain
+        // the size of a GPT disk using Win2k compatible IOCTLs.
+        //
 
         if (diskData->PartitionNumber == 0) {
 
@@ -2439,9 +2930,15 @@ Return Value:
             PPARTITION_INFORMATION outputBuffer;
 
             //
-            // We query a single partition here
-            // FIXME: this can only work for MBR-based disks, check for this!
+            // We do not support this IOCTL on an EFI partitioned disk
+            // for any partition other than partition zero.
             //
+
+            if (diskData->PartitionStyle != PARTITION_STYLE_MBR) {
+                status = STATUS_INVALID_DEVICE_REQUEST;
+                Irp->IoStatus.Status = status;
+                break;
+            }
 
             outputBuffer =
                     (PPARTITION_INFORMATION)Irp->AssociatedIrp.SystemBuffer;
@@ -2461,8 +2958,12 @@ Return Value:
         }
 
         break;
+        }
 
+// See commit https://git.reactos.org/?p=reactos.git;a=commitdiff;h=b9b461bde95804f3dcf1455a1bfbf25cfdb8aedc
     case IOCTL_DISK_GET_PARTITION_INFO_EX:
+        {
+        PPARTITION_INFORMATION_EX outputBuffer;
 
         //
         // Return the information about the partition specified by the device
@@ -2475,84 +2976,81 @@ Return Value:
             sizeof(PARTITION_INFORMATION_EX)) {
 
             status = STATUS_INFO_LENGTH_MISMATCH;
-
+            break;
         }
-#if 0 // HACK: ReactOS partition numbers must be wrong
-        else if (diskData->PartitionNumber == 0) {
+
+        //
+        // Update the geometry in case it has changed.
+        //
+
+        status = UpdateRemovableGeometry (DeviceObject, Irp);
+
+        if (!NT_SUCCESS(status)) {
 
             //
-            // Partition zero is not a partition so this is not a
-            // reasonable request.
+            // Note the drive is not ready.
             //
+
+            diskData->DriveNotReady = TRUE;
+            break;
+        }
+
+        //
+        // Note the drive is now ready.
+        //
+
+        diskData->DriveNotReady = FALSE;
+
+#if 0
+        if (diskData->PartitionType == 0 && (diskData->PartitionNumber > 0)) {
 
             status = STATUS_INVALID_DEVICE_REQUEST;
-
+            break;
         }
 #endif
-        else {
 
-            PPARTITION_INFORMATION_EX outputBuffer;
+        outputBuffer =
+                (PPARTITION_INFORMATION_EX)Irp->AssociatedIrp.SystemBuffer;
 
-            if (diskData->PartitionNumber == 0) {
-                DPRINT1("HACK: Handling partition 0 request!\n");
-                //ASSERT(FALSE);
-            }
+        outputBuffer->StartingOffset = deviceExtension->StartingOffset;
+        outputBuffer->PartitionLength.QuadPart = deviceExtension->PartitionLength.QuadPart;
+        outputBuffer->RewritePartition = FALSE;
+        outputBuffer->PartitionNumber = diskData->PartitionNumber;
+        outputBuffer->PartitionStyle = diskData->PartitionStyle;
 
-            //
-            // Update the geometry in case it has changed.
-            //
+        if ( diskData->PartitionStyle == PARTITION_STYLE_MBR ) {
 
-            status = UpdateRemovableGeometry (DeviceObject, Irp);
-
-            if (!NT_SUCCESS(status)) {
-
-                //
-                // Note the drive is not ready.
-                //
-
-                diskData->DriveNotReady = TRUE;
-                break;
-            }
-
-            //
-            // Note the drive is now ready.
-            //
-
-            diskData->DriveNotReady = FALSE;
-
-            if (diskData->PartitionType == 0 && (diskData->PartitionNumber > 0)) {
-
-                status = STATUS_INVALID_DEVICE_REQUEST;
-                break;
-            }
-
-            outputBuffer =
-                    (PPARTITION_INFORMATION_EX)Irp->AssociatedIrp.SystemBuffer;
-
-            //
-            // FIXME: hack of the year, assume that partition is MBR
-            // Thing that can obviously be wrong...
-            //
-
-            outputBuffer->PartitionStyle = PARTITION_STYLE_MBR;
             outputBuffer->Mbr.PartitionType = diskData->PartitionType;
-            outputBuffer->StartingOffset = deviceExtension->StartingOffset;
-            outputBuffer->PartitionLength.QuadPart = deviceExtension->PartitionLength.QuadPart;
             outputBuffer->Mbr.HiddenSectors = diskData->HiddenSectors;
-            outputBuffer->PartitionNumber = diskData->PartitionNumber;
             outputBuffer->Mbr.BootIndicator = diskData->BootIndicator;
-            outputBuffer->RewritePartition = FALSE;
             outputBuffer->Mbr.RecognizedPartition =
                 IsRecognizedPartition(diskData->PartitionType);
 
-            status = STATUS_SUCCESS;
-            Irp->IoStatus.Information = sizeof(PARTITION_INFORMATION_EX);
+        } else {
+
+            //
+            // ISSUE - 2000/02/09 - math: Review for Partition0.
+            // Is this correct for Partition0?
+            //
+
+            outputBuffer->Gpt.PartitionType = diskData->Efi.PartitionType;
+            outputBuffer->Gpt.PartitionId = diskData->Efi.PartitionId;
+            outputBuffer->Gpt.Attributes = diskData->Efi.Attributes;
+            RtlCopyMemory (
+                    outputBuffer->Gpt.Name,
+                    diskData->Efi.PartitionName,
+                    sizeof (outputBuffer->Gpt.Name)
+                    );
         }
 
+        status = STATUS_SUCCESS;
+        Irp->IoStatus.Information = sizeof(PARTITION_INFORMATION_EX);
+
         break;
+        }
 
     case IOCTL_DISK_SET_PARTITION_INFO:
-
+        {
         if (diskData->PartitionNumber == 0) {
 
             status = STATUS_UNSUCCESSFUL;
@@ -2561,6 +3059,12 @@ Return Value:
 
             PSET_PARTITION_INFORMATION inputBuffer =
                 (PSET_PARTITION_INFORMATION)Irp->AssociatedIrp.SystemBuffer;
+
+#ifdef __REACTOS__
+            if (diskData->PartitionStyle != PARTITION_STYLE_MBR) {
+                return STATUS_INVALID_DEVICE_REQUEST;
+            }
+#endif
 
             //
             // Validate buffer length.
@@ -2582,8 +3086,13 @@ Return Value:
             // the system.) Use partition ordinals for these legacy calls.
             //
 
+#ifdef __REACTOS__
+            status = DiskSetPartitionInformation(
+                          deviceExtension,
+#else
             status = IoSetPartitionInformation(
                           deviceExtension->PhysicalDevice,
+#endif
                           deviceExtension->DiskGeometry->Geometry.BytesPerSector,
                           diskData->PartitionOrdinal,
                           inputBuffer->PartitionType);
@@ -2595,6 +3104,146 @@ Return Value:
         }
 
         break;
+        }
+
+#ifdef __REACTOS__
+    case IOCTL_DISK_SET_PARTITION_INFO_EX:
+        {
+        if (diskData->PartitionNumber == 0) {
+
+            status = STATUS_UNSUCCESSFUL;
+
+        } else {
+
+            PSET_PARTITION_INFORMATION_EX inputBuffer =
+                (PSET_PARTITION_INFORMATION_EX)Irp->AssociatedIrp.SystemBuffer;
+
+            //
+            // Validate buffer length.
+            //
+
+            if (irpStack->Parameters.DeviceIoControl.InputBufferLength <
+                sizeof(SET_PARTITION_INFORMATION_EX)) {
+
+                status = STATUS_INFO_LENGTH_MISMATCH;
+                break;
+            }
+
+            //
+            // The HAL routines IoGet- and IoSetPartitionInformation were
+            // developed before support of dynamic partitioning and therefore
+            // don't distinguish between partition ordinal (that is the order
+            // of a partition on a disk) and the partition number. (The
+            // partition number is assigned to a partition to identify it to
+            // the system.) Use partition ordinals for these legacy calls.
+            //
+
+            status = DiskSetPartitionInformationEx(
+                          deviceExtension,
+                          diskData->PartitionOrdinal,
+                          inputBuffer);
+
+            if (NT_SUCCESS(status)) {
+
+                if (diskData->PartitionStyle == PARTITION_STYLE_MBR) {
+
+                    diskData->Mbr.PartitionType = inputBuffer->Mbr.PartitionType;
+
+                } else {
+
+                    ASSERT ( diskData->PartitionStyle == PARTITION_STYLE_MBR );
+
+                    diskData->Efi.PartitionType = inputBuffer->Gpt.PartitionType;
+                    diskData->Efi.PartitionId = inputBuffer->Gpt.PartitionId;
+                    diskData->Efi.Attributes = inputBuffer->Gpt.Attributes;
+
+                    RtlCopyMemory (
+                            diskData->Efi.PartitionName,
+                            inputBuffer->Gpt.Name,
+                            sizeof (diskData->Efi.PartitionName)
+                            );
+                }
+            }
+        }
+
+        break;
+        }
+
+    case IOCTL_DISK_CREATE_DISK:
+    {
+        PCREATE_DISK createDiskInfo;
+
+        //
+        // Check the input buffer size.
+        //
+        if (irpStack->Parameters.DeviceIoControl.InputBufferLength <
+            sizeof (CREATE_DISK) ) {
+            status = STATUS_INFO_LENGTH_MISMATCH;
+            break;
+        }
+
+        //
+        // If we are being asked to create a GPT disk on a system that doesn't
+        // support GPT, fail.
+        //
+
+        createDiskInfo = (PCREATE_DISK)Irp->AssociatedIrp.SystemBuffer;
+#if 0
+        if (DiskDisableGpt &&
+            createDiskInfo->PartitionStyle == PARTITION_STYLE_GPT) {
+            status = STATUS_INVALID_PARAMETER;
+            break;
+        }
+#endif
+
+        //
+        // Call the lower level Io routine to do the dirty work of writing a
+        // new partition table.
+        //
+
+        // DiskAcquirePartitioningLock(fdoExtension);
+        // DiskInvalidatePartitionTable(fdoExtension, TRUE);
+
+        status = IoCreateDisk(
+                        deviceExtension->PhysicalDevice,
+                        createDiskInfo);
+
+        // DiskReleasePartitioningLock(fdoExtension);
+        // ClassInvalidateBusRelations(DeviceObject);
+
+        break;
+    }
+
+    case IOCTL_DISK_DELETE_DRIVE_LAYOUT:
+    {
+        CREATE_DISK CreateDiskInfo;
+
+        //
+        // Update the disk with new partition information.
+        //
+
+        // DiskAcquirePartitioningLock(fdoExtension);
+        // DiskInvalidatePartitionTable(fdoExtension, TRUE);
+
+        //
+        // IoCreateDisk called with a partition style of raw
+        // will remove any partition tables from the disk.
+        //
+
+        RtlZeroMemory (&CreateDiskInfo, sizeof (CreateDiskInfo));
+        CreateDiskInfo.PartitionStyle = PARTITION_STYLE_RAW;
+
+        status = IoCreateDisk(
+                    deviceExtension->PhysicalDevice,
+                    &CreateDiskInfo);
+
+        // DiskReleasePartitioningLock(fdoExtension);
+        // ClassInvalidateBusRelations(deviceExtension->PhysicalDevice);
+
+        break;
+    }
+
+#endif // __REACTOS__
 
     case IOCTL_DISK_GET_DRIVE_LAYOUT:
 
