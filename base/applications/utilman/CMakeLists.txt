@@ -1,3 +1,4 @@
+PROJECT(utilman)
 
 list(APPEND SOURCE
     dialog.c

@@ -19,7 +19,7 @@ UTILMAN_GLOBALS Globals;
 UTILMAN_STATE EntriesList[] =
 {
     {L"magnify.exe", IDS_MAGNIFIER, L"", FALSE},
-    {L"osk.exe", IDS_OSK, L"", FALSE}
+    {L"osk.exe",     IDS_OSK      , L"", FALSE}
 };
 
 /* FUNCTIONS ******************************************************************/
@@ -284,7 +284,7 @@ INT_PTR APIENTRY DlgProc(
         case WM_CLOSE:
             KillTimer(hDlg, Globals.iTimer);
             DestroyIcon(Globals.hIcon);
-            EndDialog(hDlg, FALSE);
+            // EndDialog(hDlg, FALSE);
             break;
 
         case WM_COMMAND:

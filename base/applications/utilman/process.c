@@ -33,7 +33,6 @@ DWORD GetProcessID(IN LPCWSTR lpProcessName)
     if (hSnapshot == INVALID_HANDLE_VALUE)
         return 0;
 
-    /* Get the whole size of the structure */
     Process.dwSize = sizeof(Process);
 
     /* Enumerate the processes */
@@ -161,18 +160,30 @@ BOOL LaunchProcess(LPCWSTR lpProcessName)
                                     &si,
                                     &pi);
 
+    CloseHandle(hUserToken);
+    CloseHandle(hProcessToken);
+
     if (!bSuccess)
     {
+        INT_PTR Success;
+
         DPRINT("CreateProcessAsUserW() failed with error -> %lu\n", GetLastError());
-        CloseHandle(hUserToken);
-        CloseHandle(hProcessToken);
+
+        /* HACK: Retry with ShellExecute() */
+        Success = (INT_PTR)ShellExecuteW(NULL, L"open", ExpandedCmdLine, NULL, NULL, SW_SHOWNORMAL);
+        /*
+         * ShellExecuteW() returns a value that is greater than 32 indicating the
+         * function has succeded. If the function fails, the reason of such failure
+         * is shown by GetLastError().
+         */
+        if (Success >= 32)
+            return TRUE;
+
         return FALSE;
     }
 
     CloseHandle(pi.hProcess);
     CloseHandle(pi.hThread);
-    CloseHandle(hUserToken);
-    CloseHandle(hProcessToken);
     return TRUE;
 }
 
