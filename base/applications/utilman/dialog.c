@@ -385,7 +385,8 @@ INT WINAPI wWinMain(
     UNREFERENCED_PARAMETER(pCmdLine);
     UNREFERENCED_PARAMETER(nCmdShow);
 
-    /* Create a mutant object for the program. */
+    /* Create a mutant object for the program */
+    // FIXME: Windows-compatibility: Event "UtilityManagerIsActiveEvent"
     hMutex = CreateMutexW(NULL, FALSE, L"Utilman");
     if (hMutex)
     {
@@ -394,10 +395,10 @@ INT WINAPI wWinMain(
         if (dwError == ERROR_ALREADY_EXISTS)
         {
             /*
-                The program's instance is already here. That means
-                the program is running and we should not set a new instance
-                and mutex object.
-            */
+             * The program's instance is already here. That means
+             * the program is running and we should not set a new instance
+             * and mutex object.
+             */
             CloseHandle(hMutex);
             return 0;
         }
