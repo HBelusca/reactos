@@ -19,6 +19,7 @@ INT gLanguageToggleKeyState = 0;
 DWORD gdwLanguageToggleKey = 1;
 INT gLayoutToggleKeyState = 0;
 DWORD gdwLayoutToggleKey = 2;
+UINT gfsPhysicalModifiers = 0;
 
 /* FUNCTIONS *****************************************************************/
 
@@ -209,6 +210,30 @@ UserInitKeyboard(HANDLE hKeyboardDevice)
              gKeyboardInfo.KeyboardIdentifier.Type,
              gKeyboardInfo.KeyboardIdentifier.Subtype,
              gKeyboardInfo.NumberOfFunctionKeys);
+}
+
+/**
+ * @brief
+ * Returns a value indicating if the key is a modifier key, and which one.
+ * Looks only at the physical value. This differs from hotkey.c!IntGetModifiers()
+ **/
+static
+UINT FASTCALL
+IntVkToPhysModifier(WORD wVk)
+{
+    switch (wVk)
+    {
+        case VK_SHIFT:   // VK_LSHIFT, VK_RSHIFT
+            return MOD_SHIFT;
+        case VK_CONTROL: // VK_LCONTROL, VK_RCONTROL
+            return MOD_CONTROL;
+        case VK_MENU:    // VK_LMENU, VK_RMENU
+            return MOD_ALT;
+        case VK_LWIN: case VK_RWIN:
+            return MOD_WIN;
+        default:
+            return 0;
+    }
 }
 
 /*
@@ -906,7 +931,8 @@ ProcessKeyEvent(WORD wVk, WORD wScanCode, DWORD dwFlags, BOOL bInjected, DWORD d
 
     /* Get virtual key without shifts (VK_(L|R)* -> VK_*) */
     wSimpleVk = IntSimplifyVk(wVk);
-
+    // TODO @katahiromz: Could this be moved into IntSimplifyVk()?
+    // Note that it's however also invoked in the MAPVK_VSC_TO_VK case below...
     if (PRIMARYLANGID(gusLanguageID) == LANG_JAPANESE)
     {
         /* Japanese special! */
@@ -921,7 +947,8 @@ ProcessKeyEvent(WORD wVk, WORD wScanCode, DWORD dwFlags, BOOL bInjected, DWORD d
 
     bWasSimpleDown = IS_KEY_DOWN(gafAsyncKeyState, wSimpleVk);
 
-    /* Update key without shifts */
+    /* Update key without shifts.
+     * NOTE: bIsSimpleDown is only used for Alt-Tab/Esc check made below. */
     wVk2 = IntFixVk(wSimpleVk, !bExt);
     bIsSimpleDown = bIsDown || IS_KEY_DOWN(gafAsyncKeyState, wVk2);
     UpdateAsyncKeyState(wSimpleVk, bIsSimpleDown);
@@ -934,11 +961,33 @@ ProcessKeyEvent(WORD wVk, WORD wScanCode, DWORD dwFlags, BOOL bInjected, DWORD d
                               wScanCode);
     }
 
-    /* Call WH_KEYBOARD_LL hook */
+    /* Cache which modifier keys are physically pressed down, ignoring
+     * any software key injections, so as to truly determine when needed
+     * whether a SAS hotkey is being actually invoked. */
+    // TODO: Ignore also the emulated keys NTUSER may also generate.
+    // TODO: Implement flagging such emulated keys.
+    if (!bInjected)
+    {
+        if (bIsDown)
+            gfsPhysicalModifiers |= IntVkToPhysModifier(wSimpleVk);
+        else
+            gfsPhysicalModifiers &= ~IntVkToPhysModifier(wSimpleVk);
+    }
+
+    /* Call WH_KEYBOARD_LL hook. If the hook procedure returned non-zero, don't send the message. */
     if (co_CallLowLevelKeyboardHook(wVk, wScanCode, dwFlags, bInjected, dwTime, dwExtraInfo))
     {
-        ERR("Kbd msg dropped by WH_KEYBOARD_LL hook\n");
-        bPostMsg = FALSE;
+        /* Allow keys to be dropped by the keyboard hook only if these are not SAS keys */
+        if (!IsSAS(wVk))
+        {
+            TRACE("Kbd msg dropped by WH_KEYBOARD_LL hook\n");
+            bPostMsg = FALSE;
+            return TRUE;
+        }
+        else
+        {
+            WARN("SAS kbd msg drop by WH_KEYBOARD_LL hook has been ignored!\n");
+        }
     }
 
     /* Check if this is a hotkey */

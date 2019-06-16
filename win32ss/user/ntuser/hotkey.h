@@ -4,7 +4,8 @@ typedef struct _HOT_KEY
 {
     PTHREADINFO pti;
     PWND pWnd;
-    UINT fsModifiers;
+    UINT fsModifiers : 15; ///< Usual modifiers: MOD_ALT, MOD_CONTROL, MOD_SHIFT, MOD_WIN
+    UINT fsFlags : 17;     ///< Extra bits (0xFFFF8000)
     UINT vk;
     INT id;
     struct _HOT_KEY *pNext;
@@ -24,6 +25,7 @@ typedef struct _HOT_KEY
 
 VOID FASTCALL UnregisterWindowHotKeys(PWND Window);
 VOID FASTCALL UnregisterThreadHotKeys(PTHREADINFO pti);
+BOOL FASTCALL IsSAS(_In_ UINT vk);
 BOOL FASTCALL co_UserProcessHotKeys(_In_ WORD wVk, _In_ BOOL bIsDown);
 UINT FASTCALL DefWndGetHotKey(PWND pWnd);
 INT FASTCALL DefWndSetHotKey(PWND pWnd, WPARAM wParam);

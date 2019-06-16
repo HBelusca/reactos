@@ -76,6 +76,7 @@ extern INT gLanguageToggleKeyState;
 extern DWORD gdwLanguageToggleKey;
 extern INT gLayoutToggleKeyState;
 extern DWORD gdwLayoutToggleKey;
+extern UINT gfsPhysicalModifiers;
 
 /* Mouse */
 WORD FASTCALL UserGetMouseButtonsState(VOID);
