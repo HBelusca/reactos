@@ -41,9 +41,10 @@ UINT gfsModOnlyCandidate;
 /* FUNCTIONS *****************************************************************/
 
 VOID FASTCALL
-StartDebugHotKeys(VOID)
+SetDebugHotKeys(VOID)
 {
     UINT vk = VK_F12;
+
     UserUnregisterHotKey(PWND_BOTTOM, IDHK_F12);
     UserUnregisterHotKey(PWND_BOTTOM, IDHK_SHIFTF12);
     if (!ENHANCED_KEYBOARD(gKeyboardInfo.KeyboardIdentifier))
@@ -52,7 +53,8 @@ StartDebugHotKeys(VOID)
     }
     UserRegisterHotKey(PWND_BOTTOM, IDHK_SHIFTF12, MOD_SHIFT, vk);
     UserRegisterHotKey(PWND_BOTTOM, IDHK_F12, 0, vk);
-    TRACE("Start up the debugger hotkeys!! If you see this you eneabled debugprints. Congrats!\n");
+
+    TRACE("Set up the debugger hotkeys! If you see this you enabled Debug Prints. Congrats!\n");
 }
 
 /*
@@ -436,17 +438,21 @@ UserRegisterHotKey(PWND pWnd,
     PHOT_KEY pHotKey;
     PTHREADINFO pHotKeyThread;
 
-    /* Find hotkey thread */
+    /* Find the hotkey thread */
     if (pWnd == NULL || pWnd == PWND_BOTTOM)
     {
-        pHotKeyThread = PsGetCurrentThreadWin32Thread();
+        pHotKeyThread = PsGetCurrentThreadWin32Thread(); // gptiCurrent;
     }
     else
     {
         pHotKeyThread = pWnd->head.pti;
     }
 
-    /* Check for existing hotkey */
+    /* Ignore the VK_PACKET key since it is not a real keyboard input */
+    if (vk == VK_PACKET)
+        return FALSE;
+
+    /* Check whether we modify an existing hotkey */
     if (IsHotKey(fsModifiers, vk))
     {
         EngSetLastError(ERROR_HOTKEY_ALREADY_REGISTERED);
@@ -454,7 +460,7 @@ UserRegisterHotKey(PWND pWnd,
         return FALSE;
     }
 
-    /* Create new hotkey */
+    /* Create a new hotkey */
     pHotKey = ExAllocatePoolWithTag(PagedPool, sizeof(HOT_KEY), USERTAG_HOTKEY);
     if (pHotKey == NULL)
     {
@@ -468,7 +474,7 @@ UserRegisterHotKey(PWND pWnd,
     pHotKey->vk = vk;
     pHotKey->id = id;
 
-    /* Insert hotkey to the global list */
+    /* Insert the hotkey into the global list */
     pHotKey->pNext = gphkFirst;
     gphkFirst = pHotKey;
 
@@ -495,18 +501,21 @@ UserUnregisterHotKey(PWND pWnd, int id)
 
             bRet = TRUE;
         }
-        else /* This hotkey will stay, use its next ptr */
+        else
+        {
+            /* This hotkey will stay, use its next ptr */
             pLink = &pHotKey->pNext;
+        }
 
         /* Move to the next entry */
         pHotKey = phkNext;
     }
+
     return bRet;
 }
 
 
 /* SYSCALLS *****************************************************************/
-
 
 BOOL APIENTRY
 NtUserRegisterHotKey(HWND hWnd,
@@ -514,26 +523,25 @@ NtUserRegisterHotKey(HWND hWnd,
                      UINT fsModifiers,
                      UINT vk)
 {
-    PHOT_KEY pHotKey;
     PWND pWnd = NULL;
-    PTHREADINFO pHotKeyThread;
     BOOL bRet = FALSE;
 
     TRACE("Enter NtUserRegisterHotKey\n");
 
-    if (fsModifiers & ~(MOD_ALT|MOD_CONTROL|MOD_SHIFT|MOD_WIN)) // FIXME: Does Win2k3 support MOD_NOREPEAT?
+    // FIXME: Does Win2k3 support MOD_NOREPEAT?
+    if (fsModifiers & ~(MOD_ALT|MOD_CONTROL|MOD_SHIFT|MOD_WIN))
     {
         WARN("Invalid modifiers: %x\n", fsModifiers);
         EngSetLastError(ERROR_INVALID_FLAGS);
-        return 0;
+        return FALSE;
     }
 
     UserEnterExclusive();
 
-    /* Find hotkey thread */
+    /* Check the hotkey thread */
     if (hWnd == NULL)
     {
-        pHotKeyThread = gptiCurrent;
+        pWnd = NULL;
     }
     else
     {
@@ -541,44 +549,16 @@ NtUserRegisterHotKey(HWND hWnd,
         if (!pWnd)
             goto cleanup;
 
-        pHotKeyThread = pWnd->head.pti;
-
-        /* Fix wine msg "Window on another thread" test_hotkey */
+        /* FIXME?? "Fix" wine msg "Window on another thread" test_hotkey */
         if (pWnd->head.pti != gptiCurrent)
         {
-           EngSetLastError(ERROR_WINDOW_OF_OTHER_THREAD);
-           WARN("Must be from the same Thread.\n");
-           goto cleanup;
+            EngSetLastError(ERROR_WINDOW_OF_OTHER_THREAD);
+            WARN("Must be from the same Thread.\n");
+            goto cleanup;
         }
     }
 
-    /* Check for existing hotkey */
-    if (IsHotKey(fsModifiers, vk))
-    {
-        EngSetLastError(ERROR_HOTKEY_ALREADY_REGISTERED);
-        WARN("Hotkey already exists\n");
-        goto cleanup;
-    }
-
-    /* Create new hotkey */
-    pHotKey = ExAllocatePoolWithTag(PagedPool, sizeof(HOT_KEY), USERTAG_HOTKEY);
-    if (pHotKey == NULL)
-    {
-        EngSetLastError(ERROR_NOT_ENOUGH_MEMORY);
-        goto cleanup;
-    }
-
-    pHotKey->pti = pHotKeyThread;
-    pHotKey->pWnd = pWnd;
-    pHotKey->fsModifiers = fsModifiers;
-    pHotKey->vk = vk;
-    pHotKey->id = id;
-
-    /* Insert hotkey to the global list */
-    pHotKey->pNext = gphkFirst;
-    gphkFirst = pHotKey;
-
-    bRet = TRUE;
+    bRet = UserRegisterHotKey(pWnd, id, fsModifiers, vk);
 
 cleanup:
     TRACE("Leave NtUserRegisterHotKey, ret=%i\n", bRet);
@@ -586,41 +566,20 @@ cleanup:
     return bRet;
 }
 
-
 BOOL APIENTRY
 NtUserUnregisterHotKey(HWND hWnd, int id)
 {
-    PHOT_KEY pHotKey = gphkFirst, phkNext, *pLink = &gphkFirst;
     BOOL bRet = FALSE;
     PWND pWnd = NULL;
 
     TRACE("Enter NtUserUnregisterHotKey\n");
     UserEnterExclusive();
 
-    /* Fail if given window is invalid */
+    /* Fail if the given window is invalid */
     if (hWnd && !(pWnd = UserGetWindowObject(hWnd)))
         goto cleanup;
 
-    while (pHotKey)
-    {
-        /* Save next ptr for later use */
-        phkNext = pHotKey->pNext;
-
-        /* Should we delete this hotkey? */
-        if (pHotKey->pWnd == pWnd && pHotKey->id == id)
-        {
-            /* Update next ptr for previous hotkey and free memory */
-            *pLink = phkNext;
-            ExFreePoolWithTag(pHotKey, USERTAG_HOTKEY);
-
-            bRet = TRUE;
-        }
-        else /* This hotkey will stay, use its next ptr */
-            pLink = &pHotKey->pNext;
-
-        /* Move to the next entry */
-        pHotKey = phkNext;
-    }
+    bRet = UserUnregisterHotKey(pWnd, id);
 
 cleanup:
     TRACE("Leave NtUserUnregisterHotKey, ret=%i\n", bRet);
