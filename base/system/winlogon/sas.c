@@ -25,8 +25,10 @@
 #define WINLOGON_SAS_CLASS L"SAS Window class"
 #define WINLOGON_SAS_TITLE L"SAS window"
 
-#define HK_CTRL_ALT_DEL   0
-#define HK_CTRL_SHIFT_ESC 1
+#define IDHK_CTRL_ALT_DEL   0
+#define IDHK_CTRL_SHIFT_ESC 1
+#define IDHK_WIN_L          2
+#define IDHK_WIN_U          3
 
 // #define EWX_FLAGS_MASK  0x00000014
 // #define EWX_ACTION_MASK ~EWX_FLAGS_MASK
@@ -1309,17 +1311,28 @@ RegisterHotKeys(
     IN PWLSESSION Session,
     IN HWND hwndSAS)
 {
-    /* Register Ctrl+Alt+Del Hotkey */
-    if (!RegisterHotKey(hwndSAS, HK_CTRL_ALT_DEL, MOD_CONTROL | MOD_ALT, VK_DELETE))
+    /* Register Ctrl+Alt+Del SAS hotkey */
+    if (!RegisterHotKey(hwndSAS, IDHK_CTRL_ALT_DEL, /* MOD_WINLOGON_SAS | */ MOD_CONTROL | MOD_ALT, VK_DELETE))
     {
         ERR("WL: Unable to register Ctrl+Alt+Del hotkey!\n");
         return FALSE;
     }
 
-    /* Register Ctrl+Shift+Esc (optional) */
-    Session->TaskManHotkey = RegisterHotKey(hwndSAS, HK_CTRL_SHIFT_ESC, MOD_CONTROL | MOD_SHIFT, VK_ESCAPE);
+    /* Register Ctrl+Shift+Esc "Task Manager" hotkey (optional) */
+    Session->TaskManHotkey = RegisterHotKey(hwndSAS, IDHK_CTRL_SHIFT_ESC, MOD_CONTROL | MOD_SHIFT, VK_ESCAPE);
     if (!Session->TaskManHotkey)
         WARN("WL: Warning: Unable to register Ctrl+Alt+Esc hotkey!\n");
+
+    /* Register Win+L "Lock Workstation" hotkey (optional) */
+    Session->LockWkStaHotkey = RegisterHotKey(hwndSAS, IDHK_WIN_L, MOD_WIN, 'L');
+    if (!Session->LockWkStaHotkey)
+        WARN("WL: Warning: Unable to register Win+L hotkey!\n");
+
+    /* Register Win+U "Accessibility Utility" hotkey (optional) */
+    Session->UtilManHotkey = RegisterHotKey(hwndSAS, IDHK_WIN_U, MOD_WIN, 'U');
+    if (!Session->UtilManHotkey)
+        WARN("WL: Warning: Unable to register Win+U hotkey!\n");
+
     return TRUE;
 }
 
@@ -1329,11 +1342,17 @@ UnregisterHotKeys(
     IN PWLSESSION Session,
     IN HWND hwndSAS)
 {
-    /* Unregister hotkeys */
-    UnregisterHotKey(hwndSAS, HK_CTRL_ALT_DEL);
+    /* Unregister SAS hotkey */
+    UnregisterHotKey(hwndSAS, IDHK_CTRL_ALT_DEL);
 
     if (Session->TaskManHotkey)
-        UnregisterHotKey(hwndSAS, HK_CTRL_SHIFT_ESC);
+        UnregisterHotKey(hwndSAS, IDHK_CTRL_SHIFT_ESC);
+
+    if (Session->LockWkStaHotkey)
+        UnregisterHotKey(hwndSAS, IDHK_WIN_L);
+
+    if (Session->UtilManHotkey)
+        UnregisterHotKey(hwndSAS, IDHK_WIN_U);
 
     return TRUE;
 }
@@ -1387,9 +1406,9 @@ SASWindowProc(
     {
         case WM_HOTKEY:
         {
-            switch (lParam)
+            switch (wParam)
             {
-                case MAKELONG(MOD_CONTROL | MOD_ALT, VK_DELETE):
+                case IDHK_CTRL_ALT_DEL:
                 {
                     TRACE("SAS: CONTROL+ALT+DELETE\n");
                     if (!Session->Gina.UseCtrlAltDelete)
@@ -1397,11 +1416,23 @@ SASWindowProc(
                     PostMessageW(Session->SASWindow, WLX_WM_SAS, WLX_SAS_TYPE_CTRL_ALT_DEL, 0);
                     return TRUE;
                 }
-                case MAKELONG(MOD_CONTROL | MOD_SHIFT, VK_ESCAPE):
+                case IDHK_CTRL_SHIFT_ESC:
                 {
                     TRACE("SAS: CONTROL+SHIFT+ESCAPE\n");
                     if (Session->LogonState == STATE_LOGGED_ON)
                         DoGenericAction(Session, WLX_SAS_ACTION_TASKLIST);
+                    return TRUE;
+                }
+                case IDHK_WIN_L:
+                {
+                    TRACE("SAS: WIN+L\n");
+                    PostMessageW(Session->SASWindow, WM_LOGONNOTIFY, LN_LOCK_WORKSTATION, 0);
+                    return TRUE;
+                }
+                case IDHK_WIN_U:
+                {
+                    TRACE("SAS: WIN+U\n");
+                    // PostMessageW(Session->SASWindow, WM_LOGONNOTIFY, LN_ACCESSIBILITY, 0);
                     return TRUE;
                 }
             }
@@ -1458,6 +1489,13 @@ SASWindowProc(
                     DispatchSAS(Session, WLX_SAS_TYPE_SCRNSVR_TIMEOUT);
                     break;
                 }
+#if 0
+                case LN_ACCESSIBILITY:
+                {
+                    DPRINT1("LN_ACCESSIBILITY(lParam = %lu)\n", lParam);
+                    break;
+                }
+#endif
                 case LN_LOCK_WORKSTATION:
                 {
                     DoGenericAction(Session, WLX_SAS_ACTION_LOCK_WKSTA);
