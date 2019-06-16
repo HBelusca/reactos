@@ -77,6 +77,7 @@ PKL NTAPI UserHklToKbl(HKL hKl);
 BOOL NTAPI UserSetDefaultInputLang(HKL hKl);
 extern int gLanguageToggleKeyState;
 extern DWORD gdwLanguageToggleKey;
+extern UINT gfsPhysicalModifiers;
 
 /* Mouse */
 WORD FASTCALL UserGetMouseButtonsState(VOID);
@@ -87,7 +88,7 @@ BOOL NTAPI UserSendMouseInput(MOUSEINPUT *pMouseInput, BOOL bInjected);
 UINT FASTCALL IntImmProcessKey(PUSER_MESSAGE_QUEUE, PWND, UINT, WPARAM, LPARAM);
 
 extern DWORD gSystemFS;
-extern UINT gSystemCPCharSet; 
+extern UINT gSystemCPCharSet;
 extern HANDLE ghKeyboardDevice;
 extern PTHREADINFO ptiRawInput;
 extern BYTE gafAsyncKeyState[256 * 2 / 8]; // 2 bits per key

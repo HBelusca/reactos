@@ -38,6 +38,14 @@ DBG_DEFAULT_CHANNEL(UserHotkey);
 PHOT_KEY gphkFirst = NULL;
 UINT gfsModOnlyCandidate;
 
+/*
+ * The globally registered SAS hotkey. Done by Winlogon only by calling
+ * RegisterHotKey() with the special modifier MOD_WINLOGON_SAS flag.
+ */
+UINT gfsSASModifiers = 0;
+UINT gvkSAS = 0;
+
+
 /* FUNCTIONS *****************************************************************/
 
 VOID FASTCALL
@@ -60,28 +68,27 @@ SetDebugHotKeys(VOID)
 /*
  * IntGetModifiers
  *
- * Returns a value that indicates if the key is a modifier key, and
- * which one.
+ * Returns a value that indicates if the key is a modifier key, and which one.
  */
 static
 UINT FASTCALL
 IntGetModifiers(PBYTE pKeyState)
 {
-    UINT fModifiers = 0;
+    UINT fsModifiers = 0;
 
     if (IS_KEY_DOWN(pKeyState, VK_SHIFT))
-        fModifiers |= MOD_SHIFT;
+        fsModifiers |= MOD_SHIFT;
 
     if (IS_KEY_DOWN(pKeyState, VK_CONTROL))
-        fModifiers |= MOD_CONTROL;
+        fsModifiers |= MOD_CONTROL;
 
     if (IS_KEY_DOWN(pKeyState, VK_MENU))
-        fModifiers |= MOD_ALT;
+        fsModifiers |= MOD_ALT;
 
     if (IS_KEY_DOWN(pKeyState, VK_LWIN) || IS_KEY_DOWN(pKeyState, VK_RWIN))
-        fModifiers |= MOD_WIN;
+        fsModifiers |= MOD_WIN;
 
-    return fModifiers;
+    return fsModifiers;
 }
 
 /*
@@ -145,9 +152,20 @@ UnregisterThreadHotKeys(PTHREADINFO pti)
 }
 
 /*
+ * IsSAS
+ *
+ * Checks whether the hotkey combination is the registered SAS hotkey.
+ */
+BOOL FASTCALL
+IsSAS(UINT fsModifiers, UINT vk)
+{
+    return ((fsModifiers == gfsSASModifiers) && (vk == gvkSAS));
+}
+
+/*
  * IsHotKey
  *
- * Checks if given key and modificators have corresponding hotkey
+ * Checks if the given key and modificators have a corresponding hotkey.
  */
 static PHOT_KEY FASTCALL
 IsHotKey(UINT fsModifiers, WORD wVk)
@@ -178,7 +196,7 @@ IsHotKey(UINT fsModifiers, WORD wVk)
 BOOL NTAPI
 co_UserProcessHotKeys(WORD wVk, BOOL bIsDown)
 {
-    UINT fModifiers;
+    UINT fsModifiers;
     PHOT_KEY pHotKey;
     PWND pWnd;
     BOOL DoNotPostMsg = FALSE;
@@ -191,20 +209,24 @@ co_UserProcessHotKeys(WORD wVk, BOOL bIsDown)
         IsModifier = TRUE;
     }
 
-    fModifiers = IntGetModifiers(gafAsyncKeyState);
+    fsModifiers = IntGetModifiers(gafAsyncKeyState);
+
+//
+// TODO: Explicitly check for SAS here!
+//
 
     if (bIsDown)
     {
         if (IsModifier)
         {
             /* Modifier key down -- no hotkey trigger, but remember this */
-            gfsModOnlyCandidate = fModifiers;
+            gfsModOnlyCandidate = fsModifiers;
             return FALSE;
         }
         else
         {
             /* Regular key down -- check for hotkey, and reset mod candidates */
-            pHotKey = IsHotKey(fModifiers, wVk);
+            pHotKey = IsHotKey(fsModifiers, wVk);
             gfsModOnlyCandidate = 0;
         }
     }
@@ -224,6 +246,14 @@ co_UserProcessHotKeys(WORD wVk, BOOL bIsDown)
         }
     }
 
+    if (pHotKey && IsSAS(/*pHotKey->*/fsModifiers, /*pHotKey->vk*/wVk) && // FIXME: Use instead a signalling flag in one member of pHotKey
+        !IsSAS(gfsPhysicalModifiers, /*pHotKey->vk*/wVk))
+    {
+        ERR("Got a masquerading SAS hotkey while none is physically pressed!");
+        return FALSE;
+    }
+
+// TODO: Just return now if pHotKey == NULL instead of having this extra indent level.
     if (pHotKey)
     {
         TRACE("Hot key pressed (pWnd %p, id %d)\n", pHotKey->pWnd, pHotKey->id);
@@ -269,7 +299,7 @@ co_UserProcessHotKeys(WORD wVk, BOOL bIsDown)
         if (!pHotKey->pWnd)
         {
             TRACE("UPTM Hot key Id %d Key %u\n", pHotKey->id, wVk );
-            UserPostThreadMessage(pHotKey->pti, WM_HOTKEY, pHotKey->id, MAKELONG(fModifiers, wVk));
+            UserPostThreadMessage(pHotKey->pti, WM_HOTKEY, pHotKey->id, MAKELONG(fsModifiers, wVk));
             //ptiLastInput = pHotKey->pti;
             return TRUE; /* Don't send any message */
         }
@@ -295,7 +325,7 @@ co_UserProcessHotKeys(WORD wVk, BOOL bIsDown)
                 else
                 {
                     TRACE("UPM Hot key Id %d Key %u\n", pHotKey->id, wVk );
-                    UserPostMessage(UserHMGetHandle(pWnd), WM_HOTKEY, pHotKey->id, MAKELONG(fModifiers, wVk));
+                    UserPostMessage(UserHMGetHandle(pWnd), WM_HOTKEY, pHotKey->id, MAKELONG(fsModifiers, wVk));
                 }
                 //ptiLastInput = pWnd->head.pti;
                 return TRUE; /* Don't send any message */
@@ -435,10 +465,11 @@ UserRegisterHotKey(PWND pWnd,
                    UINT fsModifiers,
                    UINT vk)
 {
-    PHOT_KEY pHotKey;
     PTHREADINFO pHotKeyThread;
+    PHOT_KEY pHotKey;
+    BOOL bIsSAS = FALSE;
 
-    /* Find the hotkey thread */
+    /* Find and check the hotkey thread */
     if (pWnd == NULL || pWnd == PWND_BOTTOM)
     {
         pHotKeyThread = PsGetCurrentThreadWin32Thread(); // gptiCurrent;
@@ -446,11 +477,35 @@ UserRegisterHotKey(PWND pWnd,
     else
     {
         pHotKeyThread = pWnd->head.pti;
+
+        /* The window must be from the current thread */
+        if (pHotKeyThread != gptiCurrent)
+        {
+            EngSetLastError(ERROR_WINDOW_OF_OTHER_THREAD);
+            WARN("Must be from the same thread.\n");
+            return FALSE;
+        }
     }
 
     /* Ignore the VK_PACKET key since it is not a real keyboard input */
     if (vk == VK_PACKET)
         return FALSE;
+
+    /* Check whether this is the SAS hotkey */
+    if (fsModifiers & MOD_WINLOGON_SAS)
+    {
+        /* Only Winlogon can do it */
+        if (gpidLogon != PsGetCurrentProcessId())
+        {
+            ERR("Unauthorized process attempted to register a SAS hotkey!\n");
+            EngSetLastError(ERROR_ACCESS_DENIED);
+            return FALSE;
+        }
+        fsModifiers &= ~MOD_WINLOGON_SAS;
+
+        /* Remember this is a SAS hotkey */
+        bIsSAS = TRUE;
+    }
 
     /* Check whether we modify an existing hotkey */
     if (IsHotKey(fsModifiers, vk))
@@ -478,14 +533,21 @@ UserRegisterHotKey(PWND pWnd,
     pHotKey->pNext = gphkFirst;
     gphkFirst = pHotKey;
 
+    if (bIsSAS)
+    {
+        /* Reset the existing SAS hotkey */
+        gfsSASModifiers = fsModifiers;
+        gvkSAS = vk;
+    }
+
     return TRUE;
 }
 
 BOOL FASTCALL
 UserUnregisterHotKey(PWND pWnd, int id)
 {
-    PHOT_KEY pHotKey = gphkFirst, phkNext, *pLink = &gphkFirst;
     BOOL bRet = FALSE;
+    PHOT_KEY pHotKey = gphkFirst, phkNext, *pLink = &gphkFirst;
 
     while (pHotKey)
     {
@@ -523,13 +585,13 @@ NtUserRegisterHotKey(HWND hWnd,
                      UINT fsModifiers,
                      UINT vk)
 {
-    PWND pWnd = NULL;
     BOOL bRet = FALSE;
+    PWND pWnd = NULL;
 
     TRACE("Enter NtUserRegisterHotKey\n");
 
     // FIXME: Does Win2k3 support MOD_NOREPEAT?
-    if (fsModifiers & ~(MOD_ALT|MOD_CONTROL|MOD_SHIFT|MOD_WIN))
+    if (fsModifiers & ~(MOD_WINLOGON_SAS|MOD_ALT|MOD_CONTROL|MOD_SHIFT|MOD_WIN))
     {
         WARN("Invalid modifiers: %x\n", fsModifiers);
         EngSetLastError(ERROR_INVALID_FLAGS);
@@ -538,25 +600,9 @@ NtUserRegisterHotKey(HWND hWnd,
 
     UserEnterExclusive();
 
-    /* Check the hotkey thread */
-    if (hWnd == NULL)
-    {
-        pWnd = NULL;
-    }
-    else
-    {
-        pWnd = UserGetWindowObject(hWnd);
-        if (!pWnd)
-            goto cleanup;
-
-        /* FIXME?? "Fix" wine msg "Window on another thread" test_hotkey */
-        if (pWnd->head.pti != gptiCurrent)
-        {
-            EngSetLastError(ERROR_WINDOW_OF_OTHER_THREAD);
-            WARN("Must be from the same Thread.\n");
-            goto cleanup;
-        }
-    }
+    /* Fail if the given window is invalid */
+    if (hWnd && !(pWnd = UserGetWindowObject(hWnd)))
+        goto cleanup;
 
     bRet = UserRegisterHotKey(pWnd, id, fsModifiers, vk);
 

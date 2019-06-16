@@ -59,19 +59,17 @@ StartTaskManager(
     if (!Session->Gina.Functions.WlxStartApplication)
         return FALSE;
 
-    if (!CreateEnvironmentBlock(
-        &lpEnvironment,
-        Session->UserToken,
-        TRUE))
+    if (!CreateEnvironmentBlock(&lpEnvironment,
+                                Session->UserToken,
+                                TRUE))
     {
         return FALSE;
     }
 
-    ret = Session->Gina.Functions.WlxStartApplication(
-        Session->Gina.Context,
-        L"Default",
-        lpEnvironment,
-        L"taskmgr.exe");
+    ret = Session->Gina.Functions.WlxStartApplication(Session->Gina.Context,
+                                                      L"Default",
+                                                      lpEnvironment,
+                                                      L"taskmgr.exe");
 
     DestroyEnvironmentBlock(lpEnvironment);
     return ret;
@@ -97,11 +95,10 @@ StartUserShell(
     /* FIXME: reverting to lower privileges after creating user shell? */
     RtlAdjustPrivilege(SE_ASSIGNPRIMARYTOKEN_PRIVILEGE, TRUE, FALSE, &Old);
 
-    ret = Session->Gina.Functions.WlxActivateUserShell(
-                Session->Gina.Context,
-                L"Default",
-                NULL, /* FIXME */
-                lpEnvironment);
+    ret = Session->Gina.Functions.WlxActivateUserShell(Session->Gina.Context,
+                                                       L"Default",
+                                                       NULL, /* FIXME */
+                                                       lpEnvironment);
 
     DestroyEnvironmentBlock(lpEnvironment);
     return ret;
@@ -1312,7 +1309,7 @@ RegisterHotKeys(
     IN HWND hwndSAS)
 {
     /* Register Ctrl+Alt+Del SAS hotkey */
-    if (!RegisterHotKey(hwndSAS, IDHK_CTRL_ALT_DEL, /* MOD_WINLOGON_SAS | */ MOD_CONTROL | MOD_ALT, VK_DELETE))
+    if (!RegisterHotKey(hwndSAS, IDHK_CTRL_ALT_DEL, MOD_WINLOGON_SAS | MOD_CONTROL | MOD_ALT, VK_DELETE))
     {
         ERR("WL: Unable to register Ctrl+Alt+Del hotkey!\n");
         return FALSE;
@@ -1369,7 +1366,7 @@ HandleMessageBeep(UINT uType)
         EventName = NULL;
         break;
     case MB_OK:
-        EventName = L"SystemDefault";
+        EventName = L"SystemDefault"; // L".Default";
         break;
     case MB_ICONASTERISK:
         EventName = L"SystemAsterisk";
@@ -1432,12 +1429,13 @@ SASWindowProc(
                 case IDHK_WIN_U:
                 {
                     TRACE("SAS: WIN+U\n");
-                    // PostMessageW(Session->SASWindow, WM_LOGONNOTIFY, LN_ACCESSIBILITY, 0);
+                    PostMessageW(Session->SASWindow, WM_LOGONNOTIFY, LN_ACCESSIBILITY, 0);
                     return TRUE;
                 }
             }
             break;
         }
+
         case WM_CREATE:
         {
             /* Get the session pointer from the create data */
@@ -1449,12 +1447,14 @@ SASWindowProc(
                 return TRUE;
             return RegisterHotKeys(Session, hwndDlg);
         }
+
         case WM_DESTROY:
         {
             if (!GetSetupType())
                 UnregisterHotKeys(Session, hwndDlg);
             return TRUE;
         }
+
         case WM_SETTINGCHANGE:
         {
             UINT uiAction = (UINT)wParam;
@@ -1465,6 +1465,7 @@ SASWindowProc(
             }
             return TRUE;
         }
+
         case WM_LOGONNOTIFY:
         {
             switch(wParam)
@@ -1489,13 +1490,11 @@ SASWindowProc(
                     DispatchSAS(Session, WLX_SAS_TYPE_SCRNSVR_TIMEOUT);
                     break;
                 }
-#if 0
                 case LN_ACCESSIBILITY:
                 {
-                    DPRINT1("LN_ACCESSIBILITY(lParam = %lu)\n", lParam);
+                    ERR("LN_ACCESSIBILITY(lParam = %lu)\n", lParam);
                     break;
                 }
-#endif
                 case LN_LOCK_WORKSTATION:
                 {
                     DoGenericAction(Session, WLX_SAS_ACTION_LOCK_WKSTA);
@@ -1593,6 +1592,7 @@ SASWindowProc(
             }
             return 0;
         }
+
         case WM_TIMER:
         {
             if (wParam == 1)
@@ -1602,6 +1602,7 @@ SASWindowProc(
             }
             break;
         }
+
         case WLX_WM_SAS:
         {
             DispatchSAS(Session, (DWORD)wParam);

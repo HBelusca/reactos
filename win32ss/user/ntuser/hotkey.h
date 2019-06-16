@@ -24,6 +24,7 @@ typedef struct _HOT_KEY
 
 VOID FASTCALL UnregisterWindowHotKeys(PWND Window);
 VOID FASTCALL UnregisterThreadHotKeys(PTHREADINFO pti);
+BOOL FASTCALL IsSAS(UINT fsModifiers, UINT vk);
 BOOL NTAPI co_UserProcessHotKeys(WORD wVk, BOOL bIsDown);
 UINT FASTCALL DefWndGetHotKey(PWND pWnd);
 INT FASTCALL DefWndSetHotKey(PWND pWnd, WPARAM wParam);

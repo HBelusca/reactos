@@ -17,6 +17,7 @@ static KEYBOARD_INDICATOR_PARAMETERS gIndicators = {0, 0};
 KEYBOARD_ATTRIBUTES gKeyboardInfo;
 int gLanguageToggleKeyState = 0;
 DWORD gdwLanguageToggleKey = 0;
+UINT gfsPhysicalModifiers = 0;
 
 /* FUNCTIONS *****************************************************************/
 
@@ -207,6 +208,31 @@ UserInitKeyboard(HANDLE hKeyboardDevice)
              gKeyboardInfo.KeyboardIdentifier.Type,
              gKeyboardInfo.KeyboardIdentifier.Subtype,
              gKeyboardInfo.NumberOfFunctionKeys);
+}
+
+/*
+ * IntGetPhysicalModifiers
+ *
+ * Returns a value that indicates if the key is a modifier key, and which one.
+ * Looks only at the physical value (this differs from hotkey.c!IntGetModifiers() ).
+ */
+static
+UINT FASTCALL
+IntGetPhysicalModifiers(WORD wVk)
+{
+    switch (wVk)
+    {
+        case VK_SHIFT:
+            return MOD_SHIFT;
+        case VK_CONTROL:
+            return MOD_CONTROL;
+        case VK_MENU:
+            return MOD_ALT;
+        case VK_LWIN: case VK_RWIN:
+            return MOD_WIN;
+        default:
+            return 0;
+    }
 }
 
 /*
@@ -675,7 +701,9 @@ UpdateAsyncKeyState(WORD wVk, BOOL bIsDown)
         gafAsyncKeyStateRecentDown[wVk / 8] |= (1 << (wVk % 8));
     }
     else
+    {
         SET_KEY_DOWN(gafAsyncKeyState, wVk, FALSE);
+    }
 }
 
 /*
@@ -826,17 +854,36 @@ ProcessKeyEvent(WORD wVk, WORD wScanCode, DWORD dwFlags, BOOL bInjected, DWORD d
                               wScanCode);
     }
 
-    /* Call WH_KEYBOARD_LL hook */
+    /* Cache which physical modifier keys have been pressed, ignoring any software key injections */
+    if (!bInjected)
+    {
+        if (bIsDown) // bIsSimpleDown
+            gfsPhysicalModifiers |= IntGetPhysicalModifiers(wSimpleVk);
+        else
+            gfsPhysicalModifiers &= ~IntGetPhysicalModifiers(wSimpleVk);
+    }
+
+    /* Call WH_KEYBOARD_LL hook. If the hook procedure returned non zero, don't send the message. */
     if (co_CallLowLevelKeyboardHook(wVk, wScanCode, dwFlags, bInjected, dwTime, dwExtraInfo))
     {
-        ERR("Kbd msg dropped by WH_KEYBOARD_LL hook\n");
-        bPostMsg = FALSE;
+        /* Allow keys to be dropped by the keyboard hook only if these are not SAS keys */
+        if (!IsSAS(gfsPhysicalModifiers, wVk))
+        {
+            ERR("Kbd msg dropped by WH_KEYBOARD_LL hook\n");
+            bPostMsg = FALSE;
+            return TRUE;
+        }
+        else
+        {
+            ERR("SAS kbd msg drop by WH_KEYBOARD_LL hook has been ignored!\n");
+        }
     }
 
     /* Check if this is a hotkey */
-    if (co_UserProcessHotKeys(wSimpleVk, bIsDown)) //// Check if this is correct, refer to hotkey sequence message tests.
+    // TODO: Check if this is correct, refer to hotkey sequence message tests.
+    if (co_UserProcessHotKeys(wSimpleVk, bIsDown))
     {
-        TRACE("HotKey Processed\n");
+        TRACE("HotKey processed\n");
         bPostMsg = FALSE;
     }
 
@@ -870,7 +917,9 @@ ProcessKeyEvent(WORD wVk, WORD wScanCode, DWORD dwFlags, BOOL bInjected, DWORD d
             }
         }
         else
+        {
             Msg.message = WM_SYSKEYUP;
+        }
     }
     else
     {
@@ -903,7 +952,9 @@ ProcessKeyEvent(WORD wVk, WORD wScanCode, DWORD dwFlags, BOOL bInjected, DWORD d
             SnapWindow(pFocusQueue->spwndActive ? UserHMGetHandle(pFocusQueue->spwndActive) : 0);
         }
         else
+        {
             SnapWindow(NULL); // Snap Desktop.
+        }
     }
     else if (pFocusQueue && bPostMsg)
     {
@@ -955,10 +1006,10 @@ ProcessKeyEvent(WORD wVk, WORD wScanCode, DWORD dwFlags, BOOL bInjected, DWORD d
                 Msg.lParam |= KF_MENUMODE << 16;
         }
 
-        // Post mouse move before posting key buttons, to keep it syned.
+        // Post mouse move before posting key buttons, to keep it synced.
         if (pFocusQueue->QF_flags & QF_MOUSEMOVED)
         {
-           IntCoalesceMouseMove(pti);
+            IntCoalesceMouseMove(pti);
         }
 
         /* Post a keyboard message */
@@ -1261,7 +1312,7 @@ IntMapVirtualKeyEx(UINT uCode, UINT Type, PKBDTABLES pKbdTbl)
 
         case MAPVK_VK_TO_CHAR:
             uRet = (UINT)IntVkToChar(uCode, pKbdTbl);
-        break;
+            break;
 
         case MAPVK_VSC_TO_VK_EX:
             uRet = IntVscToVk(uCode, pKbdTbl) & 0xFF;
