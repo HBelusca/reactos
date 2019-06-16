@@ -23,48 +23,65 @@ PWLSESSION WLSession = NULL;
 
 static
 BOOL
-StartServicesManager(VOID)
+StartSystemProcess(
+    IN LPCWSTR CmdLine,
+    IN LPCWSTR Desktop OPTIONAL)
 {
+    BOOL Success;
     STARTUPINFOW StartupInfo;
     PROCESS_INFORMATION ProcessInformation;
-    LPCWSTR ServiceString = L"services.exe";
-    BOOL res;
 
-    /* Start the service control manager (services.exe) */
-    ZeroMemory(&StartupInfo, sizeof(STARTUPINFOW));
+    /* Start the system process */
+    ZeroMemory(&StartupInfo, sizeof(StartupInfo));
     StartupInfo.cb = sizeof(StartupInfo);
     StartupInfo.lpReserved = NULL;
-    StartupInfo.lpDesktop = NULL;
+    StartupInfo.lpDesktop = Desktop;
     StartupInfo.lpTitle = NULL;
-    StartupInfo.dwFlags = 0;
+    StartupInfo.dwFlags = 0;        // FIXME!
+    // StartupInfo.wShowWindow;     // FIXME!
     StartupInfo.cbReserved2 = 0;
     StartupInfo.lpReserved2 = 0;
 
-    TRACE("WL: Creating new process - %S\n", ServiceString);
+    TRACE("WL: Creating new process - %S\n", CmdLine);
 
-    res = CreateProcessW(ServiceString,
-                         NULL,
-                         NULL,
-                         NULL,
-                         FALSE,
-                         DETACHED_PROCESS,
-                         NULL,
-                         NULL,
-                         &StartupInfo,
-                         &ProcessInformation);
-    if (!res)
+    Success = CreateProcessW(CmdLine,
+                             NULL,  // ??
+                             NULL,
+                             NULL,
+                             FALSE,
+                             DETACHED_PROCESS, // | CREATE_UNICODE_ENVIRONMENT, // FIXME!
+                             NULL,  // FIXME! Environment!
+                             NULL,
+                             &StartupInfo,
+                             &ProcessInformation);
+    if (!Success)
     {
-        ERR("WL: Failed to execute services (error %lu)\n", GetLastError());
+        ERR("WL: Failed to execute process (error %lu)\n", GetLastError());
         return FALSE;
     }
 
-    TRACE("WL: Created new process - %S\n", ServiceString);
+    TRACE("WL: Created new process - %S\n", CmdLine);
 
     CloseHandle(ProcessInformation.hThread);
     CloseHandle(ProcessInformation.hProcess);
 
-    TRACE("WL: StartServicesManager() done.\n");
+    TRACE("WL: StartSystemProcess() done.\n");
 
+    return Success;
+}
+
+
+static
+BOOL
+StartServicesManager(VOID)
+{
+    /* Start the service control manager (services.exe) */
+    if (!StartSystemProcess(L"services.exe", NULL))
+    {
+        ERR("WL: Failed to execute services (error %lu)\n", GetLastError());
+        return FALSE;
+    }
+    TRACE("WL: StartServicesManager() done.\n");
     return TRUE;
 }
 
@@ -73,40 +90,14 @@ static
 BOOL
 StartLsass(VOID)
 {
-    STARTUPINFOW StartupInfo;
-    PROCESS_INFORMATION ProcessInformation;
-    LPCWSTR ServiceString = L"lsass.exe";
-    BOOL res;
-
     /* Start the local security authority subsystem (lsass.exe) */
-    ZeroMemory(&StartupInfo, sizeof(STARTUPINFOW));
-    StartupInfo.cb = sizeof(StartupInfo);
-    StartupInfo.lpReserved = NULL;
-    StartupInfo.lpDesktop = NULL;
-    StartupInfo.lpTitle = NULL;
-    StartupInfo.dwFlags = 0;
-    StartupInfo.cbReserved2 = 0;
-    StartupInfo.lpReserved2 = 0;
-
-    TRACE("WL: Creating new process - %S\n", ServiceString);
-
-    res = CreateProcessW(ServiceString,
-                         NULL,
-                         NULL,
-                         NULL,
-                         FALSE,
-                         DETACHED_PROCESS,
-                         NULL,
-                         NULL,
-                         &StartupInfo,
-                         &ProcessInformation);
-
-    TRACE("WL: Created new process - %S\n", ServiceString);
-
-    CloseHandle(ProcessInformation.hThread);
-    CloseHandle(ProcessInformation.hProcess);
-
-    return res;
+    if (!StartSystemProcess(L"lsass.exe", NULL))
+    {
+        ERR("WL: Failed to execute LSASS (error %lu)\n", GetLastError());
+        return FALSE;
+    }
+    TRACE("WL: StartLsass() done.\n");
+    return TRUE;
 }
 
 
