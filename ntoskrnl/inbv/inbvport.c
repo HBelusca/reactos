@@ -60,12 +60,13 @@ InbvPortEnableFifo(IN ULONG   PortId,
     CpEnableFifo(Port[PortId].Address, Enable);
 }
 
-VOID
+BOOLEAN
 NTAPI
 InbvPortTerminate(IN ULONG PortId)
 {
     /* The port is now available */
     Port[PortId].Address = NULL;
+    return TRUE;
 }
 
 BOOLEAN

@@ -133,7 +133,7 @@ InbvPortPutByte(
     IN UCHAR Byte
 );
 
-VOID
+BOOLEAN
 NTAPI
 InbvPortTerminate(
     IN ULONG PortId
