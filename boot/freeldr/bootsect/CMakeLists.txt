@@ -1,7 +1,7 @@
 
 include_directories(${REACTOS_SOURCE_DIR}/boot/freeldr)
 
-if(ARCH STREQUAL "i386" OR ARCH STREQUAL "amd64")
+if((ARCH STREQUAL "i386") OR (ARCH STREQUAL "amd64"))
 
     CreateBootSectorTarget(dosmbr ${CMAKE_CURRENT_SOURCE_DIR}/dosmbr.S ${CMAKE_CURRENT_BINARY_DIR}/dosmbr.bin 7c00)
     CreateBootSectorTarget(ext2 ${CMAKE_CURRENT_SOURCE_DIR}/ext2.S ${CMAKE_CURRENT_BINARY_DIR}/ext2.bin 0)
@@ -36,11 +36,14 @@ if(ARCH STREQUAL "i386" OR ARCH STREQUAL "amd64")
     add_cd_file(TARGET fat32 DESTINATION loader NO_CAB FILE ${CMAKE_CURRENT_BINARY_DIR}/fat32.bin FOR bootcd regtest)
     add_cd_file(TARGET isoboot DESTINATION loader NO_CAB NOT_IN_HYBRIDCD FILE ${CMAKE_CURRENT_BINARY_DIR}/isoboot.bin FOR all hybridcd)
     add_cd_file(TARGET isobtrt DESTINATION loader NO_CAB NOT_IN_HYBRIDCD FILE ${CMAKE_CURRENT_BINARY_DIR}/isobtrt.bin FOR bootcd regtest)
+
 elseif(ARCH STREQUAL "arm")
+
     add_custom_target(fat
         COMMAND exit 1
         COMMENT "arm fat target not implemented yet")
     add_custom_target(fat32
         COMMAND exit 1
         COMMENT "arm fat32 target not implemented yet")
+
 endif()

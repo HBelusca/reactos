@@ -334,8 +334,8 @@ endif()
 if(NOT ARCH STREQUAL "arm")
     concatenate_files(
         ${CMAKE_CURRENT_BINARY_DIR}/freeldr.sys
-        ${CMAKE_CURRENT_BINARY_DIR}/frldr16.bin
-        ${CMAKE_CURRENT_BINARY_DIR}/$<TARGET_FILE_NAME:freeldr_pe>)
+        ${CMAKE_CURRENT_BINARY_DIR}/frldr16.bin # $<SHELL_PATH:$<TARGET_FILE:frldr16>>
+        ${CMAKE_CURRENT_BINARY_DIR}/$<TARGET_FILE_NAME:freeldr_pe>) # $<SHELL_PATH:$<TARGET_FILE:freeldr_pe>>
     add_custom_target(freeldr ALL DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/freeldr.sys)
 else()
     add_custom_target(freeldr ALL DEPENDS freeldr_pe)
@@ -348,8 +348,8 @@ add_cd_file(TARGET freeldr FILE ${CMAKE_CURRENT_BINARY_DIR}/freeldr.sys DESTINAT
 if(NOT ARCH STREQUAL "arm")
     concatenate_files(
         ${CMAKE_CURRENT_BINARY_DIR}/setupldr.sys
-        ${CMAKE_CURRENT_BINARY_DIR}/frldr16.bin
-        ${CMAKE_CURRENT_BINARY_DIR}/$<TARGET_FILE_NAME:freeldr_pe>)
+        ${CMAKE_CURRENT_BINARY_DIR}/frldr16.bin # $<SHELL_PATH:$<TARGET_FILE:frldr16>>
+        ${CMAKE_CURRENT_BINARY_DIR}/$<TARGET_FILE_NAME:freeldr_pe>) # $<SHELL_PATH:$<TARGET_FILE:freeldr_pe>>
     add_custom_target(setupldr ALL DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/setupldr.sys)
 else()
     add_custom_target(setupldr ALL DEPENDS freeldr_pe)
