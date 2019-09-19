@@ -6,6 +6,11 @@ if(SEPARATE_DBG)
     set(CMAKE_LDR_PE_HELPER_STANDARD_LIBRARIES "-lgcc" CACHE STRING "Standard C Libraries")
 endif()
 
+# StartROM for x86 or x64 architectures only.
+if((ARCH STREQUAL "i386") OR (ARCH STREQUAL "amd64")) # if(NOT ARCH STREQUAL "arm")
+    include(startrom.cmake)
+endif()
+
 if(MSVC)
     # We don't need hotpatching
     replace_compile_flags("/hotpatch" " ")
@@ -15,18 +20,6 @@ if(MSVC)
 endif()
 
 spec2def(freeldr_pe.exe freeldr.spec)
-
-if(ARCH STREQUAL "i386")
-    CreateBootSectorTarget(frldr16
-        ${CMAKE_CURRENT_SOURCE_DIR}/arch/realmode/i386.S
-        ${CMAKE_CURRENT_BINARY_DIR}/frldr16.bin
-        F800)
-elseif(ARCH STREQUAL "amd64")
-    CreateBootSectorTarget(frldr16
-        ${CMAKE_CURRENT_SOURCE_DIR}/arch/realmode/amd64.S
-        ${CMAKE_CURRENT_BINARY_DIR}/frldr16.bin
-        F800)
-endif()
 
 include_directories(BEFORE include)
 include_directories(${REACTOS_SOURCE_DIR}/ntoskrnl/include)
@@ -91,12 +84,7 @@ list(APPEND FREELDR_BOOTMGR_SOURCE
     ui/ui.c
     ui/video.c)
 
-list(APPEND FREELDR_BASE_ASM_SOURCE)
-
 if(ARCH STREQUAL "i386")
-    list(APPEND FREELDR_BASE_ASM_SOURCE
-        arch/i386/multiboot.S)
-
     list(APPEND FREELDR_COMMON_ASM_SOURCE
         arch/i386/drvmap.S
         arch/i386/entry.S
@@ -243,10 +231,7 @@ if(ARCH STREQUAL "i386" AND NOT MSVC)
     target_link_libraries(freeldr_common mini_hal)
 endif()
 
-add_asm_files(freeldr_base_asm ${FREELDR_BASE_ASM_SOURCE})
-
 list(APPEND FREELDR_BASE_SOURCE
-    ${freeldr_base_asm}
     bootmgr.c # This file is compiled with custom definitions
     freeldr.c
     ntldr/setupldr.c ## Strangely enough this file is needed in GCC builds
@@ -276,14 +261,13 @@ if(NOT MSVC AND SEPARATE_DBG)
 endif()
 
 if(MSVC)
-    if(ARCH STREQUAL "arm")
-        add_target_link_flags(freeldr_pe "/ignore:4078 /ignore:4254 /DRIVER")
-        add_target_link_flags(freeldr_pe_dbg "/ignore:4078 /ignore:4254 /DRIVER")
-    else()
-        add_target_link_flags(freeldr_pe "/ignore:4078 /ignore:4254 /DRIVER /FIXED /FILEALIGN:0x200 /ALIGN:0x200")
+    add_target_link_flags(freeldr_pe "/ignore:4078 /ignore:4254 /DRIVER")
+    add_target_link_flags(freeldr_pe_dbg "/ignore:4078 /ignore:4254 /DRIVER")
+    if(NOT ARCH STREQUAL "arm")
+        add_target_link_flags(freeldr_pe "/FIXED /FILEALIGN:0x200 /ALIGN:0x200")
         add_linker_script(freeldr_pe freeldr_i386.msvc.lds)
-        add_target_link_flags(freeldr_pe_dbg "/ignore:4078 /ignore:4254 /DRIVER /FIXED /FILEALIGN:0x200 /ALIGN:0x200")
-        add_linker_script(freeldr_pe_dbg freeldr_i386.msvc.lds)
+        add_target_link_flags(freeldr_pe_dbg "/FIXED /FILEALIGN:0x200 /ALIGN:0x200")
+        ## add_linker_script(freeldr_pe_dbg freeldr_i386.msvc.lds)
     endif()
 else()
     add_target_link_flags(freeldr_pe "-Wl,--strip-all,--exclude-all-symbols,--file-alignment,0x200,--section-alignment,0x200")
@@ -317,7 +301,7 @@ endif()
 if(RUNTIME_CHECKS)
     target_link_libraries(freeldr_pe runtmchk)
     target_link_libraries(freeldr_pe_dbg runtmchk)
-    add_target_link_flags(freeldr_pe "/MERGE:.rtc=.text")
+    ## add_target_link_flags(freeldr_pe "/MERGE:.rtc=.text")
 endif()
 
 add_dependencies(freeldr_pe asm)
@@ -331,10 +315,10 @@ if(SARCH STREQUAL "pc98")
         VERBATIM)
 endif()
 
-if(NOT ARCH STREQUAL "arm")
+if((ARCH STREQUAL "i386") OR (ARCH STREQUAL "amd64")) # if(NOT ARCH STREQUAL "arm")
     concatenate_files(
         ${CMAKE_CURRENT_BINARY_DIR}/freeldr.sys
-        ${CMAKE_CURRENT_BINARY_DIR}/frldr16.bin # $<SHELL_PATH:$<TARGET_FILE:frldr16>>
+        ${CMAKE_CURRENT_BINARY_DIR}/startrom.com # $<SHELL_PATH:$<TARGET_FILE:startrom>>
         ${CMAKE_CURRENT_BINARY_DIR}/$<TARGET_FILE_NAME:freeldr_pe>) # $<SHELL_PATH:$<TARGET_FILE:freeldr_pe>>
     add_custom_target(freeldr ALL DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/freeldr.sys)
 else()
@@ -345,10 +329,10 @@ endif()
 add_cd_file(TARGET freeldr FILE ${CMAKE_CURRENT_BINARY_DIR}/freeldr.sys DESTINATION loader NO_CAB FOR bootcd regtest)
 add_cd_file(TARGET freeldr FILE ${CMAKE_CURRENT_BINARY_DIR}/freeldr.sys DESTINATION loader NO_CAB NOT_IN_HYBRIDCD FOR livecd hybridcd NAME_ON_CD setupldr.sys)
 
-if(NOT ARCH STREQUAL "arm")
+if((ARCH STREQUAL "i386") OR (ARCH STREQUAL "amd64")) # if(NOT ARCH STREQUAL "arm")
     concatenate_files(
         ${CMAKE_CURRENT_BINARY_DIR}/setupldr.sys
-        ${CMAKE_CURRENT_BINARY_DIR}/frldr16.bin # $<SHELL_PATH:$<TARGET_FILE:frldr16>>
+        ${CMAKE_CURRENT_BINARY_DIR}/startrom.com # $<SHELL_PATH:$<TARGET_FILE:startrom>>
         ${CMAKE_CURRENT_BINARY_DIR}/$<TARGET_FILE_NAME:freeldr_pe>) # $<SHELL_PATH:$<TARGET_FILE:freeldr_pe>>
     add_custom_target(setupldr ALL DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/setupldr.sys)
 else()
