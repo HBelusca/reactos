@@ -385,7 +385,7 @@ LdrProcessRelocationBlockLongLong(
     {
         Offset = SWAPW(*TypeOffset) & 0xFFF;
         Type = SWAPW(*TypeOffset) >> 12;
-        ShortPtr = (PUSHORT)(RVA(Address, Offset));
+        ShortPtr = (PUSHORT)RVA(Address, Offset);
         /*
         * Don't relocate within the relocation section itself.
         * GCC/LD generates sometimes relocation records for the relocation section.
@@ -394,12 +394,12 @@ LdrProcessRelocationBlockLongLong(
         */
         /*
         if ((ULONG_PTR)ShortPtr < (ULONG_PTR)RelocationDir ||
-        (ULONG_PTR)ShortPtr >= (ULONG_PTR)RelocationEnd)
+            (ULONG_PTR)ShortPtr >= (ULONG_PTR)RelocationEnd)
         {*/
         switch (Type)
         {
-            /* case IMAGE_REL_BASED_SECTION : */
-            /* case IMAGE_REL_BASED_REL32 : */
+            /* case IMAGE_REL_BASED_SECTION: */
+            /* case IMAGE_REL_BASED_REL32: */
         case IMAGE_REL_BASED_ABSOLUTE:
             break;
 
@@ -467,7 +467,6 @@ LdrRelocateImageWithBias(
     LONGLONG Delta;
 
     NtHeaders = RtlImageNtHeader(BaseAddress);
-
     if (NtHeaders == NULL)
         return Invalid;
 
@@ -488,17 +487,16 @@ LdrRelocateImageWithBias(
     RelocationEnd = (PIMAGE_BASE_RELOCATION)((ULONG_PTR)RelocationDir + SWAPD(RelocationDDir->Size));
 
     while (RelocationDir < RelocationEnd &&
-            SWAPW(RelocationDir->SizeOfBlock) > 0)
+           SWAPW(RelocationDir->SizeOfBlock) > 0)
     {
         Count = (SWAPW(RelocationDir->SizeOfBlock) - sizeof(IMAGE_BASE_RELOCATION)) / sizeof(USHORT);
         Address = (ULONG_PTR)RVA(BaseAddress, SWAPD(RelocationDir->VirtualAddress));
         TypeOffset = (PUSHORT)(RelocationDir + 1);
 
         RelocationDir = LdrProcessRelocationBlockLongLong(Address,
-                        Count,
-                        TypeOffset,
-                        Delta);
-
+                                                          Count,
+                                                          TypeOffset,
+                                                          Delta);
         if (RelocationDir == NULL)
         {
             DPRINT1("Error during call to LdrProcessRelocationBlockLongLong()!\n");
