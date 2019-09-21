@@ -1,20 +1,14 @@
 /*
- *  FreeLoader
- *  Copyright (C) 1998-2002  Brian Palmer  <brianp@sginet.com>
+ * PROJECT:     FreeLoader - StartUp Module
+ * LICENSE:     GPL-2.0+ (https://spdx.org/licenses/GPL-2.0+)
  *
- *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version.
+ * PURPOSE:     Entry point code for the 32-bit portion of the StartUp Module.
+ *              Also contains: the 32-bit part of the 16 <-> 32 bits
+ *              trampoline code, as well as the 32-bit parts of the Int386
+ *              mechanism, PXE and PnP support, and the Linux x86 loader.
  *
- *  This program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License along
- *  with this program; if not, write to the Free Software Foundation, Inc.,
- *  51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * COPYRIGHT:   Copyright 1998-2002  Brian Palmer  <brianp@sginet.com>
+ *              Copyright 2011-2019 Timo Kreuzer
  */
 
 #include <asm.inc>
@@ -25,7 +19,6 @@ EXTERN _BootMain:PROC
 EXTERN _InitIdt:PROC
 EXTERN _i386Idt:DWORD
 //EXTERN _i386idtptr:FWORD
-EXTERN cmdline:DWORD
 
 EXTERN _DiskStopFloppyMotor:PROC
 
@@ -36,8 +29,13 @@ EXTERN __bss_end__:DWORD
 
 .code32
 
+/*
+ * 16 -> 32 bit re-entry point.
+ */
 PUBLIC _RealEntryPoint
 _RealEntryPoint:
+
+// Interrupts must be disabled at this point
 
     /* Setup segment selectors */
     mov ax, PMODE_DS
@@ -47,15 +45,15 @@ _RealEntryPoint:
     mov gs, ax
     mov ss, ax
 
-    /* Setup protected mode stack */
-    mov esp, dword ptr ds:[stack32]
-
     /* Load the IDT */
 #ifdef _USE_ML
     lidt fword ptr ds:[i386idtptr]
 #else
     lidt i386idtptr
 #endif
+
+    /* Setup protected mode stack */
+    mov esp, dword ptr ds:[stack32]
 
     /* Continue execution */
     jmp dword ptr ds:[ContinueAddress]
@@ -64,6 +62,10 @@ PUBLIC ContinueAddress
 ContinueAddress:
     .long _FrldrStartup
 
+
+/*
+ * 32-bit entry point for the StartUp Module.
+ */
 _FrldrStartup:
 
     /* Store BootDrive and BootPartition */
@@ -95,11 +97,24 @@ _FrldrStartup:
     call _BootMain
 
     /* We should never get here */
+#if 0
 stop:
     jmp short stop
+#endif
+    jmp _Reboot
     nop
     nop
 
+
+/*
+ * TODO: Instead of linking multiboot.S, just include its file HERE!!
+ */
+#include "multiboot.S" // TODO: Rename into ".inc"
+
+
+/*
+ * 32 -> 16 bit entry points for the services.
+ */
 
 PUBLIC _Reboot
 _Reboot:
@@ -238,16 +253,17 @@ stack16:
     .word STACK16ADDR
 
     /* 32-bit stack pointer */
+// PUBLIC stack32
 stack32:
     .long STACKADDR
 
     .align 4    /* force 4-byte alignment */
 gdt:
     /* NULL Descriptor */
-   .word HEX(0000)
-   .word HEX(0000)
-   .word HEX(0000)
-   .word HEX(0000)
+    .word HEX(0000)
+    .word HEX(0000)
+    .word HEX(0000)
+    .word HEX(0000)
 
     /* 32-bit flat CS */
     .word HEX(FFFF)
@@ -279,10 +295,17 @@ gdtptr:
     .long gdt           /* Base Address */
 
 // See _i386IdtDescriptor
-PUBLIC i386idtptr
+// PUBLIC i386idtptr
 i386idtptr:
     .word 255           /* Limit */
     .long _i386Idt      /* Base Address */
+
+
+/*
+ * Boot data structure passed to FreeLdr.
+ */
+PUBLIC _BootData
+_BootData:
 
 PUBLIC _FrldrBootDrive
 _FrldrBootDrive:
@@ -291,5 +314,11 @@ _FrldrBootDrive:
 PUBLIC _FrldrBootPartition
 _FrldrBootPartition:
     .long 0
+
+#define CMDLINE_SIZE    256
+
+PUBLIC cmdline
+cmdline:
+    .space CMDLINE_SIZE
 
 END

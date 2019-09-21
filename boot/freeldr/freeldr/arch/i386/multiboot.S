@@ -48,8 +48,8 @@
 
 
 #ifdef _USE_ML
+EXTERN cmdline:DWORD
 EXTERN __bss_start__:DWORD
-EXTERN __bss_end__:DWORD
 #endif
 
 
@@ -214,8 +214,5 @@ MultibootInfo:
 MultibootMemoryMap:
     .space MB_MMAP_SIZE
 
-PUBLIC cmdline
-cmdline:
-    .space CMDLINE_SIZE
 
 END

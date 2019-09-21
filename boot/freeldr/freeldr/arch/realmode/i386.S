@@ -1,10 +1,17 @@
+/*
+ * PROJECT:     FreeLoader - StartUp Module
+ * LICENSE:     GPL-2.0+ (https://spdx.org/licenses/GPL-2.0+)
+ *
+ * PURPOSE:     Entry point code for the 16-bit StartUp Module.
+ *              Also contains: the FAT12 second-part stub, the 16 <-> 32 bits
+ *              trampoline code, as well as the 16-bit parts of the Int386
+ *              mechanism, PXE and PnP support, and the Linux x86 loader.
+ *
+ * COPYRIGHT:   Copyright 2011-2019 Timo Kreuzer
+ */
 
 #include <asm.inc>
 #include "../../include/arch/pc/x86common.h"
-
-#define IMAGE_DOS_HEADER_e_lfanew 60
-#define IMAGE_FILE_HEADER_SIZE 20
-#define IMAGE_OPTIONAL_HEADER_AddressOfEntryPoint 16
 
 .code16
 
@@ -33,24 +40,17 @@ RealModeEntryPoint:
     /* Save real mode entry point in shared memory */
     mov dword ptr ds:[BSS_RealModeEntry], offset switch_to_real16
 
-    /* Address the image with es segment */
-    mov ax, FREELDR_PE_BASE / 16
-    mov es, ax
-
-    /* Get address of optional header */
-    mov eax, dword ptr es:[IMAGE_DOS_HEADER_e_lfanew]
-    add eax, 4 + IMAGE_FILE_HEADER_SIZE
-
-    /* Get address of entry point */
-    mov eax, dword ptr es:[eax + IMAGE_OPTIONAL_HEADER_AddressOfEntryPoint]
-    add eax, FREELDR_PE_BASE
-
-    /* Save entry point */
-    mov dword ptr ds:[pm_entrypoint], eax
-
-    /* Restore es */
-    xor ax, ax
-    mov es, ax
+    /*
+     * The remaining part of the StartUp module is the 32-bit code that
+     * is appended (and which entry-point is) just at FREELDR_PE_BASE.
+     *
+     * NOTE: It serves as the 16 -> 32 bit re-entry point.
+     *
+     * NOTE 2: I think this may be simplified since now we know that
+     * the position of our 16 -> 32 bit entry point is fixed
+     */
+    /* Save the entry point to protected mode */
+    mov dword ptr ds:[pm_entrypoint], FREELDR_PE_BASE
 
     jmp exit_to_protected
 
@@ -137,7 +137,7 @@ inpmode:
     .byte HEX(0ff), HEX(25) // opcode of indirect jump
     .word pm_entrypoint, 0
 pm_entrypoint:
-    .long 0 // receives address of PE entry point
+    .long 0 // receives address of PE entry point -- Now it is the fixed address of the 32-bit portion of StartUp.
     nop
 
 CallbackTable:
@@ -205,6 +205,10 @@ rmode_idtptr:
 #include "pxe.inc"
 #include "pnp.inc"
 
+/*
+ * The 32-bit portion (and its entry-point) of the StartUp module
+ * is appended just after.
+ */
 .org (FREELDR_PE_BASE - FREELDR_BASE - 1)
 .byte 0
 .endcode16
