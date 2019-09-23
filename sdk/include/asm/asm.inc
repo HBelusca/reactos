@@ -93,6 +93,14 @@ ENDM
     DB 0
 ENDM
 
+.section MACRO name, subsect
+    name SEGMENT PUBLIC subsect
+ENDM
+
+.endsection MACRO name
+    name ENDS
+ENDM
+
 .code64 MACRO
     .code
 ENDM
@@ -313,8 +321,9 @@ ENDM
 .macro .MODEL model
 .endm
 
-.macro .code
-    .text
+.macro .code name=.text
+    // .text
+    .section \name
 .endm
 
 .macro .const
