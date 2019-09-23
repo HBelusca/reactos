@@ -744,8 +744,8 @@ PeLdrLoadImage(
         return FALSE;
     }
 
-    /* Ensure this is executable image */
-    if (((NtHeaders->FileHeader.Characteristics & IMAGE_FILE_EXECUTABLE_IMAGE) == 0))
+    /* Ensure this is an executable image */
+    if ((NtHeaders->FileHeader.Characteristics & IMAGE_FILE_EXECUTABLE_IMAGE) == 0))
     {
         ERR("Not an executable image \"%s\"\n", FileName);
         UiMessageBox("Not an executable image.");
@@ -882,7 +882,7 @@ PeLdrLoadImage(
                                                  (ULONG_PTR)VirtualBase - (ULONG_PTR)PhysicalBase,
                                                  "FreeLdr",
                                                  TRUE,
-                                                 TRUE, /* in case of conflict still return success */
+                                                 TRUE, /* In case of conflict still return success */
                                                  FALSE);
     }
 
