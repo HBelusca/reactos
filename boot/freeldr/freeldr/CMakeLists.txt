@@ -276,13 +276,13 @@ else()
     add_linker_script(freeldr_pe_dbg freeldr_i386.lds)
 endif()
 
-set_image_base(freeldr_pe 0x10000)
+# set_image_base(freeldr_pe 0x10000) # 0x00400000
 set_subsystem(freeldr_pe native)
-set_entrypoint(freeldr_pe RealEntryPoint)
+set_entrypoint(freeldr_pe BootMain 4) # NtProcessStartup 4
 
-set_image_base(freeldr_pe_dbg 0x10000)
+# set_image_base(freeldr_pe_dbg 0x10000) # 0x00400000
 set_subsystem(freeldr_pe_dbg native)
-set_entrypoint(freeldr_pe_dbg RealEntryPoint)
+set_entrypoint(freeldr_pe_dbg BootMain 4) # NtProcessStartup 4
 
 if(ARCH STREQUAL "i386")
     target_link_libraries(freeldr_pe mini_hal)
