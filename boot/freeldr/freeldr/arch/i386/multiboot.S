@@ -1,32 +1,20 @@
 /*
- *  FreeLoader
- *  Copyright (C) 1998-2002  Brian Palmer  <brianp@sginet.com>
- *
- *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version.
- *
- *  This program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License along
- *  with this program; if not, write to the Free Software Foundation, Inc.,
- *  51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * PROJECT:     FreeLoader - StartUp Module
+ * LICENSE:     GPL-2.0+ (https://spdx.org/licenses/GPL-2.0+)
+ * PURPOSE:     Support for the Multiboot v1 specification.
+ * COPYRIGHT:   Copyright 1998-2002  Brian Palmer  <brianp@sginet.com>
  */
 
 #include <asm.inc>
 #include <arch/pc/x86common.h>
 #include <multiboot.h>
 
-/* Multiboot support
+/* Multiboot v1 support
  *
  * Allows freeldr to be loaded as a "multiboot kernel" by
  * other boot loaders like GRUB.
- * This code is not referenced from anywhere. GRUB searches for
- * the header signature and uses the header to load it.
+ * This code is not referenced from anywhere. GRUB searches
+ * for the header signature and uses the header to load it.
  */
 
 #define MB_INFO_SIZE                60   /* sizeof(multiboot_info_t) */
@@ -48,15 +36,10 @@
 
 
 #ifdef _USE_ML
-EXTERN cmdline:DWORD
+// EXTERN cmdline:DWORD
 EXTERN __bss_start__:DWORD
 #endif
 
-
-#ifdef _USE_ML
-.MBDATA SEGMENT PUBLIC 'DATA'
-ASSUME nothing
-#endif
 
     /* Align to 32 bits boundary */
     .align 4
@@ -79,10 +62,6 @@ MultibootHeader:
     .long 0
     /* entry_addr */
     .long MultibootEntry + INITIAL_BASE - FREELDR_BASE
-
-#ifdef _USE_ML
-.MBDATA ENDS
-#endif
 
 
 .code32
@@ -161,9 +140,9 @@ mb3:
 
     /* Load segment registers for real-address mode */
 #ifdef _USE_ML
-    lgdt fword ptr ds:[gdtptr]
+    lgdt fword ptr ds:[gdtptr16]
 #else
-    lgdt ds:[gdtptr]
+    lgdt ds:[gdtptr16]
 #endif
     mov ax, HEX(10)
     mov ds, ax
@@ -194,15 +173,15 @@ mb4:
 
     /* Force 8-byte alignment */
     .align 8
-gdt:
+gdt16:
     .word HEX(0000), HEX(0000), HEX(0000), HEX(0000) /* 00: NULL descriptor */
     .word HEX(FFFF), HEX(0000), HEX(9B00), HEX(008F) /* 08: 16-bit flat CS (!) */
     .word HEX(FFFF), HEX(0000), HEX(9300), HEX(0000) /* 10: 16-bit real mode DS */
 
 /* GDT table pointer */
-gdtptr:
+gdtptr16:
     .word HEX(17)   /* Limit */
-    .long gdt       /* Base Address */
+    .long gdt16     /* Base Address */
 
 PUBLIC _MultibootInfoPtr
 _MultibootInfoPtr:
@@ -213,6 +192,3 @@ MultibootInfo:
 
 MultibootMemoryMap:
     .space MB_MMAP_SIZE
-
-
-END

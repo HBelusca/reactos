@@ -49,7 +49,6 @@ list(APPEND STARTROM_ASM_SOURCE)
 if(ARCH STREQUAL "i386")
     list(APPEND STARTROM_ASM_SOURCE
         arch/i386/entry.S
-        arch/i386/multiboot.S
         # arch/i386/drvmap.S
         arch/i386/int386.S
         # arch/i386/pnpbios.S
@@ -60,7 +59,6 @@ if(ARCH STREQUAL "i386")
 elseif(ARCH STREQUAL "amd64")
     # list(APPEND STARTROM_ASM_SOURCE
         # arch/amd64/entry.S
-        ## arch/i386/multiboot.S
         # arch/amd64/int386.S
         # arch/amd64/pnpbios.S)
 
