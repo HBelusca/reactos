@@ -159,6 +159,11 @@ mbfail:
 mbstop:
     jmp short mbstop  /* We should never get here */
 
+//
+// FIXME! When being compiled with e.g. MSVC 2019, this chunk of code
+// erroneously (??) gets moved at the very beginning of the executable,
+// making things broken.
+//
 .code16
 mb4:
     /* Disable protected mode */
