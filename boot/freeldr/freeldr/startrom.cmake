@@ -111,3 +111,34 @@ concatenate_files(
     ${CMAKE_CURRENT_BINARY_DIR}/frldr16.bin # $<SHELL_PATH:$<TARGET_FILE:frldr16>>
     ${CMAKE_CURRENT_BINARY_DIR}/startrom_pe_flat.exe) # ${CMAKE_CURRENT_BINARY_DIR}/$<TARGET_FILE_NAME:startrom_pe> # $<SHELL_PATH:$<TARGET_FILE:startrom_pe>>
 add_custom_target(startrom ALL DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/startrom.com ${CMAKE_CURRENT_BINARY_DIR}/frldr16.bin ${CMAKE_CURRENT_BINARY_DIR}/startrom_pe_flat.exe)
+
+
+
+
+##
+## A simple demonstration PE image. The real one will be FreeLoader ;)
+##
+list(APPEND HELLOWORLD_SOURCE helloworld_pe.c)
+add_executable(helloworld ${HELLOWORLD_SOURCE})
+target_link_libraries(helloworld libcntpr)
+
+if(NOT MSVC AND SEPARATE_DBG)
+    set_target_properties(helloworld PROPERTIES LINKER_LANGUAGE LDR_PE_HELPER)
+endif()
+
+if(MSVC)
+    add_target_link_flags(helloworld "/ignore:4078 /ignore:4254 /DRIVER /FIXED /FILEALIGN:0x200") ## Use the default section-alignment value.
+else()
+    add_target_link_flags(helloworld "-Wl,--strip-all,--exclude-all-symbols,--file-alignment,0x200") ## Use the default section-alignment value.
+endif()
+
+## We would like to NOT use runtime checks here... But some libs we depend upon currently use them.
+if(STACK_PROTECTOR)
+    target_link_libraries(helloworld gcc_ssp)
+elseif(RUNTIME_CHECKS)
+    target_link_libraries(helloworld runtmchk)
+endif()
+
+# set_image_base(helloworld 0x00400000) ## Just keep the default.
+set_subsystem(helloworld native)
+set_entrypoint(helloworld NtProcessStartup 4) ## This is in principle the default entry point for native apps.
