@@ -29,12 +29,12 @@ endif()
 #
 if(ARCH STREQUAL "i386")
     CreateBootSectorTarget(frldr16
-        ${CMAKE_CURRENT_SOURCE_DIR}/arch/realmode/i386.S
+        ${CMAKE_CURRENT_SOURCE_DIR}/arch/startup/realmode/i386.S
         ${CMAKE_CURRENT_BINARY_DIR}/frldr16.bin
         F800)
 elseif(ARCH STREQUAL "amd64")
     CreateBootSectorTarget(frldr16
-        ${CMAKE_CURRENT_SOURCE_DIR}/arch/realmode/amd64.S
+        ${CMAKE_CURRENT_SOURCE_DIR}/arch/startup/realmode/amd64.S
         ${CMAKE_CURRENT_BINARY_DIR}/frldr16.bin
         F800)
 endif()
@@ -45,21 +45,26 @@ endif()
 add_definitions(-D_NTHAL_ -D_BLDR_ -D_NTSYSTEM_)
 
 list(APPEND STARTROM_ASM_SOURCE)
+list(APPEND STARTROM_C_SOURCE)
 
 ## Please keep the ordering of ASM files!
 if(ARCH STREQUAL "i386")
     list(APPEND STARTROM_ASM_SOURCE
-        arch/i386/entry.S
-        arch/i386/i386trap.S
-        arch/i386/drvmap.S
-        arch/i386/int386.S
+        arch/startup/i386/entry.S
+        arch/startup/i386/i386trap.S
+        arch/startup/i386/drvmap.S
+        arch/startup/i386/int386.S
         arch/i386/pnpbios.S
         arch/i386/linux.S)
 
+    list(APPEND STARTROM_C_SOURCE
+        arch/i386/i386bug.c ## But only the exception thingie, not the bugcheck?
+        arch/startup/i386/i386idt.c)
+
 elseif(ARCH STREQUAL "amd64")
     list(APPEND STARTROM_ASM_SOURCE
-        arch/amd64/entry.S
-        arch/amd64/int386.S
+        arch/startup/amd64/entry.S
+        arch/startup/amd64/int386.S
         arch/amd64/pnpbios.S)
 
 endif()
@@ -67,8 +72,8 @@ endif()
 add_asm_files(startrom_asm ${STARTROM_ASM_SOURCE})
 list(APPEND STARTROM_SOURCE
     ${startrom_asm}
-    main.c
-    func.c)
+    arch/startup/main.c
+    arch/startup/func.c)
 
 add_executable(startrom_pe ${STARTROM_SOURCE})
 
