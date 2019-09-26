@@ -85,13 +85,9 @@ list(APPEND FREELDR_BOOTMGR_SOURCE
     ui/video.c)
 
 if(ARCH STREQUAL "i386")
-    list(APPEND FREELDR_COMMON_ASM_SOURCE
-        arch/i386/drvmap.S
-        arch/i386/entry.S
-        arch/i386/int386.S
-        arch/i386/pnpbios.S
-        arch/i386/i386trap.S
-        arch/i386/linux.S)
+    # list(APPEND FREELDR_COMMON_ASM_SOURCE
+        # arch/i386/pnpbios.S
+        # arch/i386/linux.S)
 
     list(APPEND FREELDR_NTLDR_SOURCE
         ntldr/arch/i386/winldr.c
@@ -157,11 +153,9 @@ if(ARCH STREQUAL "i386")
     endif()
 
 elseif(ARCH STREQUAL "amd64")
-    list(APPEND FREELDR_COMMON_ASM_SOURCE
-        arch/amd64/entry.S
-        arch/amd64/int386.S
-        arch/amd64/pnpbios.S
-        arch/amd64/linux.S)
+    # list(APPEND FREELDR_COMMON_ASM_SOURCE
+        # arch/amd64/pnpbios.S
+        # arch/amd64/linux.S)
 
     list(APPEND FREELDR_NTLDR_SOURCE
         ntldr/arch/amd64/winldr.c)
@@ -264,15 +258,15 @@ if(MSVC)
     add_target_link_flags(freeldr_pe "/ignore:4078 /ignore:4254 /DRIVER")
     add_target_link_flags(freeldr_pe_dbg "/ignore:4078 /ignore:4254 /DRIVER")
     if(NOT ARCH STREQUAL "arm")
-        add_target_link_flags(freeldr_pe "/FIXED /FILEALIGN:0x200 /ALIGN:0x200")
+        add_target_link_flags(freeldr_pe "/FIXED /FILEALIGN:0x200") # /ALIGN:0x1000
         add_linker_script(freeldr_pe freeldr_i386.msvc.lds)
-        add_target_link_flags(freeldr_pe_dbg "/FIXED /FILEALIGN:0x200 /ALIGN:0x200")
+        add_target_link_flags(freeldr_pe_dbg "/FIXED /FILEALIGN:0x200") # /ALIGN:0x1000
         ## add_linker_script(freeldr_pe_dbg freeldr_i386.msvc.lds)
     endif()
 else()
-    add_target_link_flags(freeldr_pe "-Wl,--strip-all,--exclude-all-symbols,--file-alignment,0x200,--section-alignment,0x200")
+    add_target_link_flags(freeldr_pe "-Wl,--strip-all,--exclude-all-symbols,--file-alignment,0x200") # ,--section-alignment,0x1000
     add_linker_script(freeldr_pe freeldr_i386.lds)
-    add_target_link_flags(freeldr_pe_dbg "-Wl,--exclude-all-symbols,--file-alignment,0x200,--section-alignment,0x200")
+    add_target_link_flags(freeldr_pe_dbg "-Wl,--exclude-all-symbols,--file-alignment,0x200") # ,--section-alignment,0x1000
     add_linker_script(freeldr_pe_dbg freeldr_i386.lds)
 endif()
 

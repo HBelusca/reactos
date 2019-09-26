@@ -15,7 +15,7 @@
 #include <winerror.h>
 #include <ntstrsafe.h>
 
-// #include <arch/pc/pcbios.h>
+#include <arch/pc/pcbios.h>
 // #include <arch/pc/machpc.h>
 #include <arch/pc/x86common.h>
 // #include <arch/pc/pxe.h>
@@ -30,6 +30,7 @@
 
 extern char __ImageBase;
 
+#if 0
 #include <pshpack1.h>
 typedef struct
 {
@@ -109,12 +110,15 @@ typedef union
 } REGS;
 #include <poppack.h>
 
-typedef int (__cdecl *INT386_PROC)(int ivec, REGS* in, REGS* out);
-INT386_PROC Int386;
-
 // This macro tests the Carry Flag
 // If CF is set then the call failed (usually)
 #define INT386_SUCCESS(regs)    ((regs.x.eflags & EFLAGS_CF) == 0)
+
+#endif
+
+#include <arch/pc/startup.h>
+
+SU_INT386 Int386;
 
 ///////////////////////
 
@@ -468,19 +472,47 @@ int __cdecl iswctype(wint_t wc, wctype_t wctypeFlags)
 }
 
 
+VOID
+NTAPI
+RtlAssert(IN PVOID FailedAssertion,
+          IN PVOID FileName,
+          IN ULONG LineNumber,
+          IN PCHAR Message OPTIONAL)
+{
+    if (Message)
+    {
+        PrintText("Assertion \'%s\' failed at %s line %lu: %s\n",
+                 (PCHAR)FailedAssertion,
+                 (PCHAR)FileName,
+                 LineNumber,
+                 Message);
+    }
+    else
+    {
+        PrintText("Assertion \'%s\' failed at %s line %lu\n",
+                 (PCHAR)FailedAssertion,
+                 (PCHAR)FileName,
+                 LineNumber);
+    }
 
-VOID NTAPI NtProcessStartup(PVOID ptr)
+    // DbgBreakPoint();
+    for (;;);
+}
+
+
+VOID NTAPI NtProcessStartup(IN PBOOT_CONTEXT BootContext)
 {
     INT i;
     ULONG oldScreenPosX;
     ULONG oldScreenPosY;
 
-    //
-    // FIXME: We shall receive instead a boot block record
-    // containing different type of information and a table
-    // to services exported by StartROM.
-    //
-    Int386 = (INT386_PROC)ptr;
+    /* Check the validity of the BootContext structure */
+    if (!IS_BOOT_CONTEXT_VALID(BootContext))
+        return; // Not valid, bail out quickly.
+    ASSERT(BootContext->ImageBase == &__ImageBase);
+
+    /* Initialize globals using the BootContext structure */
+    Int386 = BootContext->ServicesTable->Int386;
 
     // PcVideoHideShowTextCursor(FALSE);
     // PcVideoSetTextCursorPosition(0, 0);
@@ -488,7 +520,7 @@ VOID NTAPI NtProcessStartup(PVOID ptr)
 
     // PcVideoClearScreen(0x20 | 0x0F); // Background green, foreground white
     PrintTextColor(0x20 | 0x0F, "\nHello from the 32-bit PE image!\n===============================\n");
-    PrintTextColor(0x20 | 0x0F, "\nImage base 0x%p, parameter 0x%p\n", &__ImageBase, ptr);
+    PrintTextColor(0x20 | 0x0F, "\nImage base 0x%p, BootContext 0x%p\n", &__ImageBase, BootContext);
     PrintTextColor(0xC0 | 0x0F, "\n\nPress any key to restart..."); // Background-intensity bit 0x80 triggers blinking.
     for (;;)
     {

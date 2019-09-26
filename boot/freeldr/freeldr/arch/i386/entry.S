@@ -14,6 +14,7 @@
 #include <asm.inc>
 #include <arch/pc/x86common.h>
 #include <arch/pc/pcbios.h>
+#include <arch/pc/startup.h>
 
 EXTERN _BootMain:PROC
 EXTERN _InitIdt:PROC
@@ -301,24 +302,105 @@ i386idtptr:
     .long _i386Idt      /* Base Address */
 
 
+//
+// TODO: Move this to the DATA section
+//
+
 /*
  * Boot data structure passed to FreeLdr.
+ * See "startup.h" for the complete definitions.
  */
+
+/*
+typedef struct _SERVICES_TABLE
+{
+    SU_REBOOT Reboot;
+    SU_INT386 Int386;
+    SU_RELOCATOR16_BOOT Relocator16Boot;
+    SU_PXE_CALL_API PxeCallApi;
+    SU_PNP_SUPPORTED PnpBiosSupported;
+    SU_PNP_GET_DEVICE_NODE_COUNT PnpBiosGetDeviceNodeCount;
+    SU_PNP_GET_DEVICE_NODE PnpBiosGetDeviceNode;
+    SU_SERVICE_CALL ServiceCall;
+} SERVICES_TABLE, *PSERVICES_TABLE;
+*/
+    /* Align to 32 bits boundary */
+    .align 4
+
+// EXTERN _Reboot:PROC
+EXTERN _Int386:PROC
+// EXTERN _Relocator16Boot:PROC
+// EXTERN _PxeCallApi:PROC
+EXTERN _PnpBiosSupported:PROC
+EXTERN _PnpBiosGetDeviceNodeCount:PROC
+EXTERN _PnpBiosGetDeviceNode:PROC
+ServicesTable:
+    .long offset _Reboot
+    .long offset _Int386
+    .long offset _Relocator16Boot
+    .long offset _PxeCallApi
+    .long offset _PnpBiosSupported
+    .long offset _PnpBiosGetDeviceNodeCount
+    .long offset _PnpBiosGetDeviceNode
+    .long 0
+
+/*
+typedef struct _BOOT_CONTEXT
+{
+    ULONG Signature;    // == BOOT_CONTEXT_SIGNATURE
+    ULONG Size;         // == sizeof(BOOT_CONTEXT)
+
+    ULONG Flags;
+
+    ULONG BootDrive;        // UCHAR
+    ULONG BootPartition;    // UCHAR
+
+    ULONG MachineType;  // Either MACHINE_TYPE_ISA, MACHINE_TYPE_EISA or MACHINE_TYPE_MCA.
+
+    PVOID ImageBase;
+    ULONG ImageSize;
+    ULONG ImageType;
+
+    PSERVICES_TABLE ServicesTable;
+    CHAR CommandLine[CMDLINE_SIZE];
+} BOOT_CONTEXT, *PBOOT_CONTEXT;
+*/
+    /* Align to 32 bits boundary */
+    .align 4
+
 PUBLIC _BootData
 _BootData:
+    /* Signature */
+    .long BOOT_CONTEXT_SIGNATURE
+    /* Size */
+    .long BootDataEnd - _BootData
+    /* Flags */
+    .long 0
 
 PUBLIC _FrldrBootDrive
 _FrldrBootDrive:
     .byte 0
+    .align 4
 
 PUBLIC _FrldrBootPartition
 _FrldrBootPartition:
     .long 0
 
-#define CMDLINE_SIZE    256
+    /* MachineType */
+    .long 0
+    /* ImageBase */
+    .long 0
+    /* ImageSize */
+    .long 0
+    /* ImageType */
+    .long 0
+
+    /* ServicesTable */
+    .long offset ServicesTable
 
 PUBLIC cmdline
 cmdline:
     .space CMDLINE_SIZE
+BootDataEnd:
 
 END

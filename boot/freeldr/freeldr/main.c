@@ -41,6 +41,12 @@ objcopy c:\Temp\Essai\main.exe -O binary c:\Temp\Essai\main_objcopy.bin
 
 ///////////////////////
 
+#include <arch/pc/startup.h>
+
+/*** See pcbios.h ***/
+/***/ int __cdecl Int386(int ivec, REGS* in, REGS* out); /***/
+
+extern BOOT_CONTEXT BootData;
 extern ULONG _bss_end__;
 
 
@@ -767,6 +773,7 @@ LoadPEImage(
     //
 
     /* Load the PE image headers to destination */
+    // FIXME: They are not obligatorily continuous!!
     RtlMoveMemory(ImageBase, ImageBuffer, NtHeaders->OptionalHeader.SizeOfHeaders);
 
     /* Iterate through the sections and load them at their respective address */
@@ -900,7 +907,12 @@ VOID _cdecl BootMain(PVOID ptr)
     // containing different type of information and a table
     // to services exported by StartROM.
     //
-    (*EntryPoint)(&Int386);
+    /* Most of the BootContext structure is statically initialized */
+    // BootData.MachineType = ;
+    BootData.ImageBase = (PVOID)NtHeaders->OptionalHeader.ImageBase; // FIXME HACK 1
+    BootData.ImageSize = NtHeaders->OptionalHeader.SizeOfImage; // FIXME HACK 2
+    BootData.ImageType = FileHeader->Machine; // FIXME HACK 3
+    (*EntryPoint)(&BootData);
 
     /* If we reached there, we somehow failed to start, just reboot */
 

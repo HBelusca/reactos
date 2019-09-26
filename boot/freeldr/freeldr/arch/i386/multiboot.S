@@ -7,6 +7,7 @@
 
 #include <asm.inc>
 #include <arch/pc/x86common.h>
+#include <arch/pc/startup.h>
 #include <multiboot.h>
 
 /* Multiboot v1 support
@@ -24,7 +25,6 @@
 #define MB_INFO_MMAP_LEN_OFFSET     44
 #define MB_INFO_MMAP_ADDR_OFFSET    48
 #define MB_MMAP_SIZE                480  /* 20 * sizeof(memory_map_t) - up to 20 entries */
-#define CMDLINE_SIZE                256
 
 /*
  * We want to execute at FREELDR_BASE (to be compatible with

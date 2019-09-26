@@ -46,21 +46,21 @@ add_definitions(-D_NTHAL_ -D_BLDR_ -D_NTSYSTEM_)
 
 list(APPEND STARTROM_ASM_SOURCE)
 
+## Please keep the ordering of ASM files!
 if(ARCH STREQUAL "i386")
     list(APPEND STARTROM_ASM_SOURCE
         arch/i386/entry.S
-        # arch/i386/drvmap.S
-        arch/i386/int386.S
-        # arch/i386/pnpbios.S
         arch/i386/i386trap.S
-        # arch/i386/linux.S
-        )
+        arch/i386/drvmap.S
+        arch/i386/int386.S
+        arch/i386/pnpbios.S
+        arch/i386/linux.S)
 
 elseif(ARCH STREQUAL "amd64")
-    # list(APPEND STARTROM_ASM_SOURCE
-        # arch/amd64/entry.S
-        # arch/amd64/int386.S
-        # arch/amd64/pnpbios.S)
+    list(APPEND STARTROM_ASM_SOURCE
+        arch/amd64/entry.S
+        arch/amd64/int386.S
+        arch/amd64/pnpbios.S)
 
 endif()
 
@@ -71,6 +71,11 @@ list(APPEND STARTROM_SOURCE
     func.c)
 
 add_executable(startrom_pe ${STARTROM_SOURCE})
+
+if(USE_CLANG_CL)
+    # We need to reduce the binary size
+    add_target_compile_flags(startrom_pe "/Os")
+endif()
 
 target_link_libraries(startrom_pe libcntpr)
 
