@@ -18,6 +18,7 @@ if(MSVC)
     add_compile_flags("/GF")
 endif()
 
+include_directories(BEFORE include)
 
 ## We would like to NOT use runtime checks here... But some libs we depend upon currently use them.
 # remove_definitions(-D__RUNTIME_CHECKS__)
@@ -58,7 +59,7 @@ if(ARCH STREQUAL "i386")
         arch/i386/linux.S)
 
     list(APPEND STARTROM_C_SOURCE
-        arch/i386/i386bug.c ## But only the exception thingie, not the bugcheck?
+        arch/startup/i386/i386bug.c
         arch/startup/i386/i386idt.c)
 
 elseif(ARCH STREQUAL "amd64")
@@ -67,11 +68,17 @@ elseif(ARCH STREQUAL "amd64")
         arch/startup/amd64/int386.S
         arch/amd64/pnpbios.S)
 
+    list(APPEND STARTROM_C_SOURCE
+        arch/startup/i386/i386bug.c
+        # arch/startup/i386/i386idt.c
+        )
+
 endif()
 
 add_asm_files(startrom_asm ${STARTROM_ASM_SOURCE})
 list(APPEND STARTROM_SOURCE
     ${startrom_asm}
+    ${STARTROM_C_SOURCE}
     arch/startup/main.c
     arch/startup/func.c)
 

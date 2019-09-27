@@ -340,56 +340,11 @@ void _cdecl DiskStopFloppyMotor(void)
 }
 
 
-
-
-KIDTENTRY DECLSPEC_ALIGN(4) i386Idt[32];
-KDESCRIPTOR i386IdtDescriptor = {0, 255, (ULONG)i386Idt};
-
-static
-void
-InitIdtVector(
-    UCHAR Vector,
-    PVOID ServiceHandler,
-    USHORT Access)
-{
-    i386Idt[Vector].Offset = (ULONG)ServiceHandler & 0xffff;
-    i386Idt[Vector].ExtendedOffset = (ULONG)ServiceHandler >> 16;
-    i386Idt[Vector].Selector = PMODE_CS;
-    i386Idt[Vector].Access = Access;
-}
-
-void
-__cdecl
-InitIdt(void)
-{
-    InitIdtVector(0, i386DivideByZero, 0x8e00);
-    InitIdtVector(1, i386DebugException, 0x8e00);
-    InitIdtVector(2, i386NMIException, 0x8e00);
-    InitIdtVector(3, i386Breakpoint, 0x8e00);
-    InitIdtVector(4, i386Overflow, 0x8e00);
-    InitIdtVector(5, i386BoundException, 0x8e00);
-    InitIdtVector(6, i386InvalidOpcode, 0x8e00);
-    InitIdtVector(7, i386FPUNotAvailable, 0x8e00);
-    InitIdtVector(8, i386DoubleFault, 0x8e00);
-    InitIdtVector(9, i386CoprocessorSegment, 0x8e00);
-    InitIdtVector(10, i386InvalidTSS, 0x8e00);
-    InitIdtVector(11, i386SegmentNotPresent, 0x8e00);
-    InitIdtVector(12, i386StackException, 0x8e00);
-    InitIdtVector(13, i386GeneralProtectionFault, 0x8e00);
-    InitIdtVector(14, i386PageFault, 0x8e00);
-    InitIdtVector(16, i386CoprocessorError, 0x8e00);
-    InitIdtVector(17, i386AlignmentCheck, 0x8e00);
-    InitIdtVector(18, i386MachineCheck, 0x8e00);
-}
-
-
-
-
 #define SCREEN_ATTR 0x1F    // Bright white on blue background
 
 /* Used to store the current X and Y position on the screen */
-ULONG i386_ScreenPosX = 0;
-ULONG i386_ScreenPosY = 0;
+static ULONG i386_ScreenPosX = 0;
+static ULONG i386_ScreenPosY = 0;
 
 static void
 i386PrintText(UCHAR Attr, char *pszText)
@@ -440,103 +395,6 @@ PrintText(const char *format, ...)
     va_start(argptr, format);
     PrintTextColorV(SCREEN_ATTR, format, argptr);
     va_end(argptr);
-}
-
-static const char *i386ExceptionDescriptionText[] =
-{
-    "Exception 00: DIVIDE BY ZERO\n\n",
-    "Exception 01: DEBUG EXCEPTION\n\n",
-    "Exception 02: NON-MASKABLE INTERRUPT EXCEPTION\n\n",
-    "Exception 03: BREAKPOINT (INT 3)\n\n",
-    "Exception 04: OVERFLOW\n\n",
-    "Exception 05: BOUND EXCEPTION\n\n",
-    "Exception 06: INVALID OPCODE\n\n",
-    "Exception 07: FPU NOT AVAILABLE\n\n",
-    "Exception 08: DOUBLE FAULT\n\n",
-    "Exception 09: COPROCESSOR SEGMENT OVERRUN\n\n",
-    "Exception 0A: INVALID TSS\n\n",
-    "Exception 0B: SEGMENT NOT PRESENT\n\n",
-    "Exception 0C: STACK EXCEPTION\n\n",
-    "Exception 0D: GENERAL PROTECTION FAULT\n\n",
-    "Exception 0E: PAGE FAULT\n\n",
-    "Exception 0F: Reserved\n\n",
-    "Exception 10: COPROCESSOR ERROR\n\n",
-    "Exception 11: ALIGNMENT CHECK\n\n",
-    "Exception 12: MACHINE CHECK\n\n"
-};
-
-void
-NTAPI
-i386PrintExceptionText(ULONG TrapIndex, PKTRAP_FRAME TrapFrame, PKSPECIAL_REGISTERS Special)
-{
-    PUCHAR InstructionPointer;
-
-    PcVideoHideShowTextCursor(FALSE);
-    PcVideoClearScreen(SCREEN_ATTR);
-
-    i386_ScreenPosX = 0;
-    i386_ScreenPosY = 0;
-
-    PrintText("An error occured in " "STARTROM" "\n"
-              "Report this error to the ReactOS Development mailing list <ros-dev@reactos.org>\n\n"
-              "0x%02lx: %s\n", TrapIndex, i386ExceptionDescriptionText[TrapIndex]);
-#ifdef _M_IX86
-    PrintText("EAX: %.8lx        ESP: %.8lx        CR0: %.8lx        DR0: %.8lx\n",
-              TrapFrame->Eax, TrapFrame->HardwareEsp, Special->Cr0, TrapFrame->Dr0);
-    PrintText("EBX: %.8lx        EBP: %.8lx        CR1: ????????        DR1: %.8lx\n",
-              TrapFrame->Ebx, TrapFrame->Ebp, TrapFrame->Dr1);
-    PrintText("ECX: %.8lx        ESI: %.8lx        CR2: %.8lx        DR2: %.8lx\n",
-              TrapFrame->Ecx, TrapFrame->Esi, Special->Cr2, TrapFrame->Dr2);
-    PrintText("EDX: %.8lx        EDI: %.8lx        CR3: %.8lx        DR3: %.8lx\n",
-              TrapFrame->Edx, TrapFrame->Edi, Special->Cr3, TrapFrame->Dr3);
-    PrintText("                                                               DR6: %.8lx\n",
-              TrapFrame->Dr6);
-    PrintText("                                                               DR7: %.8lx\n\n",
-              TrapFrame->Dr7);
-    PrintText("CS: %.4lx        EIP: %.8lx\n",
-              TrapFrame->SegCs, TrapFrame->Eip);
-    PrintText("DS: %.4lx        ERROR CODE: %.8lx\n",
-              TrapFrame->SegDs, TrapFrame->ErrCode);
-    PrintText("ES: %.4lx        EFLAGS: %.8lx\n",
-              TrapFrame->SegEs, TrapFrame->EFlags);
-    PrintText("FS: %.4lx        GDTR Base: %.8lx Limit: %.4x\n",
-              TrapFrame->SegFs, Special->Gdtr.Base, Special->Gdtr.Limit);
-    PrintText("GS: %.4lx        IDTR Base: %.8lx Limit: %.4x\n",
-              TrapFrame->SegGs, Special->Idtr.Base, Special->Idtr.Limit);
-    PrintText("SS: %.4lx        LDTR: %.4lx TR: %.4lx\n\n",
-              TrapFrame->HardwareSegSs, Special->Ldtr, Special->Idtr.Limit);
-
-    // i386PrintFrames(TrapFrame);                        // Display frames
-    InstructionPointer = (PUCHAR)TrapFrame->Eip;
-#else
-    PrintText("RAX: %.8lx        R8:  %.8lx        R12: %.8lx        RSI: %.8lx\n",
-              TrapFrame->Rax, TrapFrame->R8, 0, TrapFrame->Rsi);
-    PrintText("RBX: %.8lx        R9:  %.8lx        R13: %.8lx        RDI: %.8lx\n",
-              TrapFrame->Rbx, TrapFrame->R9, 0, TrapFrame->Rdi);
-    PrintText("RCX: %.8lx        R10: %.8lx        R14: %.8lx        RBP: %.8lx\n",
-              TrapFrame->Rcx, TrapFrame->R10, 0, TrapFrame->Rbp);
-    PrintText("RDX: %.8lx        R11: %.8lx        R15: %.8lx        RSP: %.8lx\n",
-              TrapFrame->Rdx, TrapFrame->R11, 0, TrapFrame->Rsp);
-
-    PrintText("CS: %.4lx        RIP: %.8lx\n",
-              TrapFrame->SegCs, TrapFrame->Rip);
-    PrintText("DS: %.4lx        ERROR CODE: %.8lx\n",
-              TrapFrame->SegDs, TrapFrame->ErrorCode);
-    PrintText("ES: %.4lx        EFLAGS: %.8lx\n",
-              TrapFrame->SegEs, TrapFrame->EFlags);
-    PrintText("FS: %.4lx        GDTR Base: %.8lx Limit: %.4x\n",
-              TrapFrame->SegFs, Special->Gdtr.Base, Special->Gdtr.Limit);
-    PrintText("GS: %.4lx        IDTR Base: %.8lx Limit: %.4x\n",
-              TrapFrame->SegGs, Special->Idtr.Base, Special->Idtr.Limit);
-    PrintText("SS: %.4lx        LDTR: %.4lx TR: %.4lx\n\n",
-              TrapFrame->SegSs, Special->Ldtr, Special->Idtr.Limit);
-    InstructionPointer = (PUCHAR)TrapFrame->Rip;
-#endif
-    PrintText("\nInstruction stream: %.2x %.2x %.2x %.2x %.2x %.2x %.2x %.2x \n",
-              InstructionPointer[0], InstructionPointer[1],
-              InstructionPointer[2], InstructionPointer[3],
-              InstructionPointer[4], InstructionPointer[5],
-              InstructionPointer[6], InstructionPointer[7]);
 }
 
 

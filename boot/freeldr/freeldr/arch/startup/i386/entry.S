@@ -107,10 +107,8 @@ stop:
     nop
 
 
-/*
- * TODO: Instead of linking multiboot.S, just include its file HERE!!
- */
-#include "multiboot.S" // TODO: Rename into ".inc"
+/* Include multiboot support */
+#include "../multiboot.inc"
 
 
 /*

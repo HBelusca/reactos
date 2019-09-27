@@ -1,6 +1,30 @@
 
-#include <freeldr.h>
+#define NTOSAPI
+#include <ntddk.h>
+#include <ntifs.h>
+#include <ketypes.h>
+// #include <ndk/asm.h>
 
+#include <arch/pc/x86common.h>
+
+void __cdecl i386DivideByZero(void);
+void __cdecl i386DebugException(void);
+void __cdecl i386NMIException(void);
+void __cdecl i386Breakpoint(void);
+void __cdecl i386Overflow(void);
+void __cdecl i386BoundException(void);
+void __cdecl i386InvalidOpcode(void);
+void __cdecl i386FPUNotAvailable(void);
+void __cdecl i386DoubleFault(void);
+void __cdecl i386CoprocessorSegment(void);
+void __cdecl i386InvalidTSS(void);
+void __cdecl i386SegmentNotPresent(void);
+void __cdecl i386StackException(void);
+void __cdecl i386GeneralProtectionFault(void);
+void __cdecl i386PageFault(void);
+void __cdecl i386CoprocessorError(void);
+void __cdecl i386AlignmentCheck(void);
+void __cdecl i386MachineCheck(void);
 
 KIDTENTRY DECLSPEC_ALIGN(4) i386Idt[32];
 KDESCRIPTOR i386IdtDescriptor = {0, 255, (ULONG)i386Idt};

@@ -50,23 +50,4 @@ typedef struct _PAGE_DIRECTORY_X86
     HARDWARE_PTE Pde[1024];
 } PAGE_DIRECTORY_X86, *PPAGE_DIRECTORY_X86;
 
-void __cdecl i386DivideByZero(void);
-void __cdecl i386DebugException(void);
-void __cdecl i386NMIException(void);
-void __cdecl i386Breakpoint(void);
-void __cdecl i386Overflow(void);
-void __cdecl i386BoundException(void);
-void __cdecl i386InvalidOpcode(void);
-void __cdecl i386FPUNotAvailable(void);
-void __cdecl i386DoubleFault(void);
-void __cdecl i386CoprocessorSegment(void);
-void __cdecl i386InvalidTSS(void);
-void __cdecl i386SegmentNotPresent(void);
-void __cdecl i386StackException(void);
-void __cdecl i386GeneralProtectionFault(void);
-void __cdecl i386PageFault(void);
-void __cdecl i386CoprocessorError(void);
-void __cdecl i386AlignmentCheck(void);
-void __cdecl i386MachineCheck(void);
-
 /* EOF */
