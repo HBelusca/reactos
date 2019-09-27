@@ -11,7 +11,7 @@
  */
 
 #include <asm.inc>
-#include "../../include/arch/pc/x86common.h"
+#include "../../../include/arch/pc/x86common.h"
 
 .code16
 

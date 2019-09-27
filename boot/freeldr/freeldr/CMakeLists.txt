@@ -103,7 +103,6 @@ if(ARCH STREQUAL "i386")
         arch/i386/hwdisk.c
         arch/i386/hwpci.c
         arch/i386/i386bug.c
-        arch/i386/i386idt.c
         disk/scsiport.c)
 
     if(SARCH STREQUAL "pc98" OR SARCH STREQUAL "xbox")
@@ -168,7 +167,7 @@ elseif(ARCH STREQUAL "amd64")
         arch/i386/hwapm.c
         arch/i386/hwdisk.c
         arch/i386/hwpci.c
-        arch/i386/i386bug.c
+        arch/i386/i386bug.c ## Only the bugcheck?
         arch/i386/pc/machpc.c
         arch/i386/pc/pcbeep.c
         arch/i386/pc/pccons.c
