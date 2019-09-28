@@ -82,7 +82,7 @@ static PPXE GetPxeStructure(VOID)
     return pPxe;
 }
 
-extern PXENV_EXIT __cdecl PxeCallApi(UINT16 Segment, UINT16 Offset, UINT16 Service, VOID *Parameter);
+// extern PXENV_EXIT __cdecl PxeCallApi(UINT16 Segment, UINT16 Offset, UINT16 Service, VOID *Parameter);
 BOOLEAN CallPxe(UINT16 Service, PVOID Parameter)
 {
     PPXE pxe;

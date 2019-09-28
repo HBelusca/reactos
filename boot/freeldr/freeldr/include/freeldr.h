@@ -102,12 +102,14 @@
 /* Arch specific includes */
 #include <arch/archwsup.h>
 #if defined(_M_IX86) || defined(_M_AMD64)
+#include <arch/pc/startup.h>
 #include <arch/pc/hardware.h>
 #include <arch/pc/pcbios.h>
 #include <arch/pc/x86common.h>
 #include <arch/pc/pxe.h>
 #include <arch/i386/drivemap.h>
 #endif
+
 #if defined(_M_IX86)
 #if defined(SARCH_PC98)
 #include <arch/i386/machpc98.h>
@@ -131,7 +133,7 @@
 #include <arch/mips/arcbios.h>
 #endif
 
-VOID __cdecl BootMain(IN PCCH CmdLine);
+VOID __cdecl FrLdrMain(IN PCSTR CommandLine);
 VOID LoadOperatingSystem(IN OperatingSystemItem* OperatingSystem);
 #ifdef HAS_OPTION_MENU_EDIT_CMDLINE
 VOID EditOperatingSystemEntry(IN OperatingSystemItem* OperatingSystem);

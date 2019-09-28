@@ -148,7 +148,6 @@ typedef struct
 
 } BYTEREGS;
 
-
 typedef union
 {
     DWORDREGS    x;
@@ -166,7 +165,7 @@ typedef union
 // Make sure all memory pointers are in SEG:OFFS format and
 // not linear addresses, unless the interrupt handler
 // specifically handles linear addresses.
-int __cdecl Int386(int ivec, REGS* in, REGS* out);
+/*** int __cdecl Int386(int ivec, REGS* in, REGS* out); ***/
 
 // This macro tests the Carry Flag
 // If CF is set then the call failed (usually)

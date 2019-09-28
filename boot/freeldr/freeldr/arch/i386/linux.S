@@ -21,6 +21,8 @@
 #include <arch/pc/x86common.h>
 #include <arch/pc/pcbios.h>
 
+#define FNID_BootLinuxKernel 6
+
 EXTERN _DiskStopFloppyMotor:PROC
 EXTERN _Relocator16Boot:PROC
 EXTERN _FrldrBootDrive:BYTE

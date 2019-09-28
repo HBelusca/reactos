@@ -50,12 +50,8 @@ PFREELDR_MEMORY_DESCRIPTOR PcMemGetMemoryMap(ULONG *MemoryMapSize);
 BOOLEAN PcFindPciBios(PPCI_REGISTRY_INFO BusData);
 
 /*
- * Disk Variables and Functions
+ * Disk Functions
  */
-/* Platform-specific boot drive and partition numbers */
-extern UCHAR FrldrBootDrive;
-extern ULONG FrldrBootPartition;
-
 LONG DiskReportError(BOOLEAN bShowError);
 BOOLEAN DiskResetController(UCHAR DriveNumber);
 // BOOLEAN DiskGetExtendedDriveParameters(UCHAR DriveNumber, PVOID Buffer, USHORT BufferSize);
