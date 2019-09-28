@@ -18,7 +18,7 @@
  */
 
 #include <asm.inc>
-#include <arch/pc/x86common.h>
+#include "../x86common.h"
 
 EXTERN _i386PrintExceptionText@12:PROC
 

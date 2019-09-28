@@ -55,7 +55,7 @@ if(ARCH STREQUAL "i386")
         arch/startup/i386/i386trap.S
         arch/startup/i386/drvmap.S
         arch/startup/i386/int386.S
-        arch/i386/pnpbios.S
+        arch/startup/i386/pnpbios.S
         arch/i386/linux.S)
 
     list(APPEND STARTROM_C_SOURCE
@@ -66,7 +66,7 @@ elseif(ARCH STREQUAL "amd64")
     list(APPEND STARTROM_ASM_SOURCE
         arch/startup/amd64/entry.S
         arch/startup/amd64/int386.S
-        arch/amd64/pnpbios.S)
+        arch/startup/amd64/pnpbios.S)
 
     list(APPEND STARTROM_C_SOURCE
         arch/startup/i386/i386bug.c

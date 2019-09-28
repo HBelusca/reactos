@@ -5,7 +5,7 @@
 #include <ketypes.h>
 // #include <ndk/asm.h>
 
-#include <arch/pc/x86common.h>
+#include "../x86common.h"
 
 void __cdecl i386DivideByZero(void);
 void __cdecl i386DebugException(void);

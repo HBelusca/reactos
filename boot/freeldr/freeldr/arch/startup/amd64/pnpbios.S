@@ -19,7 +19,7 @@
  */
 
 #include <asm.inc>
-#include <arch/pc/x86common.h>
+#include "../x86common.h"
 
 EXTERN CallRealMode:PROC
 

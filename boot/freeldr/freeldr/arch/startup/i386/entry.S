@@ -12,8 +12,7 @@
  */
 
 #include <asm.inc>
-#include <arch/pc/x86common.h>
-#include <arch/pc/pcbios.h>
+#include "../x86common.h"
 #include <arch/pc/startup.h>
 
 EXTERN _BootMain:PROC
