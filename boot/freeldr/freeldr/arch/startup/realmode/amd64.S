@@ -1,6 +1,6 @@
 
 #include <asm.inc>
-#include "../../../include/arch/pc/x86common.h"
+#include "../x86common.h"
 
 #define IMAGE_DOS_HEADER_e_lfanew 60
 #define IMAGE_FILE_HEADER_SIZE 20

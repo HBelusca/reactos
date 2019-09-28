@@ -86,7 +86,6 @@ list(APPEND FREELDR_BOOTMGR_SOURCE
 
 if(ARCH STREQUAL "i386")
     # list(APPEND FREELDR_COMMON_ASM_SOURCE
-        # arch/i386/pnpbios.S
         # arch/i386/linux.S)
 
     list(APPEND FREELDR_NTLDR_SOURCE
@@ -153,7 +152,6 @@ if(ARCH STREQUAL "i386")
 
 elseif(ARCH STREQUAL "amd64")
     # list(APPEND FREELDR_COMMON_ASM_SOURCE
-        # arch/amd64/pnpbios.S
         # arch/amd64/linux.S)
 
     list(APPEND FREELDR_NTLDR_SOURCE

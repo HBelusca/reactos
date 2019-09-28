@@ -8,7 +8,7 @@
 #include <stdio.h>
 
 #include <ver.h> // For VERSION == "FreeLoader v3.0"
-#include <arch/pc/x86common.h>
+#include "../x86common.h"
 
 //
 // FIXME!!
