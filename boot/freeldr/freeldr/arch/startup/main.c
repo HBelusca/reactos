@@ -1,36 +1,32 @@
 /*
+ * PROJECT:     FreeLoader - StartUp Module
+ * LICENSE:     GPL-2.0+ (https://spdx.org/licenses/GPL-2.0+)
+ * PURPOSE:     Entry point code for the 32-bit portion of the StartUp Module.
+ * COPYRIGHT:   Copyright 2019-2020 Hermes Belusca-Maito
+ */
+
+/*
 cl /Zi /nologo /W4 /WX- /O2 /Oi /Oy- /GL /X /c /GF /Gm- /Zp4 /GS- /Gy- /fp:precise /fp:except- /Zc:wchar_t /Zc:forScope /GR- /openmp- /Gd /analyze- /Fd"main.pdb" /Fo"main.obj" main.c
 
 link /MANIFEST:NO /ALLOWISOLATION:NO /DEBUG /OPT:REF /OPT:ICF
 
-
-
 cl func.c main.c /Femain.exe /link /NODEFAULTLIB /SUBSYSTEM:NATIVE /DRIVER /ENTRY:NtProcessStartup /BASE:"0x00100000" /FIXED /MACHINE:X86 /ALIGN:4096 /SAFESEH:NO
-
-obj2bin.exe c:\Temp\Essai\main.exe c:\temp\essai\main_exe.bin 0x10000
-objcopy c:\Temp\Essai\main.exe -O binary c:\Temp\Essai\main_objcopy.bin
-
 */
 
 #define NTOSAPI
 #include <ntddk.h>
 #include <ntifs.h>
-#include <ioaccess.h>
 #include <ketypes.h>
 #include <mmtypes.h>
-#include <ndk/asm.h>
-#include <ndk/rtlfuncs.h>
-#include <ndk/ldrtypes.h>
-#include <ndk/halfuncs.h>
-#include <stdlib.h>
+// #include <ndk/rtlfuncs.h>
+// #include <ndk/ldrtypes.h>
+// #include <stdlib.h>
 #include <stdio.h>
-#include <ctype.h>
-#include <winerror.h>
-#include <ntstrsafe.h>
+// #include <ntstrsafe.h>
 
 #include <arch/pc/pcbios.h>
 // #include <arch/pc/machpc.h>
-#include <arch/pc/x86common.h>
+//#include "../x86common.h"
 // #include <arch/pc/pxe.h>
 
 #if defined(_M_IX86)
@@ -42,11 +38,11 @@ objcopy c:\Temp\Essai\main.exe -O binary c:\Temp\Essai\main_objcopy.bin
 ///////////////////////
 
 #include <arch/pc/startup.h>
+extern BOOT_CONTEXT BootData;
 
 /*** See pcbios.h ***/
 /***/ int __cdecl Int386(int ivec, REGS* in, REGS* out); /***/
 
-extern BOOT_CONTEXT BootData;
 extern ULONG _bss_end__;
 
 
@@ -695,10 +691,8 @@ LoadPEImage(
     return RVA(ImageBase, OptionalHeader->AddressOfEntryPoint);
 }
 
-// NOTE: Same prototype as NtProcessStartup().
-typedef VOID (NTAPI *BOOTMGR_ENTRY_POINT) (PVOID ptr /*PLOADER_PARAMETER_BLOCK LoaderBlock*/);
 
-VOID _cdecl BootMain(PVOID ptr)
+VOID _cdecl BootMain(VOID)
 {
     INT i;
     ULONG oldScreenPosX;
@@ -713,8 +707,8 @@ VOID _cdecl BootMain(PVOID ptr)
 
     // PcConsPutChar('H');
     PcVideoClearScreen(0x50 | 0x0E); // Background purple, foreground yellow
-    PrintTextColor(0x50 | 0x0E, "\nHello from StartROM!\n====================\n");
-    PrintTextColor(0x90 | 0x0F, "\n\nPress any key to load..."); // Background-intensity bit 0x80 triggers blinking.
+    PrintTextColor(0x50 | 0x0E, "\nHello from StartROM!\n====================\n\n");
+    PrintTextColor(0x90 | 0x0F, "Press any key to load..."); // Background-intensity bit 0x80 triggers blinking.
     for (;;)
     {
         if (PcConsKbHit())
@@ -727,7 +721,7 @@ VOID _cdecl BootMain(PVOID ptr)
     }
     i386_ScreenPosX = 0;
     PrintTextColor(0x50 | 0x0F, "                        "); // Erase the prompt
-    PrintText("\n\n");
+    i386_ScreenPosX = 0;
 
 
     /*
@@ -770,14 +764,14 @@ VOID _cdecl BootMain(PVOID ptr)
     BootData.ImageBase = (PVOID)NtHeaders->OptionalHeader.ImageBase; // FIXME HACK 1
     BootData.ImageSize = NtHeaders->OptionalHeader.SizeOfImage; // FIXME HACK 2
     BootData.ImageType = FileHeader->Machine; // FIXME HACK 3
-    (*EntryPoint)(&BootData);
+    EntryPoint(&BootData);
 
     /* If we reached there, we somehow failed to start, just reboot */
 
     PcVideoGetTextCursorPosition(&i386_ScreenPosX, &i386_ScreenPosY);
 
 Fail:
-    PrintTextColor(0x10 | 0x0F, "\n\nPress any key to restart...");
+    PrintTextColor(0x10 | 0x0F, "Press any key to restart...");
     for (;;)
     {
         if (PcConsKbHit())
@@ -788,7 +782,10 @@ Fail:
         }
         PcHwIdle();
     }
-    PrintText("\n\n");
+    i386_ScreenPosX = 0;
+    PrintTextColor(0x50 | 0x0F, "                           "); // Erase the prompt
+    i386_ScreenPosX = 0;
+
     // Poor-man's wait.
     oldScreenPosX = i386_ScreenPosX;
     oldScreenPosY = i386_ScreenPosY;

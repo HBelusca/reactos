@@ -19,10 +19,12 @@
 #ifndef __ASM__
 
 typedef VOID (__cdecl* SU_REBOOT)(VOID);
+
+struct _REGS;
 typedef INT  (__cdecl* SU_INT386)(
     IN  INT IVec,
-    IN  REGS* In,
-    OUT REGS* Out);
+    IN  /* REGS* */struct _REGS* In,
+    OUT /* REGS* */struct _REGS* Out);
 
 typedef VOID (__cdecl* SU_RELOCATOR16_BOOT)(
     IN REGS*  In,
@@ -74,14 +76,18 @@ typedef struct _BOOT_CONTEXT
 
     ULONG Flags;
 
-    ULONG BootDrive;        // UCHAR
-    ULONG BootPartition;    // UCHAR
+    ULONG BootDrive;
+    ULONG BootPartition;
 
     ULONG MachineType;  // Either MACHINE_TYPE_ISA, MACHINE_TYPE_EISA or MACHINE_TYPE_MCA.
 
     PVOID ImageBase;
     ULONG ImageSize;
     ULONG ImageType;
+
+    /* Buffer to store temporary data for any Int386() call */
+    PVOID BiosCallBuffer;
+    ULONG BiosCallBufferSize;
 
     PSERVICES_TABLE ServicesTable;
     CHAR CommandLine[CMDLINE_SIZE];
@@ -90,6 +96,8 @@ typedef struct _BOOT_CONTEXT
 #define IS_BOOT_CONTEXT_VALID(BootContextPtr)   \
     (((BootContextPtr)->Signature == BOOT_CONTEXT_SIGNATURE) && \
      ((BootContextPtr)->Size == sizeof(BOOT_CONTEXT)))
+
+typedef VOID (NTAPI* BOOTMGR_ENTRY_POINT)(IN PBOOT_CONTEXT BootContext);
 
 #endif // !__ASM__
 

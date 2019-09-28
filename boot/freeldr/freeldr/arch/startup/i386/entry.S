@@ -7,8 +7,9 @@
  *              trampoline code, as well as the 32-bit parts of the Int386
  *              mechanism, PXE and PnP support, and the Linux x86 loader.
  *
- * COPYRIGHT:   Copyright 1998-2002  Brian Palmer  <brianp@sginet.com>
+ * COPYRIGHT:   Copyright 1998-2002 Brian Palmer  <brianp@sginet.com>
  *              Copyright 2011-2019 Timo Kreuzer
+ *              Copyright 2019-2020 Hermes Belusca-Maito
  */
 
 #include <asm.inc>
@@ -69,10 +70,11 @@ ContinueAddress:
 _FrldrStartup:
 
     /* Store BootDrive and BootPartition */
-    mov byte ptr ds:[_FrldrBootDrive], dl
     xor eax, eax
+    mov al, dl
+    mov dword ptr ds:[BootDrive], eax
     mov al, dh
-    mov dword ptr ds:[_FrldrBootPartition], eax
+    mov dword ptr ds:[BootPartition], eax
 
     /* Patch long jump with real mode entry point */
     mov eax, dword ptr ds:[BSS_RealModeEntry]
@@ -86,14 +88,10 @@ _FrldrStartup:
     shr ecx, 2
     rep stosd
 
-    /* Initialize the idt */
+    /* Initialize the IDT */
     call _InitIdt
 
-    /* Pass the command line to BootMain */
-    mov eax, offset cmdline
-
-    /* GO! */
-    push eax
+    /* And call the C code main function */
     call _BootMain
 
     /* We should never get here */
@@ -308,19 +306,7 @@ i386idtptr:
  * See "startup.h" for the complete definitions.
  */
 
-/*
-typedef struct _SERVICES_TABLE
-{
-    SU_REBOOT Reboot;
-    SU_INT386 Int386;
-    SU_RELOCATOR16_BOOT Relocator16Boot;
-    SU_PXE_CALL_API PxeCallApi;
-    SU_PNP_SUPPORTED PnpBiosSupported;
-    SU_PNP_GET_DEVICE_NODE_COUNT PnpBiosGetDeviceNodeCount;
-    SU_PNP_GET_DEVICE_NODE PnpBiosGetDeviceNode;
-    SU_SERVICE_CALL ServiceCall;
-} SERVICES_TABLE, *PSERVICES_TABLE;
-*/
+/* typedef struct _SERVICES_TABLE SERVICES_TABLE, *PSERVICES_TABLE; */
     /* Align to 32 bits boundary */
     .align 4
 
@@ -339,64 +325,48 @@ ServicesTable:
     .long offset _PnpBiosSupported
     .long offset _PnpBiosGetDeviceNodeCount
     .long offset _PnpBiosGetDeviceNode
-    .long 0
+    .long 0 // SU_SERVICE_CALL ServiceCall;
 
-/*
-typedef struct _BOOT_CONTEXT
-{
-    ULONG Signature;    // == BOOT_CONTEXT_SIGNATURE
-    ULONG Size;         // == sizeof(BOOT_CONTEXT)
-
-    ULONG Flags;
-
-    ULONG BootDrive;        // UCHAR
-    ULONG BootPartition;    // UCHAR
-
-    ULONG MachineType;  // Either MACHINE_TYPE_ISA, MACHINE_TYPE_EISA or MACHINE_TYPE_MCA.
-
-    PVOID ImageBase;
-    ULONG ImageSize;
-    ULONG ImageType;
-
-    PSERVICES_TABLE ServicesTable;
-    CHAR CommandLine[CMDLINE_SIZE];
-} BOOT_CONTEXT, *PBOOT_CONTEXT;
-*/
+/* typedef struct _BOOT_CONTEXT BOOT_CONTEXT, *PBOOT_CONTEXT; */
     /* Align to 32 bits boundary */
     .align 4
-
 PUBLIC _BootData
 _BootData:
-    /* Signature */
+// ULONG Signature;
     .long BOOT_CONTEXT_SIGNATURE
-    /* Size */
-    .long BootDataEnd - _BootData
-    /* Flags */
+// ULONG Size;
+    .long BootDataEnd - _BootData // == sizeof(BOOT_CONTEXT)
+// ULONG Flags;
     .long 0
 
-PUBLIC _FrldrBootDrive
-_FrldrBootDrive:
-    .byte 0
-    .align 4
-
-PUBLIC _FrldrBootPartition
-_FrldrBootPartition:
+// ULONG BootDrive;
+BootDrive:
+    .long 0
+// ULONG BootPartition;
+BootPartition:
     .long 0
 
-    /* MachineType */
+// ULONG MachineType; - Either MACHINE_TYPE_ISA, MACHINE_TYPE_EISA or MACHINE_TYPE_MCA
     .long 0
-    /* ImageBase */
+// PVOID ImageBase;
     .long 0
-    /* ImageSize */
+// ULONG ImageSize;
     .long 0
-    /* ImageType */
+// ULONG ImageType;
     .long 0
 
-    /* ServicesTable */
+    /* Buffer to store temporary data for any Int386() call */
+// PVOID BiosCallBuffer;
+    .long BIOSCALLBUFFER
+// ULONG BiosCallBufferSize;
+    .long BIOSCALLBUFSIZE
+
+// PSERVICES_TABLE ServicesTable;
     .long offset ServicesTable
 
-PUBLIC cmdline
-cmdline:
+// CHAR CommandLine[CMDLINE_SIZE];
+PUBLIC CommandLine
+CommandLine:
     .space CMDLINE_SIZE
 BootDataEnd:
 
