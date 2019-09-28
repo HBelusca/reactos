@@ -17,7 +17,7 @@
 
 #include <arch/pc/pcbios.h>
 // #include <arch/pc/machpc.h>
-#include <arch/pc/x86common.h>
+////////////////////////////////// #include <arch/pc/x86common.h>
 // #include <arch/pc/pxe.h>
 
 #if defined(_M_IX86)
@@ -422,7 +422,7 @@ i386PrintText(UCHAR Attr, char *pszText)
 static void
 PrintTextColorV(UCHAR Attr, const char *format, va_list argptr)
 {
-    char buffer[256];
+    char buffer[1024];
 
     _vsnprintf(buffer, sizeof(buffer), format, argptr);
     buffer[sizeof(buffer) - 1] = 0;
@@ -514,14 +514,49 @@ VOID NTAPI NtProcessStartup(IN PBOOT_CONTEXT BootContext)
     /* Initialize globals using the BootContext structure */
     Int386 = BootContext->ServicesTable->Int386;
 
-    // PcVideoHideShowTextCursor(FALSE);
-    // PcVideoSetTextCursorPosition(0, 0);
+    PcVideoHideShowTextCursor(FALSE);
+    PcVideoSetTextCursorPosition(0, 0);
     PcVideoGetTextCursorPosition(&i386_ScreenPosX, &i386_ScreenPosY);
 
-    // PcVideoClearScreen(0x20 | 0x0F); // Background green, foreground white
-    PrintTextColor(0x20 | 0x0F, "\nHello from the 32-bit PE image!\n===============================\n");
-    PrintTextColor(0x20 | 0x0F, "\nImage base 0x%p, BootContext 0x%p\n", &__ImageBase, BootContext);
-    PrintTextColor(0xC0 | 0x0F, "\n\nPress any key to restart..."); // Background-intensity bit 0x80 triggers blinking.
+    PcVideoClearScreen(0x20 | 0x0F); // Background green, foreground white
+    PrintTextColor(0x20 | 0x0F, "\nHello from the 32-bit PE image!\n===============================\n\n");
+    PrintTextColor(0x20 | 0x0F, "Image base 0x%p, BootContext 0x%p\n", &__ImageBase, BootContext);
+
+    PrintTextColor(0x20 | 0x0F,
+        "BootContext dump:\n"
+        "Signature           : 0x%lx '%c%c%c%c'\n"
+        "Size                : 0x%lx\n"
+        "Flags               : 0x%lx\n"
+        "BootDrive           : 0x%lx\n"
+        "BootPartition       : 0x%lx\n"
+        "MachineType         : %lu\n"
+        "ImageBase           : 0x%p\n"
+        "ImageSize           : 0x%lx\n"
+        "ImageType           : 0x%lx\n"
+        "BiosCallBuffer      : 0x%p\n"
+        "BiosCallBufferSize  : 0x%lx\n"
+        "ServicesTable       : 0x%p\n"
+        "CommandLine         : 0x%p '%s'\n"
+        "\n",
+        BootContext->Signature,
+            ((PCHAR)&BootContext->Signature)[0],
+            ((PCHAR)&BootContext->Signature)[1],
+            ((PCHAR)&BootContext->Signature)[2],
+            ((PCHAR)&BootContext->Signature)[3],
+        BootContext->Size,
+        BootContext->Flags,
+        BootContext->BootDrive,
+        BootContext->BootPartition,
+        BootContext->MachineType,
+        BootContext->ImageBase,
+        BootContext->ImageSize,
+        BootContext->ImageType,
+        BootContext->BiosCallBuffer,
+        BootContext->BiosCallBufferSize,
+        BootContext->ServicesTable,
+        BootContext->CommandLine, BootContext->CommandLine);
+
+    PrintTextColor(0xC0 | 0x0F, "Press any key to restart..."); // Background-intensity bit 0x80 triggers blinking.
     for (;;)
     {
         if (PcConsKbHit())
@@ -532,7 +567,10 @@ VOID NTAPI NtProcessStartup(IN PBOOT_CONTEXT BootContext)
         }
         PcHwIdle();
     }
-    PrintText("\n\n");
+    i386_ScreenPosX = 0;
+    PrintTextColor(0x20 | 0x0F, "                           "); // Erase the prompt
+    i386_ScreenPosX = 0;
+
     // Poor-man's wait.
     oldScreenPosX = i386_ScreenPosX;
     oldScreenPosY = i386_ScreenPosY;

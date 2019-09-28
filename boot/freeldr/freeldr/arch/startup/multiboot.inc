@@ -36,7 +36,7 @@
 
 
 #ifdef _USE_ML
-// EXTERN cmdline:DWORD
+// EXTERN CommandLine:DWORD
 EXTERN __bss_start__:DWORD
 #endif
 
@@ -107,7 +107,7 @@ mbchk_command_line:
     test dword ptr ds:[ebx + MB_INFO_FLAGS_OFFSET], MB_INFO_FLAG_COMMAND_LINE
     jz mb2
     mov esi, dword ptr ds:[ebx + MB_INFO_COMMAND_LINE_OFFSET]
-    mov edi, offset cmdline + INITIAL_BASE - FREELDR_BASE
+    mov edi, offset CommandLine + INITIAL_BASE - FREELDR_BASE
     mov ecx, CMDLINE_SIZE - 1
 mb1:
     lodsb
