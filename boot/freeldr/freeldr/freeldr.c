@@ -40,16 +40,16 @@ CCHAR FrLdrBootPath[MAX_PATH] = "";
 
 /* FUNCTIONS ******************************************************************/
 
-VOID __cdecl BootMain(IN PCCH CmdLine)
+VOID __cdecl FrLdrMain(IN PCSTR CommandLine)
 {
-    CmdLineParse(CmdLine);
+    CmdLineParse(CommandLine);
 
     /* Debugger pre-initialization */
     DebugInit(0);
 
-    MachInit(CmdLine);
+    MachInit(CommandLine);
 
-    TRACE("BootMain() called.\n");
+    TRACE("FrLdrMain(0x%p) called.\n", CommandLine);
 
     /* Check if the CPU is new enough */
     FrLdrCheckCpuCompatibility(); // FIXME: Should be done inside MachInit!
@@ -71,6 +71,7 @@ VOID __cdecl BootMain(IN PCCH CmdLine)
     /* Initialize I/O subsystem */
     FsInit();
 
+    /* Start the boot manager */
     RunLoader();
 
 Quit:
@@ -78,7 +79,7 @@ Quit:
     Reboot();
 }
 
-// We need to emulate these, because the original ones don't work in freeldr
+// We need to emulate these, because the original ones don't work in FreeLdr.
 // These functions are here, because they need to be in the main compilation unit
 // and cannot be in a library.
 int __cdecl wctomb(char *mbchar, wchar_t wchar)
@@ -93,7 +94,7 @@ int __cdecl mbtowc(wchar_t *wchar, const char *mbchar, size_t count)
     return 1;
 }
 
-// The wctype table is 144 KB, too much for poor freeldr
+// The wctype table is 144 KB, too much for poor FreeLdr ;^(
 int __cdecl iswctype(wint_t wc, wctype_t wctypeFlags)
 {
     return _isctype((char)wc, wctypeFlags);

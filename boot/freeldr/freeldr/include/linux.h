@@ -128,6 +128,7 @@ typedef struct
 } LINUX_SETUPSECTOR, *PLINUX_SETUPSECTOR;
 #include <poppack.h>
 
+#if 0
 // Implemented in linux.S
 VOID __cdecl BootLinuxKernel(
     IN ULONG KernelSize,
@@ -135,6 +136,7 @@ VOID __cdecl BootLinuxKernel(
     IN PVOID KernelTargetLoadAddress,
     IN UCHAR DriveNumber,
     IN ULONG PartitionNumber);
+#endif
 
 ARC_STATUS
 LoadAndBootLinux(

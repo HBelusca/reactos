@@ -26,7 +26,13 @@
 #define TAG_HW_RESOURCE_LIST    'lRwH'
 #define TAG_HW_DISK_CONTEXT     'cDwH'
 
-/* PROTOTYPES ***************************************************************/
+/* GLOBALS *******************************************************************/
+
+extern PBOOT_CONTEXT PcBootContext;
+#define FrldrBootDrive      ((UCHAR)((PcBootContext)->BootDrive))
+#define FrldrBootPartition  ((ULONG)((PcBootContext)->BootPartition))
+
+/* PROTOTYPES ****************************************************************/
 
 /* hardware.c */
 VOID StallExecutionProcessor(ULONG Microseconds);
@@ -62,13 +68,20 @@ VOID DetectApmBios(PCONFIGURATION_COMPONENT_DATA SystemKey, ULONG *BusNumber);
 VOID DetectPciBios(PCONFIGURATION_COMPONENT_DATA SystemKey, ULONG *BusNumber);
 
 /* i386pnp.S */
-ULONG_PTR __cdecl PnpBiosSupported(VOID);
-ULONG __cdecl PnpBiosGetDeviceNodeCount(ULONG *NodeSize,
-                  ULONG *NodeCount);
-ULONG __cdecl PnpBiosGetDeviceNode(UCHAR *NodeId,
-             UCHAR *NodeBuffer);
+// ULONG_PTR __cdecl PnpBiosSupported(VOID);
+#define PnpBiosSupported()  \
+    ((PcBootContext)->ServicesTable->PnpBiosSupported)()
+// ULONG __cdecl PnpBiosGetDeviceNodeCount(OUT PULONG NodeSize, OUT PULONG NodeCount);
+#define PnpBiosGetDeviceNodeCount(NodeSize, NodeCount)  \
+    ((PcBootContext)->ServicesTable->PnpBiosGetDeviceNodeCount)((NodeSize), (NodeCount))
+// ULONG __cdecl PnpBiosGetDeviceNode(IN OUT PUCHAR NodeId, OUT PUCHAR NodeBuffer);
+#define PnpBiosGetDeviceNode(NodeId, NodeBuffer)        \
+    ((PcBootContext)->ServicesTable->PnpBiosGetDeviceNode)((NodeId), (NodeBuffer))
 
 /* i386pxe.S */
-USHORT __cdecl PxeCallApi(USHORT Segment, USHORT Offset, USHORT Service, VOID* Parameter);
+// extern PXENV_EXIT __cdecl PxeCallApi(UINT16 Segment, UINT16 Offset, UINT16 Service, VOID *Parameter);
+// USHORT __cdecl PxeCallApi(IN USHORT Segment, IN USHORT Offset, IN USHORT Service, IN PVOID Parameter);
+#define PxeCallApi(Segment, Offset, Service, Parameter) \
+    ((PcBootContext)->ServicesTable->PxeCallApi)((Segment), (Offset), (Service), (Parameter))
 
 /* EOF */
