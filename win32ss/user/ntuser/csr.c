@@ -206,7 +206,7 @@ CsrClientCallServer(IN OUT PCSR_API_MESSAGE ApiMessage,
  */
 DWORD UserSystemThreadProc(BOOL bRemoteProcess)
 {
-    DWORD Type;
+    DWORD Type = 0;
 
     if (!gdwPendingSystemThreads)
     {
@@ -219,23 +219,26 @@ DWORD UserSystemThreadProc(BOOL bRemoteProcess)
         Type = ST_RIT;
     else if (gdwPendingSystemThreads & ST_DESKTOP_THREAD)
         Type = ST_DESKTOP_THREAD;
-    else 
+    else if (gdwPendingSystemThreads & ST_GHOST_THREAD)
         Type = ST_GHOST_THREAD;
+    else if (gdwPendingSystemThreads & ST_VIDEOPORT_THREAD)
+        Type = ST_VIDEOPORT_THREAD;
 
     ASSERT(Type);
 
     /* We will handle one of these threads right here so unmark it as pending */
     gdwPendingSystemThreads &= ~Type;
 
-    UserLeave();
-
     TRACE("UserSystemThreadProc: %d\n", Type);
+
+    UserLeave();
 
     switch (Type)
     {
         case ST_RIT: RawInputThreadMain(); break;
         case ST_DESKTOP_THREAD: DesktopThreadMain(); break;
         case ST_GHOST_THREAD: UserGhostThreadEntry(); break;
+        // case ST_VIDEOPORT_THREAD: VideoPortThreadEntry(); break;
         default: ERR("Wrong type: %x\n", Type);
     }
 

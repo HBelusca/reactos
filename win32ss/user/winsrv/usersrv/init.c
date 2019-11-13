@@ -20,11 +20,11 @@
 
 HINSTANCE UserServerDllInstance = NULL;
 
-/* Handles for Power and Media events. Used by both usersrv and win32k. */
+/* Handles for Power and Media events. Used by both usersrv and Win32k. */
 HANDLE ghPowerRequestEvent;
 HANDLE ghMediaRequestEvent;
 
-/* Copy of CSR Port handle for win32k */
+/* Copy of CSR Port handle for Win32k */
 HANDLE CsrApiPort = NULL;
 
 /* Memory */
@@ -114,7 +114,14 @@ ULONG
 NTAPI
 CreateSystemThreads(PVOID pParam)
 {
+    /* Try to connect this CSR thread to the USER subsystem; ignore any failure */
+    PCSR_THREAD pcsrt = CsrConnectToUser();
+
+    /* Call Win32k */
     NtUserCallOneParam((DWORD_PTR)pParam, ONEPARAM_ROUTINE_CREATESYSTEMTHREADS);
+
+    /* Cleanup the CSR thread */
+    if (pcsrt) CsrDereferenceThread(pcsrt);
     RtlExitUserThread(0);
     return 0;
 }
@@ -199,7 +206,7 @@ UserClientConnect(IN PCSR_PROCESS CsrProcess,
         /* Query the API port and save it globally */
         CsrApiPort = CsrQueryApiPort();
 
-        /* Inform win32k about the API port */
+        /* Inform Win32k about the API port */
         Status = NtUserSetInformationThread(NtCurrentThread(),
                                             UserThreadCsrApiPort,
                                             &CsrApiPort,
@@ -224,7 +231,7 @@ UserClientConnect(IN PCSR_PROCESS CsrProcess,
         return STATUS_INVALID_PARAMETER;
     }
 
-    /* Pass the request to win32k */
+    /* Pass the request to Win32k */
     ConnectInfo->dwDispatchCount = 0; // gDispatchTableValues;
     Status = NtUserProcessConnect(CsrProcess->ProcessHandle,
                                   ConnectInfo,
