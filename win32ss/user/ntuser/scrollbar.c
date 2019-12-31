@@ -780,7 +780,7 @@ co_IntCreateScrollBars(PWND Window)
    Size = 3 * (sizeof(SBINFOEX));
    if(!(Window->pSBInfoex = ExAllocatePoolWithTag(PagedPool, Size, TAG_SBARINFO)))
    {
-      ERR("Unable to allocate memory for scrollbar information for window %p\n", Window->head.h);
+      ERR("Unable to allocate memory for scrollbar information for window %p\n", UserHMGetHandle(Window));
       return FALSE;
    }
 
@@ -788,7 +788,7 @@ co_IntCreateScrollBars(PWND Window)
 
    if(!(Window->pSBInfo = DesktopHeapAlloc( Window->head.rpdesk, sizeof(SBINFO))))
    {
-      ERR("Unable to allocate memory for scrollbar information for window %p\n", Window->head.h);
+      ERR("Unable to allocate memory for scrollbar information for window %p\n", UserHMGetHandle(Window));
       return FALSE;
    }
 
@@ -908,7 +908,7 @@ co_UserShowScrollBar(PWND Wnd, int nBar, BOOL fShowH, BOOL fShowV)
       //if (Wnd->style & WS_VSCROLL) IntUpdateSBInfo(Wnd, SB_VERT);
       /////
          /* Frame has been changed, let the window redraw itself */
-      co_WinPosSetWindowPos( Wnd, 0, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE
+      co_WinPosSetWindowPos( Wnd, PWND_TOP, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE
                            | SWP_NOACTIVATE | SWP_NOZORDER | SWP_FRAMECHANGED );
       return TRUE;
    }
@@ -1173,20 +1173,17 @@ IntDrawScrollBar(PWND Wnd, HDC DC, INT Bar)
 
 
 LRESULT APIENTRY
-ScrollBarWndProc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam)
+ScrollBarWndProc(PWND Wnd, UINT Msg, WPARAM wParam, LPARAM lParam)
 {
    LRESULT lResult = 0;
-   PWND pWnd;
-   pWnd = UserGetWindowObject(hWnd);
-   if (!pWnd) return 0;
 
    switch(Msg)
    {
        case WM_ENABLE:
        {
-           if (pWnd->pSBInfo)
+           if (Wnd->pSBInfo)
            {
-              pWnd->pSBInfo->WSBflags = wParam ? ESB_ENABLE_BOTH : ESB_DISABLE_BOTH;
+              Wnd->pSBInfo->WSBflags = wParam ? ESB_ENABLE_BOTH : ESB_DISABLE_BOTH;
            }
        }
        break;
@@ -1341,7 +1338,7 @@ NtUserEnableScrollBar(
    if (wSBflags == SB_CTL)
    {
       if ((wArrows == ESB_DISABLE_BOTH || wArrows == ESB_ENABLE_BOTH))
-         IntEnableWindow(hWnd, (wArrows == ESB_ENABLE_BOTH));
+         IntEnableWindow(Window, (wArrows == ESB_ENABLE_BOTH));
 
       RETURN(TRUE);
    }

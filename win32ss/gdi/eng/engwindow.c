@@ -110,7 +110,7 @@ IntEngWindowChanged(
         return;
     }
 
-    ASSERT(Clip->Hwnd == Window->head.h);
+    ASSERT(Clip->Hwnd == UserHMGetHandle(Window));
     // if (Clip->pvConsumer != NULL)
     {
         /* Update the WNDOBJ */

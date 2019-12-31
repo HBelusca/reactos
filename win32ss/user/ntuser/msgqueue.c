@@ -626,16 +626,10 @@ co_MsqInsertMouseMessage(MSG* Msg, DWORD flags, ULONG_PTR dwExtraInfo, BOOL Hook
 //   pDesk = pwndDesktop->head.rpdesk;
 
    /* Check if the mouse is captured */
-   Msg->hwnd = IntGetCaptureWindow();
-   if (Msg->hwnd != NULL)
-   {
-       pwnd = UserGetWindowObject(Msg->hwnd);
-   }
-   else
-   {
+   pwnd = IntGetCaptureWindow();
+   if (pwnd == NULL)
        pwnd = IntTopLevelWindowFromPoint(Msg->pt.x, Msg->pt.y);
-       if (pwnd) Msg->hwnd = pwnd->head.h;
-   }
+   Msg->hwnd = (pwnd ? UserHMGetHandle(pwnd) : NULL);
 
    hdcScreen = IntGetScreenDC();
    CurInfo = IntGetSysCursorInfo();
@@ -813,7 +807,7 @@ MsqRemoveWindowMessagesFromQueue(PWND Window)
    {
       PostedMessage = CONTAINING_RECORD(CurrentEntry, USER_MESSAGE, ListEntry);
 
-      if (PostedMessage->Msg.hwnd == Window->head.h)
+      if (PostedMessage->Msg.hwnd == UserHMGetHandle(Window))
       {
          if (PostedMessage->Msg.message == WM_QUIT && pti->QuitPosted == 0)
          {
@@ -837,7 +831,7 @@ MsqRemoveWindowMessagesFromQueue(PWND Window)
    {
       SentMessage = CONTAINING_RECORD(CurrentEntry, USER_SENT_MESSAGE, ListEntry);
 
-      if(SentMessage->Msg.hwnd == Window->head.h)
+      if(SentMessage->Msg.hwnd == UserHMGetHandle(Window))
       {
          ERR("Remove Window Messages %p From Sent Queue\n",SentMessage);
 #if 0 // Should mark these as invalid and allow the rest clean up, so far no harm by just commenting out. See CORE-9210.
@@ -1690,7 +1684,7 @@ BOOL co_IntProcessMouseMessage(MSG* msg, BOOL* RemoveMessages, BOOL* NotForUs, L
 
     if ((hittest == (USHORT)HTERROR) || (hittest == (USHORT)HTNOWHERE))
     {
-        co_IntSendMessage( msg->hwnd, WM_SETCURSOR, (WPARAM)msg->hwnd, MAKELONG( hittest, msg->message ));
+        co_IntSendMessage(pwndMsg, WM_SETCURSOR, (WPARAM)msg->hwnd, MAKELONG(hittest, msg->message));
 
         /* Remove and skip message */
         *RemoveMessages = TRUE;
@@ -1726,10 +1720,10 @@ BOOL co_IntProcessMouseMessage(MSG* msg, BOOL* RemoveMessages, BOOL* NotForUs, L
 
             if (pwndTop && pwndTop != pwndDesktop)
             {
-                LONG ret = co_IntSendMessage( msg->hwnd,
-                                              WM_MOUSEACTIVATE,
-                                              (WPARAM)UserHMGetHandle(pwndTop),
-                                              MAKELONG( hittest, msg->message));
+                LONG ret = co_IntSendMessage(pwndMsg,
+                                             WM_MOUSEACTIVATE,
+                                             (WPARAM)UserHMGetHandle(pwndTop),
+                                             MAKELONG(hittest, msg->message));
                 switch(ret)
                 {
                 case MA_NOACTIVATEANDEAT:
@@ -1756,7 +1750,7 @@ BOOL co_IntProcessMouseMessage(MSG* msg, BOOL* RemoveMessages, BOOL* NotForUs, L
 
     /* Windows sends the normal mouse message as the message parameter
        in the WM_SETCURSOR message even if it's non-client mouse message */
-    co_IntSendMessage( msg->hwnd, WM_SETCURSOR, (WPARAM)msg->hwnd, MAKELONG( hittest, msg->message ));
+    co_IntSendMessage(pwndMsg, WM_SETCURSOR, (WPARAM)msg->hwnd, MAKELONG(hittest, msg->message));
 
     msg->message = message;
     return !eatMsg;
@@ -1813,13 +1807,13 @@ BOOL co_IntProcessKeyboardMessage(MSG* Msg, BOOL* RemoveMessages)
             /* Handle F1 key by sending out WM_HELP message */
             if (Msg->wParam == VK_F1)
             {
-                UserPostMessage( Msg->hwnd, WM_KEYF1, 0, 0 );
+                UserPostMessage(Msg->hwnd, WM_KEYF1, 0, 0);
             }
             else if (Msg->wParam >= VK_BROWSER_BACK &&
                      Msg->wParam <= VK_LAUNCH_APP2)
             {
                 /* FIXME: Process keystate */
-                co_IntSendMessage(Msg->hwnd, WM_APPCOMMAND, (WPARAM)Msg->hwnd, MAKELPARAM(0, (FAPPCOMMAND_KEY | (Msg->wParam - VK_BROWSER_BACK + 1))));
+                co_IntSendMessage(pWnd, WM_APPCOMMAND, (WPARAM)Msg->hwnd, MAKELPARAM(0, (FAPPCOMMAND_KEY | (Msg->wParam - VK_BROWSER_BACK + 1))));
             }
         }
         else if (Msg->message == WM_KEYUP)
@@ -1841,7 +1835,7 @@ BOOL co_IntProcessKeyboardMessage(MSG* Msg, BOOL* RemoveMessages)
 
                 wParamTmp = UserGetKeyState(VK_SHIFT) & 0x8000 ? SC_PREVWINDOW : SC_NEXTWINDOW;
                 TRACE("Send WM_SYSCOMMAND Alt-Tab/ESC Alt-Shift-Tab/ESC\n");
-                co_IntSendMessage( Msg->hwnd, WM_SYSCOMMAND, wParamTmp, Msg->wParam );
+                co_IntSendMessage(pWnd, WM_SYSCOMMAND, wParamTmp, Msg->wParam);
 
                 //// Keep looping.
                 Ret = FALSE;
@@ -2047,7 +2041,7 @@ co_MsqPeekHardwareMessage(IN PTHREADINFO pti,
  */
       if ( ( !Window || // 1
             ( Window == PWND_BOTTOM && CurrentMessage->Msg.hwnd == NULL ) || // 2
-            ( Window != PWND_BOTTOM && Window->head.h == CurrentMessage->Msg.hwnd ) || // 3
+            ( Window != PWND_BOTTOM && UserHMGetHandle(Window) == CurrentMessage->Msg.hwnd ) || // 3
             ( is_mouse_message(CurrentMessage->Msg.message) ) ) && // Null window for anything mouse.
             ( ( ( MsgFilterLow == 0 && MsgFilterHigh == 0 ) && CurrentMessage->QS_Flags & QSflags ) ||
               ( MsgFilterLow <= CurrentMessage->Msg.message && MsgFilterHigh >= CurrentMessage->Msg.message ) ) )
@@ -2135,7 +2129,7 @@ MsqPeekMessage(IN PTHREADINFO pti,
  */
       if ( ( !Window || // 1
             ( Window == PWND_BOTTOM && CurrentMessage->Msg.hwnd == NULL ) || // 2
-            ( Window != PWND_BOTTOM && Window->head.h == CurrentMessage->Msg.hwnd ) ) && // 3
+            ( Window != PWND_BOTTOM && UserHMGetHandle(Window) == CurrentMessage->Msg.hwnd ) ) && // 3
             ( ( ( MsgFilterLow == 0 && MsgFilterHigh == 0 ) && CurrentMessage->QS_Flags & QSflags ) ||
               ( MsgFilterLow <= CurrentMessage->Msg.message && MsgFilterHigh >= CurrentMessage->Msg.message ) ) )
       {

@@ -400,7 +400,7 @@ IntScrollWindowEx(
 
             /* wine sends WM_POSCHANGING, WM_POSCHANGED messages */
             /* windows sometimes a WM_MOVE */
-            co_IntSendMessage(UserHMGetHandle(Child), WM_MOVE, 0, lParam);
+            co_IntSendMessage(Child, WM_MOVE, 0, lParam);
 
             UserDerefObjectCo(Child);
          }

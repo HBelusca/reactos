@@ -178,7 +178,7 @@ TestWindowProcess(PWND Wnd)
    if (Wnd->head.pti == (PTHREADINFO)NtCurrentTeb()->Win32ThreadInfo)
       return TRUE;
    else
-      return (NtUserQueryWindow(Wnd->head.h, QUERY_WINDOW_UNIQUE_PROCESS_ID) ==
+      return (NtUserQueryWindow(UserHMGetHandle(Wnd), QUERY_WINDOW_UNIQUE_PROCESS_ID) ==
               (DWORD_PTR)NtCurrentTeb()->ClientId.UniqueProcess );
 }
 

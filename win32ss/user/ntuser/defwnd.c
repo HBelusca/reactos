@@ -102,16 +102,16 @@ DefWndHandleWindowPosChanged(PWND pWnd, WINDOWPOS* Pos)
 
    if (!(Pos->flags & SWP_NOCLIENTMOVE))
    {
-      co_IntSendMessage(UserHMGetHandle(pWnd), WM_MOVE, 0, MAKELONG(Rect.left, Rect.top));
+      co_IntSendMessage(pWnd, WM_MOVE, 0, MAKELONG(Rect.left, Rect.top));
    }
 
    if (!(Pos->flags & SWP_NOCLIENTSIZE) || (Pos->flags & SWP_STATECHANGED))
    {
-      if (style & WS_MINIMIZE) co_IntSendMessage(UserHMGetHandle(pWnd), WM_SIZE, SIZE_MINIMIZED, 0 );
+      if (style & WS_MINIMIZE) co_IntSendMessage(pWnd, WM_SIZE, SIZE_MINIMIZED, 0);
       else
       {
          WPARAM wp = (style & WS_MAXIMIZE) ? SIZE_MAXIMIZED : SIZE_RESTORED;
-         co_IntSendMessage(UserHMGetHandle(pWnd), WM_SIZE, wp, MAKELONG(Rect.right - Rect.left, Rect.bottom - Rect.top));
+         co_IntSendMessage(pWnd, WM_SIZE, wp, MAKELONG(Rect.right - Rect.left, Rect.bottom - Rect.top));
       }
    }
    return 0;
@@ -142,25 +142,25 @@ DefWndHandleSysCommand(PWND pWnd, WPARAM wParam, LPARAM lParam)
         break;
 
       case SC_MINIMIZE:
-        if (UserHMGetHandle(pWnd) == UserGetActiveWindow())
+        if (pWnd == UserGetActiveWindow())
             IntShowOwnedPopups(pWnd,FALSE); // This is done in ShowWindow! Need to retest!
         co_WinPosShowWindow( pWnd, SW_MINIMIZE );
         break;
 
       case SC_MAXIMIZE:
-        if (((pWnd->style & WS_MINIMIZE) != 0) && UserHMGetHandle(pWnd) == UserGetActiveWindow())
+        if (((pWnd->style & WS_MINIMIZE) != 0) && pWnd == UserGetActiveWindow())
             IntShowOwnedPopups(pWnd,TRUE);
         co_WinPosShowWindow( pWnd, SW_MAXIMIZE );
         break;
 
       case SC_RESTORE:
-        if (((pWnd->style & WS_MINIMIZE) != 0) && UserHMGetHandle(pWnd) == UserGetActiveWindow())
+        if (((pWnd->style & WS_MINIMIZE) != 0) && pWnd == UserGetActiveWindow())
             IntShowOwnedPopups(pWnd,TRUE);
         co_WinPosShowWindow( pWnd, SW_RESTORE );
         break;
 
       case SC_CLOSE:
-        return co_IntSendMessage(UserHMGetHandle(pWnd), WM_CLOSE, 0, 0);
+        return co_IntSendMessage(pWnd, WM_CLOSE, 0, 0);
 
       case SC_SCREENSAVE:
         ERR("Screensaver Called!\n");
@@ -269,7 +269,8 @@ DefWndHandleSetCursor(PWND pWnd, WPARAM wParam, LPARAM lParam)
                   // Get original active window.
                   PWND pwndOrigActive = gpqForeground->spwndActive;
 
-                  co_WinPosSetWindowPos(pWnd, NULL, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+                  co_WinPosSetWindowPos(pWnd, PWND_TOP, 0, 0, 0, 0,
+                                        SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
 
                   UserRefObjectCo(pwndPopUP, &Ref);
                   //UserSetActiveWindow(pwndPopUP);
@@ -383,13 +384,13 @@ VOID FASTCALL DefWndPrint( PWND pwnd, HDC hdc, ULONG uFlags)
    * Background
    */
   if ( uFlags & PRF_ERASEBKGND)
-    co_IntSendMessage(UserHMGetHandle(pwnd), WM_ERASEBKGND, (WPARAM)hdc, 0);
+    co_IntSendMessage(pwnd, WM_ERASEBKGND, (WPARAM)hdc, 0);
 
   /*
    * Client area
    */
   if ( uFlags & PRF_CLIENT)
-    co_IntSendMessage(UserHMGetHandle(pwnd), WM_PRINTCLIENT, (WPARAM)hdc, uFlags);
+    co_IntSendMessage(pwnd, WM_PRINTCLIENT, (WPARAM)hdc, uFlags);
 }
 
 BOOL
@@ -415,7 +416,7 @@ UserPaintCaption(PWND pWnd, INT Flags)
          * are disabled but the themes service is enabled
          */
          TRACE("UDCB Flags %08x\n");
-         co_IntSendMessage(UserHMGetHandle(pWnd), WM_NCUAHDRAWCAPTION, Flags, 0);
+         co_IntSendMessage(pWnd, WM_NCUAHDRAWCAPTION, Flags, 0);
       }
       else
       {
@@ -613,7 +614,7 @@ IntDefWindowProc(
 
       case WM_SYSCOMMAND:
       {
-         TRACE("hwnd %p WM_SYSCOMMAND %lx %lx\n", Wnd->head.h, wParam, lParam );
+         TRACE("hwnd %p WM_SYSCOMMAND %lx %lx\n", UserHMGetHandle(Wnd), wParam, lParam );
          lResult = DefWndHandleSysCommand(Wnd, wParam, lParam);
          break;
       }
@@ -642,7 +643,7 @@ IntDefWindowProc(
             break;
          }
          UserRefObjectCo(Wnd->spwndParent, &Ref);
-         lResult = co_IntSendMessage(UserHMGetHandle(Wnd->spwndParent), WM_APPCOMMAND, wParam, lParam);
+         lResult = co_IntSendMessage(Wnd->spwndParent, WM_APPCOMMAND, wParam, lParam);
          UserDerefObjectCo(Wnd->spwndParent);
          break;
 
@@ -658,7 +659,7 @@ IntDefWindowProc(
          hi.iCtrlId = (Wnd->style & (WS_POPUP|WS_CHILD)) == WS_CHILD ? IntMenuItemFromPoint(Wnd, hMenu, hi.MousePos) : 0;
          hi.dwContextId = IntGetWindowContextHelpId(Wnd);
 
-         co_IntSendMessage( UserHMGetHandle(Wnd), WM_HELP, 0, (LPARAM)&hi );
+         co_IntSendMessage(Wnd, WM_HELP, 0, (LPARAM)&hi);
          break;
       }
 
@@ -675,7 +676,7 @@ IntDefWindowProc(
       case WM_HELP:
       {
          PWND Parent = IntGetParent(Wnd);
-         co_IntSendMessage(UserHMGetHandle(Parent), Msg, wParam, lParam);
+         co_IntSendMessage(Parent, Msg, wParam, lParam);
          break;
       }
 
@@ -705,7 +706,7 @@ IntDefWindowProc(
             Pt.y = GET_Y_LPARAM(lParam);
             IntClientToScreen(Wnd, &Pt);
             lParam = MAKELPARAM(Pt.x, Pt.y);
-            co_IntSendMessage(UserHMGetHandle(Wnd), WM_CONTEXTMENU, (WPARAM)UserHMGetHandle(Wnd), lParam);
+            co_IntSendMessage(Wnd, WM_CONTEXTMENU, (WPARAM)UserHMGetHandle(Wnd), lParam);
             break;
       }
 
@@ -723,7 +724,7 @@ IntDefWindowProc(
       case WM_NCXBUTTONUP:
           if (HIWORD(wParam) == XBUTTON1 || HIWORD(wParam) == XBUTTON2)
           {
-              co_IntSendMessage(UserHMGetHandle(Wnd), WM_APPCOMMAND, (WPARAM)UserHMGetHandle(Wnd),
+              co_IntSendMessage(Wnd, WM_APPCOMMAND, (WPARAM)UserHMGetHandle(Wnd),
                                 MAKELPARAM(LOWORD(wParam), FAPPCOMMAND_MOUSE | HIWORD(wParam)));
           }
           break;
@@ -733,7 +734,7 @@ IntDefWindowProc(
       {
             if (Wnd->style & WS_CHILD)
             {
-                co_IntSendMessage(UserHMGetHandle(IntGetParent(Wnd)), Msg, wParam, lParam);
+                co_IntSendMessage(IntGetParent(Wnd), Msg, wParam, lParam);
             }
             else
             {
@@ -784,7 +785,7 @@ IntDefWindowProc(
 
             if (UserGetKeyState(VK_SHIFT) & 0x8000)
             {
-               co_IntSendMessage(UserHMGetHandle(Wnd), WM_CONTEXTMENU, (WPARAM)UserHMGetHandle(Wnd), MAKELPARAM(-1, -1));
+               co_IntSendMessage(Wnd, WM_CONTEXTMENU, (WPARAM)UserHMGetHandle(Wnd), MAKELPARAM(-1, -1));
             }
          }
          if (IS_KEY_DOWN(gafAsyncKeyState, VK_LWIN) || IS_KEY_DOWN(gafAsyncKeyState, VK_RWIN))
@@ -816,9 +817,9 @@ IntDefWindowProc(
                if (wParam == VK_DOWN)
                {
                    if (topWnd->style & WS_MAXIMIZE)
-                       co_IntSendMessage(hwndTop, WM_SYSCOMMAND, SC_RESTORE, lParam);
+                       co_IntSendMessage(topWnd, WM_SYSCOMMAND, SC_RESTORE, lParam);
                    else
-                       co_IntSendMessage(hwndTop, WM_SYSCOMMAND, SC_MINIMIZE, lParam);
+                       co_IntSendMessage(topWnd, WM_SYSCOMMAND, SC_MINIMIZE, lParam);
                }
                else if (wParam == VK_UP)
                {
@@ -832,7 +833,7 @@ IntDefWindowProc(
                   {
                       currentRect = topWnd->InternalPos.NormalRect;
                   }
-                  co_IntSendMessage(hwndTop, WM_SYSCOMMAND, SC_MAXIMIZE, 0);
+                  co_IntSendMessage(topWnd, WM_SYSCOMMAND, SC_MAXIMIZE, 0);
 
                   // save normal rect if maximazing snapped window
                   topWnd->InternalPos.NormalRect = currentRect;
@@ -847,7 +848,7 @@ IntDefWindowProc(
 
                   if (topWnd->style & WS_MAXIMIZE)
                   {
-                     co_IntSendMessage(hwndTop, WM_SYSCOMMAND, SC_RESTORE, lParam);
+                     co_IntSendMessage(topWnd, WM_SYSCOMMAND, SC_RESTORE, lParam);
                      snapped = FALSE;
                   }
                   windowRect = topWnd->rcWindow;
@@ -869,7 +870,7 @@ IntDefWindowProc(
                      {
                         RECT empty = {0, 0, 0, 0};
                         co_WinPosSetWindowPos(topWnd,
-                                              0,
+                                              PWND_TOP,
                                               normalRect.left,
                                               normalRect.top,
                                               normalRect.right - normalRect.left,
@@ -881,7 +882,7 @@ IntDefWindowProc(
                   else
                   {
                      co_WinPosSetWindowPos(topWnd,
-                                           0,
+                                           PWND_TOP,
                                            snapRect.left,
                                            snapRect.top,
                                            snapRect.right - snapRect.left,
@@ -930,24 +931,24 @@ IntDefWindowProc(
                 else if ( wParam == VK_ESCAPE || wParam == VK_TAB ) // Alt-Tab/ESC Alt-Shift-Tab/ESC
                 {
                    WPARAM wParamTmp;
-                   HWND Active = UserGetActiveWindow(); // Noticed MDI problem.
+                   PWND Active = UserGetActiveWindow(); // Noticed MDI problem.
                    if (!Active)
                    {
                       FIXME("WM_SYSKEYDOWN VK_ESCAPE no active\n");
                       break;
                    }
                    wParamTmp = UserGetKeyState(VK_SHIFT) & 0x8000 ? SC_PREVWINDOW : SC_NEXTWINDOW;
-                   co_IntSendMessage( Active, WM_SYSCOMMAND, wParamTmp, wParam );
+                   co_IntSendMessage(Active, WM_SYSCOMMAND, wParamTmp, wParam);
                 }
             }
             else if( wParam == VK_F10 )
             {
                 if (UserGetKeyState(VK_SHIFT) & 0x8000)
-                    co_IntSendMessage( UserHMGetHandle(Wnd), WM_CONTEXTMENU, (WPARAM)UserHMGetHandle(Wnd), MAKELPARAM(-1, -1) );
+                    co_IntSendMessage(Wnd, WM_CONTEXTMENU, (WPARAM)UserHMGetHandle(Wnd), MAKELPARAM(-1, -1));
                 pti->MessageQueue->QF_flags |= QF_FF10STATUS; //iF10Key = 1;
             }
             else if( wParam == VK_ESCAPE && (UserGetKeyState(VK_SHIFT) & 0x8000))
-                  co_IntSendMessage( UserHMGetHandle(Wnd), WM_SYSCOMMAND, SC_KEYMENU, ' ' );
+                  co_IntSendMessage(Wnd, WM_SYSCOMMAND, SC_KEYMENU, ' ');
             break;
       }
 
@@ -958,7 +959,7 @@ IntDefWindowProc(
             if (((wParam == VK_MENU || wParam == VK_LMENU || wParam == VK_RMENU)
                  && (pti->MessageQueue->QF_flags & (QF_FMENUSTATUS|QF_FMENUSTATUSBREAK)) == QF_FMENUSTATUS /*iMenuSysKey*/) ||
                  ((wParam == VK_F10) && pti->MessageQueue->QF_flags & QF_FF10STATUS /*iF10Key*/))
-                co_IntSendMessage( UserHMGetHandle(UserGetAncestor( Wnd, GA_ROOT )), WM_SYSCOMMAND, SC_KEYMENU, 0L );
+                co_IntSendMessage(UserGetAncestor(Wnd, GA_ROOT), WM_SYSCOMMAND, SC_KEYMENU, 0L);
             pti->MessageQueue->QF_flags &= ~(QF_FMENUSTATUS|QF_FMENUSTATUSBREAK|QF_FF10STATUS); //iMenuSysKey = iF10Key = 0;
             break;
       }
@@ -975,9 +976,9 @@ IntDefWindowProc(
             {
                 if (wParam == VK_TAB || wParam == VK_ESCAPE) break;
                 if (wParam == VK_SPACE && Wnd->style & WS_CHILD)
-                    co_IntSendMessage( UserHMGetHandle(IntGetParent(Wnd)), Msg, wParam, lParam );
+                    co_IntSendMessage(IntGetParent(Wnd), Msg, wParam, lParam);
                 else
-                    co_IntSendMessage( UserHMGetHandle(Wnd), WM_SYSCOMMAND, SC_KEYMENU, wParam );
+                    co_IntSendMessage(Wnd, WM_SYSCOMMAND, SC_KEYMENU, wParam);
             }
             else /* check for Ctrl-Esc */
                 if (wParam != VK_ESCAPE) UserPostMessage(hwndSAS, WM_LOGONNOTIFY, LN_MESSAGE_BEEP, 0); //MessageBeep(0);
@@ -989,7 +990,7 @@ IntDefWindowProc(
          pti->MessageQueue->QF_flags &= ~(QF_FMENUSTATUS|QF_FMENUSTATUSBREAK);
 
          MENU_EndMenu( Wnd );
-         if (IntGetCaptureWindow() == UserHMGetHandle(Wnd))
+         if (IntGetCaptureWindow() == Wnd)
          {
             IntReleaseCapture();
          }
@@ -1022,7 +1023,7 @@ IntDefWindowProc(
              {
                  PWND parent = Wnd->spwndParent;//IntGetParent( Wnd );
                  if (parent != UserGetDesktopWindow() &&
-                     co_IntSendMessage( UserHMGetHandle(parent), WM_SETCURSOR, wParam, lParam))
+                     co_IntSendMessage(parent, WM_SETCURSOR, wParam, lParam))
                     return TRUE;
              }
          }
@@ -1032,12 +1033,10 @@ IntDefWindowProc(
       case WM_MOUSEACTIVATE:
          if (Wnd->style & WS_CHILD)
          {
-             LONG Ret;
-             HWND hwndParent;
+             LONG Ret = 0;
              PWND pwndParent = IntGetParent(Wnd);
-             hwndParent = pwndParent ? UserHMGetHandle(pwndParent) : NULL;
-             if (hwndParent) Ret = co_IntSendMessage(hwndParent, WM_MOUSEACTIVATE, wParam, lParam);
-             if (Ret) return (Ret);
+             if (pwndParent) Ret = co_IntSendMessage(pwndParent, WM_MOUSEACTIVATE, wParam, lParam);
+             if (Ret) return Ret;
          }
          return ( (HIWORD(lParam) == WM_LBUTTONDOWN && LOWORD(lParam) == HTCAPTION) ? MA_NOACTIVATE : MA_ACTIVATE );
 
@@ -1055,10 +1054,8 @@ IntDefWindowProc(
       case WM_MOUSEWHEEL:
          if (Wnd->style & WS_CHILD)
          {
-            HWND hwndParent;
             PWND pwndParent = IntGetParent(Wnd);
-            hwndParent = pwndParent ? UserHMGetHandle(pwndParent) : NULL;
-            return co_IntSendMessage( hwndParent, WM_MOUSEWHEEL, wParam, lParam);
+            return (pwndParent ? co_IntSendMessage(pwndParent, WM_MOUSEWHEEL, wParam, lParam) : 0);
          }
          break;
 
@@ -1279,7 +1276,7 @@ IntDefWindowProc(
                   _SEH2_END;
                }
                if (!lResult)
-                  lResult = co_HOOK_CallHooks(WH_CBT, HCBT_MOVESIZE, (WPARAM)Wnd->head.h, lParam ? (LPARAM)&rt : 0);
+                  lResult = co_HOOK_CallHooks(WH_CBT, HCBT_MOVESIZE, (WPARAM)UserHMGetHandle(Wnd), lParam ? (LPARAM)&rt : 0);
            }
             break;
          }

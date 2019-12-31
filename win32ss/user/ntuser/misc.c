@@ -157,7 +157,7 @@ GetControlColor(
        return (HBRUSH)IntDefWindowProc( pwndParent, CtlMsg, (WPARAM)hdc, (LPARAM)UserHMGetHandle(pwnd), FALSE);
     }
 
-    hBrush = (HBRUSH)co_IntSendMessage( UserHMGetHandle(pwndParent), CtlMsg, (WPARAM)hdc, (LPARAM)UserHMGetHandle(pwnd));
+    hBrush = (HBRUSH)co_IntSendMessage( pwndParent, CtlMsg, (WPARAM)hdc, (LPARAM)UserHMGetHandle(pwnd));
 
     if (!hBrush || !GreIsHandleValid(hBrush))
     {
@@ -232,6 +232,7 @@ NtUserGetThreadState(
    DWORD Routine)
 {
    DWORD_PTR ret = 0;
+   PWND Wnd;
 
    TRACE("Enter NtUserGetThreadState\n");
    if (Routine != THREADSTATE_GETTHREADINFO)
@@ -248,22 +249,22 @@ NtUserGetThreadState(
       case THREADSTATE_GETTHREADINFO:
          GetW32ThreadInfo();
          break;
+
       case THREADSTATE_FOCUSWINDOW:
-         ret = (DWORD_PTR)IntGetThreadFocusWindow();
+         Wnd = IntGetThreadFocusWindow();
+         ret = (DWORD_PTR)(Wnd ? UserHMGetHandle(Wnd) : NULL);
          break;
+
       case THREADSTATE_CAPTUREWINDOW:
          /* FIXME: Should use UserEnterShared */
          ret = (DWORD_PTR)IntGetCapture();
          break;
-      case THREADSTATE_PROGMANWINDOW:
-         ret = (DWORD_PTR)GetW32ThreadInfo()->pDeskInfo->hProgmanWindow;
-         break;
-      case THREADSTATE_TASKMANWINDOW:
-         ret = (DWORD_PTR)GetW32ThreadInfo()->pDeskInfo->hTaskManWindow;
-         break;
+
       case THREADSTATE_ACTIVEWINDOW:
-         ret = (DWORD_PTR)UserGetActiveWindow();
+         Wnd = UserGetActiveWindow();
+         ret = (DWORD_PTR)(Wnd ? UserHMGetHandle(Wnd) : NULL);
          break;
+
       case THREADSTATE_INSENDMESSAGE:
          {
            PUSER_SENT_MESSAGE Message =
@@ -288,6 +289,7 @@ NtUserGetThreadState(
 
            break;
          }
+
       case THREADSTATE_GETMESSAGETIME:
          ret = ((PTHREADINFO)PsGetCurrentThreadWin32Thread())->timeLast;
          break;
@@ -308,11 +310,15 @@ NtUserGetThreadState(
          ret = (gpqForeground == GetW32ThreadInfo()->MessageQueue);
          break;
       case THREADSTATE_GETCURSOR:
-         ret = (DWORD_PTR) (GetW32ThreadInfo()->MessageQueue->CursorObject ?
-                            UserHMGetHandle(GetW32ThreadInfo()->MessageQueue->CursorObject) : 0);
+         ret = (DWORD_PTR)(GetW32ThreadInfo()->MessageQueue->CursorObject ?
+                           UserHMGetHandle(GetW32ThreadInfo()->MessageQueue->CursorObject) : 0);
          break;
       case THREADSTATE_GETMESSAGEEXTRAINFO:
          ret = (DWORD_PTR)MsqGetMessageExtraInfo();
+        break;
+
+      default:
+        ERR("NtUserGetThreadState(%lu) is UNIMPLEMENTED!\n", Routine);
         break;
    }
 

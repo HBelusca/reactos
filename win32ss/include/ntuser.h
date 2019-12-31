@@ -135,15 +135,13 @@ typedef struct _DESKTOPINFO
     PVOID pvDesktopLimit;
     struct _WND *spwnd;
     DWORD fsHooks;
-    LIST_ENTRY aphkStart[NB_HOOKS];
+    LIST_ENTRY aphkStart[NB_HOOKS]; // PHOOK aphkStart[CWINHOOKS];
 
-    HWND hTaskManWindow;
-    HWND hProgmanWindow;
-    HWND hShellWindow;
     struct _WND *spwndShell;
-    struct _WND *spwndBkGnd;
-
     struct _PROCESSINFO *ppiShellProcess;
+    struct _WND *spwndBkGnd;
+    struct _WND *spwndTaskman;
+    struct _WND *spwndProgman;
 
     union
     {
@@ -728,7 +726,13 @@ typedef struct _WND
     LIST_ENTRY ThreadListEntry;
 } WND, *PWND;
 
-#define PWND_BOTTOM ((PWND)1)
+#define PWND_BROADCAST  ((PWND)HWND_BROADCAST)
+#define PWND_BOTTOM     ((PWND)HWND_BOTTOM)
+#define PWND_NOTOPMOST  ((PWND)HWND_NOTOPMOST)
+#define PWND_TOP        ((PWND)HWND_TOP)
+#define PWND_TOPMOST    ((PWND)HWND_TOPMOST)
+#define PWND_DESKTOP    ((PWND)HWND_DESKTOP)
+#define PWND_MESSAGE    ((PWND)HWND_MESSAGE) /* w2k */
 
 typedef struct _SBWND
 {
@@ -1771,6 +1775,7 @@ NtUserCloseWindowStation(
     HWINSTA hWinSta);
 
 /* Console commands for NtUserConsoleControl */
+// See also https://github.com/microsoft/terminal/blob/master/src/host/conwinuserrefs.h
 typedef enum _CONSOLECONTROL
 {
     ConsoleCtrlDesktopConsoleThread = 0,
@@ -2449,19 +2454,19 @@ NtUserGetThreadDesktop(
 
 enum ThreadStateRoutines
 {
-    THREADSTATE_GETTHREADINFO,
-    THREADSTATE_INSENDMESSAGE,
     THREADSTATE_FOCUSWINDOW,
     THREADSTATE_ACTIVEWINDOW,
     THREADSTATE_CAPTUREWINDOW,
-    THREADSTATE_PROGMANWINDOW,
-    THREADSTATE_TASKMANWINDOW,
-    THREADSTATE_GETMESSAGETIME,
+    THREADSTATE_Unknown1,
+    THREADSTATE_Unknown2,
     THREADSTATE_GETINPUTSTATE,
-    THREADSTATE_UPTIMELASTREAD,
-    THREADSTATE_FOREGROUNDTHREAD,
     THREADSTATE_GETCURSOR,
-    THREADSTATE_GETMESSAGEEXTRAINFO
+    THREADSTATE_GETTHREADINFO,
+    THREADSTATE_UPTIMELASTREAD,
+    THREADSTATE_GETMESSAGEEXTRAINFO,
+    THREADSTATE_INSENDMESSAGE,
+    THREADSTATE_GETMESSAGETIME,
+    THREADSTATE_FOREGROUNDTHREAD,
 };
 
 DWORD_PTR

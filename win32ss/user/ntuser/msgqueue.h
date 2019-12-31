@@ -165,10 +165,10 @@ co_MsqWaitForNewMessages(PTHREADINFO pti, PWND WndFilter,
                       UINT MsgFilterMin, UINT MsgFilterMax);
 VOID FASTCALL MsqIncPaintCountQueue(PTHREADINFO);
 VOID FASTCALL MsqDecPaintCountQueue(PTHREADINFO);
-LRESULT FASTCALL co_IntSendMessage(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam);
+LRESULT FASTCALL co_IntSendMessage(PWND Wnd, UINT Msg, WPARAM wParam, LPARAM lParam);
 LRESULT FASTCALL co_IntPostOrSendMessage(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam);
 LRESULT FASTCALL
-co_IntSendMessageTimeout(HWND hWnd,
+co_IntSendMessageTimeout(PWND Wnd,
                       UINT Msg,
                       WPARAM wParam,
                       LPARAM lParam,
@@ -176,13 +176,13 @@ co_IntSendMessageTimeout(HWND hWnd,
                       UINT uTimeout,
                       ULONG_PTR *uResult);
 
-BOOL FASTCALL UserSendNotifyMessage( HWND hWnd,UINT Msg,WPARAM wParam,LPARAM lParam );
-LRESULT FASTCALL co_IntSendMessageNoWait(HWND hWnd,
+BOOL FASTCALL UserSendNotifyMessage(PWND Window, UINT Msg, WPARAM wParam, LPARAM lParam);
+LRESULT FASTCALL co_IntSendMessageNoWait(PWND Wnd,
                         UINT Msg,
                         WPARAM wParam,
                         LPARAM lParam);
 LRESULT FASTCALL
-co_IntSendMessageWithCallBack(HWND hWnd,
+co_IntSendMessageWithCallBack(PWND Wnd,
                               UINT Msg,
                               WPARAM wParam,
                               LPARAM lParam,

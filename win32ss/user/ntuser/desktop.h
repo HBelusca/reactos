@@ -6,11 +6,15 @@ typedef struct _DESKTOP
     DWORD dwSessionId;
 
     PDESKTOPINFO pDeskInfo;
-    LIST_ENTRY ListEntry;
+    PVOID pDispInfo; // PDISPLAYINFO
+    LIST_ENTRY ListEntry; // struct _DESKTOP *rpdeskNext;
     /* Pointer to the associated window station. */
     struct _WINSTATION_OBJECT *rpwinstaParent;
     DWORD dwDTFlags;
     DWORD_PTR dwDesktopId;
+#if (_WIN32_WINNT < 0x0600)
+    PWND spwndMenu;
+#endif
     PMENU spmenuSys;
     PMENU spmenuDialogSys;
     PMENU spmenuHScroll;
@@ -22,10 +26,11 @@ typedef struct _DESKTOP
     PVOID hsectionDesktop;
     PWIN32HEAP pheapDesktop;
     ULONG_PTR ulHeapSize;
-    LIST_ENTRY PtiList;
 
     /* One console input thread per desktop, maintained by CONSRV */
     DWORD dwConsoleThreadId;
+
+    LIST_ENTRY PtiList;
 
     /* Use for tracking mouse moves. */
     PWND spwndTrack;
@@ -36,8 +41,6 @@ typedef struct _DESKTOP
     /* ReactOS */
     /* Pointer to the active queue. */
     struct _USER_MESSAGE_QUEUE *ActiveMessageQueue;
-    /* Handle of the desktop window. */
-    HWND DesktopWindow;
     /* Thread blocking input */
     PVOID BlockInputThread;
     LIST_ENTRY ShellHookWindows;
@@ -136,13 +139,10 @@ HDC FASTCALL
 IntGetScreenDC(VOID);
 
 HWND FASTCALL
-IntGetDesktopWindow (VOID);
+IntGetDesktopWindow(VOID);
 
 PWND FASTCALL
 UserGetDesktopWindow(VOID);
-
-HWND FASTCALL
-IntGetCurrentThreadDesktopWindow(VOID);
 
 PUSER_MESSAGE_QUEUE FASTCALL
 IntGetFocusMessageQueue(VOID);

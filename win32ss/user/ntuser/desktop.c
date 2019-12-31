@@ -1323,8 +1323,16 @@ PWND FASTCALL
 IntGetThreadDesktopWindow(PTHREADINFO pti)
 {
     if (!pti) pti = PsGetCurrentThreadWin32Thread();
-    if (pti->pDeskInfo) return pti->pDeskInfo->spwnd;
-    return NULL;
+    if (pti->pDeskInfo)
+    {
+        ASSERT(pti->rpdesk);
+        ASSERT(pti->pDeskInfo == pti->rpdesk->pDeskInfo);
+    }
+    else
+    {
+        ERR("Thread doesn't have a desktop\n");
+    }
+    return (pti->pDeskInfo ? pti->pDeskInfo->spwnd : NULL);
 }
 
 PWND FASTCALL co_GetDesktopWindow(PWND pWnd)
@@ -1335,46 +1343,27 @@ PWND FASTCALL co_GetDesktopWindow(PWND pWnd)
     return NULL;
 }
 
-HWND FASTCALL IntGetDesktopWindow(VOID)
-{
-    PDESKTOP pdo = IntGetActiveDesktop();
-    if (!pdo)
-    {
-        TRACE("No active desktop\n");
-        return NULL;
-    }
-    return pdo->DesktopWindow;
-}
-
 PWND FASTCALL UserGetDesktopWindow(VOID)
 {
     PDESKTOP pdo = IntGetActiveDesktop();
-
     if (!pdo)
     {
         TRACE("No active desktop\n");
         return NULL;
     }
-    // return pdo->pDeskInfo->spwnd;
-    return UserGetWindowObject(pdo->DesktopWindow);
+    ASSERT(pdo->pDeskInfo);
+    return pdo->pDeskInfo->spwnd;
 }
 
-HWND FASTCALL IntGetMessageWindow(VOID)
+HWND FASTCALL IntGetDesktopWindow(VOID)
 {
-    PDESKTOP pdo = IntGetActiveDesktop();
-
-    if (!pdo)
-    {
-        TRACE("No active desktop\n");
-        return NULL;
-    }
-    return pdo->spwndMessage->head.h;
+    PWND pWnd = UserGetDesktopWindow();
+    return (pWnd ? UserHMGetHandle(pWnd) : NULL);
 }
 
 PWND FASTCALL UserGetMessageWindow(VOID)
 {
     PDESKTOP pdo = IntGetActiveDesktop();
-
     if (!pdo)
     {
         TRACE("No active desktop\n");
@@ -1383,16 +1372,10 @@ PWND FASTCALL UserGetMessageWindow(VOID)
     return pdo->spwndMessage;
 }
 
-HWND FASTCALL IntGetCurrentThreadDesktopWindow(VOID)
+HWND FASTCALL IntGetMessageWindow(VOID)
 {
-    PTHREADINFO pti = PsGetCurrentThreadWin32Thread();
-    PDESKTOP pdo = pti->rpdesk;
-    if (NULL == pdo)
-    {
-        ERR("Thread doesn't have a desktop\n");
-        return NULL;
-    }
-    return pdo->DesktopWindow;
+    PWND pWnd = UserGetMessageWindow();
+    return (pWnd ? UserHMGetHandle(pWnd) : NULL);
 }
 
 /* PUBLIC FUNCTIONS ***********************************************************/
@@ -1402,7 +1385,6 @@ DesktopWindowProc(PWND Wnd, UINT Msg, WPARAM wParam, LPARAM lParam, LRESULT *lRe
 {
     PAINTSTRUCT Ps;
     ULONG Value;
-    //ERR("DesktopWindowProc\n");
 
     *lResult = 0;
 
@@ -1417,17 +1399,19 @@ DesktopWindowProc(PWND Wnd, UINT Msg, WPARAM wParam, LPARAM lParam, LRESULT *lRe
             return TRUE;
 
         case WM_CREATE:
+            /* Save Process ID */
             Value = HandleToULong(PsGetCurrentProcessId());
-            // Save Process ID
-            co_UserSetWindowLong(UserHMGetHandle(Wnd), DT_GWL_PROCESSID, Value, FALSE);
+            co_UserSetWindowLong(Wnd, DT_GWL_PROCESSID, Value, FALSE);
+            /* Save Thread ID */
             Value = HandleToULong(PsGetCurrentThreadId());
-            // Save Thread ID
-            co_UserSetWindowLong(UserHMGetHandle(Wnd), DT_GWL_THREADID, Value, FALSE);
+            co_UserSetWindowLong(Wnd, DT_GWL_THREADID, Value, FALSE);
+            /* Fall back */
         case WM_CLOSE:
             return TRUE;
 
         case WM_DISPLAYCHANGE:
-            co_WinPosSetWindowPos(Wnd, 0, 0, 0, LOWORD(lParam), HIWORD(lParam), SWP_NOZORDER | SWP_NOACTIVATE);
+            co_WinPosSetWindowPos(Wnd, PWND_TOP, 0, 0, LOWORD(lParam), HIWORD(lParam),
+                                  SWP_NOZORDER | SWP_NOACTIVATE);
             return TRUE;
 
         case WM_ERASEBKGND:
@@ -1443,6 +1427,7 @@ DesktopWindowProc(PWND Wnd, UINT Msg, WPARAM wParam, LPARAM lParam, LRESULT *lRe
             }
             return TRUE;
         }
+
         case WM_SYSCOLORCHANGE:
             co_UserRedrawWindow(Wnd, NULL, NULL, RDW_INVALIDATE|RDW_ERASE|RDW_ALLCHILDREN);
             return TRUE;
@@ -1476,6 +1461,7 @@ DesktopWindowProc(PWND Wnd, UINT Msg, WPARAM wParam, LPARAM lParam, LRESULT *lRe
             }
             break;
         }
+
         default:
             TRACE("DWP calling IDWP Msg %d\n",Msg);
             //*lResult = IntDefWindowProc(Wnd, Msg, wParam, lParam, FALSE);
@@ -1522,7 +1508,8 @@ VOID NTAPI DesktopThreadMain(VOID)
 
     while (TRUE)
     {
-        Ret = co_IntGetPeekMessage(&Msg, 0, 0, 0, PM_REMOVE, TRUE);
+ERR("DESKTOP: co_IntGetPeekMessage\n");
+        Ret = co_IntGetPeekMessage(&Msg, NULL, 0, 0, PM_REMOVE, TRUE);
         if (Ret)
         {
             IntDispatchMessage(&Msg);
@@ -1587,10 +1574,10 @@ co_IntShowDesktop(PDESKTOP Desktop, ULONG Width, ULONG Height, BOOL bRedraw)
     if (!bRedraw)
         flags |= SWP_NOREDRAW;
 
-    co_WinPosSetWindowPos(pwnd, NULL, 0, 0, Width, Height, flags);
+    co_WinPosSetWindowPos(pwnd, PWND_TOP, 0, 0, Width, Height, flags);
 
     if (bRedraw)
-        co_UserRedrawWindow( pwnd, NULL, 0, RDW_UPDATENOW | RDW_ALLCHILDREN | RDW_INVALIDATE );
+        co_UserRedrawWindow(pwnd, NULL, 0, RDW_UPDATENOW | RDW_ALLCHILDREN | RDW_INVALIDATE);
 
     return STATUS_SUCCESS;
 }
@@ -1600,8 +1587,9 @@ IntHideDesktop(PDESKTOP Desktop)
 {
     PWND DesktopWnd;
 
-    DesktopWnd = IntGetWindowObject(Desktop->DesktopWindow);
-    if (! DesktopWnd)
+    ASSERT(Desktop->pDeskInfo);
+    DesktopWnd = Desktop->pDeskInfo->spwnd;
+    if (!DesktopWnd)
     {
         return ERROR_INVALID_WINDOW_HANDLE;
     }
@@ -1794,17 +1782,14 @@ IntPaintDesktop(HDC hDC)
 
     RECTL Rect;
     HBRUSH DesktopBrush, PreviousBrush;
-    HWND hWndDesktop;
-    BOOL doPatBlt = TRUE;
     PWND WndDesktop;
+    BOOL doPatBlt = TRUE;
     BOOLEAN InSafeMode;
 
     if (GdiGetClipBox(hDC, &Rect) == ERROR)
         return FALSE;
 
-    hWndDesktop = IntGetDesktopWindow(); // rpdesk->DesktopWindow;
-
-    WndDesktop = UserGetWindowObject(hWndDesktop); // rpdesk->pDeskInfo->spwnd;
+    WndDesktop = UserGetDesktopWindow();
     if (!WndDesktop)
         return FALSE;
 
@@ -2410,11 +2395,10 @@ IntCreateDesktop(
         Status = STATUS_UNSUCCESSFUL;
         goto Quit;
     }
+    pWnd->fnid = FNID_DESKTOP;
 
     pdesk->dwSessionId = PsGetCurrentProcessSessionId();
-    pdesk->DesktopWindow = pWnd->head.h;
     pdesk->pDeskInfo->spwnd = pWnd;
-    pWnd->fnid = FNID_DESKTOP;
 
     ClassName.Buffer = MAKEINTATOM(gpsi->atomSysClass[ICLS_HWNDMESSAGE]);
     ClassName.Length = 0;

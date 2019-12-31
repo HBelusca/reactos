@@ -1938,10 +1938,22 @@ SetProgmanWindow(HWND hWnd)
 /*
  * @implemented
  */
+BOOL WINAPI
+SetShellWindow(HWND hwndShell)
+{
+    return SetShellWindowEx(hwndShell, hwndShell);
+}
+
+/*
+ * @implemented
+ */
 HWND WINAPI
 GetProgmanWindow(VOID)
 {
-    return (HWND)NtUserGetThreadState(THREADSTATE_PROGMANWINDOW);
+    PDESKTOPINFO pdi;
+    pdi = GetThreadDesktopInfo();
+    if (pdi) return UserHMGetHandle(pdi->spwndProgman);
+    return NULL;
 }
 
 /*
@@ -1950,7 +1962,22 @@ GetProgmanWindow(VOID)
 HWND WINAPI
 GetTaskmanWindow(VOID)
 {
-    return (HWND)NtUserGetThreadState(THREADSTATE_TASKMANWINDOW);
+    PDESKTOPINFO pdi;
+    pdi = GetThreadDesktopInfo();
+    if (pdi) return UserHMGetHandle(pdi->spwndTaskman);
+    return NULL;
+}
+
+/*
+ * @implemented
+ */
+HWND WINAPI
+GetShellWindow(VOID)
+{
+    PDESKTOPINFO pdi;
+    pdi = GetThreadDesktopInfo();
+    if (pdi) return UserHMGetHandle(pdi->spwndShell);
+    return NULL;
 }
 
 /*
@@ -2046,4 +2073,3 @@ DisableProcessWindowsGhosting(VOID)
 }
 
 /* EOF */
-

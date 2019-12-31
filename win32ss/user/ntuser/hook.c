@@ -165,7 +165,7 @@ UserRegisterUserApiHook(
     ppiUahServer = pti->ppi;
 
     /* Broadcast an internal message to every top level window */
-    DesktopWindow = UserGetWindowObject(IntGetDesktopWindow());
+    DesktopWindow = UserGetDesktopWindow();
     List = IntWinListChildren(DesktopWindow);
 
     if (List != NULL)

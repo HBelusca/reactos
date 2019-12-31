@@ -172,7 +172,7 @@ IntSendSyncPaint(PWND Wnd, ULONG Flags)
       {
          TRACE("Sending WM_SYNCPAINT\n");
          // This message has no parameters. But it does! Pass Flags along.
-         co_IntSendMessageNoWait(UserHMGetHandle(Wnd), WM_SYNCPAINT, Flags, 0);
+         co_IntSendMessageNoWait(Wnd, WM_SYNCPAINT, Flags, 0);
          Wnd->state |= WNDS_SYNCPAINTPENDING;
       }
    }
@@ -363,7 +363,7 @@ IntSendNCPaint(PWND pWnd, HRGN hRgn)
       hRgn = HRGN_WINDOW;
    }
 
-   if (hRgn) co_IntSendMessage(UserHMGetHandle(pWnd), WM_NCPAINT, (WPARAM)hRgn, 0);
+   if (hRgn) co_IntSendMessage(pWnd, WM_NCPAINT, (WPARAM)hRgn, 0);
 }
 
 VOID FASTCALL
@@ -391,7 +391,7 @@ VOID FASTCALL
 co_IntPaintWindows(PWND Wnd, ULONG Flags, BOOL Recurse)
 {
    HDC hDC;
-   HWND hWnd = Wnd->head.h;
+   HWND hWnd = UserHMGetHandle(Wnd);
    HRGN TempRegion = NULL;
 
    Wnd->state &= ~WNDS_PAINTNOTPROCESSED;
@@ -442,7 +442,7 @@ co_IntPaintWindows(PWND Wnd, ULONG Flags, BOOL Recurse)
 
                   Wnd->state &= ~(WNDS_SENDERASEBACKGROUND|WNDS_ERASEBACKGROUND);
                   // Kill the loop, so Clear before we send.
-                  if (!co_IntSendMessage(hWnd, WM_ERASEBKGND, (WPARAM)hDC, 0))
+                  if (!co_IntSendMessage(Wnd, WM_ERASEBKGND, (WPARAM)hDC, 0))
                   {
                      Wnd->state |= (WNDS_SENDERASEBACKGROUND|WNDS_ERASEBACKGROUND);
                   }
@@ -506,7 +506,7 @@ co_IntPaintWindows(PWND Wnd, ULONG Flags, BOOL Recurse)
 VOID FASTCALL
 co_IntUpdateWindows(PWND Wnd, ULONG Flags, BOOL Recurse)
 {
-   HWND hWnd = Wnd->head.h;
+   HWND hWnd = UserHMGetHandle(Wnd);
 
    if ( Wnd->hrgnUpdate != NULL || Wnd->state & WNDS_INTERNALPAINT )
    {
@@ -530,7 +530,7 @@ co_IntUpdateWindows(PWND Wnd, ULONG Flags, BOOL Recurse)
       Wnd->state &= ~WNDS_UPDATEDIRTY;
 
       Wnd->state2 |= WNDS2_WMPAINTSENT;
-      co_IntSendMessage(hWnd, WM_PAINT, 0, 0); 
+      co_IntSendMessage(Wnd, WM_PAINT, 0, 0); 
 
       if (Wnd->state & WNDS_PAINTNOTPROCESSED)
       {
@@ -1358,7 +1358,7 @@ IntFlashWindowEx(PWND pWnd, PFLASHWINFO pfwi)
 
    if ( pfwi->dwFlags == FLASHW_STOP || pfwi->dwFlags & FLASHW_CAPTION )
    {
-      co_IntSendMessage(UserHMGetHandle(pWnd), WM_NCACTIVATE, Activate, 0);
+      co_IntSendMessage(pWnd, WM_NCACTIVATE, Activate, 0);
    }
 
    // FIXME: Check for a Stop Sign here.
@@ -1498,7 +1498,7 @@ IntBeginPaint(PWND Window, PPAINTSTRUCT Ps)
         (!(Window->pcls->style & CS_PARENTDC) || // not parent dc or
          RECTL_bIntersectRect( &Rect, &Rect, &Ps->rcPaint) ) ) // intersecting.
    {
-      Ps->fErase = !co_IntSendMessage(UserHMGetHandle(Window), WM_ERASEBKGND, (WPARAM)Ps->hdc, 0);
+      Ps->fErase = !co_IntSendMessage(Window, WM_ERASEBKGND, (WPARAM)Ps->hdc, 0);
       if ( Ps->fErase )
       {
          Window->state |= (WNDS_SENDERASEBACKGROUND|WNDS_ERASEBACKGROUND);
@@ -2353,7 +2353,7 @@ UserRealizePalette(HDC hdc)
             IntPaintDesktop(hdc);
             UserReleaseDC(pWnd,hdc,FALSE);
          }
-         UserSendNotifyMessage((HWND)HWND_BROADCAST, WM_PALETTECHANGED, (WPARAM)hWnd, 0);
+         UserSendNotifyMessage(PWND_BROADCAST, WM_PALETTECHANGED, (WPARAM)hWnd, 0);
       }
   }
   return Ret;

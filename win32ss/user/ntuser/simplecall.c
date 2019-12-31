@@ -430,6 +430,7 @@ NtUserCallTwoParam(
 {
     PWND Window;
     DWORD_PTR Ret;
+
     TRACE("Enter NtUserCallTwoParam\n");
     UserEnterExclusive();
 
@@ -438,6 +439,11 @@ NtUserCallTwoParam(
         case TWOPARAM_ROUTINE_REDRAWTITLE:
         {
             Window = UserGetWindowObject((HWND)Param1);
+            if (!Window)
+            {
+                Ret = 0;
+                break;
+            }
             Ret = (DWORD_PTR)UserPaintCaption(Window, (INT)Param2);
             break;
         }
@@ -457,7 +463,9 @@ NtUserCallTwoParam(
                 MenuObject->cyMenu = (int)Param2;
             }
             else
+            {
                 Ret = (DWORD_PTR)MenuObject->cyMenu;
+            }
             IntReleaseMenuObject(MenuObject);
             break;
         }
@@ -471,8 +479,16 @@ NtUserCallTwoParam(
         }
 
         case TWOPARAM_ROUTINE_ENABLEWINDOW:
-            Ret = IntEnableWindow((HWND)Param1, (BOOL)Param2);
+        {
+            Window = UserGetWindowObject((HWND)Param1);
+            if (!Window)
+            {
+                Ret = 0;
+                break;
+            }
+            Ret = IntEnableWindow(Window, (BOOL)Param2);
             break;
+        }
 
         case TWOPARAM_ROUTINE_SHOWOWNEDPOPUPS:
         {
@@ -482,7 +498,6 @@ NtUserCallTwoParam(
                 Ret = 0;
                 break;
             }
-
             Ret = (DWORD_PTR)IntShowOwnedPopups(Window, (BOOL)Param2);
             break;
         }
@@ -527,7 +542,7 @@ NtUserCallTwoParam(
                     UserPostMessage(hwnd, WM_SYSCOMMAND, SC_RESTORE, 0);
                 }
                 /* bring window to top and activate */
-                co_WinPosSetWindowPos(Window, HWND_TOP, 0, 0, 0, 0,
+                co_WinPosSetWindowPos(Window, PWND_TOP, 0, 0, 0, 0,
                                       SWP_NOSIZE | SWP_NOMOVE | SWP_NOSENDCHANGING |
                                       SWP_NOOWNERZORDER | SWP_ASYNCWINDOWPOS);
             }
@@ -560,7 +575,6 @@ NtUserCallTwoParam(
             EngSetLastError(ERROR_INVALID_PARAMETER);
             Ret = 0;
     }
-
 
     TRACE("Leave NtUserCallTwoParam, ret=%p\n", (PVOID)Ret);
     UserLeave();
@@ -606,7 +620,7 @@ NtUserCallHwndLock(
             Ret = TRUE;
             if ((Window->style & (WS_CHILD | WS_POPUP)) != WS_CHILD)
                 co_WinPosSetWindowPos(Window,
-                                      HWND_DESKTOP,
+                                      PWND_DESKTOP,
                                       0, 0, 0, 0,
                                       SWP_NOSIZE |
                                       SWP_NOMOVE |
@@ -618,7 +632,7 @@ NtUserCallHwndLock(
 
         case HWNDLOCK_ROUTINE_REDRAWFRAME:
             co_WinPosSetWindowPos(Window,
-                                  HWND_DESKTOP,
+                                  PWND_DESKTOP,
                                   0, 0, 0, 0,
                                   SWP_NOSIZE |
                                   SWP_NOMOVE |
@@ -630,7 +644,7 @@ NtUserCallHwndLock(
 
         case HWNDLOCK_ROUTINE_REDRAWFRAMEANDHOOK:
             co_WinPosSetWindowPos(Window,
-                                  HWND_DESKTOP,
+                                  PWND_DESKTOP,
                                   0, 0, 0, 0,
                                   SWP_NOSIZE |
                                   SWP_NOMOVE |
@@ -680,16 +694,28 @@ NtUserCallHwndOpt(
     HWND hWnd,
     DWORD Routine)
 {
+    PWND Window;
+
+    UserEnterExclusive();
+
+    if (!(Window = UserGetWindowObject(hWnd)))
+    {
+        UserLeave();
+        return NULL;
+    }
+
     switch (Routine)
     {
         case HWNDOPT_ROUTINE_SETPROGMANWINDOW:
-            GetW32ThreadInfo()->pDeskInfo->hProgmanWindow = hWnd;
+            GetW32ThreadInfo()->pDeskInfo->spwndProgman = Window;
             break;
 
         case HWNDOPT_ROUTINE_SETTASKMANWINDOW:
-            GetW32ThreadInfo()->pDeskInfo->hTaskManWindow = hWnd;
+            GetW32ThreadInfo()->pDeskInfo->spwndTaskman = Window;
             break;
     }
+
+    UserLeave();
 
     return hWnd;
 }

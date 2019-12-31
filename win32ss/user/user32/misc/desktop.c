@@ -633,28 +633,4 @@ OpenDesktopW(
   return NtUserOpenDesktop(&ObjectAttributes, dwFlags, dwDesiredAccess);
 }
 
-
-/*
- * @implemented
- */
-BOOL WINAPI
-SetShellWindow(HWND hwndShell)
-{
-	return SetShellWindowEx(hwndShell, hwndShell);
-}
-
-
-/*
- * @implemented
- */
-HWND WINAPI
-GetShellWindow(VOID)
-{
-   PDESKTOPINFO pdi;
-   pdi = GetThreadDesktopInfo();
-   if (pdi) return pdi->hShellWindow;
-   return NULL;
-}
-
-
 /* EOF */

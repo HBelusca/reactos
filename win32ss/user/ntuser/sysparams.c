@@ -754,8 +754,12 @@ SpiSetWallpaper(PVOID pvParam, FLONG fl)
     /* Set the new wallpaper */
     gspv.hbmWallpaper = hbmp;
 
-    NtUserRedrawWindow(UserGetShellWindow(), NULL, NULL, RDW_INVALIDATE | RDW_ERASE);
-
+    if (IntGetActiveDesktop())
+    {
+        ASSERT(IntGetActiveDesktop()->pDeskInfo);
+        NtUserRedrawWindow(UserHMGetHandle(IntGetActiveDesktop()->pDeskInfo->spwndShell),
+                           NULL, NULL, RDW_INVALIDATE | RDW_ERASE);
+    }
 
     return (UINT_PTR)KEY_DESKTOP;
 }
@@ -772,19 +776,20 @@ SpiNotifyNCMetricsChanged(VOID)
     ASSERT(pwndDesktop);
 
     ahwnd = IntWinListChildren(pwndDesktop);
-    if(!ahwnd)
+    if (!ahwnd)
         return FALSE;
 
     for (i = 0; ahwnd[i]; i++)
     {
         pwndCurrent = UserGetWindowObject(ahwnd[i]);
-        if(!pwndCurrent)
+        if (!pwndCurrent)
             continue;
 
         UserRefObjectCo(pwndCurrent, &Ref);
-        co_WinPosSetWindowPos(pwndCurrent, 0, pwndCurrent->rcWindow.left,pwndCurrent->rcWindow.top,
-                                              pwndCurrent->rcWindow.right-pwndCurrent->rcWindow.left
-                                              ,pwndCurrent->rcWindow.bottom - pwndCurrent->rcWindow.top,
+        co_WinPosSetWindowPos(pwndCurrent, PWND_TOP,
+                              pwndCurrent->rcWindow.left, pwndCurrent->rcWindow.top,
+                              pwndCurrent->rcWindow.right - pwndCurrent->rcWindow.left,
+                              pwndCurrent->rcWindow.bottom - pwndCurrent->rcWindow.top,
                               SWP_FRAMECHANGED|SWP_NOACTIVATE|SWP_NOCOPYBITS|
                               SWP_NOMOVE|SWP_NOZORDER|SWP_NOREDRAW);
         UserDerefObjectCo(pwndCurrent);
@@ -2122,7 +2127,7 @@ UserSystemParametersInfo(
         if (fWinIni & SPIF_SENDCHANGE)
         {
             /* Send WM_SETTINGCHANGE to all toplevel windows */
-            co_IntSendMessageTimeout(HWND_BROADCAST,
+            co_IntSendMessageTimeout(PWND_BROADCAST,
                                      WM_SETTINGCHANGE,
                                      (WPARAM)uiAction,
                                      (LPARAM)ulResult,

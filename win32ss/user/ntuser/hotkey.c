@@ -241,7 +241,8 @@ co_UserProcessHotKeys(WORD wVk, BOOL bIsDown)
         if (pHotKey->id == IDHK_WINKEY)
         {
             ASSERT(!bIsDown);
-            pWnd = ValidateHwndNoErr(InputWindowStation->ShellWindow);
+            ASSERT(IntGetActiveDesktop());
+            pWnd = IntGetActiveDesktop()->pDeskInfo->spwndShell;
             if (pWnd)
             {
                TRACE("System Hot key Id %d Key %u\n", pHotKey->id, wVk );
@@ -284,8 +285,11 @@ co_UserProcessHotKeys(WORD wVk, BOOL bIsDown)
 
             if (pWnd)
             {
-                //  pWnd->head.rpdesk->pDeskInfo->spwndShell needs testing.
-                if (pWnd == ValidateHwndNoErr(InputWindowStation->ShellWindow) && pHotKey->id == SC_TASKLIST)
+                // TODO: Use IntGetActiveDesktop()->pDeskInfo->spwndShell
+                // or pWnd->head.rpdesk->pDeskInfo->spwndShell ??
+                // pWnd->head.rpdesk->pDeskInfo->spwndShell needs testing.
+                ASSERT(IntGetActiveDesktop());
+                if (pWnd == IntGetActiveDesktop()->pDeskInfo->spwndShell && pHotKey->id == SC_TASKLIST)
                 {
                     UserPostMessage(UserHMGetHandle(pWnd), WM_SYSCOMMAND, SC_TASKLIST, 0);
                     co_IntShellHookNotify(HSHELL_TASKMAN, 0, 0);

@@ -68,14 +68,14 @@ PWND FASTCALL co_UserCreateWindowEx(CREATESTRUCTW* Cs,
                                     PLARGE_STRING WindowName,
                                     PVOID acbiBuffer,
                                     DWORD dwVer );
-BOOL FASTCALL IntEnableWindow(HWND,BOOL);
+BOOL FASTCALL IntEnableWindow(PWND,BOOL);
 BOOL FASTCALL IntIsWindowVisible(PWND);
 DWORD FASTCALL GetNCHitEx(PWND,POINT);
 ULONG FASTCALL IntSetStyle(PWND,ULONG,ULONG);
 PWND FASTCALL VerifyWnd(PWND);
 PWND FASTCALL IntGetNonChildAncestor(PWND);
-LONG FASTCALL co_UserSetWindowLong(HWND,DWORD,LONG,BOOL);
-LONG_PTR FASTCALL co_UserSetWindowLongPtr(HWND, DWORD, LONG_PTR, BOOL);
+LONG FASTCALL co_UserSetWindowLong(PWND,DWORD,LONG,BOOL);
+LONG_PTR FASTCALL co_UserSetWindowLongPtr(PWND, DWORD, LONG_PTR, BOOL);
 HWND FASTCALL IntGetWindow(HWND,UINT);
 LRESULT co_UserFreeWindow(PWND,PPROCESSINFO,PTHREADINFO,BOOLEAN);
 

@@ -171,7 +171,7 @@ DefWndStartSizeMove(PWND Wnd, WPARAM wParam, POINT *capturePoint)
        pt.x = pt.y = 0;
        while (!hittest)
        {
-          if (!co_IntGetPeekMessage(&msg, 0, 0, 0, PM_REMOVE, TRUE)) return 0;
+          if (!co_IntGetPeekMessage(&msg, NULL, 0, 0, PM_REMOVE, TRUE)) return 0;
           if (IntCallMsgFilter( &msg, MSGF_SIZE )) continue;
 
 	  switch(msg.message)
@@ -226,7 +226,7 @@ DefWndStartSizeMove(PWND Wnd, WPARAM wParam, POINT *capturePoint)
        *capturePoint = pt;
     }
     UserSetCursorPos(pt.x, pt.y, 0, 0, FALSE);
-    co_IntSendMessage(UserHMGetHandle(Wnd), WM_SETCURSOR, (WPARAM)UserHMGetHandle(Wnd), MAKELONG(hittest, WM_MOUSEMOVE));
+    co_IntSendMessage(Wnd, WM_SETCURSOR, (WPARAM)UserHMGetHandle(Wnd), MAKELONG(hittest, WM_MOUSEMOVE));
     return hittest;
 }
 
@@ -361,7 +361,7 @@ DefWndDoSizeMove(PWND pwnd, WORD wParam)
        }
        else
        {
-           HCURSOR CursorHandle = (HCURSOR)co_IntSendMessage( UserHMGetHandle(pwnd), WM_QUERYDRAGICON, 0, 0 );
+           HCURSOR CursorHandle = (HCURSOR)co_IntSendMessage(pwnd, WM_QUERYDRAGICON, 0, 0);
            if (CursorHandle)
            {
                DragCursor = UserGetCurIconObject(CursorHandle);
@@ -378,7 +378,7 @@ DefWndDoSizeMove(PWND pwnd, WORD wParam)
 
    IntNotifyWinEvent( EVENT_SYSTEM_MOVESIZESTART, pwnd, OBJID_WINDOW, CHILDID_SELF, 0);
 
-   co_IntSendMessage( UserHMGetHandle(pwnd), WM_ENTERSIZEMOVE, 0, 0 );
+   co_IntSendMessage(pwnd, WM_ENTERSIZEMOVE, 0, 0);
 
    MsqSetStateWindow(pti, MSQ_STATE_MOVESIZE, UserHMGetHandle(pwnd));
 
@@ -390,7 +390,7 @@ DefWndDoSizeMove(PWND pwnd, WORD wParam)
    {
       int dx = 0, dy = 0;
 
-      if (!co_IntGetPeekMessage(&msg, 0, 0, 0, PM_REMOVE, TRUE)) break;
+      if (!co_IntGetPeekMessage(&msg, NULL, 0, 0, PM_REMOVE, TRUE)) break;
       if (IntCallMsgFilter( &msg, MSGF_SIZE )) continue;
 
       /* Exit on button-up */
@@ -438,7 +438,7 @@ DefWndDoSizeMove(PWND pwnd, WORD wParam)
             if (doSideSnap)
             {
                co_WinPosSetWindowPos(pwnd,
-                                     0,
+                                     PWND_TOP,
                                      snapRect.left,
                                      snapRect.top,
                                      snapRect.right - snapRect.left,
@@ -451,7 +451,7 @@ DefWndDoSizeMove(PWND pwnd, WORD wParam)
                // maximize if on dragged to top
                if (pt.y <= snapRect.top)
                {
-                  co_IntSendMessage(UserHMGetHandle(pwnd), WM_SYSCOMMAND, SC_MAXIMIZE, 0);
+                  co_IntSendMessage(pwnd, WM_SYSCOMMAND, SC_MAXIMIZE, 0);
                   pwnd->InternalPos.NormalRect = origRect;
                }
             }
@@ -532,10 +532,10 @@ DefWndDoSizeMove(PWND pwnd, WORD wParam)
 
                   if (hittest >= HTLEFT && hittest <= HTBOTTOMRIGHT)
                       wpSizingHit = WMSZ_LEFT + (hittest - HTLEFT);
-                  co_IntSendMessage( UserHMGetHandle(pwnd), WM_SIZING, wpSizingHit, (LPARAM)&newRect );
+                  co_IntSendMessage(pwnd, WM_SIZING, wpSizingHit, (LPARAM)&newRect);
               }
               else
-                  co_IntSendMessage( UserHMGetHandle(pwnd), WM_MOVING, 0, (LPARAM)&newRect );
+                  co_IntSendMessage(pwnd, WM_MOVING, 0, (LPARAM)&newRect);
 
 	      if (!iconic)
               {
@@ -552,7 +552,7 @@ DefWndDoSizeMove(PWND pwnd, WORD wParam)
                     //// This causes the mdi child window to jump up when it is moved.
                     //IntMapWindowPoints( 0, pWndParent, (POINT *)&rect, 2 );
 		    co_WinPosSetWindowPos( pwnd,
-		                           0,
+		                           PWND_TOP,
 		                           newRect.left,
 		                           newRect.top,
 				           newRect.right - newRect.left,
@@ -625,9 +625,9 @@ DefWndDoSizeMove(PWND pwnd, WORD wParam)
 
    MsqSetStateWindow(pti, MSQ_STATE_MOVESIZE, NULL);
 
-   co_IntSendMessage( UserHMGetHandle(pwnd), WM_EXITSIZEMOVE, 0, 0 );
+   co_IntSendMessage(pwnd, WM_EXITSIZEMOVE, 0, 0);
    //// wine mdi hack
-   co_IntSendMessage( UserHMGetHandle(pwnd), WM_SETVISIBLE, !!(pwnd->style & WS_MINIMIZE), 0L);
+   co_IntSendMessage(pwnd, WM_SETVISIBLE, !!(pwnd->style & WS_MINIMIZE), 0L);
    ////
    /* window moved or resized */
    if (moved)
@@ -641,7 +641,7 @@ DefWndDoSizeMove(PWND pwnd, WORD wParam)
 	  if (!DragFullWindows || iconic )
 	  {
 	    co_WinPosSetWindowPos( pwnd,
-	                           0,
+	                           PWND_TOP,
 	                           sizingRect.left,
 	                           sizingRect.top,
 			           sizingRect.right - sizingRect.left,
@@ -654,7 +654,7 @@ DefWndDoSizeMove(PWND pwnd, WORD wParam)
 	if ( DragFullWindows )
 	{
 	  co_WinPosSetWindowPos( pwnd,
-	                         0,
+	                         PWND_TOP,
 	                         origRect.left,
 	                         origRect.top,
 			         origRect.right - origRect.left,
@@ -672,7 +672,7 @@ DefWndDoSizeMove(PWND pwnd, WORD wParam)
 	if ( !moved )
         {
 	    if( Style & WS_SYSMENU )
-	      co_IntSendMessage( UserHMGetHandle(pwnd), WM_SYSCOMMAND, SC_MOUSEMENU + HTSYSMENU, MAKELONG(pt.x,pt.y));
+	      co_IntSendMessage(pwnd, WM_SYSCOMMAND, SC_MOUSEMENU + HTSYSMENU, MAKELONG(pt.x,pt.y));
         }
      }
    }
@@ -1065,7 +1065,7 @@ NC_DoNCPaint(PWND pWnd, HDC hDC, INT Flags)
          Active = IntIsChildWindow(gpqForeground->spwndActive, pWnd);
 
          if (Active)
-            Active = (UserHMGetHandle(pWnd) == (HWND)co_IntSendMessage(UserHMGetHandle(Parent), WM_MDIGETACTIVE, 0, 0));
+            Active = (UserHMGetHandle(pWnd) == (HWND)co_IntSendMessage(Parent, WM_MDIGETACTIVE, 0, 0));
       }
       else
       {
@@ -1491,7 +1491,7 @@ NC_DoButton(PWND pWnd, WPARAM wParam, LPARAM lParam)
 
    for (;;)
    {
-      if (!co_IntGetPeekMessage(&Msg, 0, WM_MOUSEFIRST, WM_MOUSELAST, PM_REMOVE, TRUE)) break;
+      if (!co_IntGetPeekMessage(&Msg, NULL, WM_MOUSEFIRST, WM_MOUSELAST, PM_REMOVE, TRUE)) break;
       if (IntCallMsgFilter( &Msg, MSGF_MAX )) continue;
 
       if (Msg.message == WM_LBUTTONUP)
@@ -1511,7 +1511,7 @@ NC_DoButton(PWND pWnd, WPARAM wParam, LPARAM lParam)
    IntReleaseCapture();
    UserReleaseDC(pWnd, WindowDC, FALSE);
    if (Pressed)
-      co_IntSendMessage(UserHMGetHandle(pWnd), WM_SYSCOMMAND, SCMsg, SCMsg == SC_CLOSE ? lParam : MAKELONG(Msg.pt.x,Msg.pt.y));
+      co_IntSendMessage(pWnd, WM_SYSCOMMAND, SCMsg, SCMsg == SC_CLOSE ? lParam : MAKELONG(Msg.pt.x,Msg.pt.y));
 }
 
 
@@ -1534,9 +1534,9 @@ NC_HandleNCLButtonDown(PWND pWnd, WPARAM wParam, LPARAM lParam)
 
             if ( co_IntSetForegroundWindowMouse(TopWnd) ||
                  //NtUserCallHwndLock(hTopWnd, HWNDLOCK_ROUTINE_SETFOREGROUNDWINDOWMOUSE) ||
-                 UserGetActiveWindow() == UserHMGetHandle(TopWnd))
+                 UserGetActiveWindow() == TopWnd)
             {
-               co_IntSendMessage(UserHMGetHandle(pWnd), WM_SYSCOMMAND, SC_MOVE + HTCAPTION, lParam);
+               co_IntSendMessage(pWnd, WM_SYSCOMMAND, SC_MOVE + HTCAPTION, lParam);
             }
             break;
         }
@@ -1553,23 +1553,23 @@ NC_HandleNCLButtonDown(PWND pWnd, WPARAM wParam, LPARAM lParam)
                 UserDrawSysMenuButton(pWnd, hDC, &rect, TRUE);
                 UserReleaseDC( pWnd, hDC, FALSE );
               }
-	      co_IntSendMessage(UserHMGetHandle(pWnd), WM_SYSCOMMAND, SC_MOUSEMENU + HTSYSMENU, lParam);
+	      co_IntSendMessage(pWnd, WM_SYSCOMMAND, SC_MOUSEMENU + HTSYSMENU, lParam);
 	  }
 	  break;
         }
         case HTMENU:
         {
-            co_IntSendMessage(UserHMGetHandle(pWnd), WM_SYSCOMMAND, SC_MOUSEMENU + HTMENU, lParam);
+            co_IntSendMessage(pWnd, WM_SYSCOMMAND, SC_MOUSEMENU + HTMENU, lParam);
             break;
         }
         case HTHSCROLL:
         {
-            co_IntSendMessage(UserHMGetHandle(pWnd), WM_SYSCOMMAND, SC_HSCROLL + HTHSCROLL, lParam);
+            co_IntSendMessage(pWnd, WM_SYSCOMMAND, SC_HSCROLL + HTHSCROLL, lParam);
             break;
         }
         case HTVSCROLL:
         {
-            co_IntSendMessage(UserHMGetHandle(pWnd), WM_SYSCOMMAND, SC_VSCROLL + HTVSCROLL, lParam);
+            co_IntSendMessage(pWnd, WM_SYSCOMMAND, SC_VSCROLL + HTVSCROLL, lParam);
             break;
         }
         case HTMINBUTTON:
@@ -1596,7 +1596,7 @@ NC_HandleNCLButtonDown(PWND pWnd, WPARAM wParam, LPARAM lParam)
             * is easy to differentiate from HTSYSMENU, because HTSYSMENU adds
             * SC_MOUSEMENU into wParam.
             */
-            co_IntSendMessage(UserHMGetHandle(pWnd), WM_SYSCOMMAND, SC_SIZE + wParam - (HTLEFT - WMSZ_LEFT), lParam);
+            co_IntSendMessage(pWnd, WM_SYSCOMMAND, SC_SIZE + wParam - (HTLEFT - WMSZ_LEFT), lParam);
             break;
         }
         case HTBORDER:
@@ -1619,7 +1619,7 @@ NC_HandleNCLButtonDblClk(PWND pWnd, WPARAM wParam, LPARAM lParam)
       /* Maximize/Restore the window */
       if((Style & WS_CAPTION) == WS_CAPTION && (Style & WS_MAXIMIZEBOX))
       {
-        co_IntSendMessage(UserHMGetHandle(pWnd), WM_SYSCOMMAND, ((Style & (WS_MINIMIZE | WS_MAXIMIZE)) ? SC_RESTORE : SC_MAXIMIZE), 0);
+        co_IntSendMessage(pWnd, WM_SYSCOMMAND, ((Style & (WS_MINIMIZE | WS_MAXIMIZE)) ? SC_RESTORE : SC_MAXIMIZE), 0);
       }
       break;
     }
@@ -1632,7 +1632,7 @@ NC_HandleNCLButtonDblClk(PWND pWnd, WPARAM wParam, LPARAM lParam)
       if ((state & (MF_DISABLED | MF_GRAYED)) || (state == 0xFFFFFFFF))
           break;
 
-      co_IntSendMessage(UserHMGetHandle(pWnd), WM_SYSCOMMAND, SC_CLOSE, lParam);
+      co_IntSendMessage(pWnd, WM_SYSCOMMAND, SC_CLOSE, lParam);
       break;
     }
     case HTTOP:
@@ -1646,7 +1646,7 @@ NC_HandleNCLButtonDblClk(PWND pWnd, WPARAM wParam, LPARAM lParam)
       UserSystemParametersInfo(SPI_GETWORKAREA, 0, &mouseRect, 0);
         
       co_WinPosSetWindowPos(pWnd,
-                            0,
+                            PWND_TOP,
                             sizingRect.left,
                             mouseRect.top,
                             sizingRect.right - sizingRect.left,
@@ -1679,7 +1679,7 @@ LRESULT NC_HandleNCRButtonDown( PWND pwnd, WPARAM wParam, LPARAM lParam )
       co_UserSetCapture( UserHMGetHandle(pwnd) );
       for (;;)
       {
-          if (!co_IntGetPeekMessage(&msg, 0, WM_MOUSEFIRST, WM_MOUSELAST, PM_REMOVE, TRUE)) break;
+          if (!co_IntGetPeekMessage(&msg, NULL, WM_MOUSEFIRST, WM_MOUSELAST, PM_REMOVE, TRUE)) break;
           if (IntCallMsgFilter( &msg, MSGF_MAX )) continue;
           if (msg.message == WM_RBUTTONUP)
           {
@@ -1692,7 +1692,7 @@ LRESULT NC_HandleNCRButtonDown( PWND pwnd, WPARAM wParam, LPARAM lParam )
       if (hittest == HTCAPTION || hittest == HTSYSMENU || hittest == HTHSCROLL || hittest == HTVSCROLL)
       {
          TRACE("Msg pt %x and Msg.lParam %x and lParam %x\n",MAKELONG(msg.pt.x,msg.pt.y),msg.lParam,lParam);
-         co_IntSendMessage( UserHMGetHandle(pwnd), WM_CONTEXTMENU, (WPARAM)UserHMGetHandle(pwnd), MAKELONG(msg.pt.x,msg.pt.y));
+         co_IntSendMessage(pwnd, WM_CONTEXTMENU, (WPARAM)UserHMGetHandle(pwnd), MAKELONG(msg.pt.x,msg.pt.y));
       }
       break;
   }

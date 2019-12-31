@@ -228,7 +228,8 @@ IntUpdateLayeredWindowI( PWND pWnd,
    else
       ret = TRUE;
 
-   co_WinPosSetWindowPos(pWnd, 0, Window.left, Window.top, Window.right - Window.left, Window.bottom - Window.top, flags);
+   co_WinPosSetWindowPos(pWnd, PWND_TOP, Window.left, Window.top,
+                         Window.right - Window.left, Window.bottom - Window.top, flags);
    return ret;
 }
 

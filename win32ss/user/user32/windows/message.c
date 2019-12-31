@@ -2712,6 +2712,23 @@ SendMessageTimeoutW(
      return FALSE;
   }
 
+if (Msg == WM_SETTINGCHANGE || Msg == WM_WININICHANGE)
+{
+   ERR("SendMessageTimeoutW(hWnd %p, Message %u, wParam %Iu (0x%x), lParam %Iu (0x%x), fuFlags %u, uTimeout %u)\n",
+       hWnd, Msg, wParam, wParam, lParam, lParam, fuFlags, uTimeout);
+    if (lParam != 0)
+    {
+        _SEH2_TRY
+        {
+            ERR("lParam string = '%S'\n", (PCWSTR)lParam);
+        }
+        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+        {
+        }
+        _SEH2_END;
+    }
+}
+
   Result = NtUserMessageCall( hWnd,
                               KMMsg.message,
                               KMMsg.wParam,

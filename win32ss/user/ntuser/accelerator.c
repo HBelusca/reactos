@@ -54,7 +54,7 @@ co_IntTranslateAccelerator(
 
     ASSERT_REFS_CO(Window);
 
-    hWnd = Window->head.h;
+    hWnd = UserHMGetHandle(Window);
 
     TRACE("IntTranslateAccelerator(hwnd %p, message %x, wParam %x, lParam %x, fVirt 0x%x, key %x, cmd %x)\n",
           hWnd, pMsg->message, pMsg->wParam, pMsg->lParam, pAccel->fVirt, pAccel->key, pAccel->cmd);
@@ -128,12 +128,12 @@ co_IntTranslateAccelerator(
        window is not disabled, send WM_INITMENU */
     if (hMenu && !IntGetCaptureWindow())
     {
-        co_IntSendMessage(hWnd, WM_INITMENU, (WPARAM)hMenu, 0L);
+        co_IntSendMessage(Window, WM_INITMENU, (WPARAM)hMenu, 0L);
         if (hSubMenu)
         {
             nPos = IntFindSubMenu(&hMenu, hSubMenu);
             TRACE("hSysMenu = %p, hSubMenu = %p, nPos = %u\n", hMenu, hSubMenu, nPos);
-            co_IntSendMessage(hWnd, WM_INITMENUPOPUP, (WPARAM)hSubMenu, MAKELPARAM(nPos, TRUE));
+            co_IntSendMessage(Window, WM_INITMENUPOPUP, (WPARAM)hSubMenu, MAKELPARAM(nPos, TRUE));
         }
     }
 
@@ -149,12 +149,12 @@ co_IntTranslateAccelerator(
         if (hMenu && hMenu == Window->SystemMenu)
         {
             TRACE("Sending WM_SYSCOMMAND, wParam=%0x\n", pAccel->cmd);
-            co_IntSendMessage(hWnd, WM_SYSCOMMAND, pAccel->cmd, 0x00010000L);
+            co_IntSendMessage(Window, WM_SYSCOMMAND, pAccel->cmd, 0x00010000L);
         }
         else
         {
             TRACE("Sending WM_COMMAND, wParam=%0x\n", 0x10000 | pAccel->cmd);
-            co_IntSendMessage(hWnd, WM_COMMAND, 0x10000 | pAccel->cmd, 0L);
+            co_IntSendMessage(Window, WM_COMMAND, 0x10000 | pAccel->cmd, 0L);
         }
     }
 

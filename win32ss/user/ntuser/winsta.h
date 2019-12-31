@@ -17,8 +17,6 @@ typedef struct _WINSTATION_OBJECT
 
     LIST_ENTRY DesktopListHead;
     PRTL_ATOM_TABLE AtomTable;
-    HANDLE ShellWindow;
-    HANDLE ShellListView;
 
     ULONG Flags;
     struct _DESKTOP* ActiveDesktop;

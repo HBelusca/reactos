@@ -1572,8 +1572,8 @@ static UINT FASTCALL MENU_FindItemByKey(PWND WndOwner, PMENU menu,
      Flags |= menu->fFlags & MNF_POPUP ? MF_POPUP : 0;
      Flags |= menu->fFlags & MNF_SYSMENU ? MF_SYSMENU : 0;
 
-     MenuChar = co_IntSendMessage( UserHMGetHandle(WndOwner), WM_MENUCHAR,
-                              MAKEWPARAM(Key, Flags), (LPARAM) UserHMGetHandle(menu));
+     MenuChar = co_IntSendMessage(WndOwner, WM_MENUCHAR,
+                                  MAKEWPARAM(Key, Flags), (LPARAM)UserHMGetHandle(menu));
      if (HIWORD(MenuChar) == MNC_EXECUTE) return LOWORD(MenuChar);
      if (HIWORD(MenuChar) == MNC_CLOSE) return (UINT)(-2);
   }
@@ -1606,7 +1606,7 @@ static void FASTCALL MENU_GetBitmapItemSize(PITEM lpitem, SIZE *size, PWND WndOw
                 measItem.itemWidth  = lpitem->cxItem - lpitem->xItem; //lpitem->Rect.right  - lpitem->Rect.left;
                 measItem.itemHeight = lpitem->cyItem - lpitem->yItem; //lpitem->Rect.bottom - lpitem->Rect.top;
                 measItem.itemData = lpitem->dwItemData;
-                co_IntSendMessage( UserHMGetHandle(WndOwner), WM_MEASUREITEM, 0, (LPARAM)&measItem);
+                co_IntSendMessage(WndOwner, WM_MEASUREITEM, 0, (LPARAM)&measItem);
                 size->cx = measItem.itemWidth;
                 size->cy = measItem.itemHeight;
                 TRACE("HBMMENU_CALLBACK Height %d Width %d\n",measItem.itemHeight,measItem.itemWidth);
@@ -1755,7 +1755,7 @@ static void FASTCALL MENU_DrawBitmapItem(HDC hdc, PITEM lpitem, const RECT *rect
                 /* some applications make this assumption on the DC's origin */
                 GreSetViewportOrgEx( hdc, lpitem->xItem, lpitem->yItem, &origorg);
                 RECTL_vOffsetRect(&drawItem.rcItem, -(LONG)lpitem->xItem, -(LONG)lpitem->yItem);
-                co_IntSendMessage( UserHMGetHandle(WndOwner), WM_DRAWITEM, 0, (LPARAM)&drawItem);
+                co_IntSendMessage(WndOwner, WM_DRAWITEM, 0, (LPARAM)&drawItem);
                 GreSetViewportOrgEx( hdc, origorg.x, origorg.y, NULL);
                 return;
             }
@@ -1846,9 +1846,9 @@ static void FASTCALL MENU_CalcItemSize( HDC hdc, PITEM lpitem, PMENU Menu, PWND 
         mis.CtlID      = 0;
         mis.itemID     = lpitem->wID;
         mis.itemData   = lpitem->dwItemData;
-        mis.itemHeight = HIWORD( IntGetDialogBaseUnits());
+        mis.itemHeight = HIWORD(IntGetDialogBaseUnits());
         mis.itemWidth  = 0;
-        co_IntSendMessage( UserHMGetHandle(pwndOwner), WM_MEASUREITEM, 0, (LPARAM)&mis );
+        co_IntSendMessage(pwndOwner, WM_MEASUREITEM, 0, (LPARAM)&mis);
         /* Tests reveal that Windows ( Win95 thru WinXP) adds twice the average
          * width of a menufont character to the width of an owner-drawn menu. 
          */
@@ -2299,7 +2299,7 @@ static void FASTCALL MENU_DrawMenuItem(PWND Wnd, PMENU Menu, PWND WndOwner, HDC 
         TRACE("Ownerdraw: Width %d Height %d\n", dis.rcItem.right-dis.rcItem.left, dis.rcItem.bottom-dis.rcItem.top);
         old_bk = GreGetBkColor(hdc);
         old_text = GreGetTextColor(hdc);
-        co_IntSendMessage(UserHMGetHandle(WndOwner), WM_DRAWITEM, 0, (LPARAM) &dis);
+        co_IntSendMessage(WndOwner, WM_DRAWITEM, 0, (LPARAM)&dis);
         IntGdiSetBkColor(hdc, old_bk);
         IntGdiSetTextColor(hdc, old_text);
         /* Draw the popup-menu arrow */
@@ -3081,7 +3081,7 @@ static BOOL FASTCALL MENU_ShowPopup(PWND pwndOwner, PMENU menu, UINT id, UINT fl
 
     /* Display the window */
     UserRefObjectCo(pWnd, &Ref);
-    co_WinPosSetWindowPos( pWnd, HWND_TOPMOST, x, y, width, height, SWP_SHOWWINDOW | SWP_NOACTIVATE);
+    co_WinPosSetWindowPos(pWnd, PWND_TOPMOST, x, y, width, height, SWP_SHOWWINDOW | SWP_NOACTIVATE);
 
     co_IntUpdateWindows(pWnd, RDW_ALLCHILDREN, FALSE);
 
@@ -3193,7 +3193,7 @@ static void FASTCALL MENU_SelectItem(PWND pwndOwner, PMENU menu, UINT wIndex,
                                       (ip->spSubMenu ? MF_POPUP : 0) |
                                       (menu->fFlags & MNF_SYSMENU ? MF_SYSMENU : 0 ) );
 
-           co_IntSendMessage(UserHMGetHandle(pwndOwner), WM_MENUSELECT, wParam, (LPARAM) UserHMGetHandle(menu));
+           co_IntSendMessage(pwndOwner, WM_MENUSELECT, wParam, (LPARAM) UserHMGetHandle(menu));
         }
     }
     else if (sendMenuSelect) 
@@ -3209,7 +3209,7 @@ static void FASTCALL MENU_SelectItem(PWND pwndOwner, PMENU menu, UINT wIndex,
                                            (ip->spSubMenu ? MF_POPUP : 0) |
                                            (topmenu->fFlags & MNF_SYSMENU ? MF_SYSMENU : 0 ) );
 
-               co_IntSendMessage(UserHMGetHandle(pwndOwner), WM_MENUSELECT, wParam, (LPARAM) UserHMGetHandle(topmenu));
+               co_IntSendMessage(pwndOwner, WM_MENUSELECT, wParam, (LPARAM) UserHMGetHandle(topmenu));
             }
         }
     }
@@ -3291,8 +3291,8 @@ static void FASTCALL MENU_HideSubPopups(PWND pWndOwner, PMENU Menu,
           /* Native returns handle to destroyed window */
           if (!(wFlags & TPM_NONOTIFY))
           {
-             co_IntSendMessage( UserHMGetHandle(pWndOwner), WM_UNINITMENUPOPUP, (WPARAM)UserHMGetHandle(Item->spSubMenu),
-                                 MAKELPARAM(0, IS_SYSTEM_MENU(Item->spSubMenu)) );
+             co_IntSendMessage(pWndOwner, WM_UNINITMENUPOPUP, (WPARAM)UserHMGetHandle(Item->spSubMenu),
+                               MAKELPARAM(0, IS_SYSTEM_MENU(Item->spSubMenu)));
           }
           ////
           // Call WM_UNINITMENUPOPUP FIRST before destroy!!
@@ -3333,9 +3333,9 @@ static PMENU FASTCALL MENU_ShowSubPopup(PWND WndOwner, PMENU Menu, BOOL SelectFi
   /* Send WM_INITMENUPOPUP message only if TPM_NONOTIFY flag is not specified */
   if (!(Flags & TPM_NONOTIFY))
   {
-      co_IntSendMessage(UserHMGetHandle(WndOwner), WM_INITMENUPOPUP,
-                        (WPARAM) UserHMGetHandle(Item->spSubMenu),
-                         MAKELPARAM(Menu->iItem, IS_SYSTEM_MENU(Menu)));
+      co_IntSendMessage(WndOwner, WM_INITMENUPOPUP,
+                        (WPARAM)UserHMGetHandle(Item->spSubMenu),
+                        MAKELPARAM(Menu->iItem, IS_SYSTEM_MENU(Menu)));
   }
 
   Item = &Menu->rgItems[Menu->iItem];
@@ -3781,7 +3781,7 @@ static LRESULT FASTCALL MENU_DoNextMenu(MTRACKER* pmt, UINT Vk, UINT wFlags)
       NextMenu.hmenuIn = UserHMGetHandle(MenuTmp);
       NextMenu.hmenuNext = NULL;
       NextMenu.hwndNext = NULL;
-      co_IntSendMessage(UserHMGetHandle(pmt->OwnerWnd), WM_NEXTMENU, Vk, (LPARAM) &NextMenu);
+      co_IntSendMessage(pmt->OwnerWnd, WM_NEXTMENU, Vk, (LPARAM) &NextMenu);
 
       TRACE("%p [%p] -> %p [%p]\n",
              pmt->CurrentMenu, pmt->OwnerWnd, NextMenu.hmenuNext, NextMenu.hwndNext );
@@ -3881,17 +3881,17 @@ static BOOL FASTCALL MENU_SuspendPopup(MTRACKER* pmt, UINT uMsg)
 
     msg.hwnd = UserHMGetHandle(pmt->OwnerWnd); ////// ? silly wine'isms?
 
-    co_IntGetPeekMessage( &msg, 0, uMsg, uMsg, PM_NOYIELD | PM_REMOVE, FALSE);
+    co_IntGetPeekMessage( &msg, NULL, uMsg, uMsg, PM_NOYIELD | PM_REMOVE, FALSE);
     pmt->TrackFlags |= TF_SKIPREMOVE;
 
     switch( uMsg )
     {
     case WM_KEYDOWN:
-        co_IntGetPeekMessage( &msg, 0, 0, 0, PM_NOYIELD | PM_NOREMOVE, FALSE);
+        co_IntGetPeekMessage( &msg, NULL, 0, 0, PM_NOYIELD | PM_NOREMOVE, FALSE);
         if( msg.message == WM_KEYUP || msg.message == WM_PAINT )
         {
-            co_IntGetPeekMessage( &msg, 0, 0, 0, PM_NOYIELD | PM_REMOVE, FALSE);
-            co_IntGetPeekMessage( &msg, 0, 0, 0, PM_NOYIELD | PM_NOREMOVE, FALSE);
+            co_IntGetPeekMessage( &msg, NULL, 0, 0, PM_NOYIELD | PM_REMOVE, FALSE);
+            co_IntGetPeekMessage( &msg, NULL, 0, 0, PM_NOYIELD | PM_NOREMOVE, FALSE);
             if( msg.message == WM_KEYDOWN &&
                 (msg.wParam == VK_LEFT || msg.wParam == VK_RIGHT))
             {
@@ -4107,11 +4107,11 @@ static INT FASTCALL MENU_TrackMenu(PMENU pmenu, UINT wFlags, INT x, INT y,
 
         for (;;)
         {
-            if (co_IntGetPeekMessage( &msg, 0, 0, 0, PM_NOREMOVE, FALSE ))
+            if (co_IntGetPeekMessage( &msg, NULL, 0, 0, PM_NOREMOVE, FALSE ))
             {
                 if (!IntCallMsgFilter( &msg, MSGF_MENU )) break;
                 /* remove the message from the queue */
-                co_IntGetPeekMessage( &msg, 0, msg.message, msg.message, PM_REMOVE, FALSE );
+                co_IntGetPeekMessage( &msg, NULL, msg.message, msg.message, PM_REMOVE, FALSE );
             }
             else
             {
@@ -4129,7 +4129,7 @@ static INT FASTCALL MENU_TrackMenu(PMENU pmenu, UINT wFlags, INT x, INT y,
                 {
                   HWND win = mt.CurrentMenu->fFlags & MNF_POPUP ? mt.CurrentMenu->hWnd : NULL;
                   enterIdleSent = TRUE;
-                  co_IntSendMessage( UserHMGetHandle(mt.OwnerWnd), WM_ENTERIDLE, MSGF_MENU, (LPARAM) win);
+                  co_IntSendMessage(mt.OwnerWnd, WM_ENTERIDLE, MSGF_MENU, (LPARAM)win);
                 }
                 co_IntWaitMessage(NULL, 0, 0);
             }
@@ -4144,7 +4144,7 @@ static INT FASTCALL MENU_TrackMenu(PMENU pmenu, UINT wFlags, INT x, INT y,
             fInsideMenuLoop = FALSE;
 
             /* remove the message from the queue */
-            co_IntGetPeekMessage( &msg, 0, msg.message, msg.message, PM_REMOVE, FALSE );
+            co_IntGetPeekMessage( &msg, NULL, msg.message, msg.message, PM_REMOVE, FALSE );
 
             /* break out of internal loop, ala ESCAPE */
             break;
@@ -4274,7 +4274,7 @@ static INT FASTCALL MENU_TrackMenu(PMENU pmenu, UINT wFlags, INT x, INT y,
                         hi.hItemHandle = UserHMGetHandle(mt.CurrentMenu);
                         hi.dwContextId = pmenu->dwContextHelpId;
                         hi.MousePos = msg.pt;
-                        co_IntSendMessage( UserHMGetHandle(pwnd), WM_HELP, 0, (LPARAM)&hi);
+                        co_IntSendMessage(pwnd, WM_HELP, 0, (LPARAM)&hi);
                         break;
                     }
 
@@ -4319,7 +4319,7 @@ static INT FASTCALL MENU_TrackMenu(PMENU pmenu, UINT wFlags, INT x, INT y,
         }
         else
         {
-            co_IntGetPeekMessage( &msg, 0, msg.message, msg.message, PM_REMOVE, FALSE );
+            co_IntGetPeekMessage( &msg, NULL, msg.message, msg.message, PM_REMOVE, FALSE );
             IntDispatchMessage( &msg );
             continue;
         }
@@ -4329,7 +4329,7 @@ static INT FASTCALL MENU_TrackMenu(PMENU pmenu, UINT wFlags, INT x, INT y,
         /* finally remove message from the queue */
 
         if (fRemove && !(mt.TrackFlags & TF_SKIPREMOVE) )
-            co_IntGetPeekMessage( &msg, 0, msg.message, msg.message, PM_REMOVE, FALSE );
+            co_IntGetPeekMessage( &msg, NULL, msg.message, msg.message, PM_REMOVE, FALSE );
         else mt.TrackFlags &= ~TF_SKIPREMOVE;
     }
 
@@ -4360,12 +4360,12 @@ static INT FASTCALL MENU_TrackMenu(PMENU pmenu, UINT wFlags, INT x, INT y,
 
               if (!(wFlags & TPM_NONOTIFY))
               {
-                 co_IntSendMessage( UserHMGetHandle(mt.OwnerWnd), WM_UNINITMENUPOPUP, (WPARAM)UserHMGetHandle(mt.TopMenu),
-                                 MAKELPARAM(0, IS_SYSTEM_MENU(mt.TopMenu)) );
+                 co_IntSendMessage(mt.OwnerWnd, WM_UNINITMENUPOPUP, (WPARAM)UserHMGetHandle(mt.TopMenu),
+                                   MAKELPARAM(0, IS_SYSTEM_MENU(mt.TopMenu)));
               }
             }
             MENU_SelectItem( mt.OwnerWnd, mt.TopMenu, NO_SELECTED_ITEM, FALSE, 0 );
-            co_IntSendMessage( UserHMGetHandle(mt.OwnerWnd), WM_MENUSELECT, MAKEWPARAM(0, 0xffff), 0 );
+            co_IntSendMessage(mt.OwnerWnd, WM_MENUSELECT, MAKEWPARAM(0, 0xffff), 0);
        }
 
        /* Reset the variable for hiding menu */
@@ -4411,7 +4411,7 @@ static BOOL FASTCALL MENU_InitTracking(PWND pWnd, PMENU Menu, BOOL bPopup, UINT 
     /* Send WM_ENTERMENULOOP and WM_INITMENU message only if TPM_NONOTIFY flag is not specified */
     if (!(wFlags & TPM_NONOTIFY))
     {
-       co_IntSendMessage( UserHMGetHandle(pWnd), WM_ENTERMENULOOP, bPopup, 0 );
+       co_IntSendMessage(pWnd, WM_ENTERMENULOOP, bPopup, 0);
     }
 
     //
@@ -4422,11 +4422,11 @@ static BOOL FASTCALL MENU_InitTracking(PWND pWnd, PMENU Menu, BOOL bPopup, UINT 
     co_UserSetCapture(capture_win);                           // 2
     pti->MessageQueue->QF_flags |= QF_CAPTURELOCKED; // Set the Q bits so noone can change this!
 
-    co_IntSendMessage( UserHMGetHandle(pWnd), WM_SETCURSOR, (WPARAM)UserHMGetHandle(pWnd), HTCAPTION );
+    co_IntSendMessage(pWnd, WM_SETCURSOR, (WPARAM)UserHMGetHandle(pWnd), HTCAPTION);
 
     if (!(wFlags & TPM_NONOTIFY))
     {
-       co_IntSendMessage( UserHMGetHandle(pWnd), WM_INITMENU, (WPARAM)UserHMGetHandle(Menu), 0 );
+       co_IntSendMessage(pWnd, WM_INITMENU, (WPARAM)UserHMGetHandle(Menu), 0);
        /* If an app changed/recreated menu bar entries in WM_INITMENU
         * menu sizes will be recalculated once the menu created/shown.
         */
@@ -4449,7 +4449,7 @@ static BOOL FASTCALL MENU_ExitTracking(PWND pWnd, BOOL bPopup, UINT wFlags)
     IntNotifyWinEvent( EVENT_SYSTEM_MENUEND, pWnd, OBJID_WINDOW, CHILDID_SELF, 0);
 
     if (!(wFlags & TPM_NONOTIFY))
-       co_IntSendMessage( UserHMGetHandle(pWnd), WM_EXITMENULOOP, bPopup, 0 );
+       co_IntSendMessage(pWnd, WM_EXITMENULOOP, bPopup, 0);
 
     co_UserShowCaret(0);
 
@@ -4584,7 +4584,7 @@ BOOL WINAPI IntTrackPopupMenuEx( PMENU menu, UINT wFlags, int x, int y,
        /* Send WM_INITMENUPOPUP message only if TPM_NONOTIFY flag is not specified */
        if (!(wFlags & TPM_NONOTIFY))
        {
-          co_IntSendMessage( UserHMGetHandle(pWnd), WM_INITMENUPOPUP, (WPARAM) UserHMGetHandle(menu), 0);
+          co_IntSendMessage(pWnd, WM_INITMENUPOPUP, (WPARAM)UserHMGetHandle(menu), 0);
        }
 
        if (menu->fFlags & MNF_SYSMENU)
@@ -4613,8 +4613,8 @@ BOOL WINAPI IntTrackPopupMenuEx( PMENU menu, UINT wFlags, int x, int y,
 
           if (!(wFlags & TPM_NONOTIFY))
           {
-             co_IntSendMessage( UserHMGetHandle(pWnd), WM_UNINITMENUPOPUP, (WPARAM)UserHMGetHandle(menu),
-                                            MAKELPARAM(0, IS_SYSTEM_MENU(menu)) );
+             co_IntSendMessage(pWnd, WM_UNINITMENUPOPUP, (WPARAM)UserHMGetHandle(menu),
+                               MAKELPARAM(0, IS_SYSTEM_MENU(menu)));
           }
        }
     }
@@ -5956,7 +5956,7 @@ NtUserGetMenuBarInfo(
             RETURN(FALSE);
         }
         // Windows does this! Wine checks for Atom and uses GetWindowLongPtrW.
-        hMenu = (HMENU)co_IntSendMessage(hwnd, MN_GETHMENU, 0, 0);
+        hMenu = (HMENU)co_IntSendMessage(pWnd, MN_GETHMENU, 0, 0);
         pPopupMenu = ((PMENUWND)pWnd)->ppopupmenu;
         if (pPopupMenu && pPopupMenu->spmenu)
         {
@@ -6429,7 +6429,8 @@ NtUserSetMenu(
    {
       USER_REFERENCE_ENTRY Ref;
       UserRefObjectCo(Window, &Ref);
-      co_WinPosSetWindowPos(Window, 0, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE | SWP_NOZORDER | SWP_FRAMECHANGED);
+      co_WinPosSetWindowPos(Window, PWND_TOP, 0, 0, 0, 0,
+                            SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE | SWP_NOZORDER | SWP_FRAMECHANGED);
       UserDerefObjectCo(Window);
    }
 

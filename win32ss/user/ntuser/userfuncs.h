@@ -61,7 +61,7 @@ HWINSTA FASTCALL UserGetProcessWindowStation(VOID);
 
 /*************** FOCUS.C ***************/
 
-HWND FASTCALL UserGetActiveWindow(VOID);
+PWND FASTCALL UserGetActiveWindow(VOID);
 
 HWND FASTCALL UserGetForegroundWindow(VOID);
 
@@ -125,7 +125,6 @@ BOOL FASTCALL UserPostMessage(HWND Wnd,UINT Msg, WPARAM wParam, LPARAM lParam);
 
 PWND FASTCALL UserGetWindowObject(HWND hWnd);
 VOID FASTCALL co_DestroyThreadWindows(struct _ETHREAD *Thread);
-HWND FASTCALL UserGetShellWindow(VOID);
 HDC FASTCALL UserGetDCEx(PWND Window OPTIONAL, HANDLE ClipRegion, ULONG Flags);
 BOOLEAN co_UserDestroyWindow(PVOID Object);
 PWND FASTCALL UserGetAncestor(PWND Wnd, UINT Type);

@@ -100,7 +100,7 @@ IntFindChildWindowToOwner(HWND hRoot, HWND hOwner)
 
       if(OwnerWnd == Owner)
       {
-         Ret = Child->head.h;
+         Ret = UserHMGetHandle(Child);
          return Ret;
       }
    }
