@@ -188,6 +188,7 @@ BEGIN
     IDS_LOCKEDSAS "Bu bilgisayar şimdilik kilitli."
     IDS_PRESSCTRLALTDELETE "Oturum açmak için Denetim, Seçenek ve Silme düğmelerine birlikte basınız."
     IDS_ASKFORUSER "Kullanıcı Adı: "
+    IDS_ASKFORDOMAIN "Domain: "
     IDS_ASKFORPASSWORD "Şifre: "
     IDS_FORCELOGOFF "Bu, şimdiki kullanıcının oturumunu kapatacak ve tüm saklanmış bilgiler yitirilecek. Sürdürülsün mü?"
     IDS_LOCKMSG "Yalnızca %s ve bir yönetici bu bilgisayarın kilidini açabilir."

@@ -186,6 +186,7 @@ BEGIN
     IDS_LOCKEDSAS "המחשב שלך כרגע נעול."
     IDS_PRESSCTRLALTDELETE "לחץ על Ctrl+Alt+Delete כדי להכנס."
     IDS_ASKFORUSER "שם משתמש: "
+    IDS_ASKFORDOMAIN "Domain: "
     IDS_ASKFORPASSWORD "סיסמה: "
     IDS_FORCELOGOFF "זה יגרום להתנתקות המשתמש הנוכחי ולאבד את כל המידע שאינו נשמר. להמשיך?"
     IDS_LOCKMSG "רק %s או מנהל יכולים לשחרר את המחשב הזה."

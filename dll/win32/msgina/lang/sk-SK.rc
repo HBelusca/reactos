@@ -191,6 +191,7 @@ BEGIN
     IDS_LOCKEDSAS "Počítač je práve uzamknutý."
     IDS_PRESSCTRLALTDELETE "Stlačte Control+Alt+Delete pre prihlásenie."
     IDS_ASKFORUSER "Meno používateľa: "
+    IDS_ASKFORDOMAIN "Domain: "
     IDS_ASKFORPASSWORD "Heslo: "
     IDS_FORCELOGOFF "Toto spôsobí odhlásenie aktuálneho používateľa a stratu všetkých neuložených údajov. Chcete pokračovať?"
     IDS_LOCKMSG "Only %s or an Administrator can unlock this computer."

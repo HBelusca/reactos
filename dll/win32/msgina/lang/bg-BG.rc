@@ -186,6 +186,7 @@ BEGIN
     IDS_LOCKEDSAS "Компютърът е заключен."
     IDS_PRESSCTRLALTDELETE "Натиснете Control+Alt+Del за да влезете."
     IDS_ASKFORUSER "Потребителско име: "
+    IDS_ASKFORDOMAIN "Domain: "
     IDS_ASKFORPASSWORD "Парола: "
     IDS_FORCELOGOFF "Така текущият потребител ще излезе и ще изгуби всички несъхранени данни. Да продължа ли?"
     IDS_LOCKMSG "Only %s or an Administrator can unlock this computer."

@@ -187,6 +187,7 @@ BEGIN
     IDS_LOCKEDSAS "The computer is currently locked."
     IDS_PRESSCTRLALTDELETE "Press Control+Alt+Delete to Logon."
     IDS_ASKFORUSER "User name: "
+    IDS_ASKFORDOMAIN "Domain: "
     IDS_ASKFORPASSWORD "Password: "
     IDS_FORCELOGOFF "This will log out the current user and lose all unsaved data. Continue?"
     IDS_LOCKMSG "Only %s or an Administrator can unlock this computer."

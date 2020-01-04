@@ -186,6 +186,7 @@ BEGIN
     IDS_LOCKEDSAS "Cet ordinateur est actuellement verrouillé."
     IDS_PRESSCTRLALTDELETE "Appuyez sur Ctrl-Alt-Suppr pour vous connecter."
     IDS_ASKFORUSER "Utilisateur : "
+    IDS_ASKFORDOMAIN "Domaine : "
     IDS_ASKFORPASSWORD "Mot de passe : "
     IDS_FORCELOGOFF "Cela déconnectera l'utilisateur en cours et perdra les données non sauvées. Continuer ?"
     IDS_LOCKMSG "Seul %s ou un administrateur peut déverrouiller cet ordinateur."

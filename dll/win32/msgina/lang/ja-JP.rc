@@ -191,6 +191,7 @@ BEGIN
     IDS_LOCKEDSAS "このコンピュータは現在ロックされています。"
     IDS_PRESSCTRLALTDELETE "ログオンするには、Control+Alt+Delete を押してください。"
     IDS_ASKFORUSER "ユーザー名: "
+    IDS_ASKFORDOMAIN "Domain: "
     IDS_ASKFORPASSWORD "パスワード: "
     IDS_FORCELOGOFF "現在のユーザーをログアウトします。保存されていないデータはすべて失われます。 続行しますか?"
     IDS_LOCKMSG "%s か管理者のみがこのコンピュータをアンロックできます。"

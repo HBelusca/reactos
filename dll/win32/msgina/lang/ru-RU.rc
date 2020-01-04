@@ -188,6 +188,7 @@ BEGIN
     IDS_LOCKEDSAS "Этот компьютер сейчас заблокирован."
     IDS_PRESSCTRLALTDELETE "Нажмите клавиши Ctrl-Alt-Del для входа."
     IDS_ASKFORUSER "Пользователь: "
+    IDS_ASKFORDOMAIN "Domain: "
     IDS_ASKFORPASSWORD "Пароль: "
     IDS_FORCELOGOFF "При регистрации нового пользователя все несохраненные данные будут утеряны. Продолжить?"
     IDS_LOCKMSG "Только %s или Администратор могут разблокировать этот компьютер."

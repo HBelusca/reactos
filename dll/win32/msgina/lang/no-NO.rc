@@ -186,6 +186,7 @@ BEGIN
     IDS_LOCKEDSAS "Datamaskinen er låst"
     IDS_PRESSCTRLALTDELETE "Trykk Control+Alt+Delete for å logge på."
     IDS_ASKFORUSER "Brukernavn: "
+    IDS_ASKFORDOMAIN "Domain: "
     IDS_ASKFORPASSWORD "Passord: "
     IDS_FORCELOGOFF "Dette vil logge av gjeldende bruker, alle ulagrede data vil gå tapt. Fortsette?"
     IDS_LOCKMSG "Only %s or an Administrator can unlock this computer."

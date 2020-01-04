@@ -19,6 +19,10 @@
 HINSTANCE hAppInstance;
 PWLSESSION WLSession = NULL;
 
+extern LOGON_UI LogonGraphicalUI;
+extern LOGON_UI LogonTextUI;
+static PLOGON_UI pLogonUI;
+
 /* FUNCTIONS *****************************************************************/
 
 static
@@ -68,7 +72,6 @@ StartServicesManager(VOID)
     return TRUE;
 }
 
-
 static
 BOOL
 StartLsass(VOID)
@@ -109,7 +112,6 @@ StartLsass(VOID)
     return res;
 }
 
-
 static
 VOID
 WaitForLsass(VOID)
@@ -145,7 +147,6 @@ WaitForLsass(VOID)
 
     CloseHandle(hEvent);
 }
-
 
 static
 VOID
@@ -279,7 +280,6 @@ UpdateTcpIpInformation(VOID)
     RegCloseKey(hKey);
 }
 
-
 static
 BOOL
 InitKeyboardLayouts(VOID)
@@ -342,6 +342,116 @@ InitKeyboardLayouts(VOID)
     }
 
     return bRet;
+}
+
+
+/*
+ * The following three functions are adapted from msgina.c
+ */
+
+LONG
+ReadRegSzValue(
+    IN HKEY hKey,
+    IN LPCWSTR pszValue,
+    OUT LPWSTR* pValue)
+{
+    LONG rc;
+    DWORD dwType;
+    DWORD cbData = 0;
+    LPWSTR Value;
+
+    if (!pValue)
+        return ERROR_INVALID_PARAMETER;
+
+    *pValue = NULL;
+    rc = RegQueryValueExW(hKey, pszValue, NULL, &dwType, NULL, &cbData);
+    if (rc != ERROR_SUCCESS)
+        return rc;
+    if (dwType != REG_SZ)
+        return ERROR_FILE_NOT_FOUND;
+    Value = HeapAlloc(GetProcessHeap(), 0, cbData + sizeof(WCHAR));
+    if (!Value)
+        return ERROR_NOT_ENOUGH_MEMORY;
+    rc = RegQueryValueExW(hKey, pszValue, NULL, NULL, (LPBYTE)Value, &cbData);
+    if (rc != ERROR_SUCCESS)
+    {
+        HeapFree(GetProcessHeap(), 0, Value);
+        return rc;
+    }
+    /* NULL-terminate the string */
+    Value[cbData / sizeof(WCHAR)] = '\0';
+
+    *pValue = Value;
+    return ERROR_SUCCESS;
+}
+
+static LONG
+ReadRegDwordValue(
+    IN HKEY hKey,
+    IN LPCWSTR pszValue,
+    OUT LPDWORD pValue)
+{
+    LONG rc;
+    DWORD dwType;
+    DWORD cbData;
+    DWORD dwValue;
+
+    if (!pValue)
+        return ERROR_INVALID_PARAMETER;
+
+    cbData = sizeof(DWORD);
+    rc = RegQueryValueExW(hKey, pszValue, NULL, &dwType, (LPBYTE)&dwValue, &cbData);
+    if (rc == ERROR_SUCCESS && dwType == REG_DWORD)
+        *pValue = dwValue;
+
+    return ERROR_SUCCESS;
+}
+
+static VOID
+ChooseLogonUI(VOID)
+{
+    HKEY ControlKey = NULL;
+    LPWSTR SystemStartOptions = NULL;
+    LPWSTR CurrentOption, NextOption; /* Pointers into SystemStartOptions */
+    BOOL ConsoleBoot = FALSE;
+    LONG rc;
+
+    rc = RegOpenKeyExW(
+        HKEY_LOCAL_MACHINE,
+        L"SYSTEM\\CurrentControlSet\\Control",
+        0,
+        KEY_QUERY_VALUE,
+        &ControlKey);
+
+    rc = ReadRegSzValue(ControlKey, L"SystemStartOptions", &SystemStartOptions);
+    if (rc != ERROR_SUCCESS)
+        goto cleanup;
+
+    /* Check for CONSOLE switch in SystemStartOptions */
+    CurrentOption = SystemStartOptions;
+    while (CurrentOption)
+    {
+        NextOption = wcschr(CurrentOption, L' ');
+        if (NextOption)
+            *NextOption = L'\0';
+        if (wcsicmp(CurrentOption, L"CONSOLE") == 0)
+        {
+            TRACE("Found %S. Switching to console boot\n", CurrentOption);
+            ConsoleBoot = TRUE;
+            goto cleanup;
+        }
+        CurrentOption = NextOption ? NextOption + 1 : NULL;
+    }
+
+cleanup:
+    if (ConsoleBoot)
+        pLogonUI = &LogonTextUI;
+    else
+        pLogonUI = &LogonGraphicalUI;
+
+    if (ControlKey != NULL)
+        RegCloseKey(ControlKey);
+    HeapFree(GetProcessHeap(), 0, SystemStartOptions);
 }
 
 
@@ -443,7 +553,6 @@ WinMain(
     NTSTATUS Status;
 #endif
     ULONG HardErrorResponse;
-    MSG Msg;
 
     UNREFERENCED_PARAMETER(hPrevInstance);
     UNREFERENCED_PARAMETER(lpCmdLine);
@@ -475,6 +584,8 @@ WinMain(
 
     ZeroMemory(WLSession, sizeof(WLSESSION));
     WLSession->DialogTimeout = 120; /* 2 minutes */
+
+    ChooseLogonUI();
 
     /* Initialize the dialog tracking list */
     InitDialogListHead();
@@ -523,7 +634,7 @@ WinMain(
     /* Init Notifications */
     InitNotifications();
 
-    /* Load and initialize gina */
+    /* Load and initialize GINA */
     if (!GinaInit(WLSession))
     {
         ERR("WL: Failed to initialize Gina\n");
@@ -595,7 +706,7 @@ WinMain(
     }
     else
     {
-        PostMessageW(WLSession->SASWindow, WLX_WM_SAS, WLX_SAS_TYPE_CTRL_ALT_DEL, 0);
+        pLogonUI->PostMessage(WLSession, WLX_WM_SAS, WLX_SAS_TYPE_CTRL_ALT_DEL, 0);
     }
 
     (void)LoadLibraryW(L"sfc_os.dll");
@@ -604,12 +715,8 @@ WinMain(
      * to support Last good known configuration boot) */
     NtInitializeRegistry(CM_BOOT_FLAG_ACCEPTED | 1);
 
-    /* Message loop for the SAS window */
-    while (GetMessageW(&Msg, WLSession->SASWindow, 0, 0))
-    {
-        TranslateMessage(&Msg);
-        DispatchMessageW(&Msg);
-    }
+    /* Process events for the SAS window */
+    pLogonUI->ProcessEvents(WLSession);
 
     CleanupNotifications();
 

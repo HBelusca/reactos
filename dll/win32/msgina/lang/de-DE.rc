@@ -186,6 +186,7 @@ BEGIN
     IDS_LOCKEDSAS "Der Computer ist derzeit gesperrt."
     IDS_PRESSCTRLALTDELETE "Drücken Sie Strg+Alt+Entf, um sich anzumelden."
     IDS_ASKFORUSER "Benutzername: "
+    IDS_ASKFORDOMAIN "Domain: "
     IDS_ASKFORPASSWORD "Passwort: "
     IDS_FORCELOGOFF "Dies wird den derzeitigen Benutzer abmelden. Alle ungespeicherten Daten gehen verloren. Fortsetzen?"
     IDS_LOCKMSG "Nur %s oder ein Administrator kann den Computer entsperren."
