@@ -54,6 +54,8 @@ typedef struct _CONSOLE_PROCESS_DATA
     // LPTHREAD_START_ROUTINE ImeRoutine;
 } CONSOLE_PROCESS_DATA, *PCONSOLE_PROCESS_DATA;
 
+#define TUITERM_COMPILE
+
 #include "include/conio.h"
 #include "include/conio_winsrv.h"
 
