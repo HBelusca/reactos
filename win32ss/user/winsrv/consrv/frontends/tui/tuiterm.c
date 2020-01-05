@@ -348,7 +348,8 @@ TuiConsoleThread(PVOID Param)
     HWND NewWindow;
     MSG msg;
 
-    NewWindow = CreateWindowW(TUI_CONSOLE_WINDOW_CLASS,
+    NewWindow = CreateWindowExW(WS_EX_TOPMOST,
+                              TUI_CONSOLE_WINDOW_CLASS,
                               Console->Title.Buffer,
                               0,
                               -32000, -32000, 0, 0,
@@ -417,6 +418,26 @@ TuiInit(IN DWORD OemCP)
         return FALSE;
     }
 
+    /* Register the TUI notification window class */
+    RtlZeroMemory(&wc, sizeof(WNDCLASSEXW));
+    wc.cbSize = sizeof(WNDCLASSEXW);
+    wc.lpszClassName = TUI_CONSOLE_WINDOW_CLASS;
+    wc.lpfnWndProc = TuiConsoleWndProc;
+    wc.cbWndExtra = 0;
+    wc.hInstance = ConSrvDllInstance;
+
+    ConsoleClassAtom = RegisterClassExW(&wc);
+    if (ConsoleClassAtom == 0)
+    {
+        DPRINT1("Failed to register TUI console wndproc.\n");
+        Success = FALSE;
+        goto Quit;
+    }
+    else
+    {
+        Success = TRUE;
+    }
+
     if (!DeviceIoControl(ConsoleDeviceHandle, IOCTL_CONSOLE_LOADFONT,
                          &OemCP, sizeof(OemCP), NULL, 0,
                          &BytesReturned, NULL))
@@ -444,25 +465,6 @@ TuiInit(IN DWORD OemCP)
         goto Quit;
     }
     PhysicalConsoleSize = ScrInfo.dwSize;
-
-    /* Register the TUI notification window class */
-    RtlZeroMemory(&wc, sizeof(WNDCLASSEXW));
-    wc.cbSize = sizeof(WNDCLASSEXW);
-    wc.lpszClassName = TUI_CONSOLE_WINDOW_CLASS;
-    wc.lpfnWndProc = TuiConsoleWndProc;
-    wc.cbWndExtra = 0;
-    wc.hInstance = ConSrvDllInstance;
-
-    ConsoleClassAtom = RegisterClassExW(&wc);
-    if (ConsoleClassAtom == 0)
-    {
-        DPRINT1("Failed to register TUI console wndproc.\n");
-        Success = FALSE;
-    }
-    else
-    {
-        Success = TRUE;
-    }
 
 Quit:
     if (!Success)
@@ -609,6 +611,8 @@ TuiDrawRegion(IN OUT PFRONTEND This,
     DWORD BytesReturned;
     UINT ConsoleDrawSize;
 
+DbgBreakPoint();
+
     if (TuiData != ActiveConsole) return;
     if (GetType(Buff) != TEXTMODE_BUFFER) return;
 
@@ -654,6 +658,8 @@ TuiWriteStream(IN OUT PFRONTEND This,
     PCHAR NewBuffer;
     ULONG NewLength;
     DWORD BytesWritten;
+
+DbgBreakPoint();
 
     if (TuiData != ActiveConsole) return;
     if (GetType(Buff) != TEXTMODE_BUFFER) return;
