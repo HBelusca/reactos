@@ -375,7 +375,7 @@ TuiConsoleThread(PVOID Param)
 }
 
 static BOOL
-TuiInit(DWORD OemCP)
+TuiInit(IN DWORD OemCP)
 {
     BOOL Success;
     CONSOLE_SCREEN_BUFFER_INFO ScrInfo;
@@ -502,7 +502,7 @@ TuiInitFrontEnd(IN OUT PFRONTEND This,
     if (!TuiData)
     {
         DPRINT1("CONSRV: Failed to create TUI_CONSOLE_DATA\n");
-        return STATUS_UNSUCCESSFUL;
+        return STATUS_NO_MEMORY;
     }
     // Console->FrontEndIFace.Context = (PVOID)TuiData;
     TuiData->Console      = Console;

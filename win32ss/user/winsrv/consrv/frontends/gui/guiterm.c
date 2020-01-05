@@ -495,7 +495,7 @@ GuiInitFrontEnd(IN OUT PFRONTEND This,
     if (!GuiData)
     {
         DPRINT1("CONSRV: Failed to create GUI_CONSOLE_DATA\n");
-        return STATUS_UNSUCCESSFUL;
+        return STATUS_NO_MEMORY;
     }
     /// /* HACK */ Console->FrontEndIFace.Context = (PVOID)GuiData; /* HACK */
     GuiData->Console      = Console;
