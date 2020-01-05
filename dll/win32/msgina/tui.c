@@ -34,7 +34,25 @@ TUIDisplayStatusMessage(
     UNREFERENCED_PARAMETER(pgContext);
     UNREFERENCED_PARAMETER(hDesktop);
     UNREFERENCED_PARAMETER(dwOptions);
-    UNREFERENCED_PARAMETER(pTitle);
+    // UNREFERENCED_PARAMETER(pTitle);
+
+/*******/
+    if (pTitle)
+    {
+        WriteConsoleW(
+            GetStdHandle(STD_OUTPUT_HANDLE),
+            pTitle,
+            wcslen(pTitle),
+            &result,
+            NULL) &&
+        WriteConsoleW(
+            GetStdHandle(STD_OUTPUT_HANDLE),
+            newLine,
+            wcslen(newLine),
+            &result,
+            NULL);
+    }
+/*******/
 
     return
         WriteConsoleW(
