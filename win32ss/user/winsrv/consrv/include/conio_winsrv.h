@@ -214,4 +214,24 @@ PCHAR_INFO ConioCoordToPointer(PTEXTMODE_SCREEN_BUFFER Buff, ULONG X, ULONG Y);
 /* terminal.c */
 VOID ConioDrawConsole(PCONSRV_CONSOLE Console);
 
+/* inputthrd.c */
+
+typedef struct _CONSOLE_INPUT_THREAD_INFO
+{
+    ULONG_PTR ThreadId;
+    HWINSTA WinSta;
+    HDESK Desktop;
+} CONSOLE_INPUT_THREAD_INFO, *PCONSOLE_INPUT_THREAD_INFO;
+
+typedef ULONG (NTAPI *PCONSOLE_THREAD)(PVOID);
+
+NTSTATUS
+StartConsoleInputThread(
+    IN HANDLE ConsoleLeaderProcessHandle,
+    IN PUNICODE_STRING Desktop,
+    IN BOOLEAN CreateUniqueThreadPerDesktop,
+    IN PCONSOLE_THREAD ConsoleThread,
+    IN PVOID Context,
+    OUT PCONSOLE_INPUT_THREAD_INFO ThreadInfo);
+
 /* EOF */

@@ -17,6 +17,10 @@
 #include <debug.h>
 
 
+// HACK before correctly including it in the build famework.
+#include "inputthrd.c"
+
+
 /* PRIVATE FUNCTIONS **********************************************************/
 
 static DWORD

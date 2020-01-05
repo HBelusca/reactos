@@ -32,10 +32,7 @@
 
 typedef struct _GUI_INIT_INFO
 {
-    HANDLE GuiThreadStartupEvent;
-    ULONG_PTR InputThreadId;
-    HWINSTA WinSta;
-    HDESK Desktop;
+    CONSOLE_INPUT_THREAD_INFO ThreadInfo;
     HICON hIcon;
     HICON hIconSm;
     BOOLEAN IsWindowVisible;
@@ -104,49 +101,16 @@ CreateSysMenu(HWND hWnd);
 static ULONG NTAPI
 GuiConsoleInputThread(PVOID Param)
 {
-    NTSTATUS Status;
-    PCSR_THREAD pcsrt = NULL;
-    PGUI_INIT_INFO GuiInitInfo = (PGUI_INIT_INFO)Param;
-    DESKTOP_CONSOLE_THREAD DesktopConsoleThreadInfo;
-    ULONG_PTR InputThreadId = HandleToUlong(NtCurrentTeb()->ClientId.UniqueThread);
-    HANDLE hThread = NULL;
-
     LONG WindowCount = 0;
-    MSG msg;
+    MSG Msg;
 
-    /*
-     * This thread dispatches all the console notifications to the
-     * notification window. It is common for all the console windows
-     * in a given desktop in a window station.
-     */
-
-    /* Assign this console input thread to this desktop */
-    DesktopConsoleThreadInfo.DesktopHandle = GuiInitInfo->Desktop; // Duplicated desktop handle
-    DesktopConsoleThreadInfo.ThreadId = InputThreadId;
-    Status = NtUserConsoleControl(ConsoleCtrlDesktopConsoleThread,
-                                  &DesktopConsoleThreadInfo,
-                                  sizeof(DesktopConsoleThreadInfo));
-    if (!NT_SUCCESS(Status)) goto Quit;
-
-    /* Connect this CSR thread to the USER subsystem */
-    pcsrt = CsrConnectToUser();
-    if (pcsrt == NULL) goto Quit;
-    hThread = pcsrt->ThreadHandle;
-
-    /* Assign the desktop to this thread */
-    if (!SetThreadDesktop(DesktopConsoleThreadInfo.DesktopHandle)) goto Quit;
-
-    /* The thread has been initialized, set the event */
-    NtSetEvent(GuiInitInfo->GuiThreadStartupEvent, NULL);
-    Status = STATUS_SUCCESS;
-
-    while (GetMessageW(&msg, NULL, 0, 0))
+    while (GetMessageW(&Msg, NULL, 0, 0))
     {
-        switch (msg.message)
+        switch (Msg.message)
         {
             case PM_CREATE_CONSOLE:
             {
-                PGUI_CONSOLE_DATA GuiData = (PGUI_CONSOLE_DATA)msg.lParam;
+                PGUI_CONSOLE_DATA GuiData = (PGUI_CONSOLE_DATA)Msg.lParam;
                 PCONSRV_CONSOLE Console = GuiData->Console;
                 HWND NewWindow;
                 RECT rcWnd;
@@ -216,8 +180,10 @@ GuiConsoleInputThread(PVOID Param)
 
             case PM_DESTROY_CONSOLE:
             {
-                PGUI_CONSOLE_DATA GuiData = (PGUI_CONSOLE_DATA)msg.lParam;
+                PGUI_CONSOLE_DATA GuiData = (PGUI_CONSOLE_DATA)Msg.lParam;
                 MSG TempMsg;
+
+                DPRINT("PM_DESTROY_CONSOLE -- destroying window\n");
 
                 /* Exit the full screen mode if it was already set */
                 // LeaveFullScreen(GuiData);
@@ -240,7 +206,8 @@ GuiConsoleInputThread(PVOID Param)
 
                 if (_InterlockedDecrement(&WindowCount) == 0)
                 {
-                    DPRINT("CONSRV: Going to quit the Input Thread 0x%p\n", InputThreadId);
+                    DPRINT("CONSRV: Going to quit the Input Thread 0x%p\n",
+                           NtCurrentTeb()->ClientId.UniqueThread);
                     goto Quit;
                 }
 
@@ -248,34 +215,11 @@ GuiConsoleInputThread(PVOID Param)
             }
         }
 
-        TranslateMessage(&msg);
-        DispatchMessageW(&msg);
+        TranslateMessage(&Msg);
+        DispatchMessageW(&Msg);
     }
 
 Quit:
-    DPRINT("CONSRV: Quit the Input Thread 0x%p, Status = 0x%08lx\n", InputThreadId, Status);
-
-    /* Remove this console input thread from this desktop */
-    // DesktopConsoleThreadInfo.DesktopHandle;
-    DesktopConsoleThreadInfo.ThreadId = 0;
-    NtUserConsoleControl(ConsoleCtrlDesktopConsoleThread,
-                         &DesktopConsoleThreadInfo,
-                         sizeof(DesktopConsoleThreadInfo));
-
-    /* Close the duplicated desktop handle */
-    CloseDesktop(DesktopConsoleThreadInfo.DesktopHandle); // NtUserCloseDesktop
-
-    /* Cleanup CSR thread */
-    if (pcsrt)
-    {
-        if (hThread != pcsrt->ThreadHandle)
-            DPRINT1("WARNING!! hThread (0x%p) != pcsrt->ThreadHandle (0x%p), you may expect crashes soon!!\n", hThread, pcsrt->ThreadHandle);
-
-        CsrDereferenceThread(pcsrt);
-    }
-
-    /* Exit the thread */
-    RtlExitUserThread(Status);
     return 0;
 }
 
@@ -285,15 +229,9 @@ GuiInit(IN PCONSOLE_INIT_INFO ConsoleInitInfo,
         IN HANDLE ConsoleLeaderProcessHandle,
         IN OUT PGUI_INIT_INFO GuiInitInfo)
 {
-    BOOL Success = TRUE;
-    UNICODE_STRING DesktopPath;
-    DESKTOP_CONSOLE_THREAD DesktopConsoleThreadInfo;
-    HWINSTA hWinSta;
-    HDESK hDesk;
-
     NTSTATUS Status;
-    HANDLE hInputThread;
-    CLIENT_ID ClientId;
+    UNICODE_STRING DesktopPath;
+    CONSOLE_INPUT_THREAD_INFO ThreadInfo;
 
     /* Perform one-time initialization */
     if (!ConsInitialized)
@@ -307,165 +245,29 @@ GuiInit(IN PCONSOLE_INIT_INFO ConsoleInitInfo,
         ConsInitialized = TRUE;
     }
 
-    /*
-     * Set-up the console input thread. We have
-     * one console input thread per desktop.
-     */
-
-    if (!CsrImpersonateClient(NULL))
-        // return STATUS_BAD_IMPERSONATION_LEVEL;
+    DesktopPath.Buffer = ConsoleInitInfo->Desktop;
+    DesktopPath.MaximumLength = ConsoleInitInfo->DesktopLength;
+    DesktopPath.Length = DesktopPath.MaximumLength - sizeof(UNICODE_NULL);
+    Status = StartConsoleInputThread(ConsoleLeaderProcessHandle,
+                                     &DesktopPath,
+                                     TRUE,
+                                     GuiConsoleInputThread,
+                                     NULL,
+                                     &ThreadInfo);
+    if (!NT_SUCCESS(Status))
         return FALSE;
-
-    if (ConsoleInitInfo->DesktopLength)
-    {
-        DesktopPath.MaximumLength = ConsoleInitInfo->DesktopLength;
-        DesktopPath.Length = DesktopPath.MaximumLength - sizeof(UNICODE_NULL);
-        DesktopPath.Buffer = ConsoleInitInfo->Desktop;
-    }
-    else
-    {
-        RtlInitUnicodeString(&DesktopPath, L"Default");
-    }
-
-    hDesk = NtUserResolveDesktop(ConsoleLeaderProcessHandle,
-                                 &DesktopPath,
-                                 FALSE,
-                                 &hWinSta);
-    DPRINT("NtUserResolveDesktop(DesktopPath = '%wZ') returned hDesk = 0x%p; hWinSta = 0x%p\n",
-           &DesktopPath, hDesk, hWinSta);
-
-    CsrRevertToSelf();
-
-    if (hDesk == NULL) return FALSE;
-
-    /*
-     * We need to see whether we need to create a
-     * new console input thread for this desktop.
-     */
-    DesktopConsoleThreadInfo.DesktopHandle = hDesk;
-    DesktopConsoleThreadInfo.ThreadId = (ULONG_PTR)INVALID_HANDLE_VALUE; // Special value to say we just want to retrieve the thread ID.
-    NtUserConsoleControl(ConsoleCtrlDesktopConsoleThread,
-                         &DesktopConsoleThreadInfo,
-                         sizeof(DesktopConsoleThreadInfo));
-    DPRINT("NtUserConsoleControl returned ThreadId = 0x%p\n", DesktopConsoleThreadInfo.ThreadId);
 
     /*
      * Save the opened window station and desktop handles in the initialization
      * structure. They will be used later on, and released, by the GUI frontend.
      */
-    GuiInitInfo->WinSta  = hWinSta;
-    GuiInitInfo->Desktop = hDesk;
-
-    /* Here GuiInitInfo contains original handles */
-
-    /* If we already have a console input thread on this desktop... */
-    if (DesktopConsoleThreadInfo.ThreadId != 0)
-    {
-        /* ... just use it... */
-        DPRINT("Using input thread InputThreadId = 0x%p\n", DesktopConsoleThreadInfo.ThreadId);
-        GuiInitInfo->InputThreadId = DesktopConsoleThreadInfo.ThreadId;
-        goto Quit;
-    }
-
-    /* ... otherwise create a new one. */
-
-    /* Initialize a startup event for the thread to signal it */
-    Status = NtCreateEvent(&GuiInitInfo->GuiThreadStartupEvent, EVENT_ALL_ACCESS,
-                           NULL, SynchronizationEvent, FALSE);
-    if (!NT_SUCCESS(Status))
-    {
-        Success = FALSE;
-        goto Quit;
-    }
-
-    /*
-     * Duplicate the desktop handle for the console input thread internal needs.
-     * If it happens to need also a window station handle in the future, then
-     * it is there that you also need to duplicate the window station handle!
-     *
-     * Note also that we are going to temporarily overwrite the stored handles
-     * in GuiInitInfo because it happens that we use also this structure to give
-     * the duplicated handles to the input thread that is going to initialize.
-     * After the input thread finishes its initialization, we restore the handles
-     * in GuiInitInfo to their old values.
-     */
-    Status = NtDuplicateObject(NtCurrentProcess(),
-                               hDesk,
-                               NtCurrentProcess(),
-                               (PHANDLE)&GuiInitInfo->Desktop,
-                               0, 0, DUPLICATE_SAME_ACCESS);
-    if (!NT_SUCCESS(Status))
-    {
-        Success = FALSE;
-        goto Quit;
-    }
-
-    /* Here GuiInitInfo contains duplicated handles */
-
-    Status = RtlCreateUserThread(NtCurrentProcess(),
-                                 NULL,
-                                 TRUE, // Start the thread in suspended state
-                                 0,
-                                 0,
-                                 0,
-                                 (PVOID)GuiConsoleInputThread,
-                                 (PVOID)GuiInitInfo,
-                                 &hInputThread,
-                                 &ClientId);
-    if (NT_SUCCESS(Status))
-    {
-        /* Add it as a static server thread and resume it */
-        CsrAddStaticServerThread(hInputThread, &ClientId, 0);
-        Status = NtResumeThread(hInputThread, NULL);
-    }
-    DPRINT("Thread creation hInputThread = 0x%p, InputThreadId = 0x%p, Status = 0x%08lx\n",
-           hInputThread, ClientId.UniqueThread, Status);
-
-    if (!NT_SUCCESS(Status) || hInputThread == NULL)
-    {
-        /* Close the thread's handle */
-        if (hInputThread) NtClose(hInputThread);
-
-        /* We need to close here the duplicated desktop handle */
-        CloseDesktop(GuiInitInfo->Desktop); // NtUserCloseDesktop
-
-        /* Close the startup event and bail out */
-        NtClose(GuiInitInfo->GuiThreadStartupEvent);
-
-        DPRINT1("CONSRV: Failed to create graphics console thread.\n");
-        Success = FALSE;
-        goto Quit;
-    }
-
-    /* No need to close hInputThread, this is done by CSR automatically */
-
-    /* Wait for the thread to finish its initialization, and close the startup event */
-    NtWaitForSingleObject(GuiInitInfo->GuiThreadStartupEvent, FALSE, NULL);
-    NtClose(GuiInitInfo->GuiThreadStartupEvent);
-
     /*
      * Save the input thread ID for later use, and restore the original handles.
      * The copies are held by the console input thread.
      */
-    GuiInitInfo->InputThreadId = (ULONG_PTR)ClientId.UniqueThread;
-    GuiInitInfo->WinSta  = hWinSta;
-    GuiInitInfo->Desktop = hDesk;
+    GuiInitInfo->ThreadInfo = ThreadInfo;
 
-    /* Here GuiInitInfo contains again original handles */
-
-Quit:
-    if (!Success)
-    {
-        /*
-         * Close the original handles. Do not use the copies in GuiInitInfo
-         * because we may have failed in the middle of the duplicate operation
-         * and the handles stored in GuiInitInfo may have changed.
-         */
-        CloseDesktop(hDesk); // NtUserCloseDesktop
-        CloseWindowStation(hWinSta); // NtUserCloseWindowStation
-    }
-
-    return Success;
+    return TRUE;
 }
 
 
@@ -548,9 +350,7 @@ GuiInitFrontEnd(IN OUT PFRONTEND This,
     GuiData->LineSelection = FALSE; // Default to block selection
     // TODO: Retrieve the selection mode via the registry.
 
-    GuiData->InputThreadId = GuiInitInfo->InputThreadId;
-    GuiData->WinSta  = GuiInitInfo->WinSta;
-    GuiData->Desktop = GuiInitInfo->Desktop;
+    GuiData->ThreadInfo = GuiInitInfo->ThreadInfo;
 
     /* Finally, finish to initialize the frontend structure */
     This->Context  = GuiData;
@@ -571,7 +371,7 @@ GuiInitFrontEnd(IN OUT PFRONTEND This,
     DPRINT("GUI - Checkpoint\n");
 
     /* Create the terminal window */
-    PostThreadMessageW(GuiData->InputThreadId, PM_CREATE_CONSOLE, 0, (LPARAM)GuiData);
+    PostThreadMessageW(GuiData->ThreadInfo.ThreadId, PM_CREATE_CONSOLE, 0, (LPARAM)GuiData);
 
     /* Wait until initialization has finished */
     NtWaitForSingleObject(GuiData->hGuiInitEvent, FALSE, NULL);
@@ -596,14 +396,14 @@ GuiDeinitFrontEnd(IN OUT PFRONTEND This)
     PGUI_CONSOLE_DATA GuiData = This->Context;
 
     DPRINT("Send PM_DESTROY_CONSOLE message and wait on hGuiTermEvent...\n");
-    PostThreadMessageW(GuiData->InputThreadId, PM_DESTROY_CONSOLE, 0, (LPARAM)GuiData);
+    PostThreadMessageW(GuiData->ThreadInfo.ThreadId, PM_DESTROY_CONSOLE, 0, (LPARAM)GuiData);
     NtWaitForSingleObject(GuiData->hGuiTermEvent, FALSE, NULL);
     DPRINT("hGuiTermEvent set\n");
     NtClose(GuiData->hGuiTermEvent);
     GuiData->hGuiTermEvent = NULL;
 
-    CloseDesktop(GuiData->Desktop); // NtUserCloseDesktop
-    CloseWindowStation(GuiData->WinSta); // NtUserCloseWindowStation
+    CloseDesktop(GuiData->ThreadInfo.Desktop); // NtUserCloseDesktop
+    CloseWindowStation(GuiData->ThreadInfo.WinSta); // NtUserCloseWindowStation
 
     DPRINT("Destroying icons !! - GuiData->hIcon = 0x%p ; ghDefaultIcon = 0x%p ; GuiData->hIconSm = 0x%p ; ghDefaultIconSm = 0x%p\n",
             GuiData->hIcon, ghDefaultIcon, GuiData->hIconSm, ghDefaultIconSm);
@@ -920,7 +720,7 @@ static HDESK NTAPI
 GuiGetThreadConsoleDesktop(IN OUT PFRONTEND This)
 {
     PGUI_CONSOLE_DATA GuiData = This->Context;
-    return GuiData->Desktop;
+    return GuiData->ThreadInfo.Desktop;
 }
 
 static HWND NTAPI
@@ -1206,7 +1006,7 @@ GuiLoadFrontEnd(IN OUT PFRONTEND FrontEnd,
     if (GuiInitInfo->IsWindowVisible)
     {
         /* Don't show the console if the window station is not interactive */
-        if (GetUserObjectInformationW(GuiInitInfo->WinSta,
+        if (GetUserObjectInformationW(GuiInitInfo->ThreadInfo.WinSta,
                                       UOI_FLAGS,
                                       &UserObjectFlags,
                                       sizeof(UserObjectFlags),

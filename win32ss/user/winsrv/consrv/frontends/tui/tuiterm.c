@@ -44,6 +44,8 @@ typedef struct _TUI_CONSOLE_DATA
     // HANDLE hTuiInitEvent;
     // HANDLE hTuiTermEvent;
 
+    CONSOLE_INPUT_THREAD_INFO ThreadInfo;
+
     HWND hWindow;               /* Handle to the console's window (used for the window's procedure) */
 
     PCONSRV_CONSOLE Console;           /* Pointer to the owned console */
@@ -340,13 +342,13 @@ TuiConsoleWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
     return DefWindowProcW(hWnd, msg, wParam, lParam);
 }
 
-static DWORD NTAPI
-TuiConsoleThread(PVOID Param)
+static ULONG NTAPI
+TuiConsoleInputThread(PVOID Param)
 {
     PTUI_CONSOLE_DATA TuiData = (PTUI_CONSOLE_DATA)Param;
     PCONSRV_CONSOLE Console = TuiData->Console;
     HWND NewWindow;
-    MSG msg;
+    MSG Msg;
 
     NewWindow = CreateWindowExW(WS_EX_TOPMOST,
                               TUI_CONSOLE_WINDOW_CLASS,
@@ -356,22 +358,23 @@ TuiConsoleThread(PVOID Param)
                               NULL, NULL,
                               ConSrvDllInstance,
                               (PVOID)Console);
-    if (NULL == NewWindow)
+    if (NewWindow == NULL)
     {
         DPRINT1("CONSRV: Unable to create console window\n");
-        return 1;
+        goto Quit;
     }
     TuiData->hWindow = NewWindow;
 
     SetForegroundWindow(TuiData->hWindow);
     NtUserConsoleControl(ConsoleAcquireDisplayOwnership, NULL, 0);
 
-    while (GetMessageW(&msg, NULL, 0, 0))
+    while (GetMessageW(&Msg, NULL, 0, 0))
     {
-        TranslateMessage(&msg);
-        DispatchMessageW(&msg);
+        TranslateMessage(&Msg);
+        DispatchMessageW(&Msg);
     }
 
+Quit:
     return 0;
 }
 
@@ -491,8 +494,10 @@ static NTSTATUS NTAPI
 TuiInitFrontEnd(IN OUT PFRONTEND This,
                 IN PCONSRV_CONSOLE Console)
 {
+    NTSTATUS Status;
     PTUI_CONSOLE_DATA TuiData;
-    HANDLE ThreadHandle;
+    PUNICODE_STRING Desktop;
+    CONSOLE_INPUT_THREAD_INFO ThreadInfo;
 
     if (This == NULL || Console == NULL)
         return STATUS_INVALID_PARAMETER;
@@ -524,26 +529,7 @@ TuiInitFrontEnd(IN OUT PFRONTEND This,
     // Console->FixedSize = TRUE; // MUST be placed AFTER the call to ConioResizeBuffer !!
     // // TermResizeTerminal(Console);
 
-    /*
-     * Contrary to what we do in the GUI front-end, here we create
-     * an input thread for each console. It will dispatch all the
-     * input messages to the proper console (on the GUI it is done
-     * via the default GUI dispatch thread).
-     */
-    ThreadHandle = CreateThread(NULL,
-                                0,
-                                TuiConsoleThread,
-                                (PVOID)TuiData,
-                                0,
-                                NULL);
-    if (NULL == ThreadHandle)
-    {
-        DPRINT1("CONSRV: Unable to create console thread\n");
-        // TuiDeinitFrontEnd(Console);
-        TuiDeinitFrontEnd(This);
-        return STATUS_UNSUCCESSFUL;
-    }
-    CloseHandle(ThreadHandle);
+    Desktop = This->Context2;
 
     /*
      * Insert the newly created console in the list of virtual consoles
@@ -554,9 +540,46 @@ TuiInitFrontEnd(IN OUT PFRONTEND This,
     ActiveConsole = TuiData;
     LeaveCriticalSection(&ActiveVirtConsLock);
 
-    /* Finally, initialize the frontend structure */
-    This->Context  = TuiData;
+    /* Finally, finish to initialize the frontend structure */
+    This->Context = TuiData;
+
+    /*
+     * Contrary to what we do in the GUI front-end, here we create
+     * an input thread for each console. It will dispatch all the
+     * input messages to the proper console (on the GUI it is done
+     * via the default GUI dispatch thread).
+     */
+    Status = StartConsoleInputThread(NtCurrentProcess(), // ConsoleLeaderProcessHandle,
+                                     Desktop,
+                                     FALSE,
+                                     TuiConsoleInputThread,
+                                     TuiData,
+                                     &ThreadInfo);
+
+    ConsoleFreeHeap(This->Context2);
     This->Context2 = NULL;
+
+    if (!NT_SUCCESS(Status))
+    {
+        EnterCriticalSection(&ActiveVirtConsLock);
+        RemoveEntryList(&TuiData->Entry);
+        ActiveConsole = NULL;
+        LeaveCriticalSection(&ActiveVirtConsLock);
+
+        // TuiDeinitFrontEnd(Console);
+        TuiDeinitFrontEnd(This);
+        return Status; // STATUS_UNSUCCESSFUL;
+    }
+
+    /*
+     * Save the opened window station and desktop handles in the initialization
+     * structure. They will be used later on, and released, by the GUI frontend.
+     */
+    /*
+     * Save the input thread ID for later use, and restore the original handles.
+     * The copies are held by the console input thread.
+     */
+    TuiData->ThreadInfo = ThreadInfo;
 
     return STATUS_SUCCESS;
 }
@@ -971,19 +994,38 @@ TuiLoadFrontEnd(IN OUT PFRONTEND FrontEnd,
                 IN OUT PCONSOLE_INIT_INFO ConsoleInitInfo,
                 IN HANDLE ConsoleLeaderProcessHandle)
 {
+    UNICODE_STRING Desktop;
+    PUNICODE_STRING CopyDesktop;
+
     if (FrontEnd == NULL || ConsoleInfo == NULL)
         return STATUS_INVALID_PARAMETER;
 
     /* We must be in console mode already */
-    if (!IsConsoleMode()) return STATUS_UNSUCCESSFUL;
+    if (!IsConsoleMode())
+        return STATUS_UNSUCCESSFUL;
+
+    /* Copy the desktop path string, we'll need it later */
+    RtlInitEmptyUnicodeString(&Desktop, ConsoleInitInfo->Desktop, ConsoleInitInfo->DesktopLength);
+    Desktop.Length = ConsoleInitInfo->DesktopLength - sizeof(UNICODE_NULL);
+    CopyDesktop = ConsoleAllocHeap(HEAP_ZERO_MEMORY,
+                                   sizeof(UNICODE_STRING) +
+                                      ConsoleInitInfo->DesktopLength);
+    if (!CopyDesktop)
+        return STATUS_NO_MEMORY;
+
+    RtlInitEmptyUnicodeString(CopyDesktop,
+                              (PVOID)((ULONG_PTR)CopyDesktop + sizeof(UNICODE_STRING)),
+                              ConsoleInitInfo->DesktopLength);
+    RtlCopyUnicodeString(CopyDesktop, &Desktop);
 
     /* Initialize the TUI terminal emulator */
-    if (!TuiInit(ConsoleInfo->CodePage)) return STATUS_UNSUCCESSFUL;
+    if (!TuiInit(ConsoleInfo->CodePage))
+        return STATUS_UNSUCCESSFUL;
 
     /* Finally, initialize the frontend structure */
     FrontEnd->Vtbl     = &TuiVtbl;
     FrontEnd->Context  = NULL;
-    FrontEnd->Context2 = NULL;
+    FrontEnd->Context2 = CopyDesktop;
 
     return STATUS_SUCCESS;
 }
@@ -992,7 +1034,9 @@ NTSTATUS NTAPI
 TuiUnloadFrontEnd(IN OUT PFRONTEND FrontEnd)
 {
     if (FrontEnd == NULL) return STATUS_INVALID_PARAMETER;
-    if (FrontEnd->Context) TuiDeinitFrontEnd(FrontEnd);
+
+    if (FrontEnd->Context ) TuiDeinitFrontEnd(FrontEnd);
+    if (FrontEnd->Context2) ConsoleFreeHeap(FrontEnd->Context2);
 
     return STATUS_SUCCESS;
 }
