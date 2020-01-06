@@ -513,7 +513,7 @@ error_clean:
     EngFreeMem(dhsurf);
 
 error_done:
-    return (HSURF)0;
+    return NULL;
 }
 
 
