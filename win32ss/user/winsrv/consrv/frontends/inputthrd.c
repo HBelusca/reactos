@@ -138,7 +138,7 @@ ConsoleInputThread(PVOID Param)
     hThread = pcsrt->ThreadHandle;
 
     /* Assign the desktop to this thread */
-    if (!SetThreadDesktop(DesktopConsoleThreadInfo.DesktopHandle)) goto Quit;
+    if (!SetThreadDesktop(ThreadInfoEx.ThreadInfo.Desktop)) goto Quit;
 
     /* The thread has been initialized, set the event */
     NtSetEvent(ThreadInfoEx.StartupEvent, NULL);
@@ -165,7 +165,7 @@ Quit:
     }
 
     /* Close the duplicated desktop handle */
-    CloseDesktop(DesktopConsoleThreadInfo.DesktopHandle); // NtUserCloseDesktop
+    CloseDesktop(ThreadInfoEx.ThreadInfo.Desktop); // NtUserCloseDesktop
 
     /* Cleanup CSR thread */
     if (pcsrt)
