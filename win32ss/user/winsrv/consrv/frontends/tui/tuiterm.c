@@ -629,12 +629,10 @@ TuiDrawRegion(IN OUT PFRONTEND This,
               SMALL_RECT* Region)
 {
     PTUI_CONSOLE_DATA TuiData = This->Context;
-    PCONSOLE_SCREEN_BUFFER Buff = TuiData->Console->ActiveBuffer;
+    PCONSOLE_SCREEN_BUFFER Buff = TuiData->/*Console->*/ActiveBuffer;
     PCONSOLE_DRAW ConsoleDraw;
     DWORD BytesReturned;
     UINT ConsoleDrawSize;
-
-DbgBreakPoint();
 
     if (TuiData != ActiveConsole) return;
     if (GetType(Buff) != TEXTMODE_BUFFER) return;
@@ -654,6 +652,7 @@ DbgBreakPoint();
     ConsoleDraw->CursorX = Buff->CursorPosition.X;
     ConsoleDraw->CursorY = Buff->CursorPosition.Y;
 
+DbgBreakPoint();
     TuiCopyRect((PCHAR)(ConsoleDraw + 1), (PTEXTMODE_SCREEN_BUFFER)Buff, Region);
 
     if (!DeviceIoControl(ConsoleDeviceHandle, IOCTL_CONSOLE_DRAW,
@@ -677,12 +676,10 @@ TuiWriteStream(IN OUT PFRONTEND This,
                UINT Length)
 {
     PTUI_CONSOLE_DATA TuiData = This->Context;
-    PCONSOLE_SCREEN_BUFFER Buff = TuiData->Console->ActiveBuffer;
+    PCONSOLE_SCREEN_BUFFER Buff = TuiData->/*Console->*/ActiveBuffer;
     PCHAR NewBuffer;
     ULONG NewLength;
     DWORD BytesWritten;
-
-DbgBreakPoint();
 
     if (TuiData != ActiveConsole) return;
     if (GetType(Buff) != TEXTMODE_BUFFER) return;
@@ -720,7 +717,7 @@ TuiSetCursorInfo(IN OUT PFRONTEND This,
     DWORD BytesReturned;
 
     if (TuiData != ActiveConsole) return TRUE;
-    if (TuiData->Console->ActiveBuffer != Buff) return TRUE;
+    if (TuiData->/*Console->*/ActiveBuffer != Buff) return TRUE;
     if (GetType(Buff) != TEXTMODE_BUFFER) return FALSE;
 
     Info.dwSize = ConioEffectiveCursorSize(TuiData->Console, 100);
@@ -747,7 +744,7 @@ TuiSetScreenInfo(IN OUT PFRONTEND This,
     DWORD BytesReturned;
 
     if (TuiData != ActiveConsole) return TRUE;
-    if (TuiData->Console->ActiveBuffer != Buff) return TRUE;
+    if (TuiData->/*Console->*/ActiveBuffer != Buff) return TRUE;
     if (GetType(Buff) != TEXTMODE_BUFFER) return FALSE;
 
     Info.dwCursorPosition = Buff->CursorPosition;
@@ -772,88 +769,88 @@ TuiResizeTerminal(IN OUT PFRONTEND This)
 static VOID NTAPI
 TuiSetActiveScreenBuffer(IN OUT PFRONTEND This)
 {
-    // PGUI_CONSOLE_DATA GuiData = This->Context;
-    // PCONSOLE_SCREEN_BUFFER ActiveBuffer;
+    PTUI_CONSOLE_DATA TuiData = This->Context;
+    PCONSOLE_SCREEN_BUFFER ActiveBuffer;
     // HPALETTE hPalette;
 
-    // EnterCriticalSection(&GuiData->Lock);
-    // GuiData->WindowSizeLock = TRUE;
+    EnterCriticalSection(&TuiData->Lock);
+    // TuiData->WindowSizeLock = TRUE;
 
-    // InterlockedExchangePointer(&GuiData->ActiveBuffer,
-                               // ConDrvGetActiveScreenBuffer(GuiData->Console));
+    InterlockedExchangePointer(&TuiData->ActiveBuffer,
+                               ConDrvGetActiveScreenBuffer(TuiData->Console));
 
-    // GuiData->WindowSizeLock = FALSE;
-    // LeaveCriticalSection(&GuiData->Lock);
+    // TuiData->WindowSizeLock = FALSE;
+    LeaveCriticalSection(&TuiData->Lock);
 
-    // ActiveBuffer = GuiData->ActiveBuffer;
+    ActiveBuffer = TuiData->ActiveBuffer;
 
-    // /* Change the current palette */
-    // if (ActiveBuffer->PaletteHandle == NULL)
-    // {
-        // hPalette = GuiData->hSysPalette;
-    // }
-    // else
-    // {
-        // hPalette = ActiveBuffer->PaletteHandle;
-    // }
+#if 0
+    /* Change the current palette */
+    if (ActiveBuffer->PaletteHandle == NULL)
+        hPalette = TuiData->hSysPalette;
+    else
+        hPalette = ActiveBuffer->PaletteHandle;
 
-    // DPRINT("GuiSetActiveScreenBuffer using palette 0x%p\n", hPalette);
+    DPRINT("TuiSetActiveScreenBuffer using palette 0x%p\n", hPalette);
 
-    // /* Set the new palette for the framebuffer */
-    // SelectPalette(GuiData->hMemDC, hPalette, FALSE);
+    /* Set the new palette for the framebuffer */
+    SelectPalette(TuiData->hMemDC, hPalette, FALSE);
 
-    // /* Specify the use of the system palette for the framebuffer */
-    // SetSystemPaletteUse(GuiData->hMemDC, ActiveBuffer->PaletteUsage);
+    /* Specify the use of the system palette for the framebuffer */
+    SetSystemPaletteUse(TuiData->hMemDC, ActiveBuffer->PaletteUsage);
 
-    // /* Realize the (logical) palette */
-    // RealizePalette(GuiData->hMemDC);
+    /* Realize the (logical) palette */
+    RealizePalette(TuiData->hMemDC);
+#endif
 
-    // GuiResizeTerminal(This);
-    // // ConioDrawConsole(Console);
+    // TuiResizeTerminal(This);
+    // ConioDrawConsole(Console);
 }
 
 static VOID NTAPI
 TuiReleaseScreenBuffer(IN OUT PFRONTEND This,
                        IN PCONSOLE_SCREEN_BUFFER ScreenBuffer)
 {
-    // PGUI_CONSOLE_DATA GuiData = This->Context;
+    PTUI_CONSOLE_DATA TuiData = This->Context;
 
-    // /*
-     // * If we were notified to release a screen buffer that is not actually
-     // * ours, then just ignore the notification...
-     // */
-    // if (ScreenBuffer != GuiData->ActiveBuffer) return;
+    /*
+     * If we were notified to release a screen buffer that is not actually
+     * ours, then just ignore the notification...
+     */
+    if (ScreenBuffer != TuiData->ActiveBuffer) return;
 
-    // /*
-     // * ... else, we must release our active buffer. Two cases are present:
-     // * - If ScreenBuffer (== GuiData->ActiveBuffer) IS NOT the console
-     // *   active screen buffer, then we can safely switch to it.
-     // * - If ScreenBuffer IS the console active screen buffer, we must release
-     // *   it ONLY.
-     // */
+    /*
+     * ... else, we must release our active buffer. Two cases are present:
+     * - If ScreenBuffer (== TuiData->ActiveBuffer) IS NOT the console
+     *   active screen buffer, then we can safely switch to it.
+     * - If ScreenBuffer IS the console active screen buffer, we must release
+     *   it ONLY.
+     */
 
-    // /* Release the old active palette and set the default one */
-    // if (GetCurrentObject(GuiData->hMemDC, OBJ_PAL) == ScreenBuffer->PaletteHandle)
-    // {
-        // /* Set the new palette */
-        // SelectPalette(GuiData->hMemDC, GuiData->hSysPalette, FALSE);
-    // }
+#if 0
+    /* Release the old active palette and set the default one */
+    if (GetCurrentObject(TuiData->hMemDC, OBJ_PAL) == ScreenBuffer->PaletteHandle)
+    {
+        /* Set the new palette */
+        SelectPalette(TuiData->hMemDC, TuiData->hSysPalette, FALSE);
+    }
+#endif
 
-    // /* Set the adequate active screen buffer */
-    // if (ScreenBuffer != GuiData->Console->ActiveBuffer)
-    // {
-        // GuiSetActiveScreenBuffer(This);
-    // }
-    // else
-    // {
-        // EnterCriticalSection(&GuiData->Lock);
-        // GuiData->WindowSizeLock = TRUE;
+    /* Set the adequate active screen buffer */
+    if (ScreenBuffer != TuiData->Console->ActiveBuffer)
+    {
+        TuiSetActiveScreenBuffer(This);
+    }
+    else
+    {
+        EnterCriticalSection(&TuiData->Lock);
+        // TuiData->WindowSizeLock = TRUE;
 
-        // InterlockedExchangePointer(&GuiData->ActiveBuffer, NULL);
+        InterlockedExchangePointer((PVOID*)&TuiData->ActiveBuffer, NULL);
 
-        // GuiData->WindowSizeLock = FALSE;
-        // LeaveCriticalSection(&GuiData->Lock);
-    // }
+        // TuiData->WindowSizeLock = FALSE;
+        LeaveCriticalSection(&TuiData->Lock);
+    }
 }
 
 static VOID NTAPI
@@ -876,8 +873,8 @@ TuiChangeIcon(IN OUT PFRONTEND This,
 static HDESK NTAPI
 TuiGetThreadConsoleDesktop(IN OUT PFRONTEND This)
 {
-    // PTUI_CONSOLE_DATA TuiData = This->Context;
-    return NULL;
+    PTUI_CONSOLE_DATA TuiData = This->Context;
+    return TuiData->ThreadInfo.Desktop;
 }
 
 static HWND NTAPI
