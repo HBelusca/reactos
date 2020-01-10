@@ -461,7 +461,7 @@ DxEngGetDCState(HDC hDC,
         switch (type)
         {
             case 1:
-                retVal = (DWORD_PTR) pDC->fs & DC_FLAG_FULLSCREEN;
+                retVal = (DWORD_PTR) pDC->fs & DC_FULLSCREEN;
                 break;
             case 2:
                 /* Return the number of rectangles in the visible region. */
@@ -654,7 +654,7 @@ HDC
 APIENTRY
 DxEngCreateMemoryDC(HDEV hDev)
 {
-    return IntGdiCreateDisplayDC(hDev, DC_TYPE_MEMORY, FALSE);
+    return IntGdiCreateDisplayDC(hDev, DCTYPE_MEMORY, FALSE);
 }
 
 /************************************************************************/
@@ -746,9 +746,9 @@ DxEngSetDCState(HDC hDC, DWORD SetType, DWORD Set)
       if (SetType == 1)
       {
         if ( Set )
-            pDC->fs |= DC_FLAG_FULLSCREEN;
+            pDC->fs |= DC_FULLSCREEN;
         else
-            pDC->fs &= ~DC_FLAG_FULLSCREEN;
+            pDC->fs &= ~DC_FULLSCREEN;
         Ret = TRUE;
       }
       DC_UnlockDc(pDC);

@@ -38,9 +38,9 @@ enum _DCFLAGS
 
 typedef enum _DCTYPE
 {
-    DCTYPE_DIRECT = 0,
-    DCTYPE_MEMORY = 1,
-    DCTYPE_INFO = 2,
+    DCTYPE_DIRECT = 0,  /* Normal device context */
+    DCTYPE_MEMORY = 1,  /* Memory device context */
+    DCTYPE_INFO   = 2,  /* Information context   */
 } DCTYPE;
 
 
