@@ -100,6 +100,7 @@ DC_AllocDcWithHandle(GDILOOBJTYPE eDcObjType)
 }
 
 
+static
 void
 DC_InitHack(PDC pdc)
 {
@@ -157,8 +158,8 @@ DC_vInitDc(
     else
     {
         /* Other DC's are as big as the related PDEV */
-	    pdc->dclevel.sizl.cx = ppdev->gdiinfo.ulHorzRes;
-	    pdc->dclevel.sizl.cy = ppdev->gdiinfo.ulVertRes;
+        pdc->dclevel.sizl.cx = ppdev->gdiinfo.ulHorzRes;
+        pdc->dclevel.sizl.cy = ppdev->gdiinfo.ulVertRes;
     }
 
     /* Setup Window rect based on DC size */
@@ -200,42 +201,42 @@ DC_vInitDc(
       //pdc->dcattr.VisRectRegion:
 
     /* Setup coordinate transformation data */
-	pdc->dclevel.mxWorldToDevice = gmxWorldToDeviceDefault;
-	pdc->dclevel.mxDeviceToWorld = gmxDeviceToWorldDefault;
-	pdc->dclevel.mxWorldToPage = gmxWorldToPageDefault;
-	pdc->dclevel.efM11PtoD = gef16;
-	pdc->dclevel.efM22PtoD = gef16;
-	pdc->dclevel.efDxPtoD = gef0;
-	pdc->dclevel.efDyPtoD = gef0;
-	pdc->dclevel.efM11_TWIPS = gef0;
-	pdc->dclevel.efM22_TWIPS = gef0;
-	pdc->dclevel.efPr11 = gef0;
-	pdc->dclevel.efPr22 = gef0;
-	pdc->dcattr.mxWorldToDevice = pdc->dclevel.mxWorldToDevice;
-	pdc->dcattr.mxDeviceToWorld = pdc->dclevel.mxDeviceToWorld;
-	pdc->dcattr.mxWorldToPage = pdc->dclevel.mxWorldToPage;
-	pdc->dcattr.efM11PtoD = pdc->dclevel.efM11PtoD;
-	pdc->dcattr.efM22PtoD = pdc->dclevel.efM22PtoD;
-	pdc->dcattr.efDxPtoD = pdc->dclevel.efDxPtoD;
-	pdc->dcattr.efDyPtoD = pdc->dclevel.efDyPtoD;
-	pdc->dcattr.iMapMode = MM_TEXT;
-	pdc->dcattr.dwLayout = 0;
-	pdc->dcattr.flXform = PAGE_TO_DEVICE_SCALE_IDENTITY |
-	                      PAGE_TO_DEVICE_IDENTITY |
-	                      WORLD_TO_PAGE_IDENTITY;
+    pdc->dclevel.mxWorldToDevice = gmxWorldToDeviceDefault;
+    pdc->dclevel.mxDeviceToWorld = gmxDeviceToWorldDefault;
+    pdc->dclevel.mxWorldToPage = gmxWorldToPageDefault;
+    pdc->dclevel.efM11PtoD = gef16;
+    pdc->dclevel.efM22PtoD = gef16;
+    pdc->dclevel.efDxPtoD = gef0;
+    pdc->dclevel.efDyPtoD = gef0;
+    pdc->dclevel.efM11_TWIPS = gef0;
+    pdc->dclevel.efM22_TWIPS = gef0;
+    pdc->dclevel.efPr11 = gef0;
+    pdc->dclevel.efPr22 = gef0;
+    pdc->dcattr.mxWorldToDevice = pdc->dclevel.mxWorldToDevice;
+    pdc->dcattr.mxDeviceToWorld = pdc->dclevel.mxDeviceToWorld;
+    pdc->dcattr.mxWorldToPage = pdc->dclevel.mxWorldToPage;
+    pdc->dcattr.efM11PtoD = pdc->dclevel.efM11PtoD;
+    pdc->dcattr.efM22PtoD = pdc->dclevel.efM22PtoD;
+    pdc->dcattr.efDxPtoD = pdc->dclevel.efDxPtoD;
+    pdc->dcattr.efDyPtoD = pdc->dclevel.efDyPtoD;
+    pdc->dcattr.iMapMode = MM_TEXT;
+    pdc->dcattr.dwLayout = 0;
+    pdc->dcattr.flXform = PAGE_TO_DEVICE_SCALE_IDENTITY |
+                          PAGE_TO_DEVICE_IDENTITY |
+                          WORLD_TO_PAGE_IDENTITY;
 
     /* Setup more coordinates */
     pdc->ptlDCOrig.x = 0;
     pdc->ptlDCOrig.y = 0;
-	pdc->dcattr.lWindowOrgx = 0;
-	pdc->dcattr.ptlWindowOrg.x = 0;
-	pdc->dcattr.ptlWindowOrg.y = 0;
-	pdc->dcattr.szlWindowExt.cx = 1;
-	pdc->dcattr.szlWindowExt.cy = 1;
-	pdc->dcattr.ptlViewportOrg.x = 0;
-	pdc->dcattr.ptlViewportOrg.y = 0;
-	pdc->dcattr.szlViewportExt.cx = 1;
-	pdc->dcattr.szlViewportExt.cy = 1;
+    pdc->dcattr.lWindowOrgx = 0;
+    pdc->dcattr.ptlWindowOrg.x = 0;
+    pdc->dcattr.ptlWindowOrg.y = 0;
+    pdc->dcattr.szlWindowExt.cx = 1;
+    pdc->dcattr.szlWindowExt.cy = 1;
+    pdc->dcattr.ptlViewportOrg.x = 0;
+    pdc->dcattr.ptlViewportOrg.y = 0;
+    pdc->dcattr.szlViewportExt.cx = 1;
+    pdc->dcattr.szlViewportExt.cy = 1;
     pdc->dcattr.szlVirtualDevicePixel.cx = ppdev->gdiinfo.ulHorzRes;
     pdc->dcattr.szlVirtualDevicePixel.cy = ppdev->gdiinfo.ulVertRes;
     pdc->dcattr.szlVirtualDeviceMm.cx = ppdev->gdiinfo.ulHorzSize;
@@ -245,46 +246,46 @@ DC_vInitDc(
 
     /* Setup regions */
     pdc->prgnAPI = NULL;
-	pdc->prgnRao = NULL;
-	pdc->dclevel.prgnClip = NULL;
-	pdc->dclevel.prgnMeta = NULL;
+    pdc->prgnRao = NULL;
+    pdc->dclevel.prgnClip = NULL;
+    pdc->dclevel.prgnMeta = NULL;
     /* Allocate a Vis region */
     pdc->prgnVis = IntSysCreateRectpRgn(0, 0, pdc->dclevel.sizl.cx, pdc->dclevel.sizl.cy);
-	ASSERT(pdc->prgnVis);
+    ASSERT(pdc->prgnVis);
 
     /* Setup Vis Region Attribute information */
     UpdateVisRgn(pdc);
 
-	/* Initialize Clip object */
-	IntEngInitClipObj(&pdc->co);
+    /* Initialize Clip object */
+    IntEngInitClipObj(&pdc->co);
 
     /* Setup palette */
     pdc->dclevel.hpal = StockObjects[DEFAULT_PALETTE];
     pdc->dclevel.ppal = PALETTE_ShareLockPalette(pdc->dclevel.hpal);
 
     /* Setup path */
-	pdc->dclevel.hPath = NULL;
+    pdc->dclevel.hPath = NULL;
     pdc->dclevel.flPath = 0;
-//	pdc->dclevel.lapath:
+//    pdc->dclevel.lapath:
 
     /* Setup colors */
-	pdc->dcattr.crBackgroundClr = RGB(0xff, 0xff, 0xff);
-	pdc->dcattr.ulBackgroundClr = RGB(0xff, 0xff, 0xff);
-	pdc->dcattr.crForegroundClr = RGB(0, 0, 0);
-	pdc->dcattr.ulForegroundClr = RGB(0, 0, 0);
-	pdc->dcattr.crBrushClr = RGB(0xff, 0xff, 0xff);
-	pdc->dcattr.ulBrushClr = RGB(0xff, 0xff, 0xff);
-	pdc->dcattr.crPenClr = RGB(0, 0, 0);
-	pdc->dcattr.ulPenClr = RGB(0, 0, 0);
+    pdc->dcattr.crBackgroundClr = RGB(0xff, 0xff, 0xff);
+    pdc->dcattr.ulBackgroundClr = RGB(0xff, 0xff, 0xff);
+    pdc->dcattr.crForegroundClr = RGB(0, 0, 0);
+    pdc->dcattr.ulForegroundClr = RGB(0, 0, 0);
+    pdc->dcattr.crBrushClr = RGB(0xff, 0xff, 0xff);
+    pdc->dcattr.ulBrushClr = RGB(0xff, 0xff, 0xff);
+    pdc->dcattr.crPenClr = RGB(0, 0, 0);
+    pdc->dcattr.ulPenClr = RGB(0, 0, 0);
 
     /* Select the default fill and line brush */
-	pdc->dcattr.hbrush = StockObjects[WHITE_BRUSH];
-	pdc->dcattr.hpen = StockObjects[BLACK_PEN];
+    pdc->dcattr.hbrush = StockObjects[WHITE_BRUSH];
+    pdc->dcattr.hpen = StockObjects[BLACK_PEN];
     pdc->dclevel.pbrFill = BRUSH_ShareLockBrush(pdc->pdcattr->hbrush);
     pdc->dclevel.pbrLine = PEN_ShareLockPen(pdc->pdcattr->hpen);
-	pdc->dclevel.ptlBrushOrigin.x = 0;
-	pdc->dclevel.ptlBrushOrigin.y = 0;
-	pdc->dcattr.ptlBrushOrigin = pdc->dclevel.ptlBrushOrigin;
+    pdc->dclevel.ptlBrushOrigin.x = 0;
+    pdc->dclevel.ptlBrushOrigin.y = 0;
+    pdc->dcattr.ptlBrushOrigin = pdc->dclevel.ptlBrushOrigin;
 
     /* Initialize EBRUSHOBJs */
     EBRUSHOBJ_vInitFromDC(&pdc->eboFill, pdc->dclevel.pbrFill, pdc);
@@ -293,48 +294,48 @@ DC_vInitDc(
     EBRUSHOBJ_vInitFromDC(&pdc->eboBackground, pbrDefaultBrush, pdc);
 
     /* Setup fill data */
-	pdc->dcattr.jROP2 = R2_COPYPEN;
-	pdc->dcattr.jBkMode = 2;
-	pdc->dcattr.lBkMode = 2;
-	pdc->dcattr.jFillMode = ALTERNATE;
-	pdc->dcattr.lFillMode = 1;
-	pdc->dcattr.jStretchBltMode = 1;
-	pdc->dcattr.lStretchBltMode = 1;
+    pdc->dcattr.jROP2 = R2_COPYPEN;
+    pdc->dcattr.jBkMode = 2;
+    pdc->dcattr.lBkMode = 2;
+    pdc->dcattr.jFillMode = ALTERNATE;
+    pdc->dcattr.lFillMode = 1;
+    pdc->dcattr.jStretchBltMode = 1;
+    pdc->dcattr.lStretchBltMode = 1;
     pdc->ptlFillOrigin.x = 0;
     pdc->ptlFillOrigin.y = 0;
 
     /* Setup drawing position */
-	pdc->dcattr.ptlCurrent.x = 0;
-	pdc->dcattr.ptlCurrent.y = 0;
-	pdc->dcattr.ptfxCurrent.x = 0;
-	pdc->dcattr.ptfxCurrent.y = 0;
+    pdc->dcattr.ptlCurrent.x = 0;
+    pdc->dcattr.ptlCurrent.y = 0;
+    pdc->dcattr.ptfxCurrent.x = 0;
+    pdc->dcattr.ptfxCurrent.y = 0;
 
-	/* Setup ICM data */
-	pdc->dclevel.lIcmMode = 0;
-	pdc->dcattr.lIcmMode = 0;
-	pdc->dcattr.hcmXform = NULL;
-	pdc->dcattr.flIcmFlags = 0;
-	pdc->dcattr.IcmBrushColor = CLR_INVALID;
-	pdc->dcattr.IcmPenColor = CLR_INVALID;
-	pdc->dcattr.pvLIcm = NULL;
+    /* Setup ICM data */
+    pdc->dclevel.lIcmMode = 0;
+    pdc->dcattr.lIcmMode = 0;
+    pdc->dcattr.hcmXform = NULL;
+    pdc->dcattr.flIcmFlags = 0;
+    pdc->dcattr.IcmBrushColor = CLR_INVALID;
+    pdc->dcattr.IcmPenColor = CLR_INVALID;
+    pdc->dcattr.pvLIcm = NULL;
     pdc->dcattr.hColorSpace = NULL; // FIXME: 0189001f
-	pdc->dclevel.pColorSpace = NULL; // FIXME
+    pdc->dclevel.pColorSpace = NULL; // FIXME
     pdc->pClrxFormLnk = NULL;
-//	pdc->dclevel.ca =
+//    pdc->dclevel.ca =
 
-	/* Setup font data */
+    /* Setup font data */
     pdc->hlfntCur = NULL; // FIXME: 2f0a0cf8
     pdc->pPFFList = NULL;
     pdc->flSimulationFlags = 0;
     pdc->lEscapement = 0;
     pdc->prfnt = NULL;
-	pdc->dcattr.flFontMapper = 0;
-	pdc->dcattr.flTextAlign = 0;
-	pdc->dcattr.lTextAlign = 0;
-	pdc->dcattr.lTextExtra = 0;
-	pdc->dcattr.lRelAbs = 1;
-	pdc->dcattr.lBreakExtra = 0;
-	pdc->dcattr.cBreak = 0;
+    pdc->dcattr.flFontMapper = 0;
+    pdc->dcattr.flTextAlign = 0;
+    pdc->dcattr.lTextAlign = 0;
+    pdc->dcattr.lTextExtra = 0;
+    pdc->dcattr.lRelAbs = 1;
+    pdc->dcattr.lBreakExtra = 0;
+    pdc->dcattr.cBreak = 0;
     pdc->dcattr.hlfntNew = StockObjects[SYSTEM_FONT];
     pdc->dclevel.plfnt = LFONT_ShareLockFont(pdc->dcattr.hlfntNew);
 
@@ -345,10 +346,10 @@ DC_vInitDc(
     pdc->ulCopyCount = -1;
     pdc->ptlDoBanding.x = 0;
     pdc->ptlDoBanding.y = 0;
-	pdc->dclevel.lSaveDepth = 1;
-	pdc->dclevel.hdcSave = NULL;
-	pdc->dcattr.iGraphicsMode = GM_COMPATIBLE;
-	pdc->dcattr.iCS_CP = 0;
+    pdc->dclevel.lSaveDepth = 1;
+    pdc->dclevel.hdcSave = NULL;
+    pdc->dcattr.iGraphicsMode = GM_COMPATIBLE;
+    pdc->dcattr.iCS_CP = 0;
     pdc->pSurfInfo = NULL;
 }
 
@@ -1050,7 +1051,7 @@ IntGdiCreateDC(
                      pdmInit,
                      NULL,
                      CreateAsIC ? DCTYPE_INFO :
-                          (Driver ? DCTYPE_DIRECT : DCTYPE_DIRECT),
+                          (Driver ? DCTYPE_DIRECT : DCTYPE_MEMORY),
                      TRUE,
                      NULL,
                      NULL,
@@ -1067,7 +1068,7 @@ IntGdiCreateDisplayDC(HDEV hDev, ULONG DcType, BOOL EmptyDC)
     ASSERT(FALSE);
 
     if (DcType == DCTYPE_MEMORY)
-        hDC = NtGdiCreateCompatibleDC(NULL); // OH~ Yuck! I think I taste vomit in my mouth!
+        hDC = GreCreateCompatibleDC(NULL, FALSE); // OH~ Yuck! I think I taste vomit in my mouth!
     else
         hDC = IntGdiCreateDC(NULL, NULL, NULL, NULL, (DcType == DCTYPE_INFO));
 
