@@ -258,14 +258,14 @@ NTSTATUS
 NTAPI
 InitGdiHandleTable(void)
 {
-    NTSTATUS status;
+    NTSTATUS Status;
     LARGE_INTEGER liSize;
     PVOID pvSection;
     SIZE_T cjViewSize = 0;
 
     /* Create a section for the shared handle table */
     liSize.QuadPart = sizeof(GDI_HANDLE_TABLE); // GDI_HANDLE_COUNT * sizeof(ENTRY);
-    status = MmCreateSection(&gpvGdiHdlTblSection,
+    Status = MmCreateSection(&gpvGdiHdlTblSection,
                              SECTION_ALL_ACCESS,
                              NULL,
                              &liSize,
@@ -273,21 +273,21 @@ InitGdiHandleTable(void)
                              SEC_COMMIT | 0x1,
                              NULL,
                              NULL);
-    if (!NT_SUCCESS(status))
+    if (!NT_SUCCESS(Status))
     {
         DPRINT1("INITGDI: Could not allocate a GDI handle table.\n");
-        return status;
+        return Status;
     }
 
     /* Map the section in session space */
-    status = MmMapViewInSessionSpace(gpvGdiHdlTblSection,
+    Status = MmMapViewInSessionSpace(gpvGdiHdlTblSection,
                                      (PVOID*)&gpentHmgr,
                                      &cjViewSize);
-    if (!NT_SUCCESS(status))
+    if (!NT_SUCCESS(Status))
     {
-        DPRINT1("INITGDI: Failed to map handle table section\n");
+        DPRINT1("INITGDI: Failed to map handle table section.\n");
         ObDereferenceObject(gpvGdiHdlTblSection);
-        return status;
+        return Status;
     }
 
     /* Allocate memory for the reference counter table */
@@ -311,8 +311,12 @@ InitGdiHandleTable(void)
     gpaLookasideList = ExAllocatePoolWithTag(NonPagedPool,
                            GDIObjTypeTotal * sizeof(PAGED_LOOKASIDE_LIST),
                            TAG_GDIHNDTBLE);
-    if(!gpaLookasideList)
+    if (!gpaLookasideList)
+    {
+        DPRINT1("INITGDI: Failed to initialize the lookaside lists.\n");
+        ObDereferenceObject(gpvGdiHdlTblSection);
         return STATUS_NO_MEMORY;
+    }
 
     InitLookasideList(GDIObjType_DC_TYPE, sizeof(DC));
     InitLookasideList(GDIObjType_RGN_TYPE, sizeof(REGION));
@@ -685,9 +689,10 @@ GDIOBJ_vDereferenceObject(POBJ pobj)
 
 POBJ
 NTAPI
-GDIOBJ_ReferenceObjectByHandle(
+GDIOBJ_ReferenceObjectByHandleEx(
     HGDIOBJ hobj,
-    UCHAR objt)
+    UCHAR objt,
+    FLONG fl)
 {
     PENTRY pentry;
     POBJ pobj;
@@ -701,7 +706,7 @@ GDIOBJ_ReferenceObjectByHandle(
     }
 
     /* Reference the handle entry */
-    pentry = ENTRY_ReferenceEntryByHandle(hobj, 0);
+    pentry = ENTRY_ReferenceEntryByHandle(hobj, fl);
     if (!pentry)
     {
         DPRINT("GDIOBJ: Requested handle 0x%p is not valid.\n", hobj);
@@ -724,6 +729,15 @@ GDIOBJ_ReferenceObjectByHandle(
 
     /* All is well, return the object */
     return pobj;
+}
+
+POBJ
+NTAPI
+GDIOBJ_ReferenceObjectByHandle(
+    HGDIOBJ hobj,
+    UCHAR objt)
+{
+    return GDIOBJ_ReferenceObjectByHandleEx(hobj, objt, 0);
 }
 
 VOID
@@ -751,9 +765,10 @@ GDIOBJ_vReferenceObjectByPointer(POBJ pobj)
 
 PGDIOBJ
 NTAPI
-GDIOBJ_TryLockObject(
+GDIOBJ_TryLockObjectEx(
     HGDIOBJ hobj,
-    UCHAR objt)
+    UCHAR objt,
+    FLONG fl)
 {
     PENTRY pentry;
     POBJ pobj;
@@ -771,7 +786,7 @@ GDIOBJ_TryLockObject(
     ASSERT_LOCK_ORDER(objt);
 
     /* Reference the handle entry */
-    pentry = ENTRY_ReferenceEntryByHandle(hobj, 0);
+    pentry = ENTRY_ReferenceEntryByHandle(hobj, fl);
     if (!pentry)
     {
         DPRINT("GDIOBJ: Requested handle 0x%p is not valid.\n", hobj);
@@ -787,7 +802,7 @@ GDIOBJ_TryLockObject(
     {
         /* Disable APCs and try acquiring the push lock */
         KeEnterCriticalRegion();
-        if(!ExTryAcquirePushLockExclusive(&pobj->pushlock))
+        if (!ExTryAcquirePushLockExclusive(&pobj->pushlock))
         {
             ULONG cRefs, ulIndex;
             /* Already owned. Clean up and leave. */
@@ -820,9 +835,19 @@ GDIOBJ_TryLockObject(
 
 PGDIOBJ
 NTAPI
-GDIOBJ_LockObject(
+GDIOBJ_TryLockObject(
     HGDIOBJ hobj,
     UCHAR objt)
+{
+    return GDIOBJ_TryLockObjectEx(hobj, objt, 0);
+}
+
+PGDIOBJ
+NTAPI
+GDIOBJ_LockObjectEx(
+    HGDIOBJ hobj,
+    UCHAR objt,
+    FLONG fl)
 {
     PENTRY pentry;
     POBJ pobj;
@@ -840,7 +865,7 @@ GDIOBJ_LockObject(
     ASSERT_LOCK_ORDER(objt);
 
     /* Reference the handle entry */
-    pentry = ENTRY_ReferenceEntryByHandle(hobj, 0);
+    pentry = ENTRY_ReferenceEntryByHandle(hobj, fl);
     if (!pentry)
     {
         DPRINT("GDIOBJ: Requested handle 0x%p is not valid.\n", hobj);
@@ -870,6 +895,15 @@ GDIOBJ_LockObject(
 
     /* Return the object */
     return pobj;
+}
+
+PGDIOBJ
+NTAPI
+GDIOBJ_LockObject(
+    HGDIOBJ hobj,
+    UCHAR objt)
+{
+    return GDIOBJ_LockObjectEx(hobj, objt, 0);
 }
 
 VOID
@@ -1315,6 +1349,55 @@ GreGetObject(
 
     GDIOBJ_vDereferenceObject(pvObj);
     return iResult;
+}
+
+/*
+ * Iterates through the GDI object table and finds the next object of a
+ * given type after the current one pointed by its corresponding handle.
+ */
+POBJ
+FASTCALL
+GreGetNextObject(
+    IN HGDIOBJ hobj,
+    IN UCHAR objt)
+{
+    ULONG ulIndex;
+    PENTRY pentry;
+    // POBJ pObj;
+
+    if (hobj == NULL)
+    {
+        /* Find the first object of the correct type */
+        ulIndex = RESERVE_ENTRIES_COUNT;
+    }
+    else
+    {
+        /* Get the handle index and go to the next one */
+        ulIndex = GDI_HANDLE_GET_INDEX(hobj);
+        ++ulIndex;
+    }
+
+    /* Loop all handles in the handle table */
+    for (; ulIndex < gulFirstUnused; ++ulIndex)
+    {
+        pentry = &gpentHmgr[ulIndex];
+
+        /* Check if the object is of the correct type */
+        if (pentry->Objt == (objt & 0x1f))
+        {
+            /* Yes it is, reference it and return it */
+            // pObj = GDIOBJ_ReferenceObjectByHandleEx(hobj, objt, GDIOBJFLAG_IGNOREPID);
+            // if (!pObj) continue;
+            // return pObj;
+
+            /* Reference the handle entry */
+            pentry = ENTRY_ReferenceEntryByHandle(hobj, GDIOBJFLAG_IGNOREPID);
+            if (!pentry) continue;
+            return pentry->einfo.pobj;
+        }
+    }
+
+    return NULL;
 }
 
 W32KAPI

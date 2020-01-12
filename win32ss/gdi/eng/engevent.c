@@ -122,6 +122,10 @@ EngMapEvent(
     PVOID pvEvent;
     NTSTATUS Status;
 
+    UNREFERENCED_PARAMETER(hDev);
+    UNREFERENCED_PARAMETER(Reserved2);
+    UNREFERENCED_PARAMETER(Reserved3);
+
     /* Allocate memory for the event structure */
     EngEvent = ExAllocatePoolWithTag(NonPagedPool,
                                      sizeof(ENG_EVENT),

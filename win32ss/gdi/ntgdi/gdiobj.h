@@ -7,7 +7,7 @@
 
 #define GDI_OBJECT_STACK_LEVELS 20
 
-/* The first 10 entries are never used in windows, they are empty */
+/* The first 10 entries are never used in Windows, they are empty */
 static const unsigned RESERVE_ENTRIES_COUNT = 10;
 
 typedef struct _GDI_HANDLE_TABLE
@@ -16,14 +16,12 @@ typedef struct _GDI_HANDLE_TABLE
  * properly mapped!
  */
 //////////////////////////////////////////////////////////////////////////////
-  GDI_TABLE_ENTRY Entries[GDI_HANDLE_COUNT];
-  DEVCAPS         DevCaps;                 // Device Capabilities.
-  FLONG           flDeviceUniq;            // Device settings uniqueness.
-  PVOID           pvLangPack;              // Language Pack.
-  CFONT           cfPublic[GDI_CFONT_MAX]; // Public Fonts.
-  DWORD           dwCFCount;
-
-
+    GDI_TABLE_ENTRY Entries[GDI_HANDLE_COUNT];
+    DEVCAPS         DevCaps;                 // Device Capabilities.
+    FLONG           flDeviceUniq;            // Device settings uniqueness.
+    PVOID           pvLangPack;              // Language Pack.
+    CFONT           cfPublic[GDI_CFONT_MAX]; // Public Fonts.
+    DWORD           dwCFCount;
 } GDI_HANDLE_TABLE, *PGDI_HANDLE_TABLE;
 
 extern PGDI_HANDLE_TABLE GdiHandleTable;
@@ -112,6 +110,12 @@ GreGetObject(
     IN HGDIOBJ hobj,
     IN INT cbCount,
     OUT PVOID pvBuffer);
+
+POBJ
+FASTCALL
+GreGetNextObject(
+    IN HGDIOBJ hobj,
+    IN UCHAR objt);
 
 POBJ
 NTAPI

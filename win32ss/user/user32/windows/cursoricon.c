@@ -283,7 +283,7 @@ create_alpha_bitmap(
     void *bits = NULL;
     ULONG size;
 
-    hdcScreen = CreateDCW(DISPLAYW, NULL, NULL, NULL);
+    hdcScreen = GetDC(NULL); // CreateDCW(DISPLAYW, NULL, NULL, NULL);
     if (!hdcScreen)
         return NULL;
     hdc = CreateCompatibleDC(hdcScreen);
@@ -624,7 +624,7 @@ static BOOL CURSORICON_GetCursorDataFromBMI(
         pdata->yHotspot = pdata->cy/2;
     }
 
-    hdcScreen = CreateDCW(DISPLAYW, NULL, NULL, NULL);
+    hdcScreen = GetDC(NULL); // CreateDCW(DISPLAYW, NULL, NULL, NULL);
     if(!hdcScreen)
         return FALSE;
     hdc = CreateCompatibleDC(hdcScreen);
@@ -747,7 +747,7 @@ static BOOL CURSORICON_GetCursorDataFromIconInfo(
         /* The mask dictates its dimensions */
         if (!GetObject(pIconInfo->hbmMask, sizeof(bm), &bm))
             return FALSE;
-        hdcScreen = CreateDCW(DISPLAYW, NULL, NULL, NULL);
+        hdcScreen = GetDC(NULL); // CreateDCW(DISPLAYW, NULL, NULL, NULL);
         if(!hdcScreen)
             return FALSE;
         hdcMem = CreateCompatibleDC(hdcScreen);
@@ -1273,7 +1273,7 @@ create_bitmap:
     if(cyDesired < 0) cyDesired = -cyDesired;
 
     /* We need a device context */
-    hdcScreen = CreateDCW(DISPLAYW, NULL, NULL, NULL);
+    hdcScreen = GetDC(NULL); // CreateDCW(DISPLAYW, NULL, NULL, NULL);
     if(!hdcScreen)
         goto end;
     hdc = CreateCompatibleDC(hdcScreen);

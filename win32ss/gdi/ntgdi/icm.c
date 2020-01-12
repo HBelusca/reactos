@@ -91,9 +91,10 @@ BOOL
 FASTCALL
 IntGetDeviceGammaRamp(HDEV hPDev, PGAMMARAMP Ramp)
 {
-    PPDEVOBJ pGDev = (PPDEVOBJ) hPDev;
+    PPDEVOBJ pGDev = (PPDEVOBJ)hPDev;
     int i;
 
+    if (!hPDev) return FALSE;
     if (!(pGDev->flFlags & PDEV_DISPLAY)) return FALSE;
 
     if ((pGDev->devinfo.iDitherFormat == BMF_8BPP)  ||
@@ -285,11 +286,10 @@ IntSetDeviceGammaRamp(HDEV hPDev, PGAMMARAMP Ramp, BOOL Test)
 {
     WORD IcmGR, i, R, G, B;
     BOOL Ret = FALSE, TstPeak;
-    PPDEVOBJ pGDev = (PPDEVOBJ) hPDev;
+    PPDEVOBJ pGDev = (PPDEVOBJ)hPDev;
 
     if (!hPDev) return FALSE;
-
-    if (!(pGDev->flFlags & PDEV_DISPLAY )) return FALSE;
+    if (!(pGDev->flFlags & PDEV_DISPLAY)) return FALSE;
 
     if ((pGDev->devinfo.iDitherFormat == BMF_8BPP)  ||
         (pGDev->devinfo.iDitherFormat == BMF_16BPP) ||

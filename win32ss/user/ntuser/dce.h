@@ -48,7 +48,7 @@ void FASTCALL DceFreeDCE(PDCE dce, BOOLEAN Force);
 void FASTCALL DceEmptyCache(void);
 VOID FASTCALL DceResetActiveDCEs(PWND Window);
 void FASTCALL DceFreeClassDCE(PDCE);
-HWND FASTCALL UserGethWnd(HDC,PWNDOBJ*);
+HWND FASTCALL UserGethWnd(HDC hdc, PEWNDOBJ* pwndo);
 void FASTCALL DceFreeWindowDCE(PWND);
 void FASTCALL DceFreeThreadDCE(PTHREADINFO);
 VOID FASTCALL DceUpdateVisRgn(DCE *Dce, PWND Window, ULONG Flags);

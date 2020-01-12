@@ -40,7 +40,7 @@ co_IntDrawCaret(PWND pWnd, PTHRDCARETINFO CaretInfo)
 
     if (pWnd->hrgnUpdate)
     {
-       NtGdiSaveDC(hdc);
+        NtGdiSaveDC(hdc);
     }
 
     IntGetClientRect(pWnd, &rcClient);
@@ -91,7 +91,7 @@ co_IntDrawCaret(PWND pWnd, PTHRDCARETINFO CaretInfo)
 cleanup:
     if (pWnd->hrgnUpdate)
     {
-       NtGdiRestoreDC(hdc, -1);
+        NtGdiRestoreDC(hdc, -1);
     }
 
     UserReleaseDC(pWnd, hdc, FALSE);

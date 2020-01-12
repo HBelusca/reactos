@@ -106,11 +106,12 @@ NtDxEngGetRedirectionBitmap(
 HBITMAP
 FASTCALL
 IntCreateCompatibleBitmap(
+    _In_ HDC hdc,
     _In_ PDC Dc,
     _In_ INT Width,
     _In_ INT Height,
-    _In_ UINT Bpp,
-    _In_ UINT Planes);
+    _In_ UINT Planes,
+    _In_ UINT Bpp);
 
 WORD APIENTRY IntGdiSetHookFlags(HDC hDC, WORD Flags);
 

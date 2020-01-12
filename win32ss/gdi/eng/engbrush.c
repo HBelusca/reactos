@@ -72,7 +72,7 @@ EBRUSHOBJ_vInit(EBRUSHOBJ *pebo,
 
     pebo->psurfTrg = psurf;
     /* We are initializing for a new memory DC */
-    if(!pebo->psurfTrg)
+    if (!pebo->psurfTrg)
         pebo->psurfTrg = psurfDefaultBitmap;
     ASSERT(pebo->psurfTrg);
     ASSERT(pebo->psurfTrg->ppal);
@@ -323,8 +323,13 @@ EBRUSHOBJ_bRealizeBrush(EBRUSHOBJ *pebo, BOOL bCallDriver)
     ASSERT(pebo->psurfTrg);
 
     ppdev = (PPDEVOBJ)pebo->psurfTrg->SurfObj.hdev;
+    ASSERT(ppdev); // FIXME: For testing/debugging purposes ONLY!!
     if (!ppdev)
-        ppdev = gppdevPrimary;
+    {
+        ERR("No PDEV was associated with the brush's surface!\n");
+        return FALSE;
+        // ppdev = gppdevPrimary;
+    }
 
     if (bCallDriver)
     {
@@ -457,8 +462,13 @@ EBRUSHOBJ_psoMask(EBRUSHOBJ *pebo)
         {
             /* Get the PDEV */
             ppdev = (PPDEVOBJ)pebo->psurfTrg->SurfObj.hdev;
+            ASSERT(ppdev); // FIXME: For testing/debugging purposes ONLY!!
             if (!ppdev)
-                ppdev = gppdevPrimary;
+            {
+                ERR("No PDEV was associated with the brush's surface!\n");
+                return NULL;
+                // ppdev = gppdevPrimary;
+            }
 
             /* Use the hatch bitmap as the mask */
             hbmMask = (HBITMAP)ppdev->ahsurf[pebo->pbrush->iHatch];

@@ -19,6 +19,9 @@ IntGetipfdDevMax(PDC pdc)
     INT Ret = 0;
     PPDEVOBJ ppdev = pdc->ppdev;
 
+    if (pdc->ipfdDevMax)
+        return pdc->ipfdDevMax;
+
     if (ppdev->flFlags & PDEV_META_DEVICE)
     {
         return 0;
@@ -33,7 +36,8 @@ IntGetipfdDevMax(PDC pdc)
                                                 NULL);
     }
 
-    if (Ret) pdc->ipfdDevMax = Ret;
+    if (Ret)
+        pdc->ipfdDevMax = Ret;
 
     return Ret;
 }
@@ -63,12 +67,11 @@ NtGdiDescribePixelFormat(
     }
 
     if (!pdc->ipfdDevMax)
+        IntGetipfdDevMax(pdc);
+    if (!pdc->ipfdDevMax)
     {
-        if (!IntGetipfdDevMax(pdc))
-        {
-            /* EngSetLastError ? */
-            goto Exit;
-        }
+        /* EngSetLastError ? */
+        goto Exit;
     }
 
     if (!ppfd)
@@ -120,7 +123,6 @@ Exit:
     return Ret;
 }
 
-
 BOOL
 APIENTRY
 NtGdiSetPixelFormat(
@@ -130,8 +132,7 @@ NtGdiSetPixelFormat(
     PDC pdc;
     PPDEVOBJ ppdev;
     HWND hWnd;
-    PWNDOBJ pWndObj;
-    SURFOBJ *pso = NULL;
+    PEWNDOBJ pWndObj;
     BOOL Ret = FALSE;
 
     DPRINT1("Setting pixel format from win32k!\n");
@@ -142,39 +143,49 @@ NtGdiSetPixelFormat(
         EngSetLastError(ERROR_INVALID_HANDLE);
         return FALSE;
     }
+    /* A DC surface is required */
+    if (!pdc->dclevel.pSurface)
+    {
+        EngSetLastError(ERROR_INVALID_HANDLE);
+        goto Exit;
+    }
 
     if (!pdc->ipfdDevMax)
         IntGetipfdDevMax(pdc);
 
-    if ( ipfd < 1 ||
-        ipfd > pdc->ipfdDevMax )
+    if ((ipfd < 1) || (ipfd > pdc->ipfdDevMax))
     {
         EngSetLastError(ERROR_INVALID_PARAMETER);
         goto Exit;
     }
 
-    UserEnterExclusive();
-    hWnd = UserGethWnd(hdc, &pWndObj);
-    UserLeave();
-
-    if (!hWnd)
+    if (pdc->fs & DC_DISPLAY)
     {
-        EngSetLastError(ERROR_INVALID_WINDOW_STYLE);
-        goto Exit;
+        ASSERT(pdc->dcattr & DCTYPE_DIRECT);
+
+        UserEnterExclusive();
+        hWnd = UserGethWnd(hdc, &pWndObj);
+        UserLeave();
+
+        if (!hWnd)
+        {
+            EngSetLastError(ERROR_INVALID_WINDOW_STYLE);
+            goto Exit;
+        }
+
+        if (pWndObj && (pWndObj->PixelFormat != ipfd))
+        {
+            ERR("Window object %p has different pixel format!\n", pWndObj);
+            EngSetLastError(ERROR_INVALID_PIXEL_FORMAT);
+            goto Exit;
+        }
+    }
+    else
+    {
+        hWnd = NULL;
     }
 
     ppdev = pdc->ppdev;
-
-    /*
-        WndObj is needed so exit on NULL pointer.
-    */
-    if (pWndObj)
-        pso = pWndObj->psoOwner;
-    else
-    {
-        EngSetLastError(ERROR_INVALID_PIXEL_FORMAT);
-        goto Exit;
-    }
 
     if (ppdev->flFlags & PDEV_META_DEVICE)
     {
@@ -184,10 +195,8 @@ NtGdiSetPixelFormat(
 
     if (ppdev->DriverFunctions.SetPixelFormat)
     {
-        Ret = ppdev->DriverFunctions.SetPixelFormat(
-                                                pso,
-                                                ipfd,
-                                                hWnd);
+        Ret = ppdev->DriverFunctions.SetPixelFormat(&pdc->dclevel.pSurface->SurfObj,
+                                                    ipfd, hWnd);
     }
 
 Exit:
@@ -203,8 +212,7 @@ NtGdiSwapBuffers(
     PDC pdc;
     PPDEVOBJ ppdev;
     HWND hWnd;
-    PWNDOBJ pWndObj;
-    SURFOBJ *pso = NULL;
+    PEWNDOBJ pWndObj;
     BOOL Ret = FALSE;
 
     pdc = DC_LockDc(hdc);
@@ -213,6 +221,20 @@ NtGdiSwapBuffers(
         EngSetLastError(ERROR_INVALID_HANDLE);
         return FALSE;
     }
+    /* A DC surface is required */
+    if (!pdc->dclevel.pSurface)
+    {
+        EngSetLastError(ERROR_INVALID_HANDLE);
+        goto Exit;
+    }
+
+    /* Do nothing if this is not a display DC */
+    if (!(pdc->fs & DC_DISPLAY))
+    {
+        Ret = TRUE;
+        goto Exit;
+    }
+    ASSERT(pdc->dcattr & DCTYPE_DIRECT);
 
     UserEnterExclusive();
     hWnd = UserGethWnd(hdc, &pWndObj);
@@ -224,18 +246,14 @@ NtGdiSwapBuffers(
         goto Exit;
     }
 
-    ppdev = pdc->ppdev;
-
-    /*
-        WndObj is needed so exit on NULL pointer.
-    */
-    if (pWndObj)
-        pso = pWndObj->psoOwner;
-    else
+    /* pWndObj is needed so exit on NULL pointer */
+    if (!pWndObj)
     {
-        EngSetLastError(ERROR_INVALID_PIXEL_FORMAT);
+        EngSetLastError(ERROR_INVALID_HANDLE);
         goto Exit;
     }
+
+    ppdev = pdc->ppdev;
 
     if (ppdev->flFlags & PDEV_META_DEVICE)
     {
@@ -245,7 +263,8 @@ NtGdiSwapBuffers(
 
     if (ppdev->DriverFunctions.SwapBuffers)
     {
-        Ret = ppdev->DriverFunctions.SwapBuffers(pso, pWndObj);
+        Ret = ppdev->DriverFunctions.SwapBuffers(&pdc->dclevel.pSurface->SurfObj,
+                                                 pWndObj);
     }
 
 Exit:

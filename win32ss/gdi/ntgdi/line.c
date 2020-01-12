@@ -24,7 +24,7 @@ AddPenLinesBounds(PDC dc, int count, POINT *points)
     /* Get BRUSH from current pen. */
     pbrLine = dc->dclevel.pbrLine;
     ASSERT(pbrLine);
-    
+
     lWidth = 0;
 
     // Setup bounds
@@ -55,7 +55,7 @@ AddPenLinesBounds(PDC dc, int count, POINT *points)
         rect.top    = points->y - lWidth;
         rect.right  = points->x + lWidth + 1;
         rect.bottom = points->y + lWidth + 1;
-        RECTL_bUnionRect(&bounds, &bounds, &rect);        
+        RECTL_bUnionRect(&bounds, &bounds, &rect);
         points++;
     }
 

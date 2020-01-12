@@ -143,4 +143,3 @@ SURFACE_vSetPalette(
         GDIOBJ_vReferenceObjectByPointer((POBJ)ppal);
     *(PVOID*)&psurf->ppal = ppal;
 }
-

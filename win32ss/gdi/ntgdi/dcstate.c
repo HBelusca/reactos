@@ -44,7 +44,7 @@ DC_vCopyState(PDC pdcSrc, PDC pdcDst, BOOL To)
     DC_vSelectPalette(pdcDst, pdcSrc->dclevel.ppal);
 
     /* Dereference the old font, reference the new one */
-    if (pdcDst->dclevel.plfnt) LFONT_ShareUnlockFont(pdcDst->dclevel.plfnt); /// @todo should aways be != NULL
+    if (pdcDst->dclevel.plfnt) LFONT_ShareUnlockFont(pdcDst->dclevel.plfnt); /// @todo should always be != NULL
     GDIOBJ_vReferenceObjectByPointer(&pdcSrc->dclevel.plfnt->BaseObject);
     pdcDst->dclevel.plfnt           = pdcSrc->dclevel.plfnt;
 
@@ -190,7 +190,7 @@ DC_vRestoreDC(
 
             if (pdcSave->dclevel.hPath)
             {
-               PATH_RestorePath( pdc, pdcSave );
+                PATH_RestorePath(pdc, pdcSave);
             }
         }
 
@@ -305,7 +305,7 @@ NtGdiSaveDC(
     /* Copy path */
     if (pdc->dclevel.hPath)
     {
-       PATH_SavePath( pdcSave, pdc );
+        PATH_SavePath(pdcSave, pdc);
     }
     pdcSave->dclevel.flPath = pdc->dclevel.flPath | DCPATH_SAVESTATE;
 

@@ -49,6 +49,7 @@ DbgLookupDHPDEV(DHPDEV dhpdev)
 }
 #endif
 
+static
 PPDEVOBJ
 PDEVOBJ_AllocPDEV(VOID)
 {
@@ -80,7 +81,7 @@ PDEVOBJ_AllocPDEV(VOID)
 static
 VOID
 PDEVOBJ_vDeletePDEV(
-    PPDEVOBJ ppdev)
+    _Inout_ PPDEVOBJ ppdev)
 {
     EngDeleteSemaphore(ppdev->hsemDevLock);
     if (ppdev->pEDDgpl)
@@ -156,12 +157,77 @@ PDEVOBJ_vRelease(
     EngReleaseSemaphore(ghsemPDEV);
 }
 
+/*
+ * This function resets the PDEV from its temporary display-disabled state,
+ * or sets the PDEV to that state. It should not be confused with
+ * PDEVOBJ_bEnablePDEV(), whose purpose is to register a PDEV with
+ * a given graphics driver.
+ */
 BOOL
-NTAPI
+PDEVOBJ_bEnable(
+    _In_ PPDEVOBJ ppdev,
+    _In_ BOOL bEnable)
+{
+    PDC pdc;
+    HDC hdc;
+
+    /* This call is valid only for display PDEVs */
+    ASSERT(ppdev->flFlags & PDEV_DISPLAY);
+
+    /* Nothing to do if we are already in the correct state */
+    if (bEnable == ((ppdev->flFlags & PDEV_DISABLED) == 0))
+        return bEnable;
+
+    /* Toggle the disabled flag */
+    if (bEnable)
+        ppdev->flFlags &= ~PDEV_DISABLED;
+    else
+        ppdev->flFlags |= PDEV_DISABLED;
+
+    /*
+     * Loop through all the DC's, and for each of these that refer to this
+     * underlying PDEV and are direct display DC's, enable or disable them
+     * adequately.
+     *
+     * IMPORTANT NOTE! Because there is no unique global list of DCs on the
+     * system, the only way we have to iterate through them is to find those
+     * that have been added to the global handle table. Fortunately for us
+     * it appears that all valid DCs created by us, are created using the
+     * internal DC_AllocDcWithHandle() function, that always adds a handle
+     * to the table. This therefore ensures that we should be able to retrieve
+     * the complete list of DCs by just iterating through the handle table.
+     */
+    for (pdc = (PDC)GreGetNextObject(NULL, GDIObjType_DC_TYPE);
+         pdc != NULL;
+         pdc = (PDC)GreGetNextObject(hdc, GDIObjType_DC_TYPE))
+    {
+        hdc = pdc->BaseObject.hHmgr;
+
+        /* Ignore if this is not a direct DC to this PDEV */
+        if ((pdc->ppdev != ppdev) || (pdc->dctype != DCTYPE_DIRECT))
+        {
+            GDIOBJ_vDereferenceObject(pdc);
+            continue;
+        }
+
+        /* Update the corresponding flag in the DC */
+        if (bEnable)
+            pdc->fs &= ~DC_FULLSCREEN;
+        else
+            pdc->fs |= DC_FULLSCREEN;
+
+        GDIOBJ_vDereferenceObject(pdc);
+    }
+
+    return bEnable;
+}
+
+static
+BOOL
 PDEVOBJ_bEnablePDEV(
-    PPDEVOBJ ppdev,
-    PDEVMODEW pdevmode,
-    PWSTR pwszLogAddress)
+    _In_ PPDEVOBJ ppdev,
+    _In_ PDEVMODEW pdevmode,
+    _In_ PWSTR pwszLogAddress)
 {
     PFN_DrvEnablePDEV pfnEnablePDEV;
     ULONG i;
@@ -453,8 +519,8 @@ SwitchPointer(
 VOID
 NTAPI
 PDEVOBJ_vSwitchPdev(
-    PPDEVOBJ ppdev,
-    PPDEVOBJ ppdev2)
+    _Inout_ PPDEVOBJ ppdev,
+    _Inout_ PPDEVOBJ ppdev2)
 {
     union
     {
@@ -502,7 +568,6 @@ PDEVOBJ_vSwitchPdev(
     ppdev->pfn.CompletePDEV(ppdev->dhpdev, (HDEV)ppdev);
     ppdev2->pfn.CompletePDEV(ppdev2->dhpdev, (HDEV)ppdev2);
 }
-
 
 BOOL
 NTAPI
@@ -659,7 +724,8 @@ EngpGetPDEV(
 
 INT
 NTAPI
-PDEVOBJ_iGetColorManagementCaps(PPDEVOBJ ppdev)
+PDEVOBJ_iGetColorManagementCaps(
+    _Out_ PPDEVOBJ ppdev)
 {
     INT ret = CM_NONE;
 
@@ -955,12 +1021,12 @@ NtGdiGetDhpdev(
     EngAcquireSemaphoreShared(ghsemPDEV);
 
     /* Walk through the list of PDEVs */
-    for (ppdev = gppdevList;  ppdev; ppdev = ppdev->ppdevNext)
+    for (ppdev = gppdevList; ppdev; ppdev = ppdev->ppdevNext)
     {
         /* Compare with the given HDEV */
         if (ppdev == (PPDEVOBJ)hdev)
         {
-            /* Found the PDEV! Get it's dhpdev and break */
+            /* Found the PDEV! Get its dhpdev and break */
             dhpdev = ppdev->dhpdev;
             break;
         }

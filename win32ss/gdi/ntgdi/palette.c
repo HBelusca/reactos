@@ -15,7 +15,7 @@
 #define PAL_SETPOWNER 0x8000
 #define MAX_PALCOLORS 65536
 
-static UINT SystemPaletteUse = SYSPAL_NOSTATIC;  /* The program need save the pallete and restore it */
+static UINT SystemPaletteUse = SYSPAL_NOSTATIC;  /* The program needs to save the palette and restore it */
 
 PALETTE gpalRGB, gpalBGR, gpalRGB555, gpalRGB565, *gppalMono, *gppalDefault;
 PPALETTE appalSurfaceDefault[11];
@@ -669,15 +669,14 @@ NtGdiGetNearestColor(
     PPALETTE ppal;
 
     dc = DC_LockDc(hDC);
-
-    if(dc == NULL)
+    if (dc == NULL)
     {
         EngSetLastError(ERROR_INVALID_HANDLE);
         return CLR_INVALID;
     }
 
     /// FIXME: shouldn't dereference pSurface while the PDEV is not locked
-    if(dc->dclevel.pSurface == NULL)
+    if (dc->dclevel.pSurface == NULL)
         ppal = gppalMono;
     else
         ppal = dc->dclevel.pSurface->ppal;

@@ -49,7 +49,7 @@ NtGdiAlphaBlend(
 
     TRACE("Locking DCs\n");
     ahDC[0] = hDCDest;
-    ahDC[1] = hDCSrc ;
+    ahDC[1] = hDCSrc;
     if (!GDIOBJ_bLockMultipleObjects(2, (HGDIOBJ*)ahDC, apObj, GDIObjType_DC_TYPE))
     {
         WARN("Invalid dc handle (dest=0x%p, src=0x%p) passed to NtGdiAlphaBlend\n", hDCDest, hDCSrc);
@@ -59,7 +59,7 @@ NtGdiAlphaBlend(
     DCDest = apObj[0];
     DCSrc = apObj[1];
 
-    if (DCDest->dctype == DCTYPE_INFO || DCDest->dctype == DCTYPE_INFO)
+    if (DCSrc->dctype == DCTYPE_INFO || DCDest->dctype == DCTYPE_INFO)
     {
         GDIOBJ_vUnlockObject(&DCSrc->BaseObject);
         GDIOBJ_vUnlockObject(&DCDest->BaseObject);
@@ -80,7 +80,7 @@ NtGdiAlphaBlend(
 
     if (DCDest->fs & (DC_ACCUM_APP|DC_ACCUM_WMGR))
     {
-       IntUpdateBoundsRect(DCDest, &DestRect);
+        IntUpdateBoundsRect(DCDest, &DestRect);
     }
 
     SourceRect.left   = XOriginSrc;
@@ -112,8 +112,8 @@ NtGdiAlphaBlend(
     BitmapDest = DCDest->dclevel.pSurface;
     if (!BitmapDest)
     {
-        bResult = FALSE ;
-        goto leave ;
+        bResult = FALSE;
+        goto leave;
     }
 
     BitmapSrc = DCSrc->dclevel.pSurface;
@@ -227,7 +227,7 @@ NtGdiTransparentBlt(
 
     TRACE("Locking DCs\n");
     ahDC[0] = hdcDst;
-    ahDC[1] = hdcSrc ;
+    ahDC[1] = hdcSrc;
     if (!GDIOBJ_bLockMultipleObjects(2, (HGDIOBJ*)ahDC, apObj, GDIObjType_DC_TYPE))
     {
         WARN("Invalid dc handle (dest=0x%p, src=0x%p) passed to NtGdiAlphaBlend\n", hdcDst, hdcSrc);
@@ -237,7 +237,7 @@ NtGdiTransparentBlt(
     DCDest = apObj[0];
     DCSrc = apObj[1];
 
-    if (DCDest->dctype == DCTYPE_INFO || DCDest->dctype == DCTYPE_INFO)
+    if (DCSrc->dctype == DCTYPE_INFO || DCDest->dctype == DCTYPE_INFO)
     {
         GDIOBJ_vUnlockObject(&DCSrc->BaseObject);
         GDIOBJ_vUnlockObject(&DCDest->BaseObject);
@@ -269,7 +269,7 @@ NtGdiTransparentBlt(
 
     if (DCDest->fs & (DC_ACCUM_APP|DC_ACCUM_WMGR))
     {
-       IntUpdateBoundsRect(DCDest, &rcDest);
+        IntUpdateBoundsRect(DCDest, &rcDest);
     }
 
     /* Prepare for blit */
@@ -392,14 +392,14 @@ NtGdiMaskBlt(
     ASSERT(DCDest);
     if (NULL == DCDest)
     {
-        if(DCSrc) DC_UnlockDc(DCSrc);
+        if (DCSrc) DC_UnlockDc(DCSrc);
         WARN("Invalid destination dc handle (0x%p) passed to NtGdiMaskBlt\n", hdcDest);
         return FALSE;
     }
 
     if (DCDest->dctype == DCTYPE_INFO)
     {
-        if(DCSrc) DC_UnlockDc(DCSrc);
+        if (DCSrc) DC_UnlockDc(DCSrc);
         DC_UnlockDc(DCDest);
         /* Yes, Windows really returns TRUE in this case */
         return TRUE;
@@ -410,8 +410,8 @@ NtGdiMaskBlt(
         ASSERT(DCSrc);
         if (DCSrc->dctype == DCTYPE_INFO)
         {
-            DC_UnlockDc(DCDest);
             DC_UnlockDc(DCSrc);
+            DC_UnlockDc(DCDest);
             /* Yes, Windows really returns TRUE in this case */
             return TRUE;
         }
@@ -432,7 +432,7 @@ NtGdiMaskBlt(
 
     if (DCDest->fs & (DC_ACCUM_APP|DC_ACCUM_WMGR))
     {
-       IntUpdateBoundsRect(DCDest, &DestRect);
+        IntUpdateBoundsRect(DCDest, &DestRect);
     }
 
     SourcePoint.x = nXSrc;
@@ -448,7 +448,7 @@ NtGdiMaskBlt(
         SourceRect.left = SourcePoint.x;
         SourceRect.top = SourcePoint.y;
         SourceRect.right = SourcePoint.x + DestRect.right - DestRect.left;
-        SourceRect.bottom = SourcePoint.y + DestRect.bottom - DestRect.top ;
+        SourceRect.bottom = SourcePoint.y + DestRect.bottom - DestRect.top;
     }
     else
     {
@@ -498,11 +498,10 @@ NtGdiMaskBlt(
 cleanup:
     DC_vFinishBlit(DCDest, DCSrc);
     if (UsesSource)
-    {
         DC_UnlockDc(DCSrc);
-    }
     DC_UnlockDc(DCDest);
-    if(psurfMask) SURFACE_ShareUnlockSurface(psurfMask);
+    if (psurfMask)
+        SURFACE_ShareUnlockSurface(psurfMask);
 
     return Status;
 }
@@ -596,8 +595,8 @@ GreStretchBltMask(
 
     if (DCDest->dctype == DCTYPE_INFO)
     {
-        if(DCSrc) GDIOBJ_vUnlockObject(&DCSrc->BaseObject);
-        if(DCMask) GDIOBJ_vUnlockObject(&DCMask->BaseObject);
+        if (DCSrc) GDIOBJ_vUnlockObject(&DCSrc->BaseObject);
+        if (DCMask) GDIOBJ_vUnlockObject(&DCMask->BaseObject);
         GDIOBJ_vUnlockObject(&DCDest->BaseObject);
         /* Yes, Windows really returns TRUE in this case */
         return TRUE;
@@ -605,11 +604,12 @@ GreStretchBltMask(
 
     if (UsesSource)
     {
+        ASSERT(DCSrc);
         if (DCSrc->dctype == DCTYPE_INFO)
         {
             GDIOBJ_vUnlockObject(&DCDest->BaseObject);
             GDIOBJ_vUnlockObject(&DCSrc->BaseObject);
-            if(DCMask) GDIOBJ_vUnlockObject(&DCMask->BaseObject);
+            if (DCMask) GDIOBJ_vUnlockObject(&DCMask->BaseObject);
             /* Yes, Windows really returns TRUE in this case */
             return TRUE;
         }
@@ -630,7 +630,7 @@ GreStretchBltMask(
 
     if (DCDest->fs & (DC_ACCUM_APP|DC_ACCUM_WMGR))
     {
-       IntUpdateBoundsRect(DCDest, &DestRect);
+        IntUpdateBoundsRect(DCDest, &DestRect);
     }
 
     SourceRect.left   = XOriginSrc;
@@ -824,7 +824,7 @@ IntPatBlt(
 
     if (pdc->fs & (DC_ACCUM_APP|DC_ACCUM_WMGR))
     {
-       IntUpdateBoundsRect(pdc, &DestRect);
+        IntUpdateBoundsRect(pdc, &DestRect);
     }
 
 #ifdef _USE_DIBLIB_
@@ -1080,7 +1080,7 @@ IntGdiBitBltRgn(
 
     if (pdc->fs & (DC_ACCUM_APP|DC_ACCUM_WMGR))
     {
-        RECTL rcrgn;        
+        RECTL rcrgn;
         REGION_GetRgnBox(prgnClip, &rcrgn);
         IntUpdateBoundsRect(pdc, &rcrgn);
     }
@@ -1165,7 +1165,7 @@ IntGdiFillRgn(
 
     if (pdc->fs & (DC_ACCUM_APP|DC_ACCUM_WMGR))
     {
-        RECTL rcrgn;        
+        RECTL rcrgn;
         REGION_GetRgnBox(prgnClip, &rcrgn);
         IntUpdateBoundsRect(pdc, &rcrgn);
     }
@@ -1386,18 +1386,18 @@ NtGdiSetPixel(
 
     if (pdc->fs & (DC_ACCUM_APP|DC_ACCUM_WMGR))
     {
-       RECTL rcDst;
+        RECTL rcDst;
 
-       RECTL_vSetRect(&rcDst, x, y, x+1, y+1);
+        RECTL_vSetRect(&rcDst, x, y, x+1, y+1);
 
-       IntLPtoDP(pdc, (LPPOINT)&rcDst, 2);
+        IntLPtoDP(pdc, (LPPOINT)&rcDst, 2);
 
-       rcDst.left   += pdc->ptlDCOrig.x;
-       rcDst.top    += pdc->ptlDCOrig.y;
-       rcDst.right  += pdc->ptlDCOrig.x;
-       rcDst.bottom += pdc->ptlDCOrig.y;
+        rcDst.left   += pdc->ptlDCOrig.x;
+        rcDst.top    += pdc->ptlDCOrig.y;
+        rcDst.right  += pdc->ptlDCOrig.x;
+        rcDst.bottom += pdc->ptlDCOrig.y;
 
-       IntUpdateBoundsRect(pdc, &rcDst);
+        IntUpdateBoundsRect(pdc, &rcDst);
     }
 
     /* Translate the color to the target format */

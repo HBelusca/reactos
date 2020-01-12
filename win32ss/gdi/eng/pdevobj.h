@@ -26,17 +26,17 @@ enum _PDEVFLAGS
 
 typedef struct _GDIPOINTER /* should stay private to ENG? No, part of PDEVOBJ aka HDEV aka PDEV. */
 {
-  /* Private GDI pointer handling information, required for software emulation */
-  BOOL     Enabled;
-  SIZEL    Size;
-  POINTL   HotSpot;
-  SURFACE  *psurfColor;
-  SURFACE  *psurfMask;
-  SURFACE  *psurfSave;
-  FLONG    flags;
+    /* Private GDI pointer handling information, required for software emulation */
+    BOOL     Enabled;
+    SIZEL    Size;
+    POINTL   HotSpot;
+    SURFACE  *psurfColor;
+    SURFACE  *psurfMask;
+    SURFACE  *psurfSave;
+    FLONG    flags;
 
-  /* Public pointer information */
-  RECTL    Exclude; /* Required publicly for SPS_ACCEPT_EXCLUDE */
+    /* Public pointer information */
+    RECTL    Exclude; /* Required publicly for SPS_ACCEPT_EXCLUDE */
 } GDIPOINTER, *PGDIPOINTER;
 
 typedef struct _DEVMODEINFO
@@ -51,7 +51,6 @@ typedef struct _DEVMODEENTRY
 {
     DWORD dwFlags;
     PDEVMODEW pdm;
-
 } DEVMODEENTRY, *PDEVMODEENTRY;
 
 typedef struct _GRAPHICS_DEVICE
@@ -135,9 +134,9 @@ typedef struct _PDEVOBJ
 //  ULONG                     WatchDogs;
     union
     {
-      DRIVER_FUNCTIONS        DriverFunctions;
-      DRIVER_FUNCTIONS        pfn;
-      PVOID                   apfn[INDEX_LAST];         // B8C 0x0598
+        DRIVER_FUNCTIONS      DriverFunctions;
+        DRIVER_FUNCTIONS      pfn;
+        PVOID                 apfn[INDEX_LAST];         // B8C 0x0598
     };
 
     /* ros specific */
@@ -161,6 +160,10 @@ PPDEVOBJ
 NTAPI
 EngpGetPDEV(
     _In_opt_ PUNICODE_STRING pustrDevice);
+
+BOOL
+PDEVOBJ_bEnable(
+    _In_ BOOL bEnable);
 
 FORCEINLINE
 VOID

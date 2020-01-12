@@ -64,7 +64,6 @@ IntArc( DC *dc,
            return TRUE;
     }
 
-
     pdcattr = dc->pdcattr;
 
     pbrPen = PEN_ShareLockPen(pdcattr->hpen);

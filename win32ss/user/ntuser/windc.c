@@ -949,24 +949,24 @@ UserGetWindowDC(PWND Wnd)
 }
 
 HWND FASTCALL
-UserGethWnd( HDC hdc, PWNDOBJ *pwndo)
+UserGethWnd(HDC hdc, PEWNDOBJ* pwndo)
 {
-  EWNDOBJ* Clip;
-  PWND Wnd;
-  HWND hWnd;
+    PEWNDOBJ Clip;
+    PWND Wnd;
+    HWND hWnd;
 
-  hWnd = IntWindowFromDC(hdc);
+    hWnd = IntWindowFromDC(hdc);
 
-  if (hWnd && (Wnd = UserGetWindowObject(hWnd)))
-  {
-     Clip = (EWNDOBJ*)UserGetProp(Wnd, AtomWndObj, TRUE);
+    if (hWnd && (Wnd = UserGetWindowObject(hWnd)))
+    {
+        Clip = (PEWNDOBJ)UserGetProp(Wnd, AtomWndObj, TRUE);
 
-     if ( Clip && Clip->Hwnd == hWnd )
-     {
-        if (pwndo) *pwndo = (PWNDOBJ)Clip;
-     }
-  }
-  return hWnd;
+        if (Clip && Clip->Hwnd == hWnd)
+        {
+            if (pwndo) *pwndo = Clip;
+        }
+    }
+    return hWnd;
 }
 
 HDC APIENTRY

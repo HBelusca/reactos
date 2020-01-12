@@ -157,4 +157,3 @@ EngUnlockDriverObj(
     /* Success */
     return TRUE;
 }
-

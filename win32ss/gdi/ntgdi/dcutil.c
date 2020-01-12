@@ -939,5 +939,3 @@ TranslateCOLORREF(PDC pdc, COLORREF crColor)
 
     return ulColor;
 }
-
-

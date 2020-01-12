@@ -170,7 +170,14 @@ DC_vInitDc(
 
     if (dctype == DCTYPE_DIRECT)
     {
+        /* Extra flags that reflect the state of the underlying PDEV */
+        if (ppdev->flFlags & PDEV_DISPLAY)
+            pdc->fs |= DC_DISPLAY;
+        if (ppdev->flFlags & PDEV_DISABLED)
+            pdc->fs |= DC_FULLSCREEN;
+
         /* Direct DCs get the surface from the PDEV */
+        // FIXME: What about printer PDEV ?
         pdc->dclevel.pSurface = PDEVOBJ_pSurface(ppdev);
 
         pdc->erclBounds.left = 0x7fffffff;
@@ -198,7 +205,7 @@ DC_vInitDc(
         pdc->co = gxcoTrivial;
     }
 
-      //pdc->dcattr.VisRectRegion:
+    //pdc->dcattr.VisRectRegion:
 
     /* Setup coordinate transformation data */
     pdc->dclevel.mxWorldToDevice = gmxWorldToDeviceDefault;
@@ -475,7 +482,7 @@ static
 void
 DC_vUpdateDC(PDC pdc)
 {
-    // PREGION VisRgn ;
+    // PREGION VisRgn;
     PPDEVOBJ ppdev = pdc->ppdev;
 
     pdc->dhpdev = ppdev->dhpdev;
@@ -495,7 +502,7 @@ DC_vUpdateDC(PDC pdc)
     pdc->flGraphicsCaps2 = ppdev->devinfo.flGraphicsCaps2;
 
     /* Mark EBRUSHOBJs as dirty */
-    pdc->pdcattr->ulDirty_ |= DIRTY_DEFAULT ;
+    pdc->pdcattr->ulDirty_ |= DIRTY_DEFAULT;
 }
 
 /* Prepare a blit for up to 2 DCs */
@@ -571,7 +578,7 @@ DC_vPrepareDCsForBlit(
                                prcFirst->left,
                                prcFirst->top,
                                prcFirst->right,
-                               prcFirst->bottom) ;
+                               prcFirst->bottom);
     }
 
 #if DBG
@@ -601,7 +608,7 @@ DC_vPrepareDCsForBlit(
                                prcSecond->left,
                                prcSecond->top,
                                prcSecond->right,
-                               prcSecond->bottom) ;
+                               prcSecond->bottom);
     }
 
 #if DBG
@@ -972,8 +979,10 @@ MakeInfoDC(PDC pdc, BOOL bSet)
     PSURFACE pSurface;
     SIZEL sizl;
 
-    /* Can not be a display DC. */
-    if (pdc->fs & DC_DISPLAY) return FALSE;
+    /* Cannot be a display DC */
+    if (pdc->fs & DC_DISPLAY)
+        return FALSE;
+
     if (bSet)
     {
         if (pdc->fs & DC_TEMPINFODC || pdc->dctype == DCTYPE_DIRECT)
@@ -1074,4 +1083,3 @@ IntGdiCreateDisplayDC(HDEV hDev, ULONG DcType, BOOL EmptyDC)
 
     return hDC;
 }
-
