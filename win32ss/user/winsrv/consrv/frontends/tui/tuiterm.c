@@ -250,25 +250,51 @@ TuiSwapConsole(INT Next)
 static VOID
 TuiCopyRect(PCHAR Dest, PTEXTMODE_SCREEN_BUFFER Buff, SMALL_RECT* Region)
 {
-    UINT SrcDelta, DestDelta;
-    LONG i;
-    PCHAR_INFO Src, SrcEnd;
+    // UINT SrcDelta, DestDelta;
+    LONG X, Y;
+    // PCHAR_INFO Src, SrcEnd;
+    PCHAR_INFO Ptr;
 
-    Src = ConioCoordToPointer(Buff, Region->Left, Region->Top);
-    SrcDelta = Buff->ScreenBufferSize.X * sizeof(CHAR_INFO);
-    SrcEnd = Buff->Buffer + Buff->ScreenBufferSize.Y * Buff->ScreenBufferSize.X * sizeof(CHAR_INFO);
-    DestDelta = ConioRectWidth(Region) * 2 /* 2 == sizeof(CHAR) + sizeof(BYTE) */;
-    for (i = Region->Top; i <= Region->Bottom; i++)
+//
+// TODO: Fix for regression introduced by d224604e (r59212).
+//
+
+    // Src = ConioCoordToPointer(Buff, Region->Left, Region->Top);
+    // SrcDelta = Buff->ScreenBufferSize.X * sizeof(CHAR_INFO);
+    // SrcEnd = Buff->Buffer + Buff->ScreenBufferSize.Y * Buff->ScreenBufferSize.X * sizeof(CHAR_INFO);
+    // DestDelta = ConioRectWidth(Region) * 2 /* 2 == sizeof(CHAR) + sizeof(BYTE) */;
+
+    // CapturedWriteRegion = *WriteRegion;
+
+    // /* Make sure WriteRegion is inside the screen buffer */
+    // ConioInitRect(&ScreenBuffer, 0, 0,
+                  // Buffer->ScreenBufferSize.Y - 1,
+                  // Buffer->ScreenBufferSize.X - 1);
+    // if (!ConioGetIntersection(&CapturedWriteRegion, &ScreenBuffer, &CapturedWriteRegion))
+    // {
+        // /*
+         // * It is okay to have a WriteRegion completely outside
+         // * the screen buffer. No data is written then.
+         // */
+        // return STATUS_SUCCESS;
+    // }
+
+    for (Y = Region->Top; Y <= Region->Bottom; ++Y)
     {
-        ConsoleOutputUnicodeToAnsiChar(Buff->Header.Console, (PCHAR)Dest, &Src->Char.UnicodeChar);
-        *(PBYTE)(Dest + 1) = (BYTE)Src->Attributes;
-
-        Src += SrcDelta;
-        if (SrcEnd <= Src)
+        Ptr = ConioCoordToPointer(Buff, Region->Left, Y);
+        for (X = Region->Left; X <= Region->Right; ++X)
         {
-            Src -= Buff->ScreenBufferSize.Y * Buff->ScreenBufferSize.X * sizeof(CHAR_INFO);
+            ConsoleOutputUnicodeToAnsiChar(Buff->Header.Console, (PCHAR)Dest, &/*Src*/Ptr->Char.UnicodeChar);
+            *(PBYTE)(Dest + 1) = (BYTE)(/*Src*/Ptr->Attributes & 0xFF);
+            ++Ptr;
+            Dest += 2;
         }
-        Dest += DestDelta;
+        // Src += SrcDelta;
+        // if (SrcEnd <= Src)
+        // {
+            // Src -= Buff->ScreenBufferSize.Y * Buff->ScreenBufferSize.X * sizeof(CHAR_INFO);
+        // }
+        // Dest += DestDelta;
     }
 }
 
@@ -652,7 +678,6 @@ TuiDrawRegion(IN OUT PFRONTEND This,
     ConsoleDraw->CursorX = Buff->CursorPosition.X;
     ConsoleDraw->CursorY = Buff->CursorPosition.Y;
 
-DbgBreakPoint();
     TuiCopyRect((PCHAR)(ConsoleDraw + 1), (PTEXTMODE_SCREEN_BUFFER)Buff, Region);
 
     if (!DeviceIoControl(ConsoleDeviceHandle, IOCTL_CONSOLE_DRAW,

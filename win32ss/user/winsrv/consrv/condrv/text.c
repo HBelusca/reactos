@@ -614,9 +614,8 @@ ConDrvReadConsoleOutput(IN PCONSOLE Console,
             }
             else
             {
-                // ConsoleOutputUnicodeToAnsiChar(Console, &CurCharInfo->Char.AsciiChar, &Ptr->Char.UnicodeChar);
-                WideCharToMultiByte(Console->OutputCodePage, 0, &Ptr->Char.UnicodeChar, 1,
-                                    &CurCharInfo->Char.AsciiChar, 1, NULL, NULL);
+                ConsoleOutputUnicodeToAnsiChar(Console, &CurCharInfo->Char.AsciiChar,
+                                                        &Ptr->Char.UnicodeChar);
             }
 #if (_WIN32_WINNT < _WIN32_WINNT_WIN8)
             /* NOTE: Windows < 8 compatibility: DBCS flags are filtered out */
