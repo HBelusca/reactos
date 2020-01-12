@@ -52,7 +52,9 @@ W32kOpenFile(PCWSTR pwszFileName, DWORD dwDesiredAccess)
 
     RtlInitUnicodeString(&ustrFile, pwszFileName);
 
-    InitializeObjectAttributes(&ObjectAttributes, &ustrFile, 0, NULL, NULL);
+    InitializeObjectAttributes(&ObjectAttributes, &ustrFile,
+                               OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE,
+                               NULL, NULL);
 
     Status = ZwCreateFile(&hFile,
                           dwDesiredAccess,
