@@ -34,14 +34,19 @@ HSURF APIENTRY
 DrvEnableSurface(
    IN DHPDEV dhpdev)
 {
-   PPDEV ppdev = (PPDEV)dhpdev;
-   HSURF hSurface;
-   ULONG BitmapType;
-   SIZEL ScreenSize;
-   VIDEO_MEMORY VideoMemory;
-   VIDEO_MEMORY_INFORMATION VideoMemoryInfo;
-   ULONG ulTemp;
+   // PPDEV ppdev = (PPDEV)dhpdev;
+   // HSURF hSurface;
+   // ULONG BitmapType;
+   // SIZEL ScreenSize;
+   // VIDEO_MEMORY VideoMemory;
+   // VIDEO_MEMORY_INFORMATION VideoMemoryInfo;
+   // ULONG ulTemp;
 
+__debugbreak();
+
+    return NULL;
+
+#if 0
    /*
     * Set video mode of our adapter.
     */
@@ -117,6 +122,7 @@ DrvEnableSurface(
    ppdev->hSurfEng = hSurface;
 
    return hSurface;
+#endif
 }
 
 /*
