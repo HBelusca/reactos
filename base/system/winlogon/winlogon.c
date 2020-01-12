@@ -19,8 +19,10 @@
 HINSTANCE hAppInstance;
 PWLSESSION WLSession = NULL;
 
-extern LOGON_UI LogonGraphicalUI;
-extern LOGON_UI LogonTextUI;
+// extern LOGON_UI LogonGraphicalUI;
+// extern LOGON_UI LogonTextUI;
+#include "gui.c"
+#include "tui.c"
 static PLOGON_UI pLogonUI;
 
 /* FUNCTIONS *****************************************************************/
@@ -585,17 +587,18 @@ WinMain(
     ZeroMemory(WLSession, sizeof(WLSESSION));
     WLSession->DialogTimeout = 120; /* 2 minutes */
 
-    ChooseLogonUI();
-
-    /* Initialize the dialog tracking list */
-    InitDialogListHead();
-
     if (!CreateWindowStationAndDesktops(WLSession))
     {
         ERR("WL: Could not create window station and desktops\n");
         NtRaiseHardError(STATUS_SYSTEM_PROCESS_TERMINATED, 0, 0, NULL, OptionOk, &HardErrorResponse);
         ExitProcess(1);
     }
+
+    /* Initialize the dialog tracking list */
+    InitDialogListHead();
+
+    ChooseLogonUI();
+    pLogonUI->Initialize(WLSession);
 
     LockWorkstation(WLSession);
 

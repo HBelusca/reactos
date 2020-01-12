@@ -5,7 +5,9 @@
  * PROGRAMMER:      Hervé Poussineau (hpoussin@reactos.org)
  */
 
+#if 0
 #include "winlogon.h"
+#endif
 
 #include <wingdi.h>
 // #include <winnls.h>

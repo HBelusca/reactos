@@ -30,6 +30,12 @@
 #include <userenv.h>
 #include <ndk/sefuncs.h>
 
+HANDLE WINAPI
+OpenConsoleW(LPCWSTR wsName,
+             DWORD   dwDesiredAccess,
+             BOOL    bInheritHandle,
+             DWORD   dwShareMode);
+
 HINSTANCE hDllInstance;
 
 extern GINA_UI GinaGraphicalUI;
@@ -117,48 +123,55 @@ ReadRegDwordValue(
 static VOID
 ChooseGinaUI(VOID)
 {
-    HKEY ControlKey = NULL;
-    LPWSTR SystemStartOptions = NULL;
-    LPWSTR CurrentOption, NextOption; /* Pointers into SystemStartOptions */
-    BOOL ConsoleBoot = FALSE;
-    LONG rc;
+    /*
+     * Check whether the process to which we are attached (Winlogon) uses
+     * a console. If so, use the Text UI, otherwise fall back to the GUI.
+     */
 
-    rc = RegOpenKeyExW(
-        HKEY_LOCAL_MACHINE,
-        L"SYSTEM\\CurrentControlSet\\Control",
-        0,
-        KEY_QUERY_VALUE,
-        &ControlKey);
+#if 0
+    //
+    // This way is less secure because anybody could put an invalid handle
+    // there and there is no way for us to validate it (i.e. is it a valid
+    // handle that refers to a console?)
+    //
+    HANDLE ConsoleHandle;
 
-    rc = ReadRegSzValue(ControlKey, L"SystemStartOptions", &SystemStartOptions);
-    if (rc != ERROR_SUCCESS)
-        goto cleanup;
+    RtlAcquirePebLock();
+    ConsoleHandle = NtCurrentPeb()->ProcessParameters->ConsoleHandle;
+    RtlReleasePebLock();
 
-    /* Check for CONSOLE switch in SystemStartOptions */
-    CurrentOption = SystemStartOptions;
-    while (CurrentOption)
+    if (ConsoleHandle && (ConsoleHandle != INVALID_HANDLE_VALUE))
     {
-        NextOption = wcschr(CurrentOption, L' ');
-        if (NextOption)
-            *NextOption = L'\0';
-        if (wcsicmp(CurrentOption, L"CONSOLE") == 0)
-        {
-            TRACE("Found %S. Switching to console boot\n", CurrentOption);
-            ConsoleBoot = TRUE;
-            goto cleanup;
-        }
-        CurrentOption = NextOption ? NextOption + 1 : NULL;
+        /* We have a console, so use the Text UI */
+        pGinaUI = &GinaTextUI;
+    }
+    else
+    {
+        /* We don't have a console, so use the Graphical UI */
+        pGinaUI = &GinaGraphicalUI;
     }
 
-cleanup:
-    if (ConsoleBoot)
-        pGinaUI = &GinaTextUI;
-    else
-        pGinaUI = &GinaGraphicalUI;
+#else
+    HANDLE hConOut;
 
-    if (ControlKey != NULL)
-        RegCloseKey(ControlKey);
-    HeapFree(GetProcessHeap(), 0, SystemStartOptions);
+    hConOut = OpenConsoleW(L"CONOUT$",
+                           GENERIC_READ | GENERIC_WRITE,
+                           FALSE,
+                           FILE_SHARE_READ | FILE_SHARE_WRITE);
+
+    if (hConOut && (hConOut != INVALID_HANDLE_VALUE))
+    {
+        /* We have a console, so use the Text UI */
+        pGinaUI = &GinaTextUI;
+        /* And close the handle */
+        CloseHandle(hConOut);
+    }
+    else
+    {
+        /* We don't have a console, so use the Graphical UI */
+        pGinaUI = &GinaGraphicalUI;
+    }
+#endif
 }
 
 
@@ -897,14 +910,16 @@ WlxDisplaySASNotice(
 
     TRACE("WlxDisplaySASNotice(%p)\n", pWlxContext);
 
+__debugbreak();
+
     if (GetSystemMetrics(SM_REMOTESESSION))
     {
-        /* User is remotely logged on. Don't display a notice */
+        /* User is remotely logged on: don't display a notice */
         pgContext->pWlxFuncs->WlxSasNotify(pgContext->hWlx, WLX_SAS_TYPE_CTRL_ALT_DEL);
         return;
     }
 
-    if (pgContext->bAutoAdminLogon)
+    // if (pgContext->bAutoAdminLogon)
     {
         if (pgContext->bIgnoreShiftOverride ||
             (GetKeyState(VK_SHIFT) >= 0))
