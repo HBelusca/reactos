@@ -264,10 +264,11 @@ InitDesktopImpl(VOID)
 }
 
 static NTSTATUS
-GetSystemVersionString(OUT PWSTR pwszzVersion,
-                       IN SIZE_T cchDest,
-                       IN BOOLEAN InSafeMode,
-                       IN BOOLEAN AppendNtSystemRoot)
+GetSystemVersionStrings(
+    OUT PZZWSTR pwszzVersion,
+    IN SIZE_T cchDest,
+    IN BOOLEAN InSafeMode,
+    IN BOOLEAN AppendNtSystemRoot)
 {
     NTSTATUS Status;
 
@@ -2100,10 +2101,10 @@ IntPaintDesktop(HDC hDC)
         /* Display the system version information */
         if (!*wszzVersion)
         {
-            Status = GetSystemVersionString(wszzVersion,
-                                            ARRAYSIZE(wszzVersion),
-                                            InSafeMode,
-                                            g_AlwaysDisplayVersion);
+            Status = GetSystemVersionStrings(wszzVersion,
+                                             ARRAYSIZE(wszzVersion),
+                                             InSafeMode,
+                                             g_AlwaysDisplayVersion);
             if (!InSafeMode && NT_SUCCESS(Status) && *wszzVersion)
             {
                 PWCHAR pstr = wszzVersion;
