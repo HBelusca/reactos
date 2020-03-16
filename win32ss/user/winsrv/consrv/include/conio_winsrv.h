@@ -147,14 +147,7 @@ typedef struct _CONSRV_CONSOLE
     BOOLEAN HistoryNoDup;                   /* Remove old duplicate history entries */
 
 /**************************** Input Line Discipline ***************************/
-    PWCHAR  LineBuffer;                     /* Current line being input, in line buffered mode */
-    ULONG   LineMaxSize;                    /* Maximum size of line in characters (including CR+LF) */
-    ULONG   LineSize;                       /* Current size of line */
-    ULONG   LinePos;                        /* Current position within line */
-    BOOLEAN LineComplete;                   /* User pressed enter, ready to send back to client */
-    BOOLEAN LineUpPressed;
-    BOOLEAN LineInsertToggle;               /* Replace character over cursor instead of inserting */
-    ULONG   LineWakeupMask;                 /* Bitmap of which control characters will end line input */
+    LINE_EDIT_INFO LineEditInfo;
 
     BOOLEAN InsertMode;
     BOOLEAN QuickEdit;
@@ -201,15 +194,15 @@ ConSrvSetConsoleProcessFocus(IN PCONSRV_CONSOLE Console,
 
 /* coninput.c */
 VOID NTAPI ConioProcessKey(PCONSRV_CONSOLE Console, MSG* msg);
-DWORD ConioEffectiveCursorSize(PCONSRV_CONSOLE Console,
-                               DWORD Scale);
+
+DWORD
+ConioEffectiveCursorSize(
+    IN PCONSOLE_SCREEN_BUFFER ScreenBuffer, // PTEXTMODE_SCREEN_BUFFER
+    IN DWORD Scale);
 
 NTSTATUS
 ConioProcessInputEvent(PCONSRV_CONSOLE Console,
                        PINPUT_RECORD InputEvent);
-
-/* conoutput.c */
-PCHAR_INFO ConioCoordToPointer(PTEXTMODE_SCREEN_BUFFER Buff, ULONG X, ULONG Y);
 
 /* terminal.c */
 VOID ConioDrawConsole(PCONSRV_CONSOLE Console);

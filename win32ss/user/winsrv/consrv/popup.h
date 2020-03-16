@@ -28,7 +28,6 @@ typedef struct _POPUP_WINDOW
 
 PPOPUP_WINDOW
 CreatePopupWindow(
-    IN PCONSRV_CONSOLE Console,
     IN PCONSOLE_SCREEN_BUFFER ScreenBuffer,
     IN SHORT xLeft,
     IN SHORT yTop,

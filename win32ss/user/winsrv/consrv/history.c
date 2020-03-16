@@ -18,11 +18,12 @@ typedef struct _HISTORY_BUFFER
 {
     LIST_ENTRY ListEntry;
     ULONG Position;
-    ULONG MaxEntries;
     ULONG NumEntries;
+    ULONG MaxEntries;
+    HANDLE ProcessHandle; // For refining "uniqueness" per application.
     UNICODE_STRING  ExeName;
     PUNICODE_STRING Entries;
-} HISTORY_BUFFER, *PHISTORY_BUFFER;
+} HISTORY_BUFFER; //, *PHISTORY_BUFFER;
 
 
 BOOLEAN
@@ -43,10 +44,11 @@ ConvertInputUnicodeToAnsi(PCONSRV_CONSOLE Console,
 
 /* PRIVATE FUNCTIONS **********************************************************/
 
-static PHISTORY_BUFFER
+/*static*/ PHISTORY_BUFFER
 HistoryCurrentBuffer(
     IN PCONSRV_CONSOLE Console,
-    IN PUNICODE_STRING ExeName)
+    /**/IN PUNICODE_STRING ExeName,/**/
+    IN HANDLE ProcessHandle)
 {
     PLIST_ENTRY Entry;
     PHISTORY_BUFFER Hist;
@@ -56,7 +58,8 @@ HistoryCurrentBuffer(
          Entry = Entry->Flink)
     {
         Hist = CONTAINING_RECORD(Entry, HISTORY_BUFFER, ListEntry);
-        if (RtlEqualUnicodeString(ExeName, &Hist->ExeName, FALSE))
+        if (Hist->ProcessHandle == ProcessHandle)
+        // if (RtlEqualUnicodeString(ExeName, &Hist->ExeName, FALSE))
             return Hist;
     }
 
@@ -74,6 +77,7 @@ HistoryCurrentBuffer(
             ConsoleFreeHeap(Hist);
             return NULL;
         }
+        Hist->ProcessHandle = ProcessHandle;
         Hist->ExeName.Length = Hist->ExeName.MaximumLength = ExeName->Length;
         Hist->ExeName.Buffer = (PWCHAR)(Hist + 1);
         RtlCopyMemory(Hist->ExeName.Buffer, ExeName->Buffer, ExeName->Length);
@@ -87,16 +91,47 @@ HistoryCurrentBuffer(
         // Reuse an older history buffer, if possible with the same Exe name,
         // otherwise take the oldest one and reset its contents.
         // And move the history buffer back to the head of the list.
+
+        // /* Move it at the top of the history list */
+        // RemoveEntryList(&Hist->ListEntry);
+        // InsertHeadList(&Console->HistoryBuffers, &Hist->ListEntry);
+
         UNIMPLEMENTED;
         return NULL;
     }
 }
 
+#if 0
 static PHISTORY_BUFFER
-HistoryFindBuffer(PCONSRV_CONSOLE Console,
-                  PVOID    ExeName,
-                  USHORT   ExeLength,
-                  BOOLEAN  UnicodeExe)
+HistoryFindBufferByProcess(
+    IN PCONSRV_CONSOLE Console,
+    IN HANDLE ProcessHandle)
+{
+    PLIST_ENTRY Entry;
+    PHISTORY_BUFFER Hist;
+
+    for (Entry = Console->HistoryBuffers.Flink;
+         Entry != &Console->HistoryBuffers;
+         Entry = Entry->Flink)
+    {
+        Hist = CONTAINING_RECORD(Entry, HISTORY_BUFFER, ListEntry);
+        if (Hist->ProcessHandle == ProcessHandle)
+            return Hist;
+    }
+
+// TODO: Reference / flag the history as under usage so as it does not
+// go away if a concurrent thread decides to reduce the number of histories.
+
+    return NULL;
+}
+#endif
+
+static PHISTORY_BUFFER
+HistoryFindBufferByExe(
+    IN PCONSRV_CONSOLE Console,
+    IN PVOID   ExeName,
+    IN USHORT  ExeLength,
+    IN BOOLEAN UnicodeExe)
 {
     UNICODE_STRING ExeNameU;
 
@@ -140,8 +175,9 @@ HistoryFindBuffer(PCONSRV_CONSOLE Console,
     return NULL;
 }
 
-static VOID
-HistoryDeleteBuffer(PHISTORY_BUFFER Hist)
+VOID
+HistoryDeleteBuffer(
+    IN PHISTORY_BUFFER Hist)
 {
     if (!Hist) return;
 
@@ -182,17 +218,12 @@ HistoryResizeBuffer(
 }
 
 VOID
-HistoryAddEntry(PCONSRV_CONSOLE Console,
-                PUNICODE_STRING ExeName,
-                PUNICODE_STRING Entry)
+HistoryAddEntry(
+    IN PHISTORY_BUFFER Hist,
+    IN PUNICODE_STRING Entry,
+    IN BOOLEAN HistoryNoDup)
 {
-    // UNICODE_STRING NewEntry;
-    PHISTORY_BUFFER Hist = HistoryCurrentBuffer(Console, ExeName);
-
     if (!Hist) return;
-
-    // NewEntry.Length = NewEntry.MaximumLength = Console->LineSize * sizeof(WCHAR);
-    // NewEntry.Buffer = Console->LineBuffer;
 
     /* Don't add blank or duplicate entries */
     if (Entry->Length == 0 || Hist->MaxEntries == 0 ||
@@ -202,7 +233,7 @@ HistoryAddEntry(PCONSRV_CONSOLE Console,
         return;
     }
 
-    if (Console->HistoryNoDup)
+    if (HistoryNoDup)
     {
         INT i;
 
@@ -238,25 +269,22 @@ HistoryAddEntry(PCONSRV_CONSOLE Console,
 }
 
 VOID
-HistoryGetCurrentEntry(PCONSRV_CONSOLE Console,
-                       PUNICODE_STRING ExeName,
-                       PUNICODE_STRING Entry)
+HistoryGetCurrentEntry(
+    IN PHISTORY_BUFFER Hist,
+    OUT PUNICODE_STRING Entry)
 {
-    PHISTORY_BUFFER Hist = HistoryCurrentBuffer(Console, ExeName);
-
     if (!Hist || Hist->NumEntries == 0)
         Entry->Length = 0;
     else
         *Entry = Hist->Entries[Hist->Position];
 }
 
-BOOL
-HistoryRecallHistory(PCONSRV_CONSOLE Console,
-                     PUNICODE_STRING ExeName,
-                     INT Offset,
-                     PUNICODE_STRING Entry)
+BOOLEAN
+HistoryRecallHistory(
+    IN PHISTORY_BUFFER Hist,
+    IN INT Offset,
+    OUT PUNICODE_STRING Entry)
 {
-    PHISTORY_BUFFER Hist = HistoryCurrentBuffer(Console, ExeName);
     ULONG Position = 0;
 
     if (!Hist || Hist->NumEntries == 0) return FALSE;
@@ -269,28 +297,24 @@ HistoryRecallHistory(PCONSRV_CONSOLE Console,
     return TRUE;
 }
 
-BOOL
-HistoryFindEntryByPrefix(PCONSRV_CONSOLE Console,
-                         PUNICODE_STRING ExeName,
-                         PUNICODE_STRING Prefix,
-                         PUNICODE_STRING Entry)
+BOOLEAN
+HistoryFindEntryByPrefix(
+    IN PHISTORY_BUFFER Hist,
+    IN BOOLEAN LineUpPressed,
+    IN PUNICODE_STRING Prefix,
+    OUT PUNICODE_STRING Entry)
 {
     INT HistPos;
 
-    /* Search for history entries starting with input. */
-    PHISTORY_BUFFER Hist = HistoryCurrentBuffer(Console, ExeName);
+    /* Search for history entries starting with input */
     if (!Hist || Hist->NumEntries == 0) return FALSE;
 
     /*
-     * Like Up/F5, on first time start from current (usually last) entry,
+     * If LineUpPressed, on first time start from current (usually last) entry,
      * but on subsequent times start at previous entry.
      */
-    if (Console->LineUpPressed)
+    if (LineUpPressed)
         Hist->Position = (Hist->Position ? Hist->Position : Hist->NumEntries) - 1;
-    Console->LineUpPressed = TRUE;
-
-    // Entry.Length = Console->LinePos * sizeof(WCHAR); // == Pos * sizeof(WCHAR)
-    // Entry.Buffer = Console->LineBuffer;
 
     /*
      * Keep going backwards, even wrapping around to the end,
@@ -312,32 +336,28 @@ HistoryFindEntryByPrefix(PCONSRV_CONSOLE Console,
 }
 
 PPOPUP_WINDOW
-HistoryDisplayCurrentHistory(PCONSRV_CONSOLE Console,
-                             PUNICODE_STRING ExeName)
+HistoryDisplayCurrentHistory(
+    IN PCONSOLE_SCREEN_BUFFER ScreenBuffer,
+    IN PHISTORY_BUFFER Hist)
 {
-    PCONSOLE_SCREEN_BUFFER ActiveBuffer;
     PPOPUP_WINDOW Popup;
 
     SHORT xLeft, yTop;
     SHORT Width, Height;
 
-    PHISTORY_BUFFER Hist = HistoryCurrentBuffer(Console, ExeName);
+    if (!Hist || Hist->NumEntries == 0) return NULL;
 
-    if (!Hist) return NULL;
-    if (Hist->NumEntries == 0) return NULL;
-
-    if (GetType(Console->ActiveBuffer) != TEXTMODE_BUFFER) return NULL;
-    ActiveBuffer = Console->ActiveBuffer;
+    if (GetType(ScreenBuffer) != TEXTMODE_BUFFER) return NULL;
 
     Width  = 40;
     Height = 10;
 
     /* Center the popup window on the screen */
-    xLeft = ActiveBuffer->ViewOrigin.X + (ActiveBuffer->ViewSize.X - Width ) / 2;
-    yTop  = ActiveBuffer->ViewOrigin.Y + (ActiveBuffer->ViewSize.Y - Height) / 2;
+    xLeft = ScreenBuffer->ViewOrigin.X + (ScreenBuffer->ViewSize.X - Width ) / 2;
+    yTop  = ScreenBuffer->ViewOrigin.Y + (ScreenBuffer->ViewSize.Y - Height) / 2;
 
     /* Create the popup */
-    Popup = CreatePopupWindow(Console, ActiveBuffer,
+    Popup = CreatePopupWindow(ScreenBuffer,
                               xLeft, yTop, Width, Height);
     if (Popup == NULL) return NULL;
 
@@ -347,14 +367,8 @@ HistoryDisplayCurrentHistory(PCONSRV_CONSOLE Console,
 }
 
 VOID
-HistoryDeleteCurrentBuffer(PCONSRV_CONSOLE Console,
-                           PUNICODE_STRING ExeName)
-{
-    HistoryDeleteBuffer(HistoryCurrentBuffer(Console, ExeName));
-}
-
-VOID
-HistoryDeleteBuffers(PCONSRV_CONSOLE Console)
+HistoryDeleteBuffers(
+    IN PCONSRV_CONSOLE Console)
 {
     PLIST_ENTRY CurrentEntry;
     PHISTORY_BUFFER HistoryBuffer;
@@ -442,10 +456,10 @@ CON_API(SrvGetConsoleCommandHistory,
         return STATUS_INVALID_PARAMETER;
     }
 
-    Hist = HistoryFindBuffer(Console,
-                             GetCommandHistoryRequest->ExeName,
-                             GetCommandHistoryRequest->ExeLength,
-                             GetCommandHistoryRequest->Unicode2);
+    Hist = HistoryFindBufferByExe(Console,
+                                  GetCommandHistoryRequest->ExeName,
+                                  GetCommandHistoryRequest->ExeLength,
+                                  GetCommandHistoryRequest->Unicode2);
     if (Hist)
     {
         ULONG i;
@@ -519,10 +533,10 @@ CON_API(SrvGetConsoleCommandHistoryLength,
         return STATUS_INVALID_PARAMETER;
     }
 
-    Hist = HistoryFindBuffer(Console,
-                             GetCommandHistoryLengthRequest->ExeName,
-                             GetCommandHistoryLengthRequest->ExeLength,
-                             GetCommandHistoryLengthRequest->Unicode2);
+    Hist = HistoryFindBufferByExe(Console,
+                                  GetCommandHistoryLengthRequest->ExeName,
+                                  GetCommandHistoryLengthRequest->ExeLength,
+                                  GetCommandHistoryLengthRequest->Unicode2);
     if (Hist)
     {
         ULONG i;
@@ -555,10 +569,10 @@ CON_API(SrvExpungeConsoleCommandHistory,
         return STATUS_INVALID_PARAMETER;
     }
 
-    Hist = HistoryFindBuffer(Console,
-                             ExpungeCommandHistoryRequest->ExeName,
-                             ExpungeCommandHistoryRequest->ExeLength,
-                             ExpungeCommandHistoryRequest->Unicode2);
+    Hist = HistoryFindBufferByExe(Console,
+                                  ExpungeCommandHistoryRequest->ExeName,
+                                  ExpungeCommandHistoryRequest->ExeLength,
+                                  ExpungeCommandHistoryRequest->Unicode2);
     HistoryDeleteBuffer(Hist);
 
     return STATUS_SUCCESS;
@@ -579,13 +593,18 @@ CON_API(SrvSetConsoleNumberOfCommands,
         return STATUS_INVALID_PARAMETER;
     }
 
-    Hist = HistoryFindBuffer(Console,
-                             SetHistoryNumberCommandsRequest->ExeName,
-                             SetHistoryNumberCommandsRequest->ExeLength,
-                             SetHistoryNumberCommandsRequest->Unicode2);
+    Hist = HistoryFindBufferByExe(Console,
+                                  SetHistoryNumberCommandsRequest->ExeName,
+                                  SetHistoryNumberCommandsRequest->ExeLength,
+                                  SetHistoryNumberCommandsRequest->Unicode2);
     if (Hist)
     {
+        /* Reallocate the buffer */
         Status = HistoryResizeBuffer(Hist, SetHistoryNumberCommandsRequest->NumCommands);
+
+        /* Move it at the top of the history list */
+        RemoveEntryList(&Hist->ListEntry);
+        InsertHeadList(&Console->HistoryBuffers, &Hist->ListEntry);
     }
 
     return Status;

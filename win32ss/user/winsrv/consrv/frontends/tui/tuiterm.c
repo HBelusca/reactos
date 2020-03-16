@@ -694,7 +694,7 @@ TuiSetCursorInfo(IN OUT PFRONTEND This,
     if (TuiData->Console->ActiveBuffer != Buff) return TRUE;
     if (GetType(Buff) != TEXTMODE_BUFFER) return FALSE;
 
-    Info.dwSize = ConioEffectiveCursorSize(TuiData->Console, 100);
+    Info.dwSize = ConioEffectiveCursorSize(Buff, 100);
     Info.bVisible = Buff->CursorInfo.bVisible;
 
     if (!DeviceIoControl(ConsoleDeviceHandle, IOCTL_CONSOLE_SET_CURSOR_INFO,

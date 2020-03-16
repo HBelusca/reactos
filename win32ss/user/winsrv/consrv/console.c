@@ -667,7 +667,8 @@ ConSrvInitConsole(OUT PHANDLE NewConsoleHandle,
     DrvConsoleInfo.ScreenBufferSize = ConsoleInfo->ScreenBufferSize;
     DrvConsoleInfo.ConsoleSize = ConsoleInfo->WindowSize;
     DrvConsoleInfo.CursorSize = ConsoleInfo->CursorSize;
-    // DrvConsoleInfo.CursorBlinkOn = ConsoleInfo->CursorBlinkOn;
+    /***DrvConsoleInfo.CursorBlinkOn = ConsoleInfo->CursorBlinkOn;***/ // FIXME: Buggy ????
+    // DrvConsoleInfo.ForceCursorOff = ConsoleInfo->ForceCursorOff;
     DrvConsoleInfo.ScreenAttrib = ConsoleInfo->ScreenAttributes;
     DrvConsoleInfo.PopupAttrib = ConsoleInfo->PopupAttributes;
     DrvConsoleInfo.CodePage = ConsoleInfo->CodePage;
@@ -743,12 +744,6 @@ ConSrvInitConsole(OUT PHANDLE NewConsoleHandle,
     Console->HistoryNoDup      = ConsoleInfo->HistoryNoDup;
 
     /* Initialize the Input Line Discipline */
-    // InitLineInput(Console);
-    Console->LineBuffer = NULL;
-    Console->LinePos = Console->LineMaxSize = Console->LineSize = 0;
-    Console->LineComplete = Console->LineUpPressed = FALSE;
-    // LineWakeupMask
-    Console->LineInsertToggle =
     Console->InsertMode = ConsoleInfo->InsertMode;
     Console->QuickEdit  = ConsoleInfo->QuickEdit;
 
@@ -835,8 +830,8 @@ ConSrvDeleteConsole(PCONSRV_CONSOLE Console)
     NtClose(Console->InitEvents[INIT_FAILURE]);
     NtClose(Console->InitEvents[INIT_SUCCESS]);
 
-    /* Clean the Input Line Discipline */
-    if (Console->LineBuffer) ConsoleFreeHeap(Console->LineBuffer);
+    // FIXME!! Move out of there!! Clean the Input Line Discipline
+    if (Console->LineEditInfo.LineBuffer) ConsoleFreeHeap(Console->LineEditInfo.LineBuffer);
 
     /* Clean aliases and history */
     IntDeleteAllAliases(Console);

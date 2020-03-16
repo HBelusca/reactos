@@ -49,7 +49,7 @@ do { \
 
 typedef struct _GET_INPUT_INFO
 {
-    PCSR_THREAD           CallingThread;    // The thread which called the input API.
+    PCSR_THREAD           CallingThread;    // The thread that called the input API.
     PVOID                 HandleEntry;      // The handle data associated with the wait thread.
     PCONSOLE_INPUT_BUFFER InputBuffer;      // The input buffer corresponding to the handle.
 } GET_INPUT_INFO, *PGET_INPUT_INFO;
@@ -217,12 +217,28 @@ ConioProcessInputEvent(PCONSRV_CONSOLE Console,
             DPRINT1("Console_Api Ctrl-C\n");
             ConSrvConsoleProcessCtrlEvent(Console, 0, CTRL_C_EVENT);
 
-            if (Console->LineBuffer && !Console->LineComplete)
+//
+// FIXME!!!! Line discipline stuff -- MUST BE DONE ELSEWHERE !!!!!!!!
+//
+            {
+            PLINE_EDIT_INFO LineEditInfo = &Console->LineEditInfo;
+
+            if (LineEditInfo->LineBuffer && !LineEditInfo->LineComplete)
             {
                 /* Line input is in progress; end it */
-                Console->LinePos = Console->LineSize = 0;
-                Console->LineComplete = TRUE;
+                LineEditInfo->LinePos = LineEditInfo->LineSize = 0;
+                LineEditInfo->LineComplete = TRUE;
+/***************/
+                /* Set the cursor size */
+                if (LineEditInfo->ScreenBuffer)
+                {
+                    LineEditInfo->ScreenBuffer->CursorIsDouble = FALSE;
+                        // (!LineEditInfo->LineComplete && (Console->InsertMode != LineEditInfo->LineInsertToggle));
+                }
+/***************/
             }
+            }
+/////////////
             return STATUS_SUCCESS; // STATUS_CONTROL_C_EXIT;
         }
     }
@@ -236,10 +252,11 @@ ConioProcessInputEvent(PCONSRV_CONSOLE Console,
 
 
 static NTSTATUS
-WaitBeforeReading(IN PGET_INPUT_INFO InputInfo,
-                  IN PCSR_API_MESSAGE ApiMessage,
-                  IN CSR_WAIT_FUNCTION WaitFunction OPTIONAL,
-                  IN BOOLEAN CreateWaitBlock OPTIONAL)
+WaitBeforeReading(
+    IN PGET_INPUT_INFO InputInfo,
+    IN PCSR_API_MESSAGE ApiMessage,
+    IN BOOLEAN CreateWaitBlock,
+    IN CSR_WAIT_FUNCTION WaitFunction OPTIONAL)
 {
     if (CreateWaitBlock)
     {
@@ -249,7 +266,7 @@ WaitBeforeReading(IN PGET_INPUT_INFO InputInfo,
         CapturedInputInfo = ConsoleAllocHeap(0, sizeof(GET_INPUT_INFO));
         if (!CapturedInputInfo) return STATUS_NO_MEMORY;
 
-        RtlMoveMemory(CapturedInputInfo, InputInfo, sizeof(GET_INPUT_INFO));
+        RtlCopyMemory(CapturedInputInfo, InputInfo, sizeof(GET_INPUT_INFO));
 
         if (!CsrCreateWait(&Console->ReadWaitQueue,
                            WaitFunction,
@@ -267,32 +284,38 @@ WaitBeforeReading(IN PGET_INPUT_INFO InputInfo,
 }
 
 static NTSTATUS
-ReadChars(IN PGET_INPUT_INFO InputInfo,
-          IN PCSR_API_MESSAGE ApiMessage,
-          IN BOOLEAN CreateWaitBlock OPTIONAL);
+ReadChars(
+    IN PGET_INPUT_INFO InputInfo,
+    IN PCSR_API_MESSAGE ApiMessage,
+    IN BOOLEAN CreateWaitBlock);
 
 // Wait function CSR_WAIT_FUNCTION
 static BOOLEAN
 NTAPI
-ReadCharsThread(IN PLIST_ENTRY WaitList,
-                IN PCSR_THREAD WaitThread,
-                IN PCSR_API_MESSAGE WaitApiMessage,
-                IN PVOID WaitContext,
-                IN PVOID WaitArgument1,
-                IN PVOID WaitArgument2,
-                IN ULONG WaitFlags)
+ReadCharsThread(
+    IN PLIST_ENTRY WaitList,
+    IN PCSR_THREAD WaitThread,
+    IN PCSR_API_MESSAGE WaitApiMessage,
+    IN PVOID WaitContext,
+    IN PVOID WaitArgument1,
+    IN PVOID WaitArgument2,
+    IN ULONG WaitFlags)
 {
     NTSTATUS Status;
     PGET_INPUT_INFO InputInfo = (PGET_INPUT_INFO)WaitContext;
-
     PVOID InputHandle = WaitArgument2;
 
-    DPRINT("ReadCharsThread - WaitContext = 0x%p, WaitArgument1 = 0x%p, WaitArgument2 = 0x%p, WaitFlags = %lu\n", WaitContext, WaitArgument1, WaitArgument2, WaitFlags);
+    DPRINT1("ReadCharsThread(ApiMsgWait: %lx.%lx / ThrdWait: %lx.%lx) - WaitContext = 0x%p, WaitArgument1 = 0x%p, WaitArgument2 = 0x%p, WaitFlags = %lu\n",
+           WaitApiMessage->Header.ClientId.UniqueProcess,
+           WaitApiMessage->Header.ClientId.UniqueThread,
+           WaitThread->ClientId.UniqueProcess,
+           WaitThread->ClientId.UniqueThread,
+           WaitContext, WaitArgument1, WaitArgument2, WaitFlags);
 
     /*
      * If we are notified of the process termination via a call
-     * to CsrNotifyWaitBlock triggered by CsrDestroyProcess or
-     * CsrDestroyThread, just return.
+     * to CsrNotifyWaitBlock() triggered by CsrDestroyProcess()
+     * or CsrDestroyThread(), just return.
      */
     if (WaitFlags & CsrProcessTerminating)
     {
@@ -302,8 +325,8 @@ ReadCharsThread(IN PLIST_ENTRY WaitList,
 
     /*
      * Somebody is closing a handle to this input buffer,
-     * by calling ConSrvCloseHandleEntry.
-     * See whether we are linked to that handle (ie. we
+     * by calling ConSrvCloseHandleEntry().
+     * See whether we are linked to that handle (i.e. we
      * are a waiter for this handle), and if so, return.
      * Otherwise, ignore the call and continue waiting.
      */
@@ -315,7 +338,7 @@ ReadCharsThread(IN PLIST_ENTRY WaitList,
     }
 
     /*
-     * If we go there, that means we are notified for some new input.
+     * If we go there, this means we are notified for some new input.
      * The console is therefore already locked.
      */
     Status = ReadChars(InputInfo, WaitApiMessage, FALSE);
@@ -327,52 +350,38 @@ Quit:
         ConsoleFreeHeap(InputInfo);
     }
 
-    return (Status == STATUS_PENDING ? FALSE : TRUE);
+    /* Return TRUE if the wait is satisfied, or FALSE otherwise */
+    return (Status != STATUS_PENDING);
 }
 
 NTSTATUS NTAPI
-ConDrvReadConsole(IN PCONSOLE Console,
-                  IN PCONSOLE_INPUT_BUFFER InputBuffer,
-                  IN BOOLEAN Unicode,
-                  OUT PVOID Buffer,
-                  IN OUT PCONSOLE_READCONSOLE_CONTROL ReadControl,
-                  IN PVOID Parameter OPTIONAL,
-                  IN ULONG NumCharsToRead,
-                  OUT PULONG NumCharsRead OPTIONAL);
+ConDrvReadConsole(
+    IN PCONSOLE Console,
+    IN PCONSOLE_INPUT_BUFFER InputBuffer,
+    IN BOOLEAN Unicode,
+    IN OUT PVOID Parameter OPTIONAL,
+    OUT PVOID Buffer,
+    IN ULONG NumCharsToRead,
+    OUT PULONG NumCharsRead OPTIONAL);
+
 static NTSTATUS
-ReadChars(IN PGET_INPUT_INFO InputInfo,
-          IN PCSR_API_MESSAGE ApiMessage,
-          IN BOOLEAN CreateWaitBlock OPTIONAL)
+ReadChars(
+    IN PGET_INPUT_INFO InputInfo,
+    IN PCSR_API_MESSAGE ApiMessage,
+    IN BOOLEAN CreateWaitBlock)
 {
     NTSTATUS Status;
     PCONSOLE_READCONSOLE ReadConsoleRequest = &((PCONSOLE_API_MESSAGE)ApiMessage)->Data.ReadConsoleRequest;
     PCONSOLE_INPUT_BUFFER InputBuffer = InputInfo->InputBuffer;
-    CONSOLE_READCONSOLE_CONTROL ReadControl;
+    PCONSRV_CONSOLE Console = InputBuffer->Header.Console;
+    BOOLEAN IsCookedMode = !!(InputBuffer->Mode & ENABLE_LINE_INPUT);
 
-    UNICODE_STRING ExeName;
+    PLINE_EDIT_INFO LineEditInfo = NULL;
+    CONSOLE_READCONSOLE_CONTROL ReadControl;
 
     PVOID Buffer;
     ULONG NrCharactersRead = 0;
     ULONG CharSize = (ReadConsoleRequest->Unicode ? sizeof(WCHAR) : sizeof(CHAR));
-
-    /* Retrieve the executable name, if needed */
-    if (ReadConsoleRequest->InitialNumBytes == 0 &&
-        ReadConsoleRequest->ExeLength <= sizeof(ReadConsoleRequest->StaticBuffer))
-    {
-        ExeName.Length = ExeName.MaximumLength = ReadConsoleRequest->ExeLength;
-        ExeName.Buffer = (PWCHAR)ReadConsoleRequest->StaticBuffer;
-    }
-    else
-    {
-        ExeName.Length = ExeName.MaximumLength = 0;
-        ExeName.Buffer = NULL;
-    }
-
-    /* Build the ReadControl structure */
-    ReadControl.nLength           = sizeof(CONSOLE_READCONSOLE_CONTROL);
-    ReadControl.nInitialChars     = ReadConsoleRequest->InitialNumBytes / CharSize;
-    ReadControl.dwCtrlWakeupMask  = ReadConsoleRequest->CtrlWakeupMask;
-    ReadControl.dwControlKeyState = ReadConsoleRequest->ControlKeyState;
 
     /*
      * For optimization purposes, Windows (and hence ReactOS, too, for
@@ -394,27 +403,58 @@ ReadChars(IN PGET_INPUT_INFO InputInfo,
         Buffer = ReadConsoleRequest->Buffer;
     }
 
-    DPRINT("Calling ConDrvReadConsole(%wZ)\n", &ExeName);
-    Status = ConDrvReadConsole(InputBuffer->Header.Console,
+    if (IsCookedMode)
+    {
+        /* COOKED mode */
+
+        PUNICODE_STRING ExeName;
+        // PCONSOLE_READCONSOLE_CONTROL ReadControl;
+
+        LineEditInfo = &Console->LineEditInfo; // FIXME!! Must be one context per handle!!
+        ExeName = &LineEditInfo->ExeName;
+        // ReadControl = &LineEditInfo->ReadControl;
+
+        /* Retrieve the executable name -- Used for Aliases resolution */
+        // FIXME: Do a buffer capture?
+        if (ReadConsoleRequest->ExeLength <= sizeof(ReadConsoleRequest->StaticBuffer))
+        {
+            ExeName->Length = ExeName->MaximumLength = ReadConsoleRequest->ExeLength;
+            ExeName->Buffer = (PWCHAR)ReadConsoleRequest->StaticBuffer;
+        }
+        else
+        {
+            ExeName->Length = ExeName->MaximumLength = 0;
+            ExeName->Buffer = NULL;
+        }
+
+        /* Build the ReadControl structure */
+        ReadControl.nLength           = sizeof(CONSOLE_READCONSOLE_CONTROL);
+        ReadControl.nInitialChars     = ReadConsoleRequest->InitialNumBytes / CharSize;
+        ReadControl.dwCtrlWakeupMask  = ReadConsoleRequest->CtrlWakeupMask;
+        // ReadControl.dwControlKeyState = ReadConsoleRequest->ControlKeyState;
+
+        DPRINT1("ReadChars(%wZ)\n", ExeName);
+    }
+    ReadControl.dwControlKeyState = ReadConsoleRequest->ControlKeyState;
+
+    DPRINT("Calling ConDrvReadConsole()\n");
+    Status = ConDrvReadConsole(Console,
                                InputBuffer,
                                ReadConsoleRequest->Unicode,
-                               Buffer,
                                &ReadControl,
-                               &ExeName,
+                               Buffer,
                                ReadConsoleRequest->NumBytes / CharSize, // NrCharactersToRead
                                &NrCharactersRead);
-    DPRINT("ConDrvReadConsole returned (%d ; Status = 0x%08x)\n",
+    DPRINT1("ConDrvReadConsole returned (%d ; Status = 0x%08x)\n",
            NrCharactersRead, Status);
-
-    // ReadConsoleRequest->ControlKeyState = ReadControl.dwControlKeyState;
 
     if (Status == STATUS_PENDING)
     {
         /* We haven't completed a read, so start a wait */
         return WaitBeforeReading(InputInfo,
                                  ApiMessage,
-                                 ReadCharsThread,
-                                 CreateWaitBlock);
+                                 CreateWaitBlock,
+                                 ReadCharsThread);
     }
     else
     {
@@ -425,38 +465,160 @@ ReadChars(IN PGET_INPUT_INFO InputInfo,
         ReadConsoleRequest->NumBytes = NrCharactersRead * CharSize;
         ReadConsoleRequest->ControlKeyState = ReadControl.dwControlKeyState;
 
+        if (IsCookedMode)
+        {
+            // ReadConsoleRequest->ControlKeyState = ReadControl.dwControlKeyState;
+            /* Clean the Input Line Discipline */
+            ASSERT(LineEditInfo);
+            if (LineEditInfo->LineBuffer) ConsoleFreeHeap(LineEditInfo->LineBuffer);
+        }
+
         return Status;
         // return STATUS_SUCCESS;
     }
 }
 
 static NTSTATUS
-ReadInputBuffer(IN PGET_INPUT_INFO InputInfo,
-                IN PCSR_API_MESSAGE ApiMessage,
-                IN BOOLEAN CreateWaitBlock OPTIONAL);
+DoReadConsole(
+    IN PGET_INPUT_INFO InputInfo,
+    IN PCSR_API_MESSAGE ApiMessage)
+{
+    PCONSOLE_READCONSOLE ReadConsoleRequest = &((PCONSOLE_API_MESSAGE)ApiMessage)->Data.ReadConsoleRequest;
+    PCONSOLE_INPUT_BUFFER InputBuffer = InputInfo->InputBuffer;
+    PCONSRV_CONSOLE Console = InputBuffer->Header.Console;
+    BOOLEAN IsCookedMode = !!(InputBuffer->Mode & ENABLE_LINE_INPUT);
+
+    // PVOID Buffer;
+    // ULONG CharSize = (ReadConsoleRequest->Unicode ? sizeof(WCHAR) : sizeof(CHAR));
+
+#if 0
+    /*
+     * For optimization purposes, Windows (and hence ReactOS, too, for
+     * compatibility reasons) uses a static buffer if no more than eighty
+     * bytes are read. Otherwise a new buffer is used.
+     * The client-side expects that we know this behaviour.
+     */
+    if (ReadConsoleRequest->CaptureBufferSize <= sizeof(ReadConsoleRequest->StaticBuffer))
+    {
+        /*
+         * Adjust the internal pointer, because its old value points to
+         * the static buffer in the original ApiMessage structure.
+         */
+        // ReadConsoleRequest->Buffer = ReadConsoleRequest->StaticBuffer;
+        Buffer = ReadConsoleRequest->StaticBuffer;
+    }
+    else
+    {
+        Buffer = ReadConsoleRequest->Buffer;
+    }
+#endif
+
+    if (IsCookedMode)
+    {
+        /* COOKED mode */
+
+        HANDLE ProcessHandle = InputInfo->CallingThread->Process->ProcessHandle;
+        PLINE_EDIT_INFO LineEditInfo = &Console->LineEditInfo; // FIXME!! Must be one context per handle!!
+        PUNICODE_STRING ExeName = &LineEditInfo->ExeName;
+        // PCONSOLE_READCONSOLE_CONTROL ReadControl = &LineEditInfo->ReadControl;
+
+        RtlZeroMemory(LineEditInfo, sizeof(LINE_EDIT_INFO));
+
+        /* Retrieve the executable name -- Used for Aliases resolution */
+        // FIXME: Do a buffer capture?
+        if (ReadConsoleRequest->ExeLength <= sizeof(ReadConsoleRequest->StaticBuffer))
+        {
+            ExeName->Length = ExeName->MaximumLength = ReadConsoleRequest->ExeLength;
+            ExeName->Buffer = (PWCHAR)ReadConsoleRequest->StaticBuffer;
+        }
+        else
+        {
+            ExeName->Length = ExeName->MaximumLength = 0;
+            ExeName->Buffer = NULL;
+        }
+
+        /* Retrieve the history for this process, by handle */
+        // HistoryFindBufferByProcess
+        LineEditInfo->Hist = HistoryCurrentBuffer(Console, /**/ExeName, /**/ ProcessHandle);
+
+#if 0
+        /* Build the ReadControl structure */
+        ReadControl->nLength           = sizeof(CONSOLE_READCONSOLE_CONTROL);
+        ReadControl->nInitialChars     = ReadConsoleRequest->InitialNumBytes / CharSize;
+        ReadControl->dwCtrlWakeupMask  = ReadConsoleRequest->CtrlWakeupMask;
+        ReadControl->dwControlKeyState = ReadConsoleRequest->ControlKeyState;
+#endif
+
+        /*
+         * Save the current modes that are set at the time of the call.
+         * Therefore, we consistently use the same modes during cross-read-wait
+         * calls, even if these modes are changed concurrently.
+         */
+        LineEditInfo->Mode = InputBuffer->Mode;
+
+        /*
+         * Reference the input buffer and the active screen buffer so that
+         * they don't go away while reads are in progress or waiting.
+         */
+        LineEditInfo->InputBuffer = InputBuffer; // TODO: FIXME
+        if (LineEditInfo->Mode & ENABLE_ECHO_INPUT)
+            LineEditInfo->ScreenBuffer = Console->ActiveBuffer; // TODO: FIXME: Reference, etc...
+        else
+            LineEditInfo->ScreenBuffer = NULL;
+
+        /* Initialize the Input Line Discipline */
+        LineEditInfo->LineBuffer = NULL;
+        LineEditInfo->LinePos = LineEditInfo->LineMaxSize = LineEditInfo->LineSize = 0;
+        LineEditInfo->LineComplete = LineEditInfo->LineUpPressed = FALSE;
+        // LineWakeupMask
+        LineEditInfo->LineInsertToggle = Console->InsertMode;
+
+        DPRINT1("DoReadConsole(%wZ, 0x%lx)\n", ExeName, ProcessHandle);
+    }
+    else
+    {
+        /* RAW mode */
+
+        DPRINT1("DoReadConsole()\n");
+    }
+
+    return ReadChars(InputInfo, ApiMessage, TRUE);
+}
+
+
+static NTSTATUS
+DoGetConsoleInput(
+    IN PGET_INPUT_INFO InputInfo,
+    IN PCSR_API_MESSAGE ApiMessage,
+    IN BOOLEAN CreateWaitBlock);
 
 // Wait function CSR_WAIT_FUNCTION
 static BOOLEAN
 NTAPI
-ReadInputBufferThread(IN PLIST_ENTRY WaitList,
-                      IN PCSR_THREAD WaitThread,
-                      IN PCSR_API_MESSAGE WaitApiMessage,
-                      IN PVOID WaitContext,
-                      IN PVOID WaitArgument1,
-                      IN PVOID WaitArgument2,
-                      IN ULONG WaitFlags)
+ReadInputBufferThread(
+    IN PLIST_ENTRY WaitList,
+    IN PCSR_THREAD WaitThread,
+    IN PCSR_API_MESSAGE WaitApiMessage,
+    IN PVOID WaitContext,
+    IN PVOID WaitArgument1,
+    IN PVOID WaitArgument2,
+    IN ULONG WaitFlags)
 {
     NTSTATUS Status;
     PGET_INPUT_INFO InputInfo = (PGET_INPUT_INFO)WaitContext;
-
     PVOID InputHandle = WaitArgument2;
 
-    DPRINT("ReadInputBufferThread - WaitContext = 0x%p, WaitArgument1 = 0x%p, WaitArgument2 = 0x%p, WaitFlags = %lu\n", WaitContext, WaitArgument1, WaitArgument2, WaitFlags);
+    DPRINT1("ReadInputBufferThread(ApiMsgWait: %lx.%lx / ThrdWait: %lx.%lx) - WaitContext = 0x%p, WaitArgument1 = 0x%p, WaitArgument2 = 0x%p, WaitFlags = %lu\n",
+           WaitApiMessage->Header.ClientId.UniqueProcess,
+           WaitApiMessage->Header.ClientId.UniqueThread,
+           WaitThread->ClientId.UniqueProcess,
+           WaitThread->ClientId.UniqueThread,
+           WaitContext, WaitArgument1, WaitArgument2, WaitFlags);
 
     /*
      * If we are notified of the process termination via a call
-     * to CsrNotifyWaitBlock triggered by CsrDestroyProcess or
-     * CsrDestroyThread, just return.
+     * to CsrNotifyWaitBlock() triggered by CsrDestroyProcess()
+     * or CsrDestroyThread(), just return.
      */
     if (WaitFlags & CsrProcessTerminating)
     {
@@ -466,8 +628,8 @@ ReadInputBufferThread(IN PLIST_ENTRY WaitList,
 
     /*
      * Somebody is closing a handle to this input buffer,
-     * by calling ConSrvCloseHandleEntry.
-     * See whether we are linked to that handle (ie. we
+     * by calling ConSrvCloseHandleEntry().
+     * See whether we are linked to that handle (i.e. we
      * are a waiter for this handle), and if so, return.
      * Otherwise, ignore the call and continue waiting.
      */
@@ -479,10 +641,10 @@ ReadInputBufferThread(IN PLIST_ENTRY WaitList,
     }
 
     /*
-     * If we go there, that means we are notified for some new input.
+     * If we go there, this means we are notified for some new input.
      * The console is therefore already locked.
      */
-    Status = ReadInputBuffer(InputInfo, WaitApiMessage, FALSE);
+    Status = DoGetConsoleInput(InputInfo, WaitApiMessage, FALSE);
 
 Quit:
     if (Status != STATUS_PENDING)
@@ -491,7 +653,8 @@ Quit:
         ConsoleFreeHeap(InputInfo);
     }
 
-    return (Status == STATUS_PENDING ? FALSE : TRUE);
+    /* Return TRUE if the wait is satisfied, or FALSE otherwise */
+    return (Status != STATUS_PENDING);
 }
 
 NTSTATUS NTAPI
@@ -502,10 +665,12 @@ ConDrvGetConsoleInput(IN PCONSOLE Console,
                       OUT PINPUT_RECORD InputRecord,
                       IN ULONG NumEventsToRead,
                       OUT PULONG NumEventsRead OPTIONAL);
+
 static NTSTATUS
-ReadInputBuffer(IN PGET_INPUT_INFO InputInfo,
-                IN PCSR_API_MESSAGE ApiMessage,
-                IN BOOLEAN CreateWaitBlock OPTIONAL)
+DoGetConsoleInput(
+    IN PGET_INPUT_INFO InputInfo,
+    IN PCSR_API_MESSAGE ApiMessage,
+    IN BOOLEAN CreateWaitBlock)
 {
     NTSTATUS Status;
     PCONSOLE_GETINPUT GetInputRequest = &((PCONSOLE_API_MESSAGE)ApiMessage)->Data.GetInputRequest;
@@ -548,8 +713,8 @@ ReadInputBuffer(IN PGET_INPUT_INFO InputInfo,
         /* We haven't completed a read, so start a wait */
         return WaitBeforeReading(InputInfo,
                                  ApiMessage,
-                                 ReadInputBufferThread,
-                                 CreateWaitBlock);
+                                 CreateWaitBlock,
+                                 ReadInputBufferThread);
     }
     else
     {
@@ -636,7 +801,7 @@ CON_API(SrvReadConsole,
     InputInfo.HandleEntry   = HandleEntry;
     InputInfo.InputBuffer   = InputBuffer;
 
-    Status = ReadChars(&InputInfo, ApiMessage, TRUE);
+    Status = DoReadConsole(&InputInfo, ApiMessage);
 
     ConSrvReleaseInputBuffer(InputBuffer, TRUE);
 
@@ -701,7 +866,7 @@ CON_API(SrvGetConsoleInput,
     InputInfo.HandleEntry   = HandleEntry;
     InputInfo.InputBuffer   = InputBuffer;
 
-    Status = ReadInputBuffer(&InputInfo, ApiMessage, TRUE);
+    Status = DoGetConsoleInput(&InputInfo, ApiMessage, TRUE);
 
     ConSrvReleaseInputBuffer(InputBuffer, TRUE);
 

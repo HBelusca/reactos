@@ -357,29 +357,36 @@ CON_API(SrvSetConsoleActiveScreenBuffer,
 /* CSR THREADS FOR WriteConsole ***********************************************/
 
 static NTSTATUS
-DoWriteConsole(IN PCSR_API_MESSAGE ApiMessage,
-               IN PCSR_THREAD ClientThread,
-               IN BOOLEAN CreateWaitBlock OPTIONAL);
+DoWriteConsole(
+    IN PCSR_API_MESSAGE ApiMessage,
+    IN PCSR_THREAD ClientThread,
+    IN BOOLEAN CreateWaitBlock);
 
 // Wait function CSR_WAIT_FUNCTION
 static BOOLEAN
 NTAPI
-WriteConsoleThread(IN PLIST_ENTRY WaitList,
-                   IN PCSR_THREAD WaitThread,
-                   IN PCSR_API_MESSAGE WaitApiMessage,
-                   IN PVOID WaitContext,
-                   IN PVOID WaitArgument1,
-                   IN PVOID WaitArgument2,
-                   IN ULONG WaitFlags)
+WriteConsoleThread(
+    IN PLIST_ENTRY WaitList,
+    IN PCSR_THREAD WaitThread,
+    IN PCSR_API_MESSAGE WaitApiMessage,
+    IN PVOID WaitContext,
+    IN PVOID WaitArgument1,
+    IN PVOID WaitArgument2,
+    IN ULONG WaitFlags)
 {
     NTSTATUS Status;
 
-    DPRINT("WriteConsoleThread - WaitContext = 0x%p, WaitArgument1 = 0x%p, WaitArgument2 = 0x%p, WaitFlags = %lu\n", WaitContext, WaitArgument1, WaitArgument2, WaitFlags);
+    DPRINT1("WriteConsoleThread(ApiMsgWait: %lx.%lx / ThrdWait: %lx.%lx) - WaitContext = 0x%p, WaitArgument1 = 0x%p, WaitArgument2 = 0x%p, WaitFlags = %lu\n",
+           WaitApiMessage->Header.ClientId.UniqueProcess,
+           WaitApiMessage->Header.ClientId.UniqueThread,
+           WaitThread->ClientId.UniqueProcess,
+           WaitThread->ClientId.UniqueThread,
+           WaitContext, WaitArgument1, WaitArgument2, WaitFlags);
 
     /*
      * If we are notified of the process termination via a call
-     * to CsrNotifyWaitBlock triggered by CsrDestroyProcess or
-     * CsrDestroyThread, just return.
+     * to CsrNotifyWaitBlock() triggered by CsrDestroyProcess()
+     * or CsrDestroyThread(), just return.
      */
     if (WaitFlags & CsrProcessTerminating)
     {
@@ -395,7 +402,8 @@ Quit:
         WaitApiMessage->Status = Status;
     }
 
-    return (Status == STATUS_PENDING ? FALSE : TRUE);
+    /* Return TRUE if the wait is satisfied, or FALSE otherwise */
+    return (Status != STATUS_PENDING);
 }
 
 NTSTATUS NTAPI
@@ -406,9 +414,10 @@ ConDrvWriteConsole(IN PCONSOLE Console,
                    IN ULONG NumCharsToWrite,
                    OUT PULONG NumCharsWritten OPTIONAL);
 static NTSTATUS
-DoWriteConsole(IN PCSR_API_MESSAGE ApiMessage,
-               IN PCSR_THREAD ClientThread,
-               IN BOOLEAN CreateWaitBlock OPTIONAL)
+DoWriteConsole(
+    IN PCSR_API_MESSAGE ApiMessage,
+    IN PCSR_THREAD ClientThread,
+    IN BOOLEAN CreateWaitBlock)
 {
     NTSTATUS Status;
     PCONSOLE_WRITECONSOLE WriteConsoleRequest = &((PCONSOLE_API_MESSAGE)ApiMessage)->Data.WriteConsoleRequest;

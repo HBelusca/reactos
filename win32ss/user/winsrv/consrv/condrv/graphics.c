@@ -219,6 +219,7 @@ GRAPHICS_BUFFER_Initialize(OUT PCONSOLE_SCREEN_BUFFER* Buffer,
 
     NewBuffer->CursorBlinkOn  = FALSE;
     NewBuffer->ForceCursorOff = TRUE;
+    NewBuffer->CursorIsDouble = FALSE;
     NewBuffer->CursorInfo.bVisible = FALSE;
     NewBuffer->CursorInfo.dwSize   = 0;
     NewBuffer->CursorPosition.X = NewBuffer->CursorPosition.Y = 0;

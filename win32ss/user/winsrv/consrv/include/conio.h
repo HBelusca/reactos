@@ -71,6 +71,7 @@ typedef struct _CONSOLE_SCREEN_BUFFER
     COORD   CursorPosition;             /* Current cursor position */
     BOOLEAN CursorBlinkOn;
     BOOLEAN ForceCursorOff;
+    BOOLEAN CursorIsDouble;
 //  ULONG   CursorSize;
     CONSOLE_CURSOR_INFO CursorInfo; // FIXME: Keep this member or not ??
 /*********************************************/

@@ -20,9 +20,6 @@
 #include <debug.h>
 
 
-
-
-
 /********** HACK HACK HACK HACK HACK HACK HACK HACK HACK HACK HACK ************/
 
 /* GLOBALS ********************************************************************/
@@ -78,10 +75,6 @@ ConioInputEventToUnicode(PCONSOLE Console, PINPUT_RECORD InputEvent)
 #endif
 
 /********** HACK HACK HACK HACK HACK HACK HACK HACK HACK HACK HACK ************/
-
-
-
-
 
 
 
@@ -290,8 +283,28 @@ ConSrvTermDeinitTerminal(IN OUT PTERMINAL This)
 }
 
 
+/* GLOBALS ********************************************************************/
 
-/************ Line discipline ***************/
+#include "history.h"
+
+#define TAB_WIDTH   8
+
+// See condrv/text.c
+/*static*/ VOID
+ClearLineBuffer(PTEXTMODE_SCREEN_BUFFER Buff);
+
+// See condrv/coninput.c
+NTSTATUS NTAPI
+ConDrvGetConsoleInput(IN PCONSOLE Console,
+                      IN PCONSOLE_INPUT_BUFFER InputBuffer,
+                      IN BOOLEAN KeepEvents,
+                      IN BOOLEAN WaitForMoreEvents,
+                      OUT PINPUT_RECORD InputRecord,
+                      IN ULONG NumEventsToRead,
+                      OUT PULONG NumEventsRead OPTIONAL);
+
+
+/* LINE DISCIPLINE ************************************************************/
 
 static NTSTATUS NTAPI
 ConSrvTermReadStream(IN OUT PTERMINAL This,
@@ -306,14 +319,12 @@ ConSrvTermReadStream(IN OUT PTERMINAL This,
     PFRONTEND FrontEnd = This->Context;
     PCONSRV_CONSOLE Console = FrontEnd->Console;
     PCONSOLE_INPUT_BUFFER InputBuffer = &Console->InputBuffer;
-    PUNICODE_STRING ExeName = Parameter;
 
     // STATUS_PENDING : Wait if more to read ; STATUS_SUCCESS : Don't wait.
     NTSTATUS Status = STATUS_PENDING;
 
-    PLIST_ENTRY CurrentEntry;
-    ConsoleInput *Input;
     ULONG i = 0;
+    INPUT_RECORD InputRecord;
 
     /* Validity checks */
     // ASSERT(Console == InputBuffer->Header.Console);
@@ -323,77 +334,96 @@ ConSrvTermReadStream(IN OUT PTERMINAL This,
 
     if (InputBuffer->Mode & ENABLE_LINE_INPUT)
     {
-        /* COOKED mode, call the line discipline */
+        /* COOKED mode */
 
-        if (Console->LineBuffer == NULL)
+        PLINE_EDIT_INFO LineEditInfo = &Console->LineEditInfo; // FIXME!!
+
+        if (ReadControl == NULL || ReadControl->nLength != sizeof(CONSOLE_READCONSOLE_CONTROL))
+        {
+            return STATUS_INVALID_PARAMETER;
+        }
+
+        if (LineEditInfo->LineBuffer == NULL)
         {
             /* Start a new line */
-            Console->LineMaxSize = max(256, NumCharsToRead);
+            LineEditInfo->LineMaxSize = max(256, NumCharsToRead);
 
             /*
              * Fixup ReadControl->nInitialChars in case the number of initial
              * characters is bigger than the number of characters to be read.
-             * It will always be, lesser than or equal to Console->LineMaxSize.
+             * It will always be, lesser than or equal to LineEditInfo->LineMaxSize.
              */
             ReadControl->nInitialChars = min(ReadControl->nInitialChars, NumCharsToRead);
 
-            Console->LineBuffer = ConsoleAllocHeap(0, Console->LineMaxSize * sizeof(WCHAR));
-            if (Console->LineBuffer == NULL) return STATUS_NO_MEMORY;
+            LineEditInfo->LineBuffer = ConsoleAllocHeap(0, LineEditInfo->LineMaxSize * sizeof(WCHAR));
+            if (LineEditInfo->LineBuffer == NULL) return STATUS_NO_MEMORY;
 
-            Console->LinePos = Console->LineSize = ReadControl->nInitialChars;
-            Console->LineComplete = Console->LineUpPressed = FALSE;
-            Console->LineInsertToggle = Console->InsertMode;
-            Console->LineWakeupMask = ReadControl->dwCtrlWakeupMask;
+            LineEditInfo->LinePos = LineEditInfo->LineSize = ReadControl->nInitialChars;
+            LineEditInfo->LineComplete = LineEditInfo->LineUpPressed = FALSE;
+            LineEditInfo->LineInsertToggle = Console->InsertMode;
+            LineEditInfo->LineWakeupMask = ReadControl->dwCtrlWakeupMask;
 
             /*
              * Pre-fill the buffer with the nInitialChars from the user buffer.
              * Since pre-filling is only allowed in Unicode, we don't need to
              * worry about ANSI <-> Unicode conversion.
              */
-            memcpy(Console->LineBuffer, Buffer, Console->LineSize * sizeof(WCHAR));
-            if (Console->LineSize >= Console->LineMaxSize)
+// FIXME BUGBUG!! String copied in LineBuffer of size LineMaxSize that may be smaller than LineSize??!!
+            memcpy(LineEditInfo->LineBuffer, Buffer, LineEditInfo->LineSize * sizeof(WCHAR));
+            if (LineEditInfo->LineSize >= LineEditInfo->LineMaxSize)
             {
-                Console->LineComplete = TRUE;
-                Console->LinePos = 0;
+                LineEditInfo->LineComplete = TRUE;
+                LineEditInfo->LinePos = 0;
             }
+        }
+
+        /* Set the cursor size */
+        if (LineEditInfo->ScreenBuffer)
+        {
+            LineEditInfo->ScreenBuffer->CursorIsDouble =
+                (!LineEditInfo->LineComplete && (Console->InsertMode != LineEditInfo->LineInsertToggle));
         }
 
         /* If we don't have a complete line yet, process the pending input */
-        while (!Console->LineComplete && !IsListEmpty(&InputBuffer->InputEvents))
+        while (!LineEditInfo->LineComplete)
         {
             /* Remove an input event from the queue */
-            _InterlockedDecrement((PLONG)&InputBuffer->NumberOfEvents);
-            CurrentEntry = RemoveHeadList(&InputBuffer->InputEvents);
-            if (IsListEmpty(&InputBuffer->InputEvents))
+            Status = ConDrvGetConsoleInput(Console,
+                                           InputBuffer,
+                                           FALSE,
+                                           TRUE,
+                                           &InputRecord,
+                                           1,
+                                           NULL /* &NumEventsRead */);
+            if (Status == STATUS_PENDING)
             {
-                NtClearEvent(InputBuffer->ActiveEvent);
+                /* We will wait for new input */
+                break;
             }
-            Input = CONTAINING_RECORD(CurrentEntry, ConsoleInput, ListEntry);
 
             /* Only pay attention to key down */
-            if (Input->InputEvent.EventType == KEY_EVENT &&
-                Input->InputEvent.Event.KeyEvent.bKeyDown)
+            if (InputRecord.EventType == KEY_EVENT &&
+                InputRecord.Event.KeyEvent.bKeyDown)
             {
-                LineInputKeyDown(Console, ExeName,
-                                 &Input->InputEvent.Event.KeyEvent);
-                ReadControl->dwControlKeyState = Input->InputEvent.Event.KeyEvent.dwControlKeyState;
+                LineInputKeyDown(LineEditInfo,
+                                 &InputRecord.Event.KeyEvent);
+                ReadControl->dwControlKeyState = InputRecord.Event.KeyEvent.dwControlKeyState;
             }
-            ConsoleFreeHeap(Input);
         }
 
         /* Check if we have a complete line to read from */
-        if (Console->LineComplete)
+        if (LineEditInfo->LineComplete)
         {
             /*
-             * Console->LinePos keeps the next position of the character to read
+             * LineEditInfo->LinePos keeps the next position of the character to read
              * in the line buffer across the different calls of the function,
              * so that the line buffer can be read by chunks after all the input
              * has been buffered.
              */
 
-            while (i < NumCharsToRead && Console->LinePos < Console->LineSize)
+            while (i < NumCharsToRead && LineEditInfo->LinePos < LineEditInfo->LineSize)
             {
-                WCHAR Char = Console->LineBuffer[Console->LinePos++];
+                WCHAR Char = LineEditInfo->LineBuffer[LineEditInfo->LinePos++];
 
                 if (Unicode)
                 {
@@ -406,14 +436,21 @@ ConSrvTermReadStream(IN OUT PTERMINAL This,
                 ++i;
             }
 
-            if (Console->LinePos >= Console->LineSize)
+            if (LineEditInfo->LinePos >= LineEditInfo->LineSize)
             {
                 /* The entire line has been read */
-                ConsoleFreeHeap(Console->LineBuffer);
-                Console->LineBuffer = NULL;
-                Console->LinePos = Console->LineMaxSize = Console->LineSize = 0;
-                // Console->LineComplete = Console->LineUpPressed = FALSE;
-                Console->LineComplete = FALSE;
+                ConsoleFreeHeap(LineEditInfo->LineBuffer);
+                LineEditInfo->LineBuffer = NULL;
+                LineEditInfo->LinePos = LineEditInfo->LineMaxSize = LineEditInfo->LineSize = 0;
+                // LineEditInfo->LineComplete = LineEditInfo->LineUpPressed = FALSE;
+                LineEditInfo->LineComplete = FALSE;
+            }
+
+            /* Set the cursor size */
+            if (LineEditInfo->ScreenBuffer)
+            {
+                LineEditInfo->ScreenBuffer->CursorIsDouble = FALSE;
+                    // (!LineEditInfo->LineComplete && (Console->InsertMode != LineEditInfo->LineInsertToggle));
             }
 
             Status = STATUS_SUCCESS;
@@ -424,23 +461,28 @@ ConSrvTermReadStream(IN OUT PTERMINAL This,
         /* RAW mode */
 
         /* Character input */
-        while (i < NumCharsToRead && !IsListEmpty(&InputBuffer->InputEvents))
+        while (i < NumCharsToRead)
         {
             /* Remove an input event from the queue */
-            _InterlockedDecrement((PLONG)&InputBuffer->NumberOfEvents);
-            CurrentEntry = RemoveHeadList(&InputBuffer->InputEvents);
-            if (IsListEmpty(&InputBuffer->InputEvents))
+            Status = ConDrvGetConsoleInput(Console,
+                                           InputBuffer,
+                                           FALSE,
+                                           TRUE,
+                                           &InputRecord,
+                                           1,
+                                           NULL /* &NumEventsRead */);
+            if (Status == STATUS_PENDING)
             {
-                NtClearEvent(InputBuffer->ActiveEvent);
+                /* We will wait for new input */
+                break;
             }
-            Input = CONTAINING_RECORD(CurrentEntry, ConsoleInput, ListEntry);
 
             /* Only pay attention to valid characters, on key down */
-            if (Input->InputEvent.EventType == KEY_EVENT  &&
-                Input->InputEvent.Event.KeyEvent.bKeyDown &&
-                Input->InputEvent.Event.KeyEvent.uChar.UnicodeChar != L'\0')
+            if (InputRecord.EventType == KEY_EVENT  &&
+                InputRecord.Event.KeyEvent.bKeyDown &&
+                InputRecord.Event.KeyEvent.uChar.UnicodeChar != L'\0')
             {
-                WCHAR Char = Input->InputEvent.Event.KeyEvent.uChar.UnicodeChar;
+                WCHAR Char = InputRecord.Event.KeyEvent.uChar.UnicodeChar;
 
                 if (Unicode)
                 {
@@ -452,10 +494,9 @@ ConSrvTermReadStream(IN OUT PTERMINAL This,
                 }
                 ++i;
 
-                /* Did read something */
+                /* We did read something */
                 Status = STATUS_SUCCESS;
             }
-            ConsoleFreeHeap(Input);
         }
     }
 
@@ -466,18 +507,11 @@ ConSrvTermReadStream(IN OUT PTERMINAL This,
 }
 
 
-
-
-/* GLOBALS ********************************************************************/
-
-#define TAB_WIDTH   8
-
-// See condrv/text.c
-/*static*/ VOID
-ClearLineBuffer(PTEXTMODE_SCREEN_BUFFER Buff);
-
 static VOID
-ConioNextLine(PTEXTMODE_SCREEN_BUFFER Buff, PSMALL_RECT UpdateRect, PUINT ScrolledLines)
+ConioNextLine(
+    IN PTEXTMODE_SCREEN_BUFFER Buff,
+    IN OUT PSMALL_RECT UpdateRect,
+    IN OUT PUINT ScrolledLines)
 {
     /* If we hit bottom, slide the viewable screen */
     if (++Buff->CursorPosition.Y == Buff->ScreenBufferSize.Y)
@@ -499,13 +533,14 @@ ConioNextLine(PTEXTMODE_SCREEN_BUFFER Buff, PSMALL_RECT UpdateRect, PUINT Scroll
     UpdateRect->Bottom = Buff->CursorPosition.Y;
 }
 
-static NTSTATUS
-ConioWriteConsole(PFRONTEND FrontEnd,
-                  PTEXTMODE_SCREEN_BUFFER Buff,
-                  PWCHAR Buffer,
-                  DWORD Length,
-                  BOOL Attrib)
+static NTSTATUS NTAPI
+ConSrvTermWriteStream(IN OUT PTERMINAL This,
+                      PTEXTMODE_SCREEN_BUFFER Buff,
+                      PWCHAR Buffer,
+                      DWORD Length,
+                      BOOL Attrib)
 {
+    PFRONTEND FrontEnd = This->Context;
     PCONSRV_CONSOLE Console = FrontEnd->Console;
 
     UINT i;
@@ -833,23 +868,6 @@ ConioWriteConsole(PFRONTEND FrontEnd,
     }
 
     return STATUS_SUCCESS;
-}
-
-
-
-static NTSTATUS NTAPI
-ConSrvTermWriteStream(IN OUT PTERMINAL This,
-                      PTEXTMODE_SCREEN_BUFFER Buff,
-                      PWCHAR Buffer,
-                      DWORD Length,
-                      BOOL Attrib)
-{
-    PFRONTEND FrontEnd = This->Context;
-    return ConioWriteConsole(FrontEnd,
-                             Buff,
-                             Buffer,
-                             Length,
-                             Attrib);
 }
 
 /************ Line discipline ***************/

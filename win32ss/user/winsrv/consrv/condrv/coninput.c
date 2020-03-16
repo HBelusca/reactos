@@ -228,20 +228,19 @@ ConDrvDeinitInputBuffer(IN PCONSOLE Console)
 /* PUBLIC DRIVER APIS *********************************************************/
 
 NTSTATUS NTAPI
-ConDrvReadConsole(IN PCONSOLE Console,
-                  IN PCONSOLE_INPUT_BUFFER InputBuffer,
-                  IN BOOLEAN Unicode,
-                  OUT PVOID Buffer,
-                  IN OUT PCONSOLE_READCONSOLE_CONTROL ReadControl,
-                  IN PVOID Parameter OPTIONAL,
-                  IN ULONG NumCharsToRead,
-                  OUT PULONG NumCharsRead OPTIONAL)
+ConDrvReadConsole(
+    IN PCONSOLE Console,
+    IN PCONSOLE_INPUT_BUFFER InputBuffer,
+    IN BOOLEAN Unicode,
+    IN OUT PVOID Parameter OPTIONAL,
+    OUT PVOID Buffer,
+    IN ULONG NumCharsToRead,
+    OUT PULONG NumCharsRead OPTIONAL)
 {
     // STATUS_PENDING : Wait if more to read ; STATUS_SUCCESS : Don't wait.
     // NTSTATUS Status; = STATUS_PENDING;
 
-    if (Console == NULL || InputBuffer == NULL || /* Buffer == NULL  || */
-        ReadControl == NULL || ReadControl->nLength != sizeof(CONSOLE_READCONSOLE_CONTROL))
+    if (Console == NULL || InputBuffer == NULL /* || Buffer == NULL */)
     {
         return STATUS_INVALID_PARAMETER;
     }
@@ -250,12 +249,12 @@ ConDrvReadConsole(IN PCONSOLE Console,
     ASSERT(Console == InputBuffer->Header.Console);
     ASSERT((Buffer != NULL) || (Buffer == NULL && NumCharsToRead == 0));
 
-    /* Call the line-discipline */
+    /* Call the line discipline */
     return TermReadStream(Console,
                           Unicode,
                           Buffer,
-                          ReadControl,
-                          Parameter,
+                          (PCONSOLE_READCONSOLE_CONTROL)Parameter,
+                          NULL,
                           NumCharsToRead,
                           NumCharsRead);
 }

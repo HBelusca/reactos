@@ -103,6 +103,7 @@ TEXTMODE_BUFFER_Initialize(OUT PCONSOLE_SCREEN_BUFFER* Buffer,
     NewBuffer->VirtualY = 0;
 
     NewBuffer->CursorBlinkOn = NewBuffer->ForceCursorOff = FALSE;
+    NewBuffer->CursorIsDouble = FALSE;
     NewBuffer->CursorInfo.bVisible = (TextModeInfo->IsCursorVisible && (TextModeInfo->CursorSize != 0));
     NewBuffer->CursorInfo.dwSize   = min(max(TextModeInfo->CursorSize, 0), 100);
 

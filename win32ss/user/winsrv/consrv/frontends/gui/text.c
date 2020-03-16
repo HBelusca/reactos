@@ -384,7 +384,7 @@ GuiPaintCaret(
         if (LeftColumn <= CursorX && CursorX <= RightColumn &&
             TopLine    <= CursorY && CursorY <= BottomLine)
         {
-            CursorHeight = ConioEffectiveCursorSize(Console, GuiData->CharHeight);
+            CursorHeight = ConioEffectiveCursorSize((PCONSOLE_SCREEN_BUFFER)Buffer, GuiData->CharHeight);
 
             Attribute = ConioCoordToPointer(Buffer, Buffer->CursorPosition.X, Buffer->CursorPosition.Y)->Attributes;
             if (Attribute == DEFAULT_SCREEN_ATTRIB)

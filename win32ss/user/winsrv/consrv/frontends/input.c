@@ -179,11 +179,12 @@ ConioProcessKey(PCONSRV_CONSOLE Console, MSG* msg)
 }
 
 DWORD
-ConioEffectiveCursorSize(PCONSRV_CONSOLE Console, DWORD Scale)
+ConioEffectiveCursorSize(
+    IN PCONSOLE_SCREEN_BUFFER ScreenBuffer, // PTEXTMODE_SCREEN_BUFFER
+    IN DWORD Scale)
 {
-    DWORD Size = (Console->ActiveBuffer->CursorInfo.dwSize * Scale + 99) / 100;
-    /* If line input in progress, perhaps adjust for insert toggle */
-    if (Console->LineBuffer && !Console->LineComplete && (Console->InsertMode ? !Console->LineInsertToggle : Console->LineInsertToggle))
+    DWORD Size = (ScreenBuffer->CursorInfo.dwSize * Scale + 99) / 100;
+    if (ScreenBuffer->CursorIsDouble)
         return (Size * 2 <= Scale) ? (Size * 2) : (Size / 2);
     return Size;
 }

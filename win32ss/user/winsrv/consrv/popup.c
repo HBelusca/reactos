@@ -182,18 +182,18 @@ DrawBox(PTEXTMODE_SCREEN_BUFFER Buffer,
 
 PPOPUP_WINDOW
 CreatePopupWindow(
-    IN PCONSRV_CONSOLE Console,
     IN PCONSOLE_SCREEN_BUFFER ScreenBuffer,
     IN SHORT xLeft,
     IN SHORT yTop,
     IN SHORT Width,
     IN SHORT Height)
 {
+    PCONSRV_CONSOLE Console;
     PTEXTMODE_SCREEN_BUFFER Buffer;
     PPOPUP_WINDOW Popup;
     SMALL_RECT Region;
 
-    ASSERT((PCONSOLE)Console == ScreenBuffer->Header.Console);
+    Console = ScreenBuffer->Header.Console;
 
     if (GetType(ScreenBuffer) != TEXTMODE_BUFFER)
         return NULL;
@@ -223,7 +223,7 @@ CreatePopupWindow(
     Region.Top    = Popup->Origin.Y;
     Region.Right  = Popup->Origin.X + Popup->Size.X - 1;
     Region.Bottom = Popup->Origin.Y + Popup->Size.Y - 1;
-    ConDrvReadConsoleOutput(Buffer->Header.Console,
+    ConDrvReadConsoleOutput(Console,
                             Buffer,
                             TRUE,
                             Popup->OldContents,

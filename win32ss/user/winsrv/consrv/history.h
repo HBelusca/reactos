@@ -8,33 +8,49 @@
 
 #pragma once
 
-VOID
-HistoryAddEntry(PCONSRV_CONSOLE Console,
-                PUNICODE_STRING ExeName,
-                PUNICODE_STRING Entry);
+typedef struct _HISTORY_BUFFER *PHISTORY_BUFFER;
 
-BOOL
-HistoryFindEntryByPrefix(PCONSRV_CONSOLE Console,
-                         PUNICODE_STRING ExeName,
-                         PUNICODE_STRING Prefix,
-                         PUNICODE_STRING Entry);
-
-VOID
-HistoryGetCurrentEntry(PCONSRV_CONSOLE Console,
-                       PUNICODE_STRING ExeName,
-                       PUNICODE_STRING Entry);
-
-BOOL
-HistoryRecallHistory(PCONSRV_CONSOLE Console,
-                     PUNICODE_STRING ExeName,
-                     INT Offset,
-                     PUNICODE_STRING Entry);
+//
+// FIXME: This is temporary!! It should be replaced by
+// HistoryFindBufferByProcess().
+//
+/*static*/ PHISTORY_BUFFER
+HistoryCurrentBuffer(
+    IN PCONSRV_CONSOLE Console,
+    /**/IN PUNICODE_STRING ExeName,/**/
+    IN HANDLE ProcessHandle);
 
 VOID
-HistoryDeleteCurrentBuffer(PCONSRV_CONSOLE Console,
-                           PUNICODE_STRING ExeName);
+HistoryAddEntry(
+    IN PHISTORY_BUFFER Hist,
+    IN PUNICODE_STRING Entry,
+    IN BOOLEAN HistoryNoDup);
 
-VOID HistoryDeleteBuffers(PCONSRV_CONSOLE Console);
+BOOLEAN
+HistoryFindEntryByPrefix(
+    IN PHISTORY_BUFFER Hist,
+    IN BOOLEAN LineUpPressed,
+    IN PUNICODE_STRING Prefix,
+    OUT PUNICODE_STRING Entry);
+
+VOID
+HistoryGetCurrentEntry(
+    IN PHISTORY_BUFFER Hist,
+    OUT PUNICODE_STRING Entry);
+
+BOOLEAN
+HistoryRecallHistory(
+    IN PHISTORY_BUFFER Hist,
+    IN INT Offset,
+    OUT PUNICODE_STRING Entry);
+
+VOID
+HistoryDeleteBuffer(
+    IN PHISTORY_BUFFER Hist);
+
+VOID
+HistoryDeleteBuffers(
+    IN PCONSRV_CONSOLE Console);
 
 VOID
 HistoryReshapeAllBuffers(
