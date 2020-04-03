@@ -65,7 +65,6 @@ typedef struct _CONSOLE_PROCESS_DATA
 #include "coninput.h"
 #include "conoutput.h"
 #include "handle.h"
-#include "history.h"
 #include "lineinput.h"
 
 /* shutdown.c */
