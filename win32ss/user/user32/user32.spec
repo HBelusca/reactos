@@ -1,4 +1,17 @@
 ; Functions exported by Win 2K3 SP2
+;
+; Needed in debug builds so as to test debug versions of MS modules.
+;
+; GetDbgTagFlags                 273             INT GetDbgTagFlags(INT)
+; GetRipFlags                    344             INT GetRipFlags(VOID)
+; PrivateSetDbgTag               529             VOID PrivateSetDbgTag(INT, INT)
+; PrivateSetRipFlags             530             VOID PrivateSetRipFlags(INT)
+; SetDbgTag                      599             returns NtUserSetDbgTag(INT, INT)
+; SetDebugErrorLevel             600             VOID SetDebugErrorLevel(INT)
+; SetRipFlags                    630             returns NtUserSetRipFlags(INT)
+; VRipOutput                     717             int VRipOutput(NTSTATUS NtStatus, int a4, LPCSTR File, int Line, LPCSTR Function, char *Format, ...)
+; VTagOutput                     718             int VTagOutput(ULONG dwTag, LPCSTR File, int Line, LPCSTR Function, char *Format, ...)
+;
 1 stdcall ActivateKeyboardLayout(long long) NtUserActivateKeyboardLayout
 2 stdcall AdjustWindowRect(ptr long long)
 3 stdcall AdjustWindowRectEx(ptr long long long)
