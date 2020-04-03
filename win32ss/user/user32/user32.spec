@@ -1,4 +1,24 @@
 ; Functions exported by Win 2K3 SP2
+
+; Needed in debug builds so as to test debug versions of MS modules.
+$if DBG
+
+103 stdcall -stub DbgWin32HeapFail(long long)       # VOID DbgWin32HeapFail(DWORD, BOOL)
+104 stdcall -stub DbgWin32HeapStat(ptr long long)   # DWORD DbgWin32HeapStat(PVOID, DWORD, DWORD)
+# 731 stdcall Win32PoolAllocationStats(long long long long long)  ## Related to NtUserWin32PoolAllocationStats ? # Already defined in the main list
+
+273 stdcall -stub GetDbgTagFlags(long)              # INT GetDbgTagFlags(INT)
+344 stdcall -stub GetRipFlags()                     # INT GetRipFlags(VOID)
+529 stdcall -stub PrivateSetDbgTag(long long)       # VOID PrivateSetDbgTag(INT, INT)
+530 stdcall -stub PrivateSetRipFlags(long)          # VOID PrivateSetRipFlags(INT)
+599 stdcall SetDbgTag(long long) NtUserSetDbgTag
+# 600 stdcall SetDebugErrorLevel(long)              # Already defined in the main list
+630 stdcall SetRipFlags(long) NtUserSetRipFlags     ## NOTE: Just one parameter!!
+717 varargs -stub VRipOutput(long long ptr long ptr ptr)    # int VRipOutput(NTSTATUS NtStatus, int a4, LPCSTR File, int Line, LPCSTR Function, LPSTR Format, ...)
+718 varargs -stub VTagOutput(long ptr long ptr ptr)         # int VTagOutput(ULONG dwTag, LPCSTR File, int Line, LPCSTR Function, LPSTR Format, ...)
+
+$endif
+
 1 stdcall ActivateKeyboardLayout(long long) NtUserActivateKeyboardLayout
 2 stdcall AdjustWindowRect(ptr long long)
 3 stdcall AdjustWindowRectEx(ptr long long long)
@@ -737,7 +757,7 @@
 728 stdcall WINNLSGetIMEHotkey(long)
 729 stdcall WaitForInputIdle(long long)
 730 stdcall WaitMessage() NtUserWaitMessage
-731 stdcall Win32PoolAllocationStats(long long long long long)
+731 stdcall Win32PoolAllocationStats(long long long long long)  ## Related to NtUserWin32PoolAllocationStats ?
 732 stdcall WinHelpA(long str long long)
 733 stdcall WinHelpW(long wstr long long)
 734 stdcall WindowFromDC(long)

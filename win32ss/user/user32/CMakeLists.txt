@@ -1,5 +1,5 @@
 
-spec2def(user32.dll user32.spec ADD_IMPORTLIB)
+spec2def(user32.dll user32.spec PREPROCESS ADD_IMPORTLIB)
 
 include_directories(
     ${REACTOS_SOURCE_DIR}/sdk/include/reactos/subsys
