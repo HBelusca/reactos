@@ -631,6 +631,8 @@ CsrUnhandledExceptionFilter(IN PEXCEPTION_POINTERS ExceptionInfo)
 
     DPRINT1("CsrUnhandledExceptionFilter called\n");
 
+    DbgBreakPoint();
+
     /* Check if a debugger is installed */
     Status = NtQuerySystemInformation(SystemKernelDebuggerInformation,
                                       &DebuggerInfo,
