@@ -761,12 +761,14 @@ ConDrvWriteConsoleOutputVDM(IN PCONSOLE Console,
 }
 
 NTSTATUS NTAPI
-ConDrvWriteConsole(IN PCONSOLE Console,
-                   IN PTEXTMODE_SCREEN_BUFFER ScreenBuffer,
-                   IN BOOLEAN Unicode,
-                   IN PVOID StringBuffer,
-                   IN ULONG NumCharsToWrite,
-                   OUT PULONG NumCharsWritten OPTIONAL)
+ConDrvWriteConsole(
+    IN PCONSOLE Console,
+    IN PTEXTMODE_SCREEN_BUFFER ScreenBuffer,
+    IN BOOLEAN Unicode,
+    IN OUT PVOID Parameter OPTIONAL,
+    IN PVOID StringBuffer,
+    IN ULONG NumCharsToWrite,
+    OUT PULONG NumCharsWritten OPTIONAL)
 {
     NTSTATUS Status = STATUS_SUCCESS;
     PWCHAR Buffer = NULL;
@@ -813,15 +815,15 @@ ConDrvWriteConsole(IN PCONSOLE Console,
     {
         if (NT_SUCCESS(Status))
         {
-            Status = TermWriteStream(Console,
-                                     ScreenBuffer,
-                                     Buffer,
-                                     NumCharsToWrite,
-                                     TRUE);
+            /* Call the line discipline */
+            Status = Console->WriteStream(Console,
+                                          ScreenBuffer,
+                                          // Parameter,
+                                          Buffer,
+                                          NumCharsToWrite,
+                                          TRUE);
             if (NT_SUCCESS(Status))
-            {
                 Written = NumCharsToWrite;
-            }
         }
 
         if (!Unicode) ConsoleFreeHeap(Buffer);
@@ -914,8 +916,15 @@ IntReadConsoleOutputStringAttributes(
     ULONG nNumChars = 0;
     PCHAR_INFO Ptr;
 
+    PWORD PrevAttrBuf;
+    BOOLEAN bLead;
+
     for (Y = ReadCoord->Y; Y < Buffer->ScreenBufferSize.Y; ++Y)
     {
+        /* Always read fullwidth characters in their entirety on a given line */
+        PrevAttrBuf = NULL;
+        bLead = TRUE;
+
         Ptr = ConioCoordToPointer(Buffer, XStart, Y);
         for (X = XStart; X < Buffer->ScreenBufferSize.X; ++X)
         {
@@ -923,6 +932,35 @@ IntReadConsoleOutputStringAttributes(
                 goto Quit;
 
             *StringBuffer = Ptr->Attributes;
+
+            if (bLead && !(Ptr->Attributes & COMMON_LVB_SBCSDBCS))
+            {
+                // OK, reset bLead to TRUE
+                PrevAttrBuf = NULL;
+                bLead = TRUE;
+            }
+            else
+            if (bLead && (Ptr->Attributes & COMMON_LVB_LEADING_BYTE))
+            {
+                // OK, switch bLead to FALSE
+                PrevAttrBuf = StringBuffer;
+                bLead = FALSE;
+            }
+            else
+            if (!bLead && (Ptr->Attributes & COMMON_LVB_TRAILING_BYTE))
+            {
+                // OK, switch bLead to TRUE
+                PrevAttrBuf = NULL;
+                bLead = TRUE;
+            }
+            else
+            {
+                // "bugbug": reset bLead to TRUE and remove any DBCS attrib in StringBuffer.
+                *PrevAttrBuf &= ~COMMON_LVB_SBCSDBCS;
+                PrevAttrBuf = NULL;
+                bLead = TRUE;
+            }
+
             ++Ptr;
 
             ++StringBuffer;

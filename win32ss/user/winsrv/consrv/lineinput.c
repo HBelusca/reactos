@@ -15,6 +15,13 @@
 #define NDEBUG
 #include <debug.h>
 
+//
+// FIXME: Temporary HACK!!
+// (supposes "Console" variable is always present)
+//
+#undef TermWriteStream
+#define TermWriteStream (Console)->WriteStream
+
 
 /* PRIVATE FUNCTIONS **********************************************************/
 

@@ -10,6 +10,8 @@
 
 /* Macros used to call functions in the TERMINAL_VTBL virtual table */
 
+#if 0
+
 #define TermReadStream(Console, /**/ Unicode, /**/ Buffer, ReadControl, Parameter, NumCharsToRead, NumCharsRead) \
     (Console)->TermIFace.Vtbl->ReadStream(&(Console)->TermIFace, /**/ (Unicode), /**/ \
                                            (Buffer), (ReadControl), (Parameter), (NumCharsToRead), (NumCharsRead))
@@ -18,6 +20,7 @@
     (Console)->TermIFace.Vtbl->WriteStream(&(Console)->TermIFace, (ScreenBuffer), (Buffer), \
                                            (Length), (Attrib))
 
+#endif
 
 #define TermDrawRegion(Console, Region) \
     (Console)->TermIFace.Vtbl->DrawRegion(&(Console)->TermIFace, (Region))

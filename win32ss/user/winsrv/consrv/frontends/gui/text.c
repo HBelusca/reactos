@@ -571,7 +571,7 @@ GuiPaintTextModeBuffer(PTEXTMODE_SCREEN_BUFFER Buffer,
     /* Draw the caret */
     GuiPaintCaret(Buffer, GuiData, TopLine, BottomLine, LeftColumn, RightColumn);
 
-    LeaveCriticalSection(&Console->Lock);
+    MyLeaveCriticalSection(&Console->Lock);
 }
 
 /* EOF */

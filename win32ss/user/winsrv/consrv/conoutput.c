@@ -407,12 +407,15 @@ Quit:
 }
 
 NTSTATUS NTAPI
-ConDrvWriteConsole(IN PCONSOLE Console,
-                   IN PTEXTMODE_SCREEN_BUFFER ScreenBuffer,
-                   IN BOOLEAN Unicode,
-                   IN PVOID StringBuffer,
-                   IN ULONG NumCharsToWrite,
-                   OUT PULONG NumCharsWritten OPTIONAL);
+ConDrvWriteConsole(
+    IN PCONSOLE Console,
+    IN PTEXTMODE_SCREEN_BUFFER ScreenBuffer,
+    IN BOOLEAN Unicode,
+    IN OUT PVOID Parameter OPTIONAL,
+    IN PVOID StringBuffer,
+    IN ULONG NumCharsToWrite,
+    OUT PULONG NumCharsWritten OPTIONAL);
+
 static NTSTATUS
 DoWriteConsole(
     IN PCSR_API_MESSAGE ApiMessage,
@@ -457,6 +460,7 @@ DoWriteConsole(
     Status = ConDrvWriteConsole(ScreenBuffer->Header.Console,
                                 ScreenBuffer,
                                 WriteConsoleRequest->Unicode,
+                                NULL,
                                 Buffer,
                                 WriteConsoleRequest->NumBytes / CharSize, // NrCharactersToWrite
                                 &NrCharactersWritten);
@@ -465,6 +469,7 @@ DoWriteConsole(
 
     if (Status == STATUS_PENDING)
     {
+        /* Our caller will create a wait block if necessary */
         if (CreateWaitBlock)
         {
             PCONSRV_CONSOLE Console = (PCONSRV_CONSOLE)ScreenBuffer->Header.Console;
@@ -704,7 +709,23 @@ CON_API(SrvWriteConsole,
 
     Status = DoWriteConsole(ApiMessage, CsrGetClientThread(), TRUE);
 
-    if (Status == STATUS_PENDING) *ReplyCode = CsrReplyPending;
+    if (Status == STATUS_PENDING)
+    {
+#if 0
+        PCONSRV_CONSOLE Console = (PCONSRV_CONSOLE)ScreenBuffer->Header.Console;
+
+        if (!CsrCreateWait(&Console->WriteWaitQueue,
+                           WriteConsoleThread,
+                           CsrGetClientThread(),
+                           ApiMessage,
+                           NULL))
+        {
+            /* Fail */
+            return STATUS_NO_MEMORY;
+        }
+#endif
+        *ReplyCode = CsrReplyPending;
+    }
 
     return Status;
 }

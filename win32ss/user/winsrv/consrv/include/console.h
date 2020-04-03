@@ -28,8 +28,12 @@ ConDrvValidateConsoleState(IN PCONSOLE Console,
                            IN CONSOLE_STATE ExpectedState);
 
 BOOLEAN NTAPI
-ConDrvValidateConsoleUnsafe(IN PCONSOLE Console,
+ConDrvValidateConsoleUnsafeEx(IN PCONSOLE Console,
                             IN CONSOLE_STATE ExpectedState,
-                            IN BOOLEAN LockConsole);
+                            IN BOOLEAN LockConsole,
+                            IN char* DebugString);
+
+#define ConDrvValidateConsoleUnsafe(Console, ExpectedState, LockConsole) \
+    ConDrvValidateConsoleUnsafeEx((Console), (ExpectedState), (LockConsole), "-> Enter: " __FILE__ "@" STRINGIZE(__LINE__) "\n")
 
 /* EOF */

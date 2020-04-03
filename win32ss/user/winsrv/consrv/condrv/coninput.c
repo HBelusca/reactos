@@ -250,13 +250,12 @@ ConDrvReadConsole(
     ASSERT((Buffer != NULL) || (Buffer == NULL && NumCharsToRead == 0));
 
     /* Call the line discipline */
-    return TermReadStream(Console,
-                          Unicode,
-                          Buffer,
-                          (PCONSOLE_READCONSOLE_CONTROL)Parameter,
-                          NULL,
-                          NumCharsToRead,
-                          NumCharsRead);
+    return Console->ReadStream(Console,
+                               Unicode,
+                               Parameter,
+                               Buffer,
+                               NumCharsToRead,
+                               NumCharsRead);
 }
 
 NTSTATUS NTAPI

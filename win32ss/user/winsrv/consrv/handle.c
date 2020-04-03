@@ -22,7 +22,8 @@
 /* Console handle */
 typedef struct _CONSOLE_IO_HANDLE
 {
-    PCONSOLE_IO_OBJECT Object;   /* The object on which the handle points to */
+    PCONSOLE_IO_OBJECT Object;  /* The object on which the handle points to */
+    PVOID   Data;               /* Per-handle private data, allocated with ConsoleAllocHeap() */
     ULONG   Access;
     ULONG   ShareMode;
     BOOLEAN Inheritable;
@@ -107,6 +108,10 @@ ConSrvCloseHandle(IN PCONSOLE_IO_HANDLE Handle)
                 DPRINT1("Invalid object type %d\n", Object->Type);
             }
         }
+
+        /* Delete the private data, if any */
+        if (Handle->Data)
+            ConsoleFreeHeap(Handle->Data);
 
         /* Invalidate (zero-out) this handle entry */
         // Handle->Object = NULL;
@@ -277,6 +282,7 @@ ConSrvInsertObject(IN PCONSOLE_PROCESS_DATA ProcessData,
     }
 
     ProcessData->HandleTable[i].Object      = Object;
+    ProcessData->HandleTable[i].Data        = NULL;
     ProcessData->HandleTable[i].Access      = Access;
     ProcessData->HandleTable[i].Inheritable = Inheritable;
     ProcessData->HandleTable[i].ShareMode   = ShareMode;
@@ -315,13 +321,15 @@ ConSrvRemoveObject(IN PCONSOLE_PROCESS_DATA ProcessData,
 }
 
 NTSTATUS
-ConSrvGetObject(IN PCONSOLE_PROCESS_DATA ProcessData,
-                IN HANDLE Handle,
-                OUT PCONSOLE_IO_OBJECT* Object,
-                OUT PVOID* Entry OPTIONAL,
-                IN ULONG Access,
-                IN BOOLEAN LockConsole,
-                IN CONSOLE_IO_OBJECT_TYPE Type)
+ConSrvGetObject(
+    IN PCONSOLE_PROCESS_DATA ProcessData,
+    IN HANDLE Handle,
+    OUT PCONSOLE_IO_OBJECT* Object,
+    OUT PVOID** pData OPTIONAL, // Receives a pointer to the per-handle data.
+    OUT PVOID* Entry OPTIONAL,
+    IN ULONG Access,
+    IN BOOLEAN LockConsole,
+    IN CONSOLE_IO_OBJECT_TYPE Type)
 {
     // NTSTATUS Status;
     ULONG Index = HandleToULong(Handle) >> 2;
@@ -366,6 +374,7 @@ ConSrvGetObject(IN PCONSOLE_PROCESS_DATA ProcessData,
 
         /* Return the objects to the caller */
         *Object = ObjectEntry;
+        if (pData) *pData = &HandleEntry->Data;
         if (Entry) *Entry = HandleEntry;
 
         // RtlLeaveCriticalSection(&ProcessData->HandleTableLock);

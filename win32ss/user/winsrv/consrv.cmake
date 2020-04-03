@@ -19,6 +19,7 @@ list(APPEND CONSRV_SOURCE
     consrv/popup.c
     consrv/settings.c
     consrv/shutdown.c
+    consrv/stream.c
     consrv/subsysreg.c
     consrv/condrv/coninput.c
     consrv/condrv/conoutput.c

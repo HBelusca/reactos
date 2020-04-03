@@ -192,7 +192,7 @@ TuiSwapConsole(INT Next)
          * Alt-Tab, swap consoles.
          * move SwapConsole to next console, and print its title.
          */
-        EnterCriticalSection(&ActiveVirtConsLock);
+        MyEnterCriticalSection(&ActiveVirtConsLock);
         if (!SwapConsole) SwapConsole = ActiveConsole;
 
         SwapConsole = (0 < Next ? GetNextConsole(SwapConsole) : GetPrevConsole(SwapConsole));
@@ -214,13 +214,13 @@ TuiSwapConsole(INT Next)
             DPRINT1( "Error writing to console\n" );
         }
         ConsoleFreeHeap(Buffer);
-        LeaveCriticalSection(&ActiveVirtConsLock);
+        MyLeaveCriticalSection(&ActiveVirtConsLock);
 
         return TRUE;
     }
     else if (NULL != SwapConsole)
     {
-        EnterCriticalSection(&ActiveVirtConsLock);
+        MyEnterCriticalSection(&ActiveVirtConsLock);
         if (SwapConsole != ActiveConsole)
         {
             /* First remove swapconsole from the list */
@@ -235,7 +235,7 @@ TuiSwapConsole(INT Next)
         ActiveConsole = SwapConsole;
         SwapConsole = NULL;
         ConioDrawConsole(ActiveConsole->Console);
-        LeaveCriticalSection(&ActiveVirtConsLock);
+        MyLeaveCriticalSection(&ActiveVirtConsLock);
         return TRUE;
     }
     else
@@ -314,7 +314,7 @@ TuiConsoleWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
                 Message.lParam = lParam;
 
                 ConioProcessKey(ActiveConsole->Console, &Message);
-                LeaveCriticalSection(&ActiveConsole->Console->Lock);
+                MyLeaveCriticalSection(&ActiveConsole->Console->Lock);
             }
             break;
         }
@@ -328,7 +328,7 @@ TuiConsoleWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
                     SetFocus(hWnd);
                     ConioDrawConsole(ActiveConsole->Console);
                 }
-                LeaveCriticalSection(&ActiveConsole->Console->Lock);
+                MyLeaveCriticalSection(&ActiveConsole->Console->Lock);
             }
             break;
         }
@@ -547,10 +547,10 @@ TuiInitFrontEnd(IN OUT PFRONTEND This,
      * Insert the newly created console in the list of virtual consoles
      * and activate it (give it the focus).
      */
-    EnterCriticalSection(&ActiveVirtConsLock);
+    MyEnterCriticalSection(&ActiveVirtConsLock);
     InsertTailList(&VirtConsList, &TuiData->Entry);
     ActiveConsole = TuiData;
-    LeaveCriticalSection(&ActiveVirtConsLock);
+    MyLeaveCriticalSection(&ActiveVirtConsLock);
 
     /* Finally, initialize the frontend structure */
     This->Context  = TuiData;
@@ -572,7 +572,7 @@ TuiDeinitFrontEnd(IN OUT PFRONTEND This)
      * Set the active console to the next one
      * and remove the console from the list.
      */
-    EnterCriticalSection(&ActiveVirtConsLock);
+    MyEnterCriticalSection(&ActiveVirtConsLock);
     ActiveConsole = GetNextConsole(TuiData);
     RemoveEntryList(&TuiData->Entry);
 
@@ -589,7 +589,7 @@ TuiDeinitFrontEnd(IN OUT PFRONTEND This)
         // TuiData->Entry.Flink->Blink = TuiData->Entry.Blink;
     // }
 
-    LeaveCriticalSection(&ActiveVirtConsLock);
+    MyLeaveCriticalSection(&ActiveVirtConsLock);
 
     /* Switch to the next console */
     if (NULL != ActiveConsole) ConioDrawConsole(ActiveConsole->Console);
@@ -747,14 +747,14 @@ TuiSetActiveScreenBuffer(IN OUT PFRONTEND This)
     // PCONSOLE_SCREEN_BUFFER ActiveBuffer;
     // HPALETTE hPalette;
 
-    // EnterCriticalSection(&GuiData->Lock);
+    // MyEnterCriticalSection(&GuiData->Lock);
     // GuiData->WindowSizeLock = TRUE;
 
     // InterlockedExchangePointer(&GuiData->ActiveBuffer,
                                // ConDrvGetActiveScreenBuffer(GuiData->Console));
 
     // GuiData->WindowSizeLock = FALSE;
-    // LeaveCriticalSection(&GuiData->Lock);
+    // MyLeaveCriticalSection(&GuiData->Lock);
 
     // ActiveBuffer = GuiData->ActiveBuffer;
 
@@ -817,13 +817,13 @@ TuiReleaseScreenBuffer(IN OUT PFRONTEND This,
     // }
     // else
     // {
-        // EnterCriticalSection(&GuiData->Lock);
+        // MyEnterCriticalSection(&GuiData->Lock);
         // GuiData->WindowSizeLock = TRUE;
 
         // InterlockedExchangePointer(&GuiData->ActiveBuffer, NULL);
 
         // GuiData->WindowSizeLock = FALSE;
-        // LeaveCriticalSection(&GuiData->Lock);
+        // MyLeaveCriticalSection(&GuiData->Lock);
     // }
 }
 

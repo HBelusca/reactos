@@ -764,14 +764,14 @@ GuiSetActiveScreenBuffer(IN OUT PFRONTEND This)
     PCONSOLE_SCREEN_BUFFER ActiveBuffer;
     HPALETTE hPalette;
 
-    EnterCriticalSection(&GuiData->Lock);
+    MyEnterCriticalSection(&GuiData->Lock);
     GuiData->WindowSizeLock = TRUE;
 
     InterlockedExchangePointer((PVOID*)&GuiData->ActiveBuffer,
                                ConDrvGetActiveScreenBuffer((PCONSOLE)GuiData->Console));
 
     GuiData->WindowSizeLock = FALSE;
-    LeaveCriticalSection(&GuiData->Lock);
+    MyLeaveCriticalSection(&GuiData->Lock);
 
     ActiveBuffer = GuiData->ActiveBuffer;
 
@@ -830,13 +830,13 @@ GuiReleaseScreenBuffer(IN OUT PFRONTEND This,
     }
     else
     {
-        EnterCriticalSection(&GuiData->Lock);
+        MyEnterCriticalSection(&GuiData->Lock);
         GuiData->WindowSizeLock = TRUE;
 
         InterlockedExchangePointer((PVOID*)&GuiData->ActiveBuffer, NULL);
 
         GuiData->WindowSizeLock = FALSE;
-        LeaveCriticalSection(&GuiData->Lock);
+        MyLeaveCriticalSection(&GuiData->Lock);
     }
 }
 

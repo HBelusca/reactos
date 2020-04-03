@@ -32,14 +32,18 @@ ConSrvInsertObject(IN PCONSOLE_PROCESS_DATA ProcessData,
 NTSTATUS
 ConSrvRemoveObject(IN PCONSOLE_PROCESS_DATA ProcessData,
                    IN HANDLE Handle);
+
 NTSTATUS
-ConSrvGetObject(IN PCONSOLE_PROCESS_DATA ProcessData,
-                IN HANDLE Handle,
-                OUT PCONSOLE_IO_OBJECT* Object,
-                OUT PVOID* Entry OPTIONAL,
-                IN ULONG Access,
-                IN BOOLEAN LockConsole,
-                IN CONSOLE_IO_OBJECT_TYPE Type);
+ConSrvGetObject(
+    IN PCONSOLE_PROCESS_DATA ProcessData,
+    IN HANDLE Handle,
+    OUT PCONSOLE_IO_OBJECT* Object,
+    OUT PVOID** pData OPTIONAL, // Receives a pointer to the per-handle data.
+    OUT PVOID* Entry OPTIONAL,
+    IN ULONG Access,
+    IN BOOLEAN LockConsole,
+    IN CONSOLE_IO_OBJECT_TYPE Type);
+
 VOID
 ConSrvReleaseObject(IN PCONSOLE_IO_OBJECT Object,
                     IN BOOLEAN IsConsoleLocked);

@@ -33,9 +33,10 @@ ConDrvValidateConsoleState(IN PCONSOLE Console,
 }
 
 BOOLEAN NTAPI
-ConDrvValidateConsoleUnsafe(IN PCONSOLE Console,
+ConDrvValidateConsoleUnsafeEx(IN PCONSOLE Console,
                             IN CONSOLE_STATE ExpectedState,
-                            IN BOOLEAN LockConsole)
+                            IN BOOLEAN LockConsole,
+                            IN char* DebugString)
 {
     if (!Console) return FALSE;
 
@@ -45,14 +46,14 @@ ConDrvValidateConsoleUnsafe(IN PCONSOLE Console,
      * If we don't want to lock it, it's because the lock is already
      * held. So there must be no problems.
      */
-    if (LockConsole) EnterCriticalSection(&Console->Lock);
+    if (LockConsole) MyEnterCriticalSectionEx(&Console->Lock, DebugString);
 
     // ASSERT(Console_locked);
 
     /* Check whether the console's state is what we expect */
     if (!ConDrvValidateConsoleState(Console, ExpectedState))
     {
-        if (LockConsole) LeaveCriticalSection(&Console->Lock);
+        if (LockConsole) MyLeaveCriticalSection(&Console->Lock);
         return FALSE;
     }
 
@@ -64,6 +65,27 @@ ConDrvValidateConsoleUnsafe(IN PCONSOLE Console,
 
 /* For resetting the terminal - defined in dummyterm.c */
 VOID ResetTerminal(IN PCONSOLE Console);
+
+// TEMP HACK for line discipline
+NTSTATUS NTAPI
+LineReadStream(
+    IN /*PCONSOLE*/PCONSRV_CONSOLE Console,
+    IN BOOLEAN Unicode,
+    IN PVOID Parameter OPTIONAL,
+    /**PWCHAR Buffer,**/
+    OUT PVOID Buffer,
+    IN ULONG NumCharsToRead,
+    OUT PULONG NumCharsRead OPTIONAL);
+
+NTSTATUS NTAPI
+LineWriteStream(
+    IN /*PCONSOLE*/PCONSRV_CONSOLE Console,
+    IN PTEXTMODE_SCREEN_BUFFER Buff,
+    // IN PVOID Parameter OPTIONAL,
+    IN PWCHAR Buffer,
+    IN DWORD Length,
+    IN BOOLEAN Attrib);
+// END OF HACK
 
 NTSTATUS NTAPI
 ConDrvInitConsole(
@@ -82,6 +104,21 @@ ConDrvInitConsole(
     RtlZeroMemory(Console, sizeof(*Console));
 
     /*
+     * Initialize the console
+     */
+    Console->State = CONSOLE_INITIALIZING;
+    Console->ReferenceCount = 0;
+    InitializeCriticalSection(&Console->Lock);
+
+    /* Set the line discipline */
+    // FIXME: HACK: Do not hardcode the function pointers! (see ConSrvInitConsole)
+    Console->ReadStream  = LineReadStream;
+    Console->WriteStream = LineWriteStream;
+
+    /* Initialize the terminal interface */
+    ResetTerminal(Console);
+
+    /*
      * Set and fix the screen buffer size if needed.
      * The rule is: ScreenBufferSize >= ConsoleSize
      */
@@ -91,16 +128,6 @@ ConDrvInitConsole(
         ConsoleInfo->ScreenBufferSize.X = ConsoleInfo->ConsoleSize.X;
     if (ConsoleInfo->ScreenBufferSize.Y < ConsoleInfo->ConsoleSize.Y)
         ConsoleInfo->ScreenBufferSize.Y = ConsoleInfo->ConsoleSize.Y;
-
-    /*
-     * Initialize the console
-     */
-    Console->State = CONSOLE_INITIALIZING;
-    Console->ReferenceCount = 0;
-    InitializeCriticalSection(&Console->Lock);
-
-    /* Initialize the terminal interface */
-    ResetTerminal(Console);
 
     Console->ConsoleSize = ConsoleInfo->ConsoleSize;
     Console->FixedSize   = FALSE; // Value by default; is reseted by the terminals if needed.
@@ -243,13 +270,13 @@ ConDrvDeleteConsole(IN PCONSOLE Console)
 
     /*
      * Allow other threads to finish their job: basically, unlock
-     * all other calls to EnterCriticalSection(&Console->Lock); by
+     * all other calls to MyEnterCriticalSection(&Console->Lock); by
      * ConDrvValidateConsoleUnsafe() functions so that they just see
      * that we are not in CONSOLE_RUNNING state anymore, or unlock
      * other concurrent calls to ConDrvDeleteConsole() so that they
      * can see that we are in fact already deleting the console.
      */
-    LeaveCriticalSection(&Console->Lock);
+    MyLeaveCriticalSection(&Console->Lock);
 
     /* Deregister the terminal */
     DPRINT("Deregister terminal\n");
@@ -288,7 +315,7 @@ ConDrvDeleteConsole(IN PCONSOLE Console)
     Console->ConsolePaused = FALSE;
 
     DPRINT("ConDrvDeleteConsole - Unlocking\n");
-    LeaveCriticalSection(&Console->Lock);
+    MyLeaveCriticalSection(&Console->Lock);
     DPRINT("ConDrvDeleteConsole - Destroying lock\n");
     DeleteCriticalSection(&Console->Lock);
     DPRINT("ConDrvDeleteConsole - Lock destroyed\n");

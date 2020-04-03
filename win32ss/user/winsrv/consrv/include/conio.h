@@ -184,8 +184,8 @@ typedef struct _CONSOLE_INFO
     COORD   ConsoleSize;    /* The size of the console */
 
     ULONG   CursorSize;
-    BOOLEAN CursorBlinkOn;
-    BOOLEAN ForceCursorOff;
+    BOOLEAN CursorBlinkOn;  // FIXME: Is it needed?
+    BOOLEAN ForceCursorOff; // FIXME: Is it needed?
 
     USHORT  ScreenAttrib; // CHAR_INFO ScreenFillAttrib
     USHORT  PopupAttrib;
@@ -204,30 +204,6 @@ typedef struct _TERMINAL_VTBL
     NTSTATUS (NTAPI *InitTerminal)(IN OUT PTERMINAL This,
                                    IN struct _CONSOLE* Console);
     VOID (NTAPI *DeinitTerminal)(IN OUT PTERMINAL This);
-
-
-
-/************ Line discipline ***************/
-
-    /* Interface used only for text-mode screen buffers */
-
-    NTSTATUS (NTAPI *ReadStream)(IN OUT PTERMINAL This,
-                                 IN BOOLEAN Unicode,
-                                 /**PWCHAR Buffer,**/
-                                 OUT PVOID Buffer,
-                                 IN OUT PCONSOLE_READCONSOLE_CONTROL ReadControl,
-                                 IN PVOID Parameter OPTIONAL,
-                                 IN ULONG NumCharsToRead,
-                                 OUT PULONG NumCharsRead OPTIONAL);
-    NTSTATUS (NTAPI *WriteStream)(IN OUT PTERMINAL This,
-                                  PTEXTMODE_SCREEN_BUFFER Buff,
-                                  PWCHAR Buffer,
-                                  DWORD Length,
-                                  BOOL Attrib);
-
-/************ Line discipline ***************/
-
-
 
     /* Interface used for both text-mode and graphics screen buffers */
     VOID (NTAPI *DrawRegion)(IN OUT PTERMINAL This,
@@ -298,6 +274,24 @@ typedef struct _CONSOLE
 /******************************** Input buffer ********************************/
     CONSOLE_INPUT_BUFFER InputBuffer;       /* Input buffer of the console */
     UINT InputCodePage;
+
+    /************ Line discipline ***************/
+    /* Interface used only for text-mode screen buffers */
+    NTSTATUS (NTAPI *ReadStream)(IN /*PCONSOLE*/PCONSRV_CONSOLE Console,
+                                 IN BOOLEAN Unicode,
+                                 IN PVOID Parameter OPTIONAL,
+                                 /**PWCHAR Buffer,**/
+                                 OUT PVOID Buffer,
+                                 IN ULONG NumCharsToRead,
+                                 OUT PULONG NumCharsRead OPTIONAL);
+
+    NTSTATUS (NTAPI *WriteStream)(IN /*PCONSOLE*/PCONSRV_CONSOLE Console,
+                                  IN PTEXTMODE_SCREEN_BUFFER Buff,
+                                  // IN PVOID Parameter OPTIONAL,
+                                  IN PWCHAR Buffer,
+                                  IN DWORD Length,
+                                  IN BOOLEAN Attrib);
+
 
 /******************************* Screen buffers *******************************/
     LIST_ENTRY BufferList;                  /* List of all screen buffers for this console */

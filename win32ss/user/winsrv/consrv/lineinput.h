@@ -8,6 +8,7 @@
 
 #pragma once
 
+// Used by the stream.c functions.
 // COOKED mode.
 typedef struct _LINE_EDIT_INFO
 {
@@ -18,6 +19,7 @@ typedef struct _LINE_EDIT_INFO
 
     PHISTORY_BUFFER Hist;
     UNICODE_STRING ExeName; // Used for Aliases resolution.
+    CONSOLE_READCONSOLE_CONTROL ReadControl;
 
     PWCHAR  LineBuffer;                     /* Current line being input, in line buffered mode */
     ULONG   LineMaxSize;                    /* Maximum size of line in characters (including CR+LF) */

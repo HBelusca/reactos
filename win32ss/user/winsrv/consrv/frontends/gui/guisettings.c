@@ -243,7 +243,7 @@ Quit:
     /* We have finished, close the section handle if any */
     if (hSection) NtClose(hSection);
 
-    LeaveCriticalSection(&Console->Lock);
+    MyLeaveCriticalSection(&Console->Lock);
     return;
 }
 
@@ -375,7 +375,7 @@ Quit:
         NtClose(hSection);
     }
 
-    LeaveCriticalSection(&Console->Lock);
+    MyLeaveCriticalSection(&Console->Lock);
     return;
 }
 

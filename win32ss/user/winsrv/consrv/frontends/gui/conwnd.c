@@ -273,7 +273,7 @@ SendMenuEvent(PCONSRV_CONSOLE Console, UINT CmdId)
     er.Event.MenuEvent.dwCommandId = CmdId;
     ConioProcessInputEvent(Console, &er);
 
-    LeaveCriticalSection(&Console->Lock);
+    MyLeaveCriticalSection(&Console->Lock);
 }
 
 static VOID
@@ -709,7 +709,7 @@ OnFocus(PGUI_CONSOLE_DATA GuiData, BOOL SetFocus)
     er.Event.FocusEvent.bSetFocus = SetFocus;
     ConioProcessInputEvent(Console, &er);
 
-    LeaveCriticalSection(&Console->Lock);
+    MyLeaveCriticalSection(&Console->Lock);
 
     if (SetFocus)
         DPRINT("TODO: Create console caret\n");
@@ -986,7 +986,7 @@ OnPaint(PGUI_CONSOLE_DATA GuiData)
         ps.rcPaint.left < ps.rcPaint.right &&
         ps.rcPaint.top < ps.rcPaint.bottom)
     {
-        EnterCriticalSection(&GuiData->Lock);
+        MyEnterCriticalSection(&GuiData->Lock);
 
         /* Compose the current screen-buffer on-memory */
         if (GetType(ActiveBuffer) == TEXTMODE_BUFFER)
@@ -1019,7 +1019,7 @@ OnPaint(PGUI_CONSOLE_DATA GuiData)
 
         // TODO: Move cursor display here!
 
-        LeaveCriticalSection(&GuiData->Lock);
+        MyLeaveCriticalSection(&GuiData->Lock);
     }
     EndPaint(GuiData->hWindow, &ps);
 
@@ -1229,7 +1229,7 @@ OnKey(PGUI_CONSOLE_DATA GuiData, UINT msg, WPARAM wParam, LPARAM lParam)
     }
 
 Quit:
-    LeaveCriticalSection(&Console->Lock);
+    MyLeaveCriticalSection(&Console->Lock);
 }
 
 
@@ -1344,7 +1344,7 @@ OnTimer(PGUI_CONSOLE_DATA GuiData)
     {
     }
 
-    LeaveCriticalSection(&Console->Lock);
+    MyLeaveCriticalSection(&Console->Lock);
 }
 
 static BOOL
@@ -1364,7 +1364,7 @@ OnClose(PGUI_CONSOLE_DATA GuiData)
      */
     ConSrvConsoleProcessCtrlEvent(Console, 0, CTRL_CLOSE_EVENT);
 
-    LeaveCriticalSection(&Console->Lock);
+    MyLeaveCriticalSection(&Console->Lock);
     return FALSE;
 }
 
@@ -1498,7 +1498,7 @@ OnScroll(PGUI_CONSOLE_DATA GuiData, INT nBar, WORD sbCode)
     }
 
 Quit:
-    LeaveCriticalSection(&Console->Lock);
+    MyLeaveCriticalSection(&Console->Lock);
     return;
 }
 
@@ -1921,7 +1921,7 @@ OnMouse(PGUI_CONSOLE_DATA GuiData, UINT msg, WPARAM wParam, LPARAM lParam)
         DoDefault = TRUE;
     }
 
-    LeaveCriticalSection(&Console->Lock);
+    MyLeaveCriticalSection(&Console->Lock);
 
 Quit:
     if (!DoDefault)
@@ -2029,7 +2029,7 @@ OnGetMinMaxInfo(PGUI_CONSOLE_DATA GuiData, PMINMAXINFO minMaxInfo)
     minMaxInfo->ptMaxTrackSize.x = windx;
     minMaxInfo->ptMaxTrackSize.y = windy;
 
-    LeaveCriticalSection(&Console->Lock);
+    MyLeaveCriticalSection(&Console->Lock);
 }
 
 static VOID
@@ -2095,7 +2095,7 @@ OnSize(PGUI_CONSOLE_DATA GuiData, WPARAM wParam, LPARAM lParam)
         GuiData->WindowSizeLock = FALSE;
     }
 
-    LeaveCriticalSection(&Console->Lock);
+    MyLeaveCriticalSection(&Console->Lock);
 }
 
 static VOID

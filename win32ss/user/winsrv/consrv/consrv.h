@@ -34,6 +34,26 @@
 /* Globals */
 extern HINSTANCE ConSrvDllInstance;
 
+#define STRINGIZE(x) STRINGIZE2(x)
+#define STRINGIZE2(x) #x
+
+// DPRINT1((DebugString));
+#define MyEnterCriticalSectionEx(CritSec, DebugString) \
+do { \
+    EnterCriticalSection(CritSec); \
+    (CritSec)->DebugInfo->Spare[0] = (DWORD_PTR)(DebugString); \
+} while (0)
+
+#define MyEnterCriticalSection(CritSec) \
+    MyEnterCriticalSectionEx((CritSec), "-> Enter: " __FILE__ "@" STRINGIZE(__LINE__) ": " #CritSec "\n")
+
+// DPRINT1("<- Leave: " __FILE__ "@" STRINGIZE(__LINE__) ": " #CritSec "\n");
+#define MyLeaveCriticalSection(CritSec) \
+do { \
+    LeaveCriticalSection(CritSec); \
+    (CritSec)->DebugInfo->Spare[0] = 0; \
+} while (0)
+
 #define ConsoleGetPerProcessData(Process)   \
     ((PCONSOLE_PROCESS_DATA)((Process)->ServerData[CONSRV_SERVERDLL_INDEX]))
 

@@ -29,7 +29,7 @@ DummyDeinitTerminal(IN OUT PTERMINAL This)
 
 /************ Line discipline ***************/
 
-static NTSTATUS NTAPI
+/*static*/ NTSTATUS NTAPI
 DummyReadStream(IN OUT PTERMINAL This,
                 IN BOOLEAN Unicode,
                 /**PWCHAR Buffer,**/
@@ -47,7 +47,7 @@ DummyReadStream(IN OUT PTERMINAL This,
     return STATUS_PENDING;
 }
 
-static NTSTATUS NTAPI
+/*static*/ NTSTATUS NTAPI
 DummyWriteStream(IN OUT PTERMINAL This,
                  PTEXTMODE_SCREEN_BUFFER Buff,
                  PWCHAR Buffer,
@@ -138,8 +138,8 @@ static TERMINAL_VTBL DummyVtbl =
     DummyInitTerminal,
     DummyDeinitTerminal,
 
-    DummyReadStream,
-    DummyWriteStream,
+    // DummyReadStream,
+    // DummyWriteStream,
 
     DummyDrawRegion,
     DummySetCursorInfo,

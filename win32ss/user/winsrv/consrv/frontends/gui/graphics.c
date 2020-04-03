@@ -169,7 +169,7 @@ GuiPaintGraphicsBuffer(PGRAPHICS_SCREEN_BUFFER Buffer,
     /* Release the mutex */
     NtReleaseMutant(Buffer->Mutex, NULL);
 
-    LeaveCriticalSection(&Console->Lock);
+    MyLeaveCriticalSection(&Console->Lock);
 }
 
 /* EOF */

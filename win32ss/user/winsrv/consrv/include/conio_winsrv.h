@@ -43,7 +43,7 @@ typedef struct _FRONTEND_VTBL
     /* Interface used for both text-mode and graphics screen buffers */
     VOID (NTAPI *DrawRegion)(IN OUT PFRONTEND This,
                              SMALL_RECT* Region);
-    /* Interface used only for text-mode screen buffers */
+    /* FIXME!! Interface used only for text-mode screen buffers */
     VOID (NTAPI *WriteStream)(IN OUT PFRONTEND This,
                               SMALL_RECT* Region,
                               SHORT CursorStartX,
@@ -119,6 +119,8 @@ typedef struct _CONSRV_CONSOLE
     // LONG ReferenceCount;                    /* Is incremented each time a handle to something in the console (a screen-buffer or the input buffer of this console) gets referenced */
     // CRITICAL_SECTION Lock;
     // CONSOLE_STATE State;                    /* State of the console */
+    // ULONG ConsoleID;                        /* The ID of the console */
+    // LIST_ENTRY ListEntry;                   /* Entry in the list of consoles */
 
     // ULONG ConsoleID;                        /* The ID of the console */
     // LIST_ENTRY ListEntry;                   /* Entry in the list of consoles */
@@ -147,8 +149,6 @@ typedef struct _CONSRV_CONSOLE
     BOOLEAN HistoryNoDup;                   /* Remove old duplicate history entries */
 
 /**************************** Input Line Discipline ***************************/
-    LINE_EDIT_INFO LineEditInfo;
-
     BOOLEAN InsertMode;
     BOOLEAN QuickEdit;
 

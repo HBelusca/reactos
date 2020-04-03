@@ -389,7 +389,7 @@ ConSrvNewProcess(PCSR_PROCESS SourceProcess,
             }
 
             /* Unlock the parent's console */
-            LeaveCriticalSection(&SourceConsole->Lock);
+            MyLeaveCriticalSection(&SourceConsole->Lock);
         }
     }
 

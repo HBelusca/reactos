@@ -334,7 +334,7 @@ ConSrvReleaseConsole(IN PCONSRV_CONSOLE Console,
     RefCount = _InterlockedDecrement(&Console->ReferenceCount);
 
     /* Unlock the console if needed */
-    if (IsConsoleLocked) LeaveCriticalSection(&Console->Lock);
+    if (IsConsoleLocked) MyLeaveCriticalSection(&Console->Lock);
 
     /* Delete the console if needed */
     if (RefCount <= 0) ConSrvDeleteConsole(Console);
@@ -684,6 +684,11 @@ ConSrvInitConsole(OUT PHANDLE NewConsoleHandle,
         return STATUS_NO_MEMORY;
     }
 
+    /*
+     * TODO: Provide the line discipline functions there.
+     * FIXME: For the moment they are set hardcoded in ConDrvInitConsole().
+     */
+
     Status = ConDrvInitConsole((PCONSOLE)Console, &DrvConsoleInfo);
     if (!NT_SUCCESS(Status))
     {
@@ -829,9 +834,6 @@ ConSrvDeleteConsole(PCONSRV_CONSOLE Console)
     /* Destroy the Initialization Events */
     NtClose(Console->InitEvents[INIT_FAILURE]);
     NtClose(Console->InitEvents[INIT_SUCCESS]);
-
-    // FIXME!! Move out of there!! Clean the Input Line Discipline
-    if (Console->LineEditInfo.LineBuffer) ConsoleFreeHeap(Console->LineEditInfo.LineBuffer);
 
     /* Clean aliases and history */
     IntDeleteAllAliases(Console);
@@ -1214,7 +1216,7 @@ ConSrvInheritConsole(
 
 Quit:
     /* Unlock the console and return */
-    LeaveCriticalSection(&Console->Lock);
+    MyLeaveCriticalSection(&Console->Lock);
     return Status;
 }
 
@@ -1660,8 +1662,8 @@ CON_API(SrvGetConsoleMode,
     PULONG ConsoleMode = &ConsoleModeRequest->Mode;
 
     Status = ConSrvGetObject(ProcessData,
-                             ConsoleModeRequest->Handle,
-                             &Object, NULL, GENERIC_READ, TRUE, 0);
+                             ConsoleModeRequest->Handle, &Object,
+                             NULL, NULL, GENERIC_READ, TRUE, 0);
     if (!NT_SUCCESS(Status))
         return Status;
 
@@ -1709,8 +1711,8 @@ CON_API(SrvSetConsoleMode,
     ULONG ConsoleMode = ConsoleModeRequest->Mode;
 
     Status = ConSrvGetObject(ProcessData,
-                             ConsoleModeRequest->Handle,
-                             &Object, NULL, GENERIC_WRITE, TRUE, 0);
+                             ConsoleModeRequest->Handle, &Object,
+                             NULL, NULL, GENERIC_WRITE, TRUE, 0);
     if (!NT_SUCCESS(Status))
         return Status;
 

@@ -1,0 +1,677 @@
+/*
+ * COPYRIGHT:       See COPYING in the top level directory
+ * PROJECT:         ReactOS Console Server DLL
+ * FILE:            win32ss/user/winsrv/consrv/frontends/terminal.c
+ * PURPOSE:         ConSrv terminal.
+ * PROGRAMMERS:     Hermes Belusca-Maito (hermes.belusca@sfr.fr)
+ */
+
+/* INCLUDES *******************************************************************/
+
+#include <consrv.h>
+// #include "concfg/font.h"
+#include "history.h"
+
+#define NDEBUG
+#include <debug.h>
+
+
+/********** HACK HACK HACK HACK HACK HACK HACK HACK HACK HACK HACK ************/
+
+/* GLOBALS ********************************************************************/
+
+/*
+ * From MSDN:
+ * "The lpMultiByteStr and lpWideCharStr pointers must not be the same.
+ *  If they are the same, the function fails, and GetLastError returns
+ *  ERROR_INVALID_PARAMETER."
+ */
+#define ConsoleInputUnicodeCharToAnsiChar(Console, dChar, sWChar) \
+do { \
+    ASSERT((ULONG_PTR)(dChar) != (ULONG_PTR)(sWChar)); \
+    WideCharToMultiByte((Console)->InputCodePage, 0, (sWChar), 1, (dChar), 1, NULL, NULL); \
+} while (0)
+
+#define ConsoleInputAnsiCharToUnicodeChar(Console, dWChar, sChar) \
+do { \
+    ASSERT((ULONG_PTR)(dWChar) != (ULONG_PTR)(sChar)); \
+    MultiByteToWideChar((Console)->InputCodePage, 0, (sChar), 1, (dWChar), 1); \
+} while (0)
+
+/* PRIVATE FUNCTIONS **********************************************************/
+
+#if 0
+
+static VOID
+ConioInputEventToAnsi(PCONSOLE Console, PINPUT_RECORD InputEvent)
+{
+    if (InputEvent->EventType == KEY_EVENT)
+    {
+        WCHAR UnicodeChar = InputEvent->Event.KeyEvent.uChar.UnicodeChar;
+        InputEvent->Event.KeyEvent.uChar.UnicodeChar = 0;
+        ConsoleInputUnicodeCharToAnsiChar(Console,
+                                          &InputEvent->Event.KeyEvent.uChar.AsciiChar,
+                                          &UnicodeChar);
+    }
+}
+
+static VOID
+ConioInputEventToUnicode(PCONSOLE Console, PINPUT_RECORD InputEvent)
+{
+    if (InputEvent->EventType == KEY_EVENT)
+    {
+        CHAR AsciiChar = InputEvent->Event.KeyEvent.uChar.AsciiChar;
+        InputEvent->Event.KeyEvent.uChar.AsciiChar = 0;
+        ConsoleInputAnsiCharToUnicodeChar(Console,
+                                          &InputEvent->Event.KeyEvent.uChar.UnicodeChar,
+                                          &AsciiChar);
+    }
+}
+
+#endif
+
+/********** HACK HACK HACK HACK HACK HACK HACK HACK HACK HACK HACK ************/
+
+/* GLOBALS ********************************************************************/
+
+#define TAB_WIDTH   8
+
+// See condrv/text.c
+/*static*/ VOID
+ClearLineBuffer(PTEXTMODE_SCREEN_BUFFER Buff);
+
+// See condrv/coninput.c
+NTSTATUS NTAPI
+ConDrvGetConsoleInput(IN PCONSOLE Console,
+                      IN PCONSOLE_INPUT_BUFFER InputBuffer,
+                      IN BOOLEAN KeepEvents,
+                      IN BOOLEAN WaitForMoreEvents,
+                      OUT PINPUT_RECORD InputRecord,
+                      IN ULONG NumEventsToRead,
+                      OUT PULONG NumEventsRead OPTIONAL);
+
+
+/* LINE DISCIPLINE ************************************************************/
+
+/*static*/ NTSTATUS NTAPI
+LineReadStream(
+    IN /*PCONSOLE*/PCONSRV_CONSOLE Console,
+    IN BOOLEAN Unicode,
+    IN PVOID Parameter OPTIONAL, // Context ???
+    /**PWCHAR Buffer,**/
+    OUT PVOID Buffer,
+    IN ULONG NumCharsToRead,
+    OUT PULONG NumCharsRead OPTIONAL)
+{
+    // PFRONTEND FrontEnd = (PFRONTEND)(Console->TermIFace.Context);
+    PCONSOLE_INPUT_BUFFER InputBuffer = &Console->InputBuffer;
+
+    // STATUS_PENDING : Wait if more to read ; STATUS_SUCCESS : Don't wait.
+    NTSTATUS Status = STATUS_PENDING;
+
+    ULONG i = 0;
+    INPUT_RECORD InputRecord;
+
+    /* Validity checks */
+    // ASSERT(Console == InputBuffer->Header.Console);
+    ASSERT((Buffer != NULL) || (Buffer == NULL && NumCharsToRead == 0));
+
+    /* This line discipline method requires a parameter */
+    if (Parameter == NULL)
+        return STATUS_INVALID_PARAMETER;
+
+    /* We haven't read anything (yet) */
+
+    if (InputBuffer->Mode & ENABLE_LINE_INPUT)
+    {
+        /* COOKED mode */
+
+        PLINE_EDIT_INFO LineEditInfo = (PLINE_EDIT_INFO)Parameter;
+        PCONSOLE_READCONSOLE_CONTROL ReadControl = &LineEditInfo->ReadControl;
+
+        if (ReadControl == NULL || ReadControl->nLength != sizeof(CONSOLE_READCONSOLE_CONTROL))
+        {
+            return STATUS_INVALID_PARAMETER;
+        }
+
+        if (LineEditInfo->LineBuffer == NULL)
+        {
+            /* Start a new line */
+            LineEditInfo->LineMaxSize = max(256, NumCharsToRead);
+
+            /*
+             * Fixup ReadControl->nInitialChars in case the number of initial
+             * characters is bigger than the number of characters to be read.
+             * It will always be, lesser than or equal to LineEditInfo->LineMaxSize.
+             */
+            ReadControl->nInitialChars = min(ReadControl->nInitialChars, NumCharsToRead);
+
+            LineEditInfo->LineBuffer = ConsoleAllocHeap(0, LineEditInfo->LineMaxSize * sizeof(WCHAR));
+            if (LineEditInfo->LineBuffer == NULL) return STATUS_NO_MEMORY;
+
+            LineEditInfo->LinePos = LineEditInfo->LineSize = ReadControl->nInitialChars;
+            LineEditInfo->LineComplete = LineEditInfo->LineUpPressed = FALSE;
+            LineEditInfo->LineInsertToggle = Console->InsertMode;
+            LineEditInfo->LineWakeupMask = ReadControl->dwCtrlWakeupMask;
+
+            /*
+             * Pre-fill the buffer with the nInitialChars from the user buffer.
+             * Since pre-filling is only allowed in Unicode, we don't need to
+             * worry about ANSI <-> Unicode conversion.
+             */
+// FIXME BUGBUG!! String copied in LineBuffer of size LineMaxSize that may be smaller than LineSize??!!
+            memcpy(LineEditInfo->LineBuffer, Buffer, LineEditInfo->LineSize * sizeof(WCHAR));
+            if (LineEditInfo->LineSize >= LineEditInfo->LineMaxSize)
+            {
+                LineEditInfo->LineComplete = TRUE;
+                LineEditInfo->LinePos = 0;
+            }
+        }
+
+        /* Set the cursor size */
+        if (LineEditInfo->ScreenBuffer)
+        {
+            LineEditInfo->ScreenBuffer->CursorIsDouble =
+                (!LineEditInfo->LineComplete && (Console->InsertMode != LineEditInfo->LineInsertToggle));
+        }
+
+        /* If we don't have a complete line yet, process the pending input */
+        while (!LineEditInfo->LineComplete)
+        {
+            /* Remove an input event from the queue */
+            Status = ConDrvGetConsoleInput(Console,
+                                           InputBuffer,
+                                           FALSE,
+                                           TRUE,
+                                           &InputRecord,
+                                           1,
+                                           NULL /* &NumEventsRead */);
+            if (Status == STATUS_PENDING)
+            {
+                /* We will wait for new input */
+                break;
+            }
+
+            /* Only pay attention to key down */
+            if (InputRecord.EventType == KEY_EVENT &&
+                InputRecord.Event.KeyEvent.bKeyDown)
+            {
+                LineInputKeyDown(LineEditInfo,
+                                 &InputRecord.Event.KeyEvent);
+                ReadControl->dwControlKeyState = InputRecord.Event.KeyEvent.dwControlKeyState;
+            }
+        }
+
+        /* Check if we have a complete line to read from */
+        if (LineEditInfo->LineComplete)
+        {
+            /*
+             * LineEditInfo->LinePos keeps the next position of the character to read
+             * in the line buffer across the different calls of the function,
+             * so that the line buffer can be read by chunks after all the input
+             * has been buffered.
+             */
+
+            while (i < NumCharsToRead && LineEditInfo->LinePos < LineEditInfo->LineSize)
+            {
+                WCHAR Char = LineEditInfo->LineBuffer[LineEditInfo->LinePos++];
+
+                if (Unicode)
+                {
+                    ((PWCHAR)Buffer)[i] = Char;
+                }
+                else
+                {
+                    ConsoleInputUnicodeCharToAnsiChar(Console, &((PCHAR)Buffer)[i], &Char);
+                }
+                ++i;
+            }
+
+            if (LineEditInfo->LinePos >= LineEditInfo->LineSize)
+            {
+                /* The entire line has been read */
+                ConsoleFreeHeap(LineEditInfo->LineBuffer);
+                LineEditInfo->LineBuffer = NULL;
+                LineEditInfo->LinePos = LineEditInfo->LineMaxSize = LineEditInfo->LineSize = 0;
+                // LineEditInfo->LineComplete = LineEditInfo->LineUpPressed = FALSE;
+                LineEditInfo->LineComplete = FALSE;
+            }
+
+            /* Set the cursor size */
+            if (LineEditInfo->ScreenBuffer)
+            {
+                LineEditInfo->ScreenBuffer->CursorIsDouble = FALSE;
+                    // (!LineEditInfo->LineComplete && (Console->InsertMode != LineEditInfo->LineInsertToggle));
+            }
+
+            Status = STATUS_SUCCESS;
+        }
+    }
+    else
+    {
+        /* RAW mode */
+
+        /* Character input */
+        while (i < NumCharsToRead)
+        {
+            /* Remove an input event from the queue */
+            Status = ConDrvGetConsoleInput(Console,
+                                           InputBuffer,
+                                           FALSE,
+                                           TRUE,
+                                           &InputRecord,
+                                           1,
+                                           NULL /* &NumEventsRead */);
+            if (Status == STATUS_PENDING)
+            {
+                /* We will wait for new input */
+                break;
+            }
+
+            /* Only pay attention to valid characters, on key down */
+            if (InputRecord.EventType == KEY_EVENT  &&
+                InputRecord.Event.KeyEvent.bKeyDown &&
+                InputRecord.Event.KeyEvent.uChar.UnicodeChar != L'\0')
+            {
+                WCHAR Char = InputRecord.Event.KeyEvent.uChar.UnicodeChar;
+
+                if (Unicode)
+                {
+                    ((PWCHAR)Buffer)[i] = Char;
+                }
+                else
+                {
+                    ConsoleInputUnicodeCharToAnsiChar(Console, &((PCHAR)Buffer)[i], &Char);
+                }
+                ++i;
+
+                /* We did read something */
+                Status = STATUS_SUCCESS;
+            }
+        }
+    }
+
+    // FIXME: Only set if Status == STATUS_SUCCESS ???
+    if (NumCharsRead) *NumCharsRead = i;
+
+    return Status;
+}
+
+
+static VOID
+ConioNextLine(
+    IN PTEXTMODE_SCREEN_BUFFER Buff,
+    IN OUT PSMALL_RECT UpdateRect,
+    IN OUT PUINT ScrolledLines)
+{
+    /* If we hit bottom, slide the viewable screen */
+    if (++Buff->CursorPosition.Y == Buff->ScreenBufferSize.Y)
+    {
+        Buff->CursorPosition.Y--;
+        if (++Buff->VirtualY == Buff->ScreenBufferSize.Y)
+        {
+            Buff->VirtualY = 0;
+        }
+        (*ScrolledLines)++;
+        ClearLineBuffer(Buff);
+        if (UpdateRect->Top != 0)
+        {
+            UpdateRect->Top--;
+        }
+    }
+    UpdateRect->Left = 0;
+    UpdateRect->Right = Buff->ScreenBufferSize.X - 1;
+    UpdateRect->Bottom = Buff->CursorPosition.Y;
+}
+
+/*static*/ NTSTATUS NTAPI
+LineWriteStream(
+    IN /*PCONSOLE*/PCONSRV_CONSOLE Console,
+    IN PTEXTMODE_SCREEN_BUFFER Buff,
+    // IN PVOID Parameter OPTIONAL,
+    IN PWCHAR Buffer,
+    IN DWORD Length,
+    IN BOOLEAN Attrib)
+{
+    PFRONTEND FrontEnd = (PFRONTEND)(Console->TermIFace.Context);
+
+    UINT i;
+    PCHAR_INFO Ptr;
+    SMALL_RECT UpdateRect;
+    SHORT CursorStartX, CursorStartY;
+    UINT ScrolledLines;
+    BOOLEAN bFullwidth;
+    BOOLEAN bCJK = Console->IsCJK;
+
+    /* If nothing to write, bail out now */
+    if (Length == 0)
+        return STATUS_SUCCESS;
+
+    CursorStartX = Buff->CursorPosition.X;
+    CursorStartY = Buff->CursorPosition.Y;
+    UpdateRect.Left = Buff->ScreenBufferSize.X;
+    UpdateRect.Top  = Buff->CursorPosition.Y;
+    UpdateRect.Right  = -1;
+    UpdateRect.Bottom = Buff->CursorPosition.Y;
+    ScrolledLines = 0;
+
+    for (i = 0; i < Length; i++)
+    {
+        /*
+         * If we are in processed mode, interpret special characters and
+         * display them correctly. Otherwise, just put them into the buffer.
+         */
+        if (Buff->Mode & ENABLE_PROCESSED_OUTPUT)
+        {
+            /* --- CR --- */
+            if (Buffer[i] == L'\r')
+            {
+                Buff->CursorPosition.X = 0;
+                CursorStartX = Buff->CursorPosition.X;
+                UpdateRect.Left  = min(UpdateRect.Left , Buff->CursorPosition.X);
+                UpdateRect.Right = max(UpdateRect.Right, Buff->CursorPosition.X);
+                continue;
+            }
+            /* --- LF --- */
+            else if (Buffer[i] == L'\n')
+            {
+                Buff->CursorPosition.X = 0; // TODO: Make this behaviour optional!
+                CursorStartX = Buff->CursorPosition.X;
+                ConioNextLine(Buff, &UpdateRect, &ScrolledLines);
+                continue;
+            }
+            /* --- BS --- */
+            else if (Buffer[i] == L'\b')
+            {
+                /* Only handle BS if we are not on the first position of the first line */
+                if (Buff->CursorPosition.X == 0 && Buff->CursorPosition.Y == 0)
+                    continue;
+
+                if (Buff->CursorPosition.X == 0)
+                {
+                    /* Slide virtual position up */
+                    Buff->CursorPosition.X = Buff->ScreenBufferSize.X - 1;
+                    Buff->CursorPosition.Y--;
+                    // TODO? : Update CursorStartY = Buff->CursorPosition.Y;
+                    UpdateRect.Top = min(UpdateRect.Top, Buff->CursorPosition.Y);
+                }
+                else
+                {
+                    Buff->CursorPosition.X--;
+                }
+                Ptr = ConioCoordToPointer(Buff, Buff->CursorPosition.X, Buff->CursorPosition.Y);
+
+                if (Ptr->Attributes & COMMON_LVB_LEADING_BYTE)
+                {
+                    /*
+                     * The cursor just moved on the leading byte of the same
+                     * current character. We should go one position before to
+                     * go to the actual previous character to erase.
+                     */
+
+                    /* Only handle BS if we are not on the first position of the first line */
+                    if (Buff->CursorPosition.X == 0 && Buff->CursorPosition.Y == 0)
+                        continue;
+
+                    if (Buff->CursorPosition.X == 0)
+                    {
+                        /* Slide virtual position up */
+                        Buff->CursorPosition.X = Buff->ScreenBufferSize.X - 1;
+                        Buff->CursorPosition.Y--;
+                        // TODO? : Update CursorStartY = Buff->CursorPosition.Y;
+                        UpdateRect.Top = min(UpdateRect.Top, Buff->CursorPosition.Y);
+                    }
+                    else
+                    {
+                        Buff->CursorPosition.X--;
+                    }
+                    Ptr = ConioCoordToPointer(Buff, Buff->CursorPosition.X, Buff->CursorPosition.Y);
+                }
+
+                if (Ptr->Attributes & COMMON_LVB_TRAILING_BYTE)
+                {
+                    /* The cursor is on the trailing byte of a full-width character */
+
+                    /* Delete its trailing byte... */
+                    Ptr->Char.UnicodeChar = L' ';
+                    if (Attrib)
+                        Ptr->Attributes = Buff->ScreenDefaultAttrib;
+                    Ptr->Attributes &= ~COMMON_LVB_SBCSDBCS;
+
+                    if (Buff->CursorPosition.X > 0)
+                        Buff->CursorPosition.X--;
+                    /* ... and now its leading byte */
+                    Ptr = ConioCoordToPointer(Buff, Buff->CursorPosition.X, Buff->CursorPosition.Y);
+                }
+
+                Ptr->Char.UnicodeChar = L' ';
+                if (Attrib)
+                    Ptr->Attributes = Buff->ScreenDefaultAttrib;
+                Ptr->Attributes &= ~COMMON_LVB_SBCSDBCS;
+
+                UpdateRect.Left  = min(UpdateRect.Left , Buff->CursorPosition.X);
+                UpdateRect.Right = max(UpdateRect.Right, Buff->CursorPosition.X);
+                continue;
+            }
+            /* --- TAB --- */
+            else if (Buffer[i] == L'\t')
+            {
+                UINT EndX;
+
+                Ptr = ConioCoordToPointer(Buff, Buff->CursorPosition.X, Buff->CursorPosition.Y);
+
+                if (Ptr->Attributes & COMMON_LVB_TRAILING_BYTE)
+                {
+                    /*
+                     * The cursor is on the trailing byte of a full-width character.
+                     * Go back one position to be on its leading byte.
+                     */
+                    if (Buff->CursorPosition.X > 0)
+                        Buff->CursorPosition.X--;
+                    Ptr = ConioCoordToPointer(Buff, Buff->CursorPosition.X, Buff->CursorPosition.Y);
+                }
+
+                UpdateRect.Left = min(UpdateRect.Left, Buff->CursorPosition.X);
+
+                EndX = (Buff->CursorPosition.X + TAB_WIDTH) & ~(TAB_WIDTH - 1);
+                EndX = min(EndX, (UINT)Buff->ScreenBufferSize.X);
+
+                while ((UINT)Buff->CursorPosition.X < EndX)
+                {
+                    Ptr->Char.UnicodeChar = L' ';
+                    if (Attrib)
+                        Ptr->Attributes = Buff->ScreenDefaultAttrib;
+                    Ptr->Attributes &= ~COMMON_LVB_SBCSDBCS;
+
+                    ++Ptr;
+                    Buff->CursorPosition.X++;
+                }
+                if (Buff->CursorPosition.X < Buff->ScreenBufferSize.X)
+                {
+                    /* If the following cell is the trailing byte of a full-width character, reset it */
+                    if (Ptr->Attributes & COMMON_LVB_TRAILING_BYTE)
+                    {
+                        Ptr->Char.UnicodeChar = L' ';
+                        if (Attrib)
+                            Ptr->Attributes = Buff->ScreenDefaultAttrib;
+                        Ptr->Attributes &= ~COMMON_LVB_SBCSDBCS;
+                    }
+                }
+                UpdateRect.Right = max(UpdateRect.Right, Buff->CursorPosition.X);
+
+                if (Buff->CursorPosition.X >= Buff->ScreenBufferSize.X)
+                {
+                    if (Buff->Mode & ENABLE_WRAP_AT_EOL_OUTPUT)
+                    {
+                        /* Wrapping mode: Go to next line */
+                        Buff->CursorPosition.X = 0;
+                        CursorStartX = Buff->CursorPosition.X;
+                        ConioNextLine(Buff, &UpdateRect, &ScrolledLines);
+                    }
+                    else
+                    {
+                        /* The cursor wraps back to its starting position on the same line */
+                        Buff->CursorPosition.X = CursorStartX;
+                    }
+                }
+                continue;
+            }
+            /* --- BEL ---*/
+            else if (Buffer[i] == L'\a')
+            {
+                FrontEnd->Vtbl->RingBell(FrontEnd);
+                continue;
+            }
+        }
+        UpdateRect.Left  = min(UpdateRect.Left , Buff->CursorPosition.X);
+        UpdateRect.Right = max(UpdateRect.Right, Buff->CursorPosition.X);
+
+        /* For Chinese, Japanese and Korean */
+        bFullwidth = (bCJK && IS_FULL_WIDTH(Buffer[i]));
+
+        /* Check whether we can insert the full-width character */
+        if (bFullwidth)
+        {
+            /* It spans two cells and should all fit on the current line */
+            if (Buff->CursorPosition.X >= Buff->ScreenBufferSize.X - 1)
+            {
+                if (Buff->Mode & ENABLE_WRAP_AT_EOL_OUTPUT)
+                {
+                    /* Wrapping mode: Go to next line */
+                    Buff->CursorPosition.X = 0;
+                    CursorStartX = Buff->CursorPosition.X;
+                    ConioNextLine(Buff, &UpdateRect, &ScrolledLines);
+                }
+                else
+                {
+                    /* The cursor wraps back to its starting position on the same line */
+                    Buff->CursorPosition.X = CursorStartX;
+                }
+            }
+
+            /*
+             * Now be sure we can fit the full-width character.
+             * If the screenbuffer is one cell wide we cannot display
+             * the full-width character, so just skip it.
+             */
+            if (Buff->CursorPosition.X >= Buff->ScreenBufferSize.X - 1)
+            {
+                DPRINT1("Cannot display full-width character! CursorPosition.X = %d, ScreenBufferSize.X = %d\n",
+                        Buff->CursorPosition.X, Buff->ScreenBufferSize.X);
+                continue;
+            }
+        }
+
+        Ptr = ConioCoordToPointer(Buff, Buff->CursorPosition.X, Buff->CursorPosition.Y);
+
+        /*
+         * Check whether we are overwriting part of a full-width character,
+         * in which case we need to invalidate it.
+         */
+        if (Ptr->Attributes & COMMON_LVB_TRAILING_BYTE)
+        {
+            /*
+             * The cursor is on the trailing byte of a full-width character.
+             * Go back one position to kill the previous leading byte.
+             */
+            if (Buff->CursorPosition.X > 0)
+            {
+                Ptr = ConioCoordToPointer(Buff, Buff->CursorPosition.X - 1, Buff->CursorPosition.Y);
+                Ptr->Char.UnicodeChar = L' ';
+                if (Attrib)
+                    Ptr->Attributes = Buff->ScreenDefaultAttrib;
+                Ptr->Attributes &= ~COMMON_LVB_SBCSDBCS;
+            }
+            Ptr = ConioCoordToPointer(Buff, Buff->CursorPosition.X, Buff->CursorPosition.Y);
+        }
+
+        /* Insert the character */
+        if (bFullwidth)
+        {
+            ASSERT(Buff->CursorPosition.X < Buff->ScreenBufferSize.X - 1);
+
+            /* Set the leading byte */
+            Ptr->Char.UnicodeChar = Buffer[i];
+            if (Attrib)
+                Ptr->Attributes = Buff->ScreenDefaultAttrib;
+            Ptr->Attributes &= ~COMMON_LVB_SBCSDBCS;
+            Ptr->Attributes |= COMMON_LVB_LEADING_BYTE;
+
+            /* Set the trailing byte */
+            Buff->CursorPosition.X++;
+            Ptr = ConioCoordToPointer(Buff, Buff->CursorPosition.X, Buff->CursorPosition.Y);
+            // Ptr->Char.UnicodeChar = Buffer[i]; // L' ';
+            if (Attrib)
+                Ptr->Attributes = Buff->ScreenDefaultAttrib;
+            Ptr->Attributes &= ~COMMON_LVB_SBCSDBCS;
+            Ptr->Attributes |= COMMON_LVB_TRAILING_BYTE;
+        }
+        else
+        {
+            Ptr->Char.UnicodeChar = Buffer[i];
+            if (Attrib)
+                Ptr->Attributes = Buff->ScreenDefaultAttrib;
+            Ptr->Attributes &= ~COMMON_LVB_SBCSDBCS;
+        }
+
+        ++Ptr;
+        Buff->CursorPosition.X++;
+
+        if (Buff->CursorPosition.X < Buff->ScreenBufferSize.X)
+        {
+            /* If the following cell is the trailing byte of a full-width character, reset it */
+            if (Ptr->Attributes & COMMON_LVB_TRAILING_BYTE)
+            {
+                Ptr->Char.UnicodeChar = L' ';
+                if (Attrib)
+                    Ptr->Attributes = Buff->ScreenDefaultAttrib;
+                Ptr->Attributes &= ~COMMON_LVB_SBCSDBCS;
+            }
+        }
+
+        if (Buff->CursorPosition.X >= Buff->ScreenBufferSize.X)
+        {
+            if (Buff->Mode & ENABLE_WRAP_AT_EOL_OUTPUT)
+            {
+                /* Wrapping mode: Go to next line */
+                Buff->CursorPosition.X = 0;
+                CursorStartX = Buff->CursorPosition.X;
+                ConioNextLine(Buff, &UpdateRect, &ScrolledLines);
+            }
+            else
+            {
+                /* The cursor wraps back to its starting position on the same line */
+                Buff->CursorPosition.X = CursorStartX;
+            }
+        }
+    }
+
+//
+// TODO: ANSI VT-100+ Interpreter?
+//
+
+    if (!ConioIsRectEmpty(&UpdateRect) && (PCONSOLE_SCREEN_BUFFER)Buff == Console->ActiveBuffer)
+    {
+        // TermWriteStream(Console, &UpdateRect, CursorStartX, CursorStartY,
+                        // ScrolledLines, Buffer, Length);
+        FrontEnd->Vtbl->WriteStream(FrontEnd,
+                                    &UpdateRect,
+                                    CursorStartX,
+                                    CursorStartY,
+                                    ScrolledLines,
+                                    Buffer,
+                                    Length);
+    }
+
+    return STATUS_SUCCESS;
+}
+
+#if 0
+static LINEDISC_VTBL LineDiscVtbl =
+{
+    LineReadStream,
+    LineWriteStream,
+};
+#endif
+
+/* EOF */

@@ -186,7 +186,7 @@ GuiConsoleSwitchFullScreen(PGUI_CONSOLE_DATA GuiData)
 
     SwitchFullScreen(GuiData, FullScreen);
 
-    LeaveCriticalSection(&Console->Lock);
+    MyLeaveCriticalSection(&Console->Lock);
 }
 
 /* EOF */
