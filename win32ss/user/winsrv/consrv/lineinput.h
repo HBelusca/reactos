@@ -9,6 +9,7 @@
 #pragma once
 
 // COOKED mode.
+#if 0 // FIXME!!
 typedef struct _LINE_EDIT_INFO
 {
     PCONSOLE_INPUT_BUFFER InputBuffer;      // The input buffer corresponding to the handle.
@@ -29,6 +30,9 @@ typedef struct _LINE_EDIT_INFO
     ULONG   LineWakeupMask;                 /* Bitmap of which control characters will end line input */
 
 } LINE_EDIT_INFO, *PLINE_EDIT_INFO;
+#else
+typedef struct _LINE_EDIT_INFO LINE_EDIT_INFO, *PLINE_EDIT_INFO;
+#endif
 
 VOID
 LineInputKeyDown(

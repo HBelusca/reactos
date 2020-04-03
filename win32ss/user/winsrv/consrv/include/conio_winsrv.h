@@ -108,6 +108,29 @@ struct _FRONTEND
 #define PAUSED_FROM_SCROLLBAR 0x2
 #define PAUSED_FROM_SELECTION 0x4
 
+// FIXME!! See history.h
+typedef struct _HISTORY_BUFFER *PHISTORY_BUFFER;
+// FIXME!! See lineinput.h
+struct _LINE_EDIT_INFO
+{
+    PCONSOLE_INPUT_BUFFER InputBuffer;      // The input buffer corresponding to the handle.
+    PCONSOLE_SCREEN_BUFFER ScreenBuffer; // PTEXTMODE_SCREEN_BUFFER // Reference to the SB we are echoing on.
+
+    ULONG Mode;
+
+    PHISTORY_BUFFER Hist;
+    UNICODE_STRING ExeName; // Used for Aliases resolution.
+
+    PWCHAR  LineBuffer;                     /* Current line being input, in line buffered mode */
+    ULONG   LineMaxSize;                    /* Maximum size of line in characters (including CR+LF) */
+    ULONG   LineSize;                       /* Current size of line */
+    ULONG   LinePos;                        /* Current position within line */
+    BOOLEAN LineComplete;                   /* User pressed enter, ready to send back to client */
+    BOOLEAN LineUpPressed;
+    BOOLEAN LineInsertToggle;               /* Replace character over cursor instead of inserting */
+    ULONG   LineWakeupMask;                 /* Bitmap of which control characters will end line input */
+};
+
 typedef struct _CONSRV_CONSOLE
 {
 /******************************* Console Set-up *******************************/
@@ -147,7 +170,7 @@ typedef struct _CONSRV_CONSOLE
     BOOLEAN HistoryNoDup;                   /* Remove old duplicate history entries */
 
 /**************************** Input Line Discipline ***************************/
-    LINE_EDIT_INFO LineEditInfo;
+    struct _LINE_EDIT_INFO LineEditInfo; // FIXME!!
 
     BOOLEAN InsertMode;
     BOOLEAN QuickEdit;
