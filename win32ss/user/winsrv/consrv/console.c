@@ -288,33 +288,42 @@ ConSrvValidateConsole(OUT PCONSRV_CONSOLE* Console,
 }
 
 NTSTATUS
-ConSrvGetConsole(IN PCONSOLE_PROCESS_DATA ProcessData,
-                 OUT PCONSRV_CONSOLE* Console,
-                 IN BOOLEAN LockConsole)
+ConSrvGetConsole(
+    IN PCONSOLE_PROCESS_DATA ProcessData,
+    IN HANDLE ConsoleHandle,
+    OUT PCONSRV_CONSOLE* Console,
+    IN BOOLEAN LockConsole)
 {
-    NTSTATUS Status = STATUS_INVALID_HANDLE;
     PCONSRV_CONSOLE GrabConsole;
 
     // if (Console == NULL) return STATUS_INVALID_PARAMETER;
     ASSERT(Console);
     *Console = NULL;
 
-    if (ConSrvValidateConsole(&GrabConsole,
-                              ProcessData->ConsoleHandle,
-                              CONSOLE_RUNNING,
-                              LockConsole))
+    /*
+     * If this process doesn't have a console handle, bail out immediately.
+     * Also the passed console handle should be the same as the process' one.
+     */
+    if ((ConsoleHandle == NULL) || (ConsoleHandle != ProcessData->ConsoleHandle))
+        return STATUS_INVALID_HANDLE;
+
+    if (!ConSrvValidateConsole(&GrabConsole,
+                               ProcessData->ConsoleHandle,
+                               CONSOLE_RUNNING,
+                               LockConsole))
     {
-        _InterlockedIncrement(&GrabConsole->ReferenceCount);
-        *Console = GrabConsole;
-        Status = STATUS_SUCCESS;
+        return STATUS_INVALID_HANDLE;
     }
 
-    return Status;
+    _InterlockedIncrement(&GrabConsole->ReferenceCount);
+    *Console = GrabConsole;
+    return STATUS_SUCCESS;
 }
 
 VOID
-ConSrvReleaseConsole(IN PCONSRV_CONSOLE Console,
-                     IN BOOLEAN IsConsoleLocked)
+ConSrvReleaseConsole(
+    IN PCONSRV_CONSOLE Console,
+    IN BOOLEAN IsConsoleLocked)
 {
     LONG RefCount = 0;
 

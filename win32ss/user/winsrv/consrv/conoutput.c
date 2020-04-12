@@ -39,7 +39,7 @@ CON_API(SrvInvalidateBitMapRect,
 
     Status = ConSrvGetScreenBuffer(ProcessData,
                                    InvalidateDIBitsRequest->OutputHandle,
-                                   &Buffer, GENERIC_READ, TRUE);
+                                   &Buffer, GENERIC_READ);
     if (!NT_SUCCESS(Status))
         return Status;
 
@@ -61,7 +61,7 @@ CON_API(SrvInvalidateBitMapRect,
                                         Buffer,
                                         &InvalidateDIBitsRequest->Region);
 
-    ConSrvReleaseScreenBuffer(Buffer, TRUE);
+    ConSrvReleaseScreenBuffer(Buffer);
     return Status;
 }
 
@@ -87,11 +87,11 @@ CON_API(SrvSetConsolePalette,
     /*
     Status = ConSrvGetGraphicsBuffer(ProcessData,
                                      SetPaletteRequest->OutputHandle,
-                                     &Buffer, GENERIC_WRITE, TRUE);
+                                     &Buffer, GENERIC_WRITE);
     */
     Status = ConSrvGetScreenBuffer(ProcessData,
                                    SetPaletteRequest->OutputHandle,
-                                   &Buffer, GENERIC_WRITE, TRUE);
+                                   &Buffer, GENERIC_WRITE);
     if (!NT_SUCCESS(Status))
         return Status;
 
@@ -112,7 +112,7 @@ CON_API(SrvSetConsolePalette,
                                      SetPaletteRequest->PaletteHandle,
                                      SetPaletteRequest->Usage);
 
-    ConSrvReleaseScreenBuffer(Buffer, TRUE);
+    ConSrvReleaseScreenBuffer(Buffer);
     return Status;
 }
 
@@ -129,7 +129,7 @@ CON_API(SrvGetConsoleCursorInfo,
 
     Status = ConSrvGetTextModeBuffer(ProcessData,
                                      CursorInfoRequest->OutputHandle,
-                                     &Buffer, GENERIC_READ, TRUE);
+                                     &Buffer, GENERIC_READ);
     if (!NT_SUCCESS(Status))
         return Status;
 
@@ -139,7 +139,7 @@ CON_API(SrvGetConsoleCursorInfo,
                                         Buffer,
                                         &CursorInfoRequest->Info);
 
-    ConSrvReleaseScreenBuffer(Buffer, TRUE);
+    ConSrvReleaseScreenBuffer(Buffer);
     return Status;
 }
 
@@ -156,7 +156,7 @@ CON_API(SrvSetConsoleCursorInfo,
 
     Status = ConSrvGetTextModeBuffer(ProcessData,
                                      CursorInfoRequest->OutputHandle,
-                                     &Buffer, GENERIC_WRITE, TRUE);
+                                     &Buffer, GENERIC_WRITE);
     if (!NT_SUCCESS(Status))
         return Status;
 
@@ -166,7 +166,7 @@ CON_API(SrvSetConsoleCursorInfo,
                                         Buffer,
                                         &CursorInfoRequest->Info);
 
-    ConSrvReleaseScreenBuffer(Buffer, TRUE);
+    ConSrvReleaseScreenBuffer(Buffer);
     return Status;
 }
 
@@ -183,7 +183,7 @@ CON_API(SrvSetConsoleCursorPosition,
 
     Status = ConSrvGetTextModeBuffer(ProcessData,
                                      SetCursorPositionRequest->OutputHandle,
-                                     &Buffer, GENERIC_WRITE, TRUE);
+                                     &Buffer, GENERIC_WRITE);
     if (!NT_SUCCESS(Status))
         return Status;
 
@@ -193,7 +193,7 @@ CON_API(SrvSetConsoleCursorPosition,
                                             Buffer,
                                             &SetCursorPositionRequest->Position);
 
-    ConSrvReleaseScreenBuffer(Buffer, TRUE);
+    ConSrvReleaseScreenBuffer(Buffer);
     return Status;
 }
 
@@ -341,7 +341,7 @@ CON_API(SrvSetConsoleActiveScreenBuffer,
 
     Status = ConSrvGetScreenBuffer(ProcessData,
                                    SetScreenBufferRequest->OutputHandle,
-                                   &Buffer, GENERIC_WRITE, TRUE);
+                                   &Buffer, GENERIC_WRITE);
     if (!NT_SUCCESS(Status))
         return Status;
 
@@ -349,7 +349,7 @@ CON_API(SrvSetConsoleActiveScreenBuffer,
 
     Status = ConDrvSetConsoleActiveScreenBuffer((PCONSOLE)Console, Buffer);
 
-    ConSrvReleaseScreenBuffer(Buffer, TRUE);
+    ConSrvReleaseScreenBuffer(Buffer);
     return Status;
 }
 
@@ -420,7 +420,7 @@ DoWriteConsole(IN PCSR_API_MESSAGE ApiMessage,
 
     Status = ConSrvGetTextModeBuffer(ConsoleGetPerProcessData(ClientThread->Process),
                                      WriteConsoleRequest->OutputHandle,
-                                     &ScreenBuffer, GENERIC_WRITE, FALSE);
+                                     &ScreenBuffer, GENERIC_WRITE);
     if (!NT_SUCCESS(Status)) return Status;
 
     /*
@@ -482,7 +482,7 @@ DoWriteConsole(IN PCSR_API_MESSAGE ApiMessage,
     }
 
 Quit:
-    ConSrvReleaseScreenBuffer(ScreenBuffer, FALSE);
+    ConSrvReleaseScreenBuffer(ScreenBuffer);
     return Status;
 }
 
@@ -537,7 +537,7 @@ CON_API(SrvReadConsoleOutput,
 
     Status = ConSrvGetTextModeBuffer(ProcessData,
                                      ReadOutputRequest->OutputHandle,
-                                     &Buffer, GENERIC_READ, TRUE);
+                                     &Buffer, GENERIC_READ);
     if (!NT_SUCCESS(Status))
         return Status;
 
@@ -549,7 +549,7 @@ CON_API(SrvReadConsoleOutput,
                                      CharInfo,
                                      &ReadOutputRequest->ReadRegion);
 
-    ConSrvReleaseScreenBuffer(Buffer, TRUE);
+    ConSrvReleaseScreenBuffer(Buffer);
     return Status;
 }
 
@@ -575,7 +575,7 @@ CON_API(SrvWriteConsoleOutput,
 
     Status = ConSrvGetTextModeBuffer(ProcessData,
                                      WriteOutputRequest->OutputHandle,
-                                     &Buffer, GENERIC_WRITE, TRUE);
+                                     &Buffer, GENERIC_WRITE);
     if (!NT_SUCCESS(Status))
         return Status;
 
@@ -655,7 +655,7 @@ CON_API(SrvWriteConsoleOutput,
         ConsoleFreeHeap(CharInfo);
 
 Quit:
-    ConSrvReleaseScreenBuffer(Buffer, TRUE);
+    ConSrvReleaseScreenBuffer(Buffer);
     return Status;
 }
 
@@ -766,7 +766,7 @@ CON_API(SrvReadConsoleOutputString,
 
     Status = ConSrvGetTextModeBuffer(ProcessData,
                                      ReadOutputCodeRequest->OutputHandle,
-                                     &Buffer, GENERIC_READ, TRUE);
+                                     &Buffer, GENERIC_READ);
     if (!NT_SUCCESS(Status))
     {
         ReadOutputCodeRequest->NumCodes = 0;
@@ -784,7 +784,7 @@ CON_API(SrvReadConsoleOutputString,
                                            // &ReadOutputCodeRequest->EndCoord,
                                            &ReadOutputCodeRequest->NumCodes);
 
-    ConSrvReleaseScreenBuffer(Buffer, TRUE);
+    ConSrvReleaseScreenBuffer(Buffer);
     return Status;
 }
 
@@ -854,7 +854,7 @@ CON_API(SrvWriteConsoleOutputString,
 
     Status = ConSrvGetTextModeBuffer(ProcessData,
                                      WriteOutputCodeRequest->OutputHandle,
-                                     &Buffer, GENERIC_WRITE, TRUE);
+                                     &Buffer, GENERIC_WRITE);
     if (!NT_SUCCESS(Status))
     {
         WriteOutputCodeRequest->NumCodes = 0;
@@ -872,7 +872,7 @@ CON_API(SrvWriteConsoleOutputString,
                                             // &WriteOutputCodeRequest->EndCoord,
                                             &WriteOutputCodeRequest->NumCodes);
 
-    ConSrvReleaseScreenBuffer(Buffer, TRUE);
+    ConSrvReleaseScreenBuffer(Buffer);
     return Status;
 }
 
@@ -901,7 +901,7 @@ CON_API(SrvFillConsoleOutput,
 
     Status = ConSrvGetTextModeBuffer(ProcessData,
                                      FillOutputRequest->OutputHandle,
-                                     &Buffer, GENERIC_WRITE, TRUE);
+                                     &Buffer, GENERIC_WRITE);
     if (!NT_SUCCESS(Status))
     {
         FillOutputRequest->NumCodes = 0;
@@ -918,7 +918,7 @@ CON_API(SrvFillConsoleOutput,
                                      &FillOutputRequest->WriteCoord,
                                      &FillOutputRequest->NumCodes);
 
-    ConSrvReleaseScreenBuffer(Buffer, TRUE);
+    ConSrvReleaseScreenBuffer(Buffer);
     return Status;
 }
 
@@ -940,7 +940,7 @@ CON_API(SrvGetConsoleScreenBufferInfo,
 
     Status = ConSrvGetTextModeBuffer(ProcessData,
                                      ScreenBufferInfoRequest->OutputHandle,
-                                     &Buffer, GENERIC_READ, TRUE);
+                                     &Buffer, GENERIC_READ);
     if (!NT_SUCCESS(Status))
         return Status;
 
@@ -955,7 +955,7 @@ CON_API(SrvGetConsoleScreenBufferInfo,
                                               &ScreenBufferInfoRequest->MaximumViewSize,
                                               &ScreenBufferInfoRequest->Attributes);
 
-    ConSrvReleaseScreenBuffer(Buffer, TRUE);
+    ConSrvReleaseScreenBuffer(Buffer);
     return Status;
 }
 
@@ -972,7 +972,7 @@ CON_API(SrvSetConsoleTextAttribute,
 
     Status = ConSrvGetTextModeBuffer(ProcessData,
                                      SetTextAttribRequest->OutputHandle,
-                                     &Buffer, GENERIC_WRITE, TRUE);
+                                     &Buffer, GENERIC_WRITE);
     if (!NT_SUCCESS(Status))
         return Status;
 
@@ -982,7 +982,7 @@ CON_API(SrvSetConsoleTextAttribute,
                                            Buffer,
                                            SetTextAttribRequest->Attributes);
 
-    ConSrvReleaseScreenBuffer(Buffer, TRUE);
+    ConSrvReleaseScreenBuffer(Buffer);
     return Status;
 }
 
@@ -999,7 +999,7 @@ CON_API(SrvSetConsoleScreenBufferSize,
 
     Status = ConSrvGetTextModeBuffer(ProcessData,
                                      SetScreenBufferSizeRequest->OutputHandle,
-                                     &Buffer, GENERIC_WRITE, TRUE);
+                                     &Buffer, GENERIC_WRITE);
     if (!NT_SUCCESS(Status))
         return Status;
 
@@ -1009,7 +1009,7 @@ CON_API(SrvSetConsoleScreenBufferSize,
                                               Buffer,
                                               &SetScreenBufferSizeRequest->Size);
 
-    ConSrvReleaseScreenBuffer(Buffer, TRUE);
+    ConSrvReleaseScreenBuffer(Buffer);
     return Status;
 }
 
@@ -1031,7 +1031,7 @@ CON_API(SrvScrollConsoleScreenBuffer,
 
     Status = ConSrvGetTextModeBuffer(ProcessData,
                                      ScrollScreenBufferRequest->OutputHandle,
-                                     &Buffer, GENERIC_WRITE, TRUE);
+                                     &Buffer, GENERIC_WRITE);
     if (!NT_SUCCESS(Status))
         return Status;
 
@@ -1046,7 +1046,7 @@ CON_API(SrvScrollConsoleScreenBuffer,
                                              &ScrollScreenBufferRequest->DestinationOrigin,
                                              ScrollScreenBufferRequest->Fill);
 
-    ConSrvReleaseScreenBuffer(Buffer, TRUE);
+    ConSrvReleaseScreenBuffer(Buffer);
     return Status;
 }
 
@@ -1073,7 +1073,7 @@ CON_API(SrvSetConsoleWindowInfo,
     // ConSrvGetScreenBuffer
     Status = ConSrvGetTextModeBuffer(ProcessData,
                                      SetWindowInfoRequest->OutputHandle,
-                                     &Buffer, GENERIC_READ, TRUE);
+                                     &Buffer, GENERIC_READ);
     if (!NT_SUCCESS(Status))
         return Status;
 
@@ -1084,7 +1084,7 @@ CON_API(SrvSetConsoleWindowInfo,
                                         SetWindowInfoRequest->Absolute,
                                         &SetWindowInfoRequest->WindowRect);
 
-    ConSrvReleaseScreenBuffer(Buffer, TRUE);
+    ConSrvReleaseScreenBuffer(Buffer);
     return Status;
 }
 

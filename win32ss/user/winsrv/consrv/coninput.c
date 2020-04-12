@@ -16,16 +16,16 @@
 
 /* GLOBALS ********************************************************************/
 
-#define ConSrvGetInputBuffer(ProcessData, Handle, Ptr, Access, LockConsole)     \
+#define ConSrvGetInputBuffer(ProcessData, Handle, Ptr, Access)                  \
     ConSrvGetObject((ProcessData), (Handle), (PCONSOLE_IO_OBJECT*)(Ptr), NULL,  \
-                    (Access), (LockConsole), INPUT_BUFFER)
+                    (Access), TRUE, INPUT_BUFFER)
 
-#define ConSrvGetInputBufferAndHandleEntry(ProcessData, Handle, Ptr, Entry, Access, LockConsole)    \
-    ConSrvGetObject((ProcessData), (Handle), (PCONSOLE_IO_OBJECT*)(Ptr), (Entry),                   \
-                    (Access), (LockConsole), INPUT_BUFFER)
+#define ConSrvGetInputBufferAndHandleEntry(ProcessData, Handle, Ptr, Entry, Access) \
+    ConSrvGetObject((ProcessData), (Handle), (PCONSOLE_IO_OBJECT*)(Ptr), (Entry),   \
+                    (Access), TRUE, INPUT_BUFFER)
 
-#define ConSrvReleaseInputBuffer(Buff, IsConsoleLocked) \
-    ConSrvReleaseObject(&(Buff)->Header, (IsConsoleLocked))
+#define ConSrvReleaseInputBuffer(Buff)  \
+    ConSrvReleaseObject(&(Buff)->Header, TRUE)
 
 
 /*
@@ -625,8 +625,7 @@ CON_API(SrvReadConsole,
                                                 ReadConsoleRequest->InputHandle,
                                                 &InputBuffer,
                                                 &HandleEntry,
-                                                GENERIC_READ,
-                                                TRUE);
+                                                GENERIC_READ);
     if (!NT_SUCCESS(Status))
         return Status;
 
@@ -638,7 +637,7 @@ CON_API(SrvReadConsole,
 
     Status = ReadChars(&InputInfo, ApiMessage, TRUE);
 
-    ConSrvReleaseInputBuffer(InputBuffer, TRUE);
+    ConSrvReleaseInputBuffer(InputBuffer);
 
     if (Status == STATUS_PENDING) *ReplyCode = CsrReplyPending;
 
@@ -690,8 +689,7 @@ CON_API(SrvGetConsoleInput,
                                                 GetInputRequest->InputHandle,
                                                 &InputBuffer,
                                                 &HandleEntry,
-                                                GENERIC_READ,
-                                                TRUE);
+                                                GENERIC_READ);
     if (!NT_SUCCESS(Status))
         return Status;
 
@@ -703,7 +701,7 @@ CON_API(SrvGetConsoleInput,
 
     Status = ReadInputBuffer(&InputInfo, ApiMessage, TRUE);
 
-    ConSrvReleaseInputBuffer(InputBuffer, TRUE);
+    ConSrvReleaseInputBuffer(InputBuffer);
 
     if (Status == STATUS_PENDING) *ReplyCode = CsrReplyPending;
 
@@ -759,7 +757,7 @@ CON_API(SrvWriteConsoleInput,
 
     Status = ConSrvGetInputBuffer(ProcessData,
                                   WriteInputRequest->InputHandle,
-                                  &InputBuffer, GENERIC_WRITE, TRUE);
+                                  &InputBuffer, GENERIC_WRITE);
     if (!NT_SUCCESS(Status))
     {
         WriteInputRequest->NumRecords = 0;
@@ -796,7 +794,7 @@ CON_API(SrvWriteConsoleInput,
 
     WriteInputRequest->NumRecords = NumEventsWritten;
 
-    ConSrvReleaseInputBuffer(InputBuffer, TRUE);
+    ConSrvReleaseInputBuffer(InputBuffer);
     return Status;
 }
 
@@ -812,7 +810,7 @@ CON_API(SrvFlushConsoleInputBuffer,
 
     Status = ConSrvGetInputBuffer(ProcessData,
                                   FlushInputBufferRequest->InputHandle,
-                                  &InputBuffer, GENERIC_WRITE, TRUE);
+                                  &InputBuffer, GENERIC_WRITE);
     if (!NT_SUCCESS(Status))
         return Status;
 
@@ -820,7 +818,7 @@ CON_API(SrvFlushConsoleInputBuffer,
 
     Status = ConDrvFlushConsoleInputBuffer((PCONSOLE)Console, InputBuffer);
 
-    ConSrvReleaseInputBuffer(InputBuffer, TRUE);
+    ConSrvReleaseInputBuffer(InputBuffer);
     return Status;
 }
 
@@ -837,7 +835,7 @@ CON_API(SrvGetConsoleNumberOfInputEvents,
 
     Status = ConSrvGetInputBuffer(ProcessData,
                                   GetNumInputEventsRequest->InputHandle,
-                                  &InputBuffer, GENERIC_READ, TRUE);
+                                  &InputBuffer, GENERIC_READ);
     if (!NT_SUCCESS(Status))
         return Status;
 
@@ -847,7 +845,7 @@ CON_API(SrvGetConsoleNumberOfInputEvents,
                                                  InputBuffer,
                                                  &GetNumInputEventsRequest->NumberOfEvents);
 
-    ConSrvReleaseInputBuffer(InputBuffer, TRUE);
+    ConSrvReleaseInputBuffer(InputBuffer);
     return Status;
 }
 

@@ -47,7 +47,7 @@ typedef struct _CONSOLE_PROCESS_DATA
 
     RTL_CRITICAL_SECTION HandleTableLock;
     ULONG HandleTableSize;
-    struct _CONSOLE_IO_HANDLE* /* PCONSOLE_IO_HANDLE */ HandleTable; // Length-varying table
+    struct _CONSOLE_IO_HANDLE* HandleTable; // Length-varying table
 
     LPTHREAD_START_ROUTINE CtrlRoutine;
     LPTHREAD_START_ROUTINE PropRoutine; // We hold the property dialog handler there, till all the GUI thingie moves out from CSRSS.

@@ -63,8 +63,7 @@ CON_API(SrvGetConsoleHardwareState,
     Status = ConSrvGetTextModeBuffer(ProcessData,
                                    HardwareStateRequest->OutputHandle,
                                    &Buff,
-                                   GENERIC_READ,
-                                   TRUE);
+                                   GENERIC_READ);
     if (!NT_SUCCESS(Status))
         return Status;
 
@@ -72,7 +71,7 @@ CON_API(SrvGetConsoleHardwareState,
 
     HardwareStateRequest->State = Console->HardwareState;
 
-    ConSrvReleaseScreenBuffer(Buff, TRUE);
+    ConSrvReleaseScreenBuffer(Buff);
     return STATUS_SUCCESS;
 #else
     UNIMPLEMENTED;
@@ -91,8 +90,7 @@ CON_API(SrvSetConsoleHardwareState,
     Status = ConSrvGetTextModeBuffer(ProcessData,
                                    HardwareStateRequest->OutputHandle,
                                    &Buff,
-                                   GENERIC_WRITE,
-                                   TRUE);
+                                   GENERIC_WRITE);
     if (!NT_SUCCESS(Status))
         return Status;
 
@@ -101,7 +99,7 @@ CON_API(SrvSetConsoleHardwareState,
     DPRINT("Setting console hardware state.\n");
     Status = SetConsoleHardwareState(Console, HardwareStateRequest->State);
 
-    ConSrvReleaseScreenBuffer(Buff, TRUE);
+    ConSrvReleaseScreenBuffer(Buff);
     return STATUS_SUCCESS;
 #else
     UNIMPLEMENTED;
@@ -127,8 +125,7 @@ CON_API(SrvSetConsoleDisplayMode,
     Status = ConSrvGetScreenBuffer(ProcessData,
                                    SetDisplayModeRequest->OutputHandle,
                                    &Buff,
-                                   GENERIC_WRITE,
-                                   TRUE);
+                                   GENERIC_WRITE);
     if (!NT_SUCCESS(Status))
         return Status;
 
@@ -144,7 +141,7 @@ CON_API(SrvSetConsoleDisplayMode,
         Status = STATUS_INVALID_PARAMETER;
     }
 
-    ConSrvReleaseScreenBuffer(Buff, TRUE);
+    ConSrvReleaseScreenBuffer(Buff);
     return Status;
 }
 
@@ -158,8 +155,7 @@ CON_API(SrvGetLargestConsoleWindowSize,
     Status = ConSrvGetTextModeBuffer(ProcessData,
                                      GetLargestWindowSizeRequest->OutputHandle,
                                      &Buff,
-                                     GENERIC_READ,
-                                     TRUE);
+                                     GENERIC_READ);
     if (!NT_SUCCESS(Status))
         return Status;
 
@@ -172,7 +168,7 @@ CON_API(SrvGetLargestConsoleWindowSize,
      */
     TermGetLargestConsoleWindowSize(Console, &GetLargestWindowSizeRequest->Size);
 
-    ConSrvReleaseScreenBuffer(Buff, TRUE);
+    ConSrvReleaseScreenBuffer(Buff);
     return STATUS_SUCCESS;
 }
 
@@ -186,8 +182,7 @@ CON_API(SrvShowConsoleCursor,
     Status = ConSrvGetScreenBuffer(ProcessData,
                                    ShowCursorRequest->OutputHandle,
                                    &Buff,
-                                   GENERIC_WRITE,
-                                   TRUE);
+                                   GENERIC_WRITE);
     if (!NT_SUCCESS(Status))
         return Status;
 
@@ -195,7 +190,7 @@ CON_API(SrvShowConsoleCursor,
 
     ShowCursorRequest->RefCount = TermShowMouseCursor(Console, ShowCursorRequest->Show);
 
-    ConSrvReleaseScreenBuffer(Buff, TRUE);
+    ConSrvReleaseScreenBuffer(Buff);
     return STATUS_SUCCESS;
 }
 
@@ -213,8 +208,7 @@ CON_API(SrvSetConsoleCursor,
     Status = ConSrvGetGraphicsBuffer(ProcessData,
                                      SetCursorRequest->OutputHandle,
                                      &Buff,
-                                     GENERIC_WRITE,
-                                     TRUE);
+                                     GENERIC_WRITE);
     if (!NT_SUCCESS(Status))
         return Status;
 
@@ -222,7 +216,7 @@ CON_API(SrvSetConsoleCursor,
 
     Success = TermSetMouseCursor(Console, SetCursorRequest->CursorHandle);
 
-    ConSrvReleaseScreenBuffer(Buff, TRUE);
+    ConSrvReleaseScreenBuffer(Buff);
     return (Success ? STATUS_SUCCESS : STATUS_UNSUCCESSFUL);
 }
 
@@ -236,8 +230,7 @@ CON_API(SrvConsoleMenuControl,
     Status = ConSrvGetScreenBuffer(ProcessData,
                                    MenuControlRequest->OutputHandle,
                                    &Buff,
-                                   GENERIC_WRITE,
-                                   TRUE);
+                                   GENERIC_WRITE);
     if (!NT_SUCCESS(Status))
         return Status;
 
@@ -247,7 +240,7 @@ CON_API(SrvConsoleMenuControl,
                                                      MenuControlRequest->CmdIdLow,
                                                      MenuControlRequest->CmdIdHigh);
 
-    ConSrvReleaseScreenBuffer(Buff, TRUE);
+    ConSrvReleaseScreenBuffer(Buff);
     return STATUS_SUCCESS;
 }
 
@@ -268,6 +261,7 @@ GetThreadConsoleDesktop(
 {
     NTSTATUS Status;
     PCSR_THREAD CsrThread;
+    PCONSOLE_PROCESS_DATA ProcessData;
     PCONSRV_CONSOLE Console;
 
     /* No console desktop handle by default */
@@ -279,9 +273,11 @@ GetThreadConsoleDesktop(
         return Status;
 
     ASSERT(CsrThread->Process);
+    ProcessData = ConsoleGetPerProcessData(CsrThread->Process);
 
     /* Retrieve the console to which the process is attached, and unlock the thread */
-    Status = ConSrvGetConsole(ConsoleGetPerProcessData(CsrThread->Process),
+    Status = ConSrvGetConsole(ProcessData,
+                              ProcessData->ConsoleHandle,
                               &Console, TRUE);
     CsrUnlockThread(CsrThread);
 
@@ -290,8 +286,8 @@ GetThreadConsoleDesktop(
 
     /* Retrieve the console desktop handle, and release the console */
     *ConsoleDesktop = TermGetThreadConsoleDesktop(Console);
-    ConSrvReleaseConsole(Console, TRUE);
 
+    ConSrvReleaseConsole(Console, TRUE);
     return STATUS_SUCCESS;
 }
 
@@ -340,8 +336,7 @@ CON_API(SrvGetConsoleFontInfo,
     Status = ConSrvGetTextModeBuffer(ProcessData,
                                      GetFontInfoRequest->OutputHandle,
                                      &Buff,
-                                     GENERIC_READ,
-                                     TRUE);
+                                     GENERIC_READ);
     if (!NT_SUCCESS(Status))
         return Status;
 
@@ -352,7 +347,7 @@ CON_API(SrvGetConsoleFontInfo,
     DPRINT1("%s not yet implemented\n", __FUNCTION__);
     GetFontInfoRequest->NumFonts = 0;
 
-    ConSrvReleaseScreenBuffer(Buff, TRUE);
+    ConSrvReleaseScreenBuffer(Buff);
     return STATUS_SUCCESS;
 }
 
@@ -366,8 +361,7 @@ CON_API(SrvGetConsoleFontSize,
     Status = ConSrvGetTextModeBuffer(ProcessData,
                                      GetFontSizeRequest->OutputHandle,
                                      &Buff,
-                                     GENERIC_READ,
-                                     TRUE);
+                                     GENERIC_READ);
     if (!NT_SUCCESS(Status))
         return Status;
 
@@ -377,7 +371,7 @@ CON_API(SrvGetConsoleFontSize,
     // TermGetFontSize(Console, ...);
     DPRINT1("%s not yet implemented\n", __FUNCTION__);
 
-    ConSrvReleaseScreenBuffer(Buff, TRUE);
+    ConSrvReleaseScreenBuffer(Buff);
     return STATUS_SUCCESS;
 }
 
@@ -391,8 +385,7 @@ CON_API(SrvGetConsoleCurrentFont,
     Status = ConSrvGetTextModeBuffer(ProcessData,
                                      GetCurrentFontRequest->OutputHandle,
                                      &Buff,
-                                     GENERIC_READ,
-                                     TRUE);
+                                     GENERIC_READ);
     if (!NT_SUCCESS(Status))
         return Status;
 
@@ -403,7 +396,7 @@ CON_API(SrvGetConsoleCurrentFont,
     DPRINT1("%s not yet implemented\n", __FUNCTION__);
     GetCurrentFontRequest->FontIndex = 0;
 
-    ConSrvReleaseScreenBuffer(Buff, TRUE);
+    ConSrvReleaseScreenBuffer(Buff);
     return STATUS_SUCCESS;
 }
 
@@ -417,8 +410,7 @@ CON_API(SrvSetConsoleFont,
     Status = ConSrvGetTextModeBuffer(ProcessData,
                                      SetFontRequest->OutputHandle,
                                      &Buff,
-                                     GENERIC_WRITE,
-                                     TRUE);
+                                     GENERIC_WRITE);
     if (!NT_SUCCESS(Status))
         return Status;
 
@@ -428,7 +420,7 @@ CON_API(SrvSetConsoleFont,
     // TermSetFont(Console, ...);
     DPRINT1("%s not yet implemented\n", __FUNCTION__);
 
-    ConSrvReleaseScreenBuffer(Buff, TRUE);
+    ConSrvReleaseScreenBuffer(Buff);
     return STATUS_SUCCESS;
 }
 

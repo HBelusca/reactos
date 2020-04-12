@@ -614,6 +614,7 @@ CON_API_NOCONSOLE(SrvGetConsoleHistory,
     PCONSRV_CONSOLE Console;
 
     Status = ConSrvGetConsole(ProcessData,
+                              ProcessData->ConsoleHandle,
                               &Console, TRUE);
     if (!NT_SUCCESS(Status))
         return Status;
@@ -639,6 +640,7 @@ CON_API_NOCONSOLE(SrvSetConsoleHistory,
     PCONSRV_CONSOLE Console;
 
     Status = ConSrvGetConsole(ProcessData,
+                              ProcessData->ConsoleHandle,
                               &Console, TRUE);
     if (!NT_SUCCESS(Status))
         return Status;

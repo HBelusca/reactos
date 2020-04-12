@@ -34,13 +34,16 @@ ConSrvInitConsole(OUT PHANDLE NewConsoleHandle,
 VOID NTAPI ConSrvDeleteConsole(struct _CONSRV_CONSOLE* /* PCONSRV_CONSOLE */ Console);
 
 NTSTATUS
-ConSrvGetConsole(IN PCONSOLE_PROCESS_DATA ProcessData,
-                 OUT struct _CONSRV_CONSOLE** /* PCONSRV_CONSOLE* */ Console,
-                 IN BOOLEAN LockConsole);
-VOID
-ConSrvReleaseConsole(IN struct _CONSRV_CONSOLE* /* PCONSRV_CONSOLE */ Console,
-                     IN BOOLEAN IsConsoleLocked);
+ConSrvGetConsole(
+    IN PCONSOLE_PROCESS_DATA ProcessData,
+    IN HANDLE ConsoleHandle,
+    OUT struct _CONSRV_CONSOLE** /* PCONSRV_CONSOLE* */ Console,
+    IN BOOLEAN LockConsole);
 
+VOID
+ConSrvReleaseConsole(
+    IN struct _CONSRV_CONSOLE* /* PCONSRV_CONSOLE */ Console,
+    IN BOOLEAN IsConsoleLocked);
 
 BOOLEAN NTAPI
 ConSrvValidateConsole(OUT struct _CONSRV_CONSOLE** /* PCONSRV_CONSOLE* */ Console,

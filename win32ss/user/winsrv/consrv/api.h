@@ -65,7 +65,7 @@
         PCONSRV_CONSOLE Console;                \
                                                 \
         Status = ConSrvGetConsole(ProcessData,  \
-                                  /* RequestName->ConsoleHandle, */   \
+                                  RequestName->ConsoleHandle,   \
                                   &Console, TRUE);              \
         if (!NT_SUCCESS(Status))                \
             return Status;                      \
