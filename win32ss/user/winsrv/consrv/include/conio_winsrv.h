@@ -108,6 +108,36 @@ struct _FRONTEND
 #define PAUSED_FROM_SCROLLBAR 0x2
 #define PAUSED_FROM_SELECTION 0x4
 
+#if 0
+
+//
+// Part of FILE_OBJECT containing the SHARED_ACCESS structure.
+//
+typedef struct _CONSOLE_IO_OBJECT
+{
+    // CONSOLE_IO_OBJECT_TYPE Type; // Here, should be the type wrt. the "IO" system.
+
+    struct _CONSOLE* Console;
+    LONG ReferenceCount;    /* Is incremented each time a console object gets referenced */
+
+    LONG AccessRead, AccessWrite;
+    LONG ExclusiveRead, ExclusiveWrite;
+} CONSOLE_IO_OBJECT, *PCONSOLE_IO_OBJECT;
+
+typedef struct _CONSRV_INPUT_BUFFER
+{
+    CONSOLE_IO_OBJECT Header;       /* Object header - MUST BE IN FIRST PLACE */
+    PCONSOLE_INPUT_BUFFER InputBuffer;
+} CONSRV_INPUT_BUFFER, *PCONSRV_INPUT_BUFFER;
+
+typedef struct _CONSRV_SCREEN_BUFFER
+{
+    CONSOLE_IO_OBJECT Header;       /* Object header - MUST BE IN FIRST PLACE */
+} CONSRV_SCREEN_BUFFER, *PCONSRV_SCREEN_BUFFER;
+
+#endif
+
+
 typedef struct _CONSRV_CONSOLE
 {
 /******************************* Console Set-up *******************************/
@@ -116,7 +146,7 @@ typedef struct _CONSRV_CONSOLE
     // CONSOLE Console;
     // // PCONSOLE Console;
 
-    // LONG ReferenceCount;                    /* Is incremented each time a handle to something in the console (a screen-buffer or the input buffer of this console) gets referenced */
+    LONG ReferenceCount;                    /* Is incremented each time a handle to something in the console (a screen-buffer or the input buffer of this console) gets referenced */
     // CRITICAL_SECTION Lock;
     // CONSOLE_STATE State;                    /* State of the console */
 

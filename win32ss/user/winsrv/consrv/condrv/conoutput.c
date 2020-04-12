@@ -33,6 +33,12 @@ VOID
 GRAPHICS_BUFFER_Destroy(IN OUT PCONSOLE_SCREEN_BUFFER Buffer);
 
 
+VOID
+ConDrvInitObject(
+    IN OUT PCONSOLE_IO_OBJECT Object,
+    IN CONSOLE_IO_OBJECT_TYPE Type,
+    IN PCONSOLE Console);
+
 NTSTATUS
 CONSOLE_SCREEN_BUFFER_Initialize(
     OUT PCONSOLE_SCREEN_BUFFER* Buffer,
@@ -47,7 +53,7 @@ CONSOLE_SCREEN_BUFFER_Initialize(
     if (*Buffer == NULL) return STATUS_INSUFFICIENT_RESOURCES;
 
     /* Initialize the header with the default type */
-    ConSrvInitObject(&(*Buffer)->Header, Type /* SCREEN_BUFFER */, Console);
+    ConDrvInitObject(&(*Buffer)->Header, Type /* SCREEN_BUFFER */, Console);
     return STATUS_SUCCESS;
 }
 

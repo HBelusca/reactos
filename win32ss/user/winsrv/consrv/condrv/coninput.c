@@ -188,6 +188,13 @@ PurgeInputBuffer(IN PCONSOLE_INPUT_BUFFER InputBuffer)
     // NtClose(Console->InputBuffer.ActiveEvent);
 }
 
+
+VOID
+ConDrvInitObject(
+    IN OUT PCONSOLE_IO_OBJECT Object,
+    IN CONSOLE_IO_OBJECT_TYPE Type,
+    IN PCONSOLE Console);
+
 NTSTATUS NTAPI
 ConDrvInitInputBuffer(IN PCONSOLE Console,
                       IN ULONG InputBufferSize)
@@ -195,7 +202,7 @@ ConDrvInitInputBuffer(IN PCONSOLE Console,
     NTSTATUS Status;
     OBJECT_ATTRIBUTES ObjectAttributes;
 
-    ConSrvInitObject(&Console->InputBuffer.Header, INPUT_BUFFER, Console);
+    ConDrvInitObject(&Console->InputBuffer.Header, INPUT_BUFFER, Console);
 
     InitializeObjectAttributes(&ObjectAttributes,
                                NULL,

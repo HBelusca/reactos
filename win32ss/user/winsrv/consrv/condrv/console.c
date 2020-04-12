@@ -96,7 +96,6 @@ ConDrvInitConsole(
      * Initialize the console
      */
     Console->State = CONSOLE_INITIALIZING;
-    Console->ReferenceCount = 0;
     InitializeCriticalSection(&Console->Lock);
 
     /* Initialize the terminal interface */
@@ -270,9 +269,6 @@ ConDrvDeleteConsole(IN PCONSOLE Console)
     /* We are now in destruction */
     Console->State = CONSOLE_IN_DESTRUCTION;
 
-    /* We really delete the console. Reset the count to be sure. */
-    Console->ReferenceCount = 0;
-
     /* Delete the last screen buffer */
     ConDrvDeleteScreenBuffer(Console->ActiveBuffer);
     Console->ActiveBuffer = NULL;
@@ -317,6 +313,23 @@ ConDrvUnpause(PCONSOLE Console)
 
     /* ... otherwise reset the flag */
     Console->ConsolePaused = FALSE;
+}
+
+// ConSrvCreateObject ~= ObCreateObject
+VOID
+ConDrvInitObject(
+    IN OUT PCONSOLE_IO_OBJECT Object,
+    IN CONSOLE_IO_OBJECT_TYPE Type,
+    IN PCONSOLE Console)
+{
+    ASSERT(Object);
+
+    Object->Type    = Type;
+    Object->Console = Console;
+    Object->ReferenceCount = 0;
+
+    Object->AccessRead    = Object->AccessWrite    = 0;
+    Object->ExclusiveRead = Object->ExclusiveWrite = 0;
 }
 
 NTSTATUS NTAPI

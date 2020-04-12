@@ -16,16 +16,16 @@
 
 /* GLOBALS ********************************************************************/
 
-#define ConSrvGetInputBuffer(ProcessData, Handle, Ptr, Access)                  \
-    ConSrvGetObject((ProcessData), (Handle), (PCONSOLE_IO_OBJECT*)(Ptr), NULL,  \
-                    (Access), TRUE, INPUT_BUFFER)
+#define ConSrvGetInputBuffer(ProcessData, Handle, Ptr, Access)                      \
+    ConSrvReferenceObjectByHandle((ProcessData), (Handle), (Access), HANDLE_INPUT,  \
+                    INPUT_BUFFER, (PCONSOLE_IO_OBJECT*)(Ptr), NULL)
 
 #define ConSrvGetInputBufferAndHandleEntry(ProcessData, Handle, Ptr, Entry, Access) \
-    ConSrvGetObject((ProcessData), (Handle), (PCONSOLE_IO_OBJECT*)(Ptr), (Entry),   \
-                    (Access), TRUE, INPUT_BUFFER)
+    ConSrvReferenceObjectByHandle((ProcessData), (Handle), (Access), HANDLE_INPUT,  \
+                    INPUT_BUFFER, (PCONSOLE_IO_OBJECT*)(Ptr), (Entry))
 
 #define ConSrvReleaseInputBuffer(Buff)  \
-    ConSrvReleaseObject(&(Buff)->Header, TRUE)
+    ConSrvDereferenceObject(&(Buff)->Header, HANDLE_INPUT)
 
 
 /*
@@ -50,9 +50,85 @@ do { \
 typedef struct _GET_INPUT_INFO
 {
     PCSR_THREAD           CallingThread;    // The thread which called the input API.
-    PVOID                 HandleEntry;      // The handle data associated with the wait thread.
+    PCONSOLE_IO_OBJECT_REFERENCE HandleEntry;      // The handle data associated with the wait thread.
     PCONSOLE_INPUT_BUFFER InputBuffer;      // The input buffer corresponding to the handle.
 } GET_INPUT_INFO, *PGET_INPUT_INFO;
+
+
+/* CONSRV OBJECT CALLBACKS ****************************************************/
+
+// OPEN_METHOD
+NTSTATUS NTAPI
+OpenInputBuffer(
+    IN PCONSOLE_IO_OBJECT_REFERENCE ObjectRef,
+    /***IN PCONSOLE_IO_OBJECT Object,***/
+    IN ACCESS_MASK GrantedAccess)
+{
+    PCONSOLE_IO_OBJECT Object = ObjectRef->Object;
+    ASSERT(Object->Type == INPUT_BUFFER);
+    DPRINT1("Opening the input buffer\n");
+    return STATUS_SUCCESS;
+}
+
+// OKAYTOCLOSE_METHOD
+NTSTATUS NTAPI
+OkayToCloseInputBuffer(
+    IN PCONSOLE_IO_OBJECT_REFERENCE ObjectRef,
+    // IN ACCESS_MASK GrantedAccess,
+    IN HANDLE Handle)
+{
+    PCONSOLE_IO_OBJECT Object = ObjectRef->Object;
+    PCONSRV_CONSOLE Console = (PCONSRV_CONSOLE)Object->Console;
+
+    ASSERT(Object->Type == INPUT_BUFFER);
+
+    DPRINT1("Closing the input buffer\n");
+
+    /*
+     * If this is a input handle, notify and dereference
+     * all the waits related to this handle.
+     *
+     * Wake up all the writing waiters related to this handle for this
+     * input buffer, if any, then dereference them and purge them all
+     * from the list.
+     * To select them amongst all the waiters for this input buffer,
+     * pass the handle pointer to the waiters, then they will check
+     * whether or not they are related to this handle and if so, they
+     * return.
+     */
+    CsrNotifyWait(&Console->ReadWaitQueue,
+                  TRUE,
+                  NULL,
+                  (PVOID)Handle);
+    if (!IsListEmpty(&Console->ReadWaitQueue))
+    {
+        CsrDereferenceWait(&Console->ReadWaitQueue);
+    }
+
+    return STATUS_SUCCESS;
+}
+
+// CLOSE_METHOD
+VOID NTAPI
+CloseInputBuffer(
+    IN PCONSOLE_IO_OBJECT Object
+    // IN ACCESS_MASK GrantedAccess
+    )
+{
+    ASSERT(Object->Type == INPUT_BUFFER);
+    DPRINT1("Input buffer closed\n");
+}
+
+// DELETE_METHOD
+VOID NTAPI
+DeleteInputBuffer(
+    IN /* PCONSOLE_OBJECT */ PCONSOLE_IO_OBJECT Object)
+{
+    ASSERT(Object->Type == INPUT_BUFFER);
+    DPRINT1("Deleting the input buffer\n");
+    // TODO: Should do a mix of PurgeInputBuffer() / ConDrvFlushConsoleInputBuffer()
+    // and reset the accesses to the input buffer.
+}
 
 
 /* PRIVATE FUNCTIONS **********************************************************/
@@ -585,7 +661,7 @@ CON_API(SrvReadConsole,
         CONSOLE_READCONSOLE, ReadConsoleRequest)
 {
     NTSTATUS Status;
-    PVOID HandleEntry;
+    PCONSOLE_IO_OBJECT_REFERENCE HandleEntry;
     PCONSOLE_INPUT_BUFFER InputBuffer;
     GET_INPUT_INFO InputInfo;
 
@@ -649,7 +725,7 @@ CON_API(SrvGetConsoleInput,
         CONSOLE_GETINPUT, GetInputRequest)
 {
     NTSTATUS Status;
-    PVOID HandleEntry;
+    PCONSOLE_IO_OBJECT_REFERENCE HandleEntry;
     PCONSOLE_INPUT_BUFFER InputBuffer;
     GET_INPUT_INFO InputInfo;
 

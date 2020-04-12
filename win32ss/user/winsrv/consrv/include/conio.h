@@ -29,11 +29,14 @@ typedef enum _CONSOLE_IO_OBJECT_TYPE
     ANY_TYPE_BUFFER = 0x07, // --> Any IO object
 } CONSOLE_IO_OBJECT_TYPE;
 
+//
+// Part of FILE_OBJECT containing the SHARED_ACCESS structure.
+//
 typedef struct _CONSOLE_IO_OBJECT
 {
-    CONSOLE_IO_OBJECT_TYPE Type;
+    CONSOLE_IO_OBJECT_TYPE Type; // Here, should be the type wrt. the "IO" system.
+    struct _CONSOLE* Console;
 
-    struct _CONSOLE* /* PCONSOLE */ Console;
     LONG ReferenceCount;    /* Is incremented each time a console object gets referenced */
 
     LONG AccessRead, AccessWrite;
@@ -286,7 +289,6 @@ typedef enum _CONSOLE_STATE
 typedef struct _CONSOLE
 {
 /******************************* Console Set-up *******************************/
-    LONG ReferenceCount;                    /* Is incremented each time a handle to something in the console (a screen-buffer or the input buffer of this console) gets referenced */
     CRITICAL_SECTION Lock;
 
     CONSOLE_STATE State;                    /* State of the console */

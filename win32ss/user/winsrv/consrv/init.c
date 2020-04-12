@@ -328,13 +328,13 @@ ConSrvNewProcess(PCSR_PROCESS SourceProcess,
     /**************************************************************************
      * This function is called whenever a new process (GUI or CUI) is created.
      *
-     * Copy the parent's handles table here if both the parent and the child
+     * Copy the parent's handle table here if both the parent and the child
      * processes are CUI. If we must actually create our proper console (and
      * thus do not inherit from the console handles of the parent's), then we
-     * will clean this table in the next ConSrvConnect call. Why we are doing
+     * will clean this table in the next ConSrvConnect() call. Why are we doing
      * this? It's because here, we still don't know whether or not we must create
      * a new console instead of inherit it from the parent, and, because in
-     * ConSrvConnect we don't have any reference to the parent process anymore.
+     * ConSrvConnect() we don't have any reference to the parent process anymore.
      **************************************************************************/
 
     NTSTATUS Status = STATUS_SUCCESS;
@@ -352,13 +352,10 @@ ConSrvNewProcess(PCSR_PROCESS SourceProcess,
     TargetProcessData->ConsoleApp = FALSE;
 
     /*
-     * The handles table gets initialized either when inheriting from
+     * The handle table gets initialized either when inheriting from
      * another console process, or when creating a new console.
      */
-    TargetProcessData->HandleTableSize = 0;
-    TargetProcessData->HandleTable = NULL;
-
-    RtlInitializeCriticalSection(&TargetProcessData->HandleTableLock);
+    ConSrvCreateHandleTable(TargetProcessData);
 
     /* Do nothing if the source process is NULL */
     if (!SourceProcess) return STATUS_SUCCESS;
@@ -368,7 +365,7 @@ ConSrvNewProcess(PCSR_PROCESS SourceProcess,
     /*
      * If the child process is a console application and the parent process is
      * either a console application or just has a valid console (with a valid
-     * handles table: this can happen if it is a GUI application having called
+     * handle table: this can happen if it is a GUI application having called
      * AllocConsole), then try to inherit handles from the parent process.
      */
     if (TargetProcess->Flags & CsrProcessIsConsoleApp /* && SourceProcessData->ConsoleHandle != NULL */)
@@ -381,11 +378,11 @@ ConSrvNewProcess(PCSR_PROCESS SourceProcess,
                                   SourceProcessData->ConsoleHandle,
                                   CONSOLE_RUNNING, TRUE))
         {
-            /* Inherit the parent's handles table */
-            Status = ConSrvInheritHandlesTable(SourceProcessData, TargetProcessData);
+            /* Inherit the parent's handle table */
+            Status = ConSrvInheritHandleTable(SourceProcessData, TargetProcessData);
             if (!NT_SUCCESS(Status))
             {
-                DPRINT1("Inheriting handles table failed\n");
+                DPRINT1("Inheriting handle table failed\n");
             }
 
             /* Unlock the parent's console */
@@ -478,11 +475,11 @@ ConSrvConnect(IN PCSR_PROCESS CsrProcess,
         /*
          * We are about to create a new console. However when ConSrvNewProcess
          * was called, we didn't know that we wanted to create a new console and
-         * therefore, we by default inherited the handles table from our parent
+         * therefore, we by default inherited the handle table from our parent
          * process. It's only now that we notice that in fact we do not need
          * them, because we've created a new console and thus we must use it.
          *
-         * ConSrvAllocateConsole will free our old handles table
+         * ConSrvAllocateConsole will free our old handle table
          * and recreate a new valid one.
          */
 
@@ -546,7 +543,7 @@ ConSrvDisconnect(IN PCSR_PROCESS CsrProcess)
         ConSrvRemoveConsole(ProcessData);
     }
 
-    RtlDeleteCriticalSection(&ProcessData->HandleTableLock);
+    ConSrvDestroyHandleTable(ProcessData);
 }
 
 CSR_SERVER_DLL_INIT(ConServerDllInitialization)

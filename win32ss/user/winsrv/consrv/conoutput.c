@@ -14,6 +14,68 @@
 #define NDEBUG
 #include <debug.h>
 
+
+/* CONSRV OBJECT CALLBACKS ****************************************************/
+
+// OPEN_METHOD
+NTSTATUS NTAPI
+OpenScreenBuffer(
+    IN PCONSOLE_IO_OBJECT_REFERENCE ObjectRef,
+    /***IN PCONSOLE_IO_OBJECT Object,***/
+    IN ACCESS_MASK GrantedAccess)
+{
+    PCONSOLE_IO_OBJECT Object = ObjectRef->Object;
+    ASSERT(Object->Type == TEXTMODE_BUFFER || Object->Type == GRAPHICS_BUFFER);
+    DPRINT1("Opening the screen buffer\n");
+    return STATUS_SUCCESS;
+}
+
+// OKAYTOCLOSE_METHOD
+NTSTATUS NTAPI
+OkayToCloseScreenBuffer(
+    IN PCONSOLE_IO_OBJECT_REFERENCE ObjectRef,
+    // IN ACCESS_MASK GrantedAccess,
+    IN HANDLE Handle)
+{
+    PCONSOLE_IO_OBJECT Object = ObjectRef->Object;
+    ASSERT(Object->Type == TEXTMODE_BUFFER || Object->Type == GRAPHICS_BUFFER);
+    DPRINT1("Closing the screen buffer\n");
+    return STATUS_SUCCESS;
+}
+
+// CLOSE_METHOD
+VOID NTAPI
+CloseScreenBuffer(
+    IN PCONSOLE_IO_OBJECT Object
+    // IN ACCESS_MASK GrantedAccess
+    )
+{
+    ASSERT(Object->Type == TEXTMODE_BUFFER || Object->Type == GRAPHICS_BUFFER);
+    DPRINT1("Screen buffer closed\n");
+}
+
+// DELETE_METHOD
+VOID NTAPI
+DeleteScreenBuffer(
+    IN /* PCONSOLE_OBJECT */ PCONSOLE_IO_OBJECT Object)
+{
+    PCONSOLE_SCREEN_BUFFER Buffer = (PCONSOLE_SCREEN_BUFFER)Object;
+
+    ASSERT(Object->Type == TEXTMODE_BUFFER || Object->Type == GRAPHICS_BUFFER);
+
+    DPRINT1("Deleting the screen buffer\n");
+
+    /*
+     * If the last handle to a screen buffer is closed, delete it,
+     * unless it's the only buffer left. Windows allows deletion
+     * even of the last buffer, but having to deal with a lack of
+     * any active buffer might be error-prone.
+     */
+    if (Buffer->ListEntry.Flink != Buffer->ListEntry.Blink)
+        ConDrvDeleteScreenBuffer(Buffer);
+}
+
+
 /* PUBLIC SERVER APIS *********************************************************/
 
 /*
@@ -296,17 +358,13 @@ CON_API(SrvCreateConsoleScreenBuffer,
         return Status;
 
     /* Insert the new handle inside the process handles table */
-    RtlEnterCriticalSection(&ProcessData->HandleTableLock);
-
-    Status = ConSrvInsertObject(ProcessData,
-                                &CreateScreenBufferRequest->OutputHandle,
-                                &Buff->Header,
-                                CreateScreenBufferRequest->DesiredAccess,
-                                CreateScreenBufferRequest->InheritHandle,
-                                CreateScreenBufferRequest->ShareMode);
-
-    RtlLeaveCriticalSection(&ProcessData->HandleTableLock);
-
+    Status = ConSrvOpenObjectByPointer(ProcessData,
+                                       &Buff->Header,
+                                       HANDLE_OUTPUT,
+                                       CreateScreenBufferRequest->DesiredAccess,
+                                       CreateScreenBufferRequest->InheritHandle,
+                                       CreateScreenBufferRequest->ShareMode,
+                                       &CreateScreenBufferRequest->OutputHandle);
     if (!NT_SUCCESS(Status))
     {
         ConDrvDeleteScreenBuffer(Buff);

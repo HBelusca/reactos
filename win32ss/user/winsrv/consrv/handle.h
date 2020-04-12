@@ -10,36 +10,130 @@
 
 #pragma once
 
+// This can be understood as a FILE_OBJECT
+//
+// FIXME: Call that CONSOLE_IO_REFERENCE ???
+// Or: CONSOLE_IO_OBJECT_REFERENCE ?
+// or: CONSOLE_IO_OBJECT_CONTEXT ?
+// or: CONSOLE_IO_OBJECT_INSTANCE ?
+//
+typedef struct _CONSOLE_IO_OBJECT_REFERENCE
+{
+    PCONSOLE_IO_OBJECT Object;  /* The object referred to */
+    PVOID Context;
+
+    ACCESS_MASK Access;
+    ULONG ShareMode;
+
+} CONSOLE_IO_OBJECT_REFERENCE, *PCONSOLE_IO_OBJECT_REFERENCE;
+
+
+typedef NTSTATUS
+(NTAPI *OPEN_METHOD)(
+    IN PCONSOLE_IO_OBJECT_REFERENCE ObjectRef,
+    /***IN PCONSOLE_IO_OBJECT Object,***/
+    IN ACCESS_MASK GrantedAccess);
+
+typedef NTSTATUS
+(NTAPI *OKAYTOCLOSE_METHOD)(
+    IN PCONSOLE_IO_OBJECT_REFERENCE ObjectRef,
+    // IN ACCESS_MASK GrantedAccess,
+    IN HANDLE Handle);
+
+// PCONSOLE_OBJECT Object
+typedef VOID
+(NTAPI *CLOSE_METHOD)(
+    IN PCONSOLE_IO_OBJECT Object
+    // IN ACCESS_MASK GrantedAccess
+    );
+
+typedef VOID
+(NTAPI *DELETE_METHOD)(
+    IN PCONSOLE_IO_OBJECT Object);
+
+
+
 NTSTATUS
-ConSrvInheritHandlesTable(IN PCONSOLE_PROCESS_DATA SourceProcessData,
-                          IN PCONSOLE_PROCESS_DATA TargetProcessData);
+ConSrvCreateHandleTable(
+    IN OUT PCONSOLE_PROCESS_DATA ProcessData);
 
 VOID
-ConSrvFreeHandlesTable(IN PCONSOLE_PROCESS_DATA ProcessData);
+ConSrvDestroyHandleTable(
+    IN PCONSOLE_PROCESS_DATA ProcessData);
 
+NTSTATUS
+ConSrvInheritHandleTable(
+    IN PCONSOLE_PROCESS_DATA SourceProcessData,
+    IN PCONSOLE_PROCESS_DATA TargetProcessData);
 
 VOID
-ConSrvInitObject(IN OUT PCONSOLE_IO_OBJECT Object,
-                 IN CONSOLE_IO_OBJECT_TYPE Type,
-                 IN PCONSOLE Console);
+ConSrvSweepHandleTable(
+    IN PCONSOLE_PROCESS_DATA ProcessData);
+
+/************/
+
 NTSTATUS
-ConSrvInsertObject(IN PCONSOLE_PROCESS_DATA ProcessData,
-                   OUT PHANDLE Handle,
-                   IN PCONSOLE_IO_OBJECT Object,
-                   IN ULONG Access,
-                   IN BOOLEAN Inheritable,
-                   IN ULONG ShareMode);
+ConSrvOpenObjectByPointer(
+    IN PCONSOLE_PROCESS_DATA ProcessData,
+    IN PCONSOLE_IO_OBJECT Object,
+    IN CONSOLE_HANDLE_TYPE Type,
+    IN ACCESS_MASK Access,
+    IN BOOLEAN Inheritable,
+    IN ULONG ShareMode,
+    OUT PHANDLE Handle);
+
 NTSTATUS
-ConSrvRemoveObject(IN PCONSOLE_PROCESS_DATA ProcessData,
-                   IN HANDLE Handle);
+ConSrvOpenObjectByType(
+    IN PCONSOLE_PROCESS_DATA ProcessData,
+    IN PCONSRV_CONSOLE Console,
+    IN CONSOLE_HANDLE_TYPE Type,
+    IN CONSOLE_IO_OBJECT_TYPE IoType OPTIONAL,
+    IN ACCESS_MASK Access, // DesiredAccess
+    IN BOOLEAN Inheritable,
+    IN ULONG ShareMode,
+    OUT PHANDLE Handle);
+
 NTSTATUS
-ConSrvGetObject(IN PCONSOLE_PROCESS_DATA ProcessData,
-                IN HANDLE Handle,
-                OUT PCONSOLE_IO_OBJECT* Object,
-                OUT PVOID* Entry OPTIONAL,
-                IN ULONG Access,
-                IN BOOLEAN LockConsole,
-                IN CONSOLE_IO_OBJECT_TYPE Type);
+ConSrvDuplicateObject(
+    IN PCONSOLE_PROCESS_DATA SourceProcessData,
+    IN HANDLE SourceHandle,
+    IN PCONSOLE_PROCESS_DATA TargetProcessData,
+    OUT PHANDLE TargetHandle OPTIONAL,
+    IN ACCESS_MASK DesiredAccess,
+    IN BOOLEAN Inheritable, // ULONG HandleAttributes
+    IN ULONG Options);
+
+NTSTATUS
+ConSrvCloseHandle(
+    IN PCONSOLE_PROCESS_DATA ProcessData,
+    IN HANDLE Handle);
+
+
+
+NTSTATUS
+ConSrvReferenceObject(
+    IN PCONSOLE_IO_OBJECT Object,
+    /****/IN CONSOLE_HANDLE_TYPE Type/****/);
+
+NTSTATUS
+ConSrvReferenceObjectByPointer(
+    IN PCONSOLE_IO_OBJECT Object,
+    IN ACCESS_MASK Access,
+    /****/IN CONSOLE_HANDLE_TYPE Type,/****/
+    IN CONSOLE_IO_OBJECT_TYPE IoType OPTIONAL);
+
+NTSTATUS
+ConSrvReferenceObjectByHandle(
+    IN PCONSOLE_PROCESS_DATA ProcessData,
+    IN HANDLE Handle,
+    IN ACCESS_MASK Access,
+    IN CONSOLE_HANDLE_TYPE Type OPTIONAL,
+    IN CONSOLE_IO_OBJECT_TYPE IoType OPTIONAL,
+    OUT PCONSOLE_IO_OBJECT* Object,
+    OUT PCONSOLE_IO_OBJECT_REFERENCE* Entry OPTIONAL    // BOF BOF !!!! Not PCONSOLE_IO_HANDLE*
+    );
+
 VOID
-ConSrvReleaseObject(IN PCONSOLE_IO_OBJECT Object,
-                    IN BOOLEAN IsConsoleLocked);
+ConSrvDereferenceObject(
+    IN PCONSOLE_IO_OBJECT Object,
+    /****/IN CONSOLE_HANDLE_TYPE Type/****/);

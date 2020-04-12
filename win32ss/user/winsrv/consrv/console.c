@@ -16,7 +16,6 @@
 #define COBJMACROS
 #include <shlobj.h>
 
-
 #include <alias.h>
 #include <history.h>
 #include "procinit.h"
@@ -73,7 +72,7 @@ InsertConsole(
     OUT PHANDLE Handle,
     IN PCONSRV_CONSOLE Console)
 {
-#define CONSOLE_HANDLES_INCREMENT   2 * 3
+#define CONSOLE_HANDLES_INCREMENT   (2 * 3)
 
     NTSTATUS Status = STATUS_SUCCESS;
     ULONG i = 0;
@@ -96,8 +95,8 @@ InsertConsole(
 
     if (i >= ConsoleListSize)
     {
-        DPRINT("Creation of a new handles table\n");
-        /* Allocate a new handles table */
+        DPRINT("Creation of a new handle table\n");
+        /* Allocate a new handle table */
         Block = ConsoleAllocHeap(HEAP_ZERO_MEMORY,
                                  (ConsoleListSize +
                                     CONSOLE_HANDLES_INCREMENT) * sizeof(PCONSRV_CONSOLE));
@@ -107,7 +106,7 @@ InsertConsole(
             goto Quit;
         }
 
-        /* If we previously had a handles table, free it and use the new one */
+        /* If we previously had a handle table, free it and use the new one */
         if (ConsoleList)
         {
             /* Copy the handles from the old table to the new one */
@@ -274,11 +273,19 @@ ConSrvValidateConsole(OUT PCONSRV_CONSOLE* Console,
         return FALSE;
     }
 
-    ValidatedConsole = ConsoleList[Index];
+    // ValidatedConsole = ConsoleList[Index];
 
     /* Unlock the console list */
     ConSrvUnlockConsoleList();
 
+//
+// FIXME: What if the console goes away now?
+// Also I don't want to hold the console list lock because
+// ConDrvValidateConsoleUnsafe() may wait (if LockConsole == TRUE)
+// for the console to be locked.
+//
+// Use the Console->ReferenceCount ???
+//
     RetVal = ConDrvValidateConsoleUnsafe((PCONSOLE)ValidatedConsole,
                                          ExpectedState,
                                          LockConsole);
@@ -692,6 +699,9 @@ ConSrvInitConsole(OUT PHANDLE NewConsoleHandle,
         return STATUS_NO_MEMORY;
     }
 
+    /*
+     * Initialize the console
+     */
     Status = ConDrvInitConsole((PCONSOLE)Console, &DrvConsoleInfo);
     if (!NT_SUCCESS(Status))
     {
@@ -700,6 +710,8 @@ ConSrvInitConsole(OUT PHANDLE NewConsoleHandle,
         ConSrvDeinitTerminal(&Terminal);
         return Status;
     }
+
+    Console->ReferenceCount = 0;
 
     DPRINT("Console initialized\n");
 
@@ -838,6 +850,9 @@ ConSrvDeleteConsole(PCONSRV_CONSOLE Console)
     /* Remove the console from the list */
     RemoveConsoleByPointer(Console);
 
+    /* We really delete the console. Reset the count to be sure. */
+    Console->ReferenceCount = 0;
+
     /* Destroy the Initialization Events */
     NtClose(Console->InitEvents[INIT_FAILURE]);
     NtClose(Console->InitEvents[INIT_SUCCESS]);
@@ -917,47 +932,60 @@ ConSrvInitProcessHandles(
     RtlEnterCriticalSection(&ProcessData->HandleTableLock);
 
     /* Insert the Input handle */
-    Status = ConSrvInsertObject(ProcessData,
-                                &InputHandle,
-                                &Console->InputBuffer.Header,
-                                GENERIC_READ | GENERIC_WRITE,
-                                TRUE,
-                                FILE_SHARE_READ | FILE_SHARE_WRITE);
+    Status = ConSrvOpenObjectByPointer(ProcessData,
+                                       &Console->InputBuffer.Header,
+                                       HANDLE_INPUT,
+                                       GENERIC_READ | GENERIC_WRITE,
+                                       TRUE,
+                                       FILE_SHARE_READ | FILE_SHARE_WRITE,
+                                       &InputHandle);
     if (!NT_SUCCESS(Status))
     {
         DPRINT1("Failed to insert the input handle\n");
         RtlLeaveCriticalSection(&ProcessData->HandleTableLock);
-        ConSrvFreeHandlesTable(ProcessData);
+        ConSrvSweepHandleTable(ProcessData);
         return Status;
     }
 
     /* Insert the Output handle */
-    Status = ConSrvInsertObject(ProcessData,
-                                &OutputHandle,
-                                &Console->ActiveBuffer->Header,
-                                GENERIC_READ | GENERIC_WRITE,
-                                TRUE,
-                                FILE_SHARE_READ | FILE_SHARE_WRITE);
+    Status = ConSrvOpenObjectByPointer(ProcessData,
+                                       &Console->ActiveBuffer->Header,
+                                       HANDLE_OUTPUT,
+                                       GENERIC_READ | GENERIC_WRITE,
+                                       TRUE,
+                                       FILE_SHARE_READ | FILE_SHARE_WRITE,
+                                       &OutputHandle);
     if (!NT_SUCCESS(Status))
     {
         DPRINT1("Failed to insert the output handle\n");
         RtlLeaveCriticalSection(&ProcessData->HandleTableLock);
-        ConSrvFreeHandlesTable(ProcessData);
+        ConSrvSweepHandleTable(ProcessData);
         return Status;
     }
 
     /* Insert the Error handle */
-    Status = ConSrvInsertObject(ProcessData,
-                                &ErrorHandle,
-                                &Console->ActiveBuffer->Header,
-                                GENERIC_READ | GENERIC_WRITE,
-                                TRUE,
-                                FILE_SHARE_READ | FILE_SHARE_WRITE);
+#if 0
+    Status = ConSrvOpenObjectByPointer(ProcessData,
+                                       &Console->ActiveBuffer->Header,
+                                       HANDLE_OUTPUT,
+                                       GENERIC_READ | GENERIC_WRITE,
+                                       TRUE,
+                                       FILE_SHARE_READ | FILE_SHARE_WRITE,
+                                       &ErrorHandle);
+#else
+    Status = ConSrvDuplicateObject(ProcessData,
+                                   OutputHandle,
+                                   ProcessData,
+                                   &ErrorHandle,
+                                   0, // GENERIC_READ | GENERIC_WRITE,
+                                   TRUE,
+                                   DUPLICATE_SAME_ACCESS | DUPLICATE_SAME_ATTRIBUTES);
+#endif
     if (!NT_SUCCESS(Status))
     {
         DPRINT1("Failed to insert the error handle\n");
         RtlLeaveCriticalSection(&ProcessData->HandleTableLock);
-        ConSrvFreeHandlesTable(ProcessData);
+        ConSrvSweepHandleTable(ProcessData);
         return Status;
     }
 
@@ -993,7 +1021,7 @@ ConSrvAllocateConsole(
      * Therefore, free the handle table so that we can recreate
      * a new one later on.
      */
-    ConSrvFreeHandlesTable(ProcessData);
+    ConSrvSweepHandleTable(ProcessData);
 
     /* Initialize a new Console owned by this process */
     Status = ConSrvInitConsole(&ConsoleHandle,
@@ -1032,7 +1060,7 @@ ConSrvAllocateConsole(
     if (!NT_SUCCESS(Status))
     {
         DPRINT1("NtDuplicateObject(InitEvents[INIT_SUCCESS]) failed: %lu\n", Status);
-        ConSrvFreeHandlesTable(ProcessData);
+        ConSrvSweepHandleTable(ProcessData);
         ConSrvDeleteConsole(Console);
         ProcessData->ConsoleHandle = NULL;
         return Status;
@@ -1049,7 +1077,7 @@ ConSrvAllocateConsole(
         NtDuplicateObject(ProcessData->Process->ProcessHandle,
                           ConsoleInitInfo->ConsoleStartInfo->InitEvents[INIT_SUCCESS],
                           NULL, NULL, 0, 0, DUPLICATE_CLOSE_SOURCE);
-        ConSrvFreeHandlesTable(ProcessData);
+        ConSrvSweepHandleTable(ProcessData);
         ConSrvDeleteConsole(Console);
         ProcessData->ConsoleHandle = NULL;
         return Status;
@@ -1070,7 +1098,7 @@ ConSrvAllocateConsole(
         NtDuplicateObject(ProcessData->Process->ProcessHandle,
                           ConsoleInitInfo->ConsoleStartInfo->InitEvents[INIT_SUCCESS],
                           NULL, NULL, 0, 0, DUPLICATE_CLOSE_SOURCE);
-        ConSrvFreeHandlesTable(ProcessData);
+        ConSrvSweepHandleTable(ProcessData);
         ConSrvDeleteConsole(Console);
         ProcessData->ConsoleHandle = NULL;
         return Status;
@@ -1136,7 +1164,7 @@ ConSrvInheritConsole(
          * Therefore, free the handle table so that we can recreate
          * a new one later on.
          */
-        ConSrvFreeHandlesTable(ProcessData);
+        ConSrvSweepHandleTable(ProcessData);
 
         /* Initialize the process handles */
         Status = ConSrvInitProcessHandles(ProcessData,
@@ -1161,7 +1189,7 @@ ConSrvInheritConsole(
     if (!NT_SUCCESS(Status))
     {
         DPRINT1("NtDuplicateObject(InitEvents[INIT_SUCCESS]) failed: %lu\n", Status);
-        ConSrvFreeHandlesTable(ProcessData);
+        ConSrvSweepHandleTable(ProcessData);
         ProcessData->ConsoleHandle = NULL;
         goto Quit;
     }
@@ -1177,7 +1205,7 @@ ConSrvInheritConsole(
         NtDuplicateObject(ProcessData->Process->ProcessHandle,
                           ConsoleStartInfo->InitEvents[INIT_SUCCESS],
                           NULL, NULL, 0, 0, DUPLICATE_CLOSE_SOURCE);
-        ConSrvFreeHandlesTable(ProcessData);
+        ConSrvSweepHandleTable(ProcessData);
         ProcessData->ConsoleHandle = NULL;
         goto Quit;
     }
@@ -1197,7 +1225,7 @@ ConSrvInheritConsole(
         NtDuplicateObject(ProcessData->Process->ProcessHandle,
                           ConsoleStartInfo->InitEvents[INIT_SUCCESS],
                           NULL, NULL, 0, 0, DUPLICATE_CLOSE_SOURCE);
-        ConSrvFreeHandlesTable(ProcessData); // NOTE: Always free the handle table.
+        ConSrvSweepHandleTable(ProcessData); // NOTE: Always free the handle table.
         ProcessData->ConsoleHandle = NULL;
         goto Quit;
     }
@@ -1258,7 +1286,7 @@ ConSrvRemoveConsole(
     ConsoleLeaderProcess = ConSrvGetConsoleLeaderProcess(Console);
 
     /* Close all console handles and free the handle table */
-    ConSrvFreeHandlesTable(ProcessData);
+    ConSrvSweepHandleTable(ProcessData);
 
     /* Detach the process from the console */
     ProcessData->ConsoleHandle = NULL;
@@ -1680,9 +1708,10 @@ CON_API(SrvGetConsoleMode,
     PCONSOLE_IO_OBJECT Object;
     PULONG ConsoleMode = &ConsoleModeRequest->Mode;
 
-    Status = ConSrvGetObject(ProcessData,
+    Status = ConSrvReferenceObjectByHandle(ProcessData,
                              ConsoleModeRequest->Handle,
-                             &Object, NULL, GENERIC_READ, TRUE, 0);
+                             GENERIC_READ, 0, 0,
+                             &Object, NULL);
     if (!NT_SUCCESS(Status))
         return Status;
 
@@ -1709,7 +1738,10 @@ CON_API(SrvGetConsoleMode,
         }
     }
 
-    ConSrvReleaseObject(Object, TRUE);
+    ConSrvDereferenceObject(Object,
+                            Object->Type == INPUT_BUFFER
+                                ? HANDLE_INPUT : HANDLE_OUTPUT);
+
     return Status;
 }
 
@@ -1729,9 +1761,10 @@ CON_API(SrvSetConsoleMode,
     PCONSOLE_IO_OBJECT Object;
     ULONG ConsoleMode = ConsoleModeRequest->Mode;
 
-    Status = ConSrvGetObject(ProcessData,
+    Status = ConSrvReferenceObjectByHandle(ProcessData,
                              ConsoleModeRequest->Handle,
-                             &Object, NULL, GENERIC_WRITE, TRUE, 0);
+                             GENERIC_WRITE, 0, 0,
+                             &Object, NULL);
     if (!NT_SUCCESS(Status))
         return Status;
 
@@ -1769,7 +1802,10 @@ CON_API(SrvSetConsoleMode,
         }
     }
 
-    ConSrvReleaseObject(Object, TRUE);
+    ConSrvDereferenceObject(Object,
+                            Object->Type == INPUT_BUFFER
+                                ? HANDLE_INPUT : HANDLE_OUTPUT);
+
     return Status;
 }
 

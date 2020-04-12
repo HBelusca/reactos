@@ -62,9 +62,9 @@ typedef struct _CONSOLE_PROCESS_DATA
 #include "include/settings.h"
 #include "include/term.h"
 #include "console.h"
+#include "handle.h"
 #include "coninput.h"
 #include "conoutput.h"
-#include "handle.h"
 #include "lineinput.h"
 
 /* shutdown.c */
