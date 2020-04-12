@@ -1315,7 +1315,8 @@ ConSrvConsoleCtrlEventTimeout(IN ULONG CtrlEvent,
 {
     NTSTATUS Status = STATUS_SUCCESS;
 
-    DPRINT("ConSrvConsoleCtrlEventTimeout Parent ProcessId = %x\n", ProcessData->Process->ClientId.UniqueProcess);
+    DPRINT("ConSrvConsoleCtrlEventTimeout ProcessId = %x, Process = 0x%p\n",
+           ProcessData->Process->ClientId.UniqueProcess, ProcessData->Process);
 
     /*
      * Be sure we effectively have a control routine. It resides in kernel32.dll (client).
@@ -1328,24 +1329,32 @@ ConSrvConsoleCtrlEventTimeout(IN ULONG CtrlEvent,
 
         _SEH2_TRY
         {
-            Thread = CreateRemoteThread(ProcessData->Process->ProcessHandle, NULL, 0,
-                                        ProcessData->CtrlRoutine,
-                                        UlongToPtr(CtrlEvent), 0, NULL);
-            if (NULL == Thread)
+            /* Create the remote thread and start it directly */
+            Status = RtlCreateUserThread(ProcessData->Process->ProcessHandle,
+                                         NULL,
+                                         FALSE,
+                                         0,
+                                         0,
+                                         0,
+                                         ProcessData->CtrlRoutine,
+                                         UlongToPtr(CtrlEvent),
+                                         &Thread,
+                                         NULL);
+            if (NT_SUCCESS(Status))
             {
-                Status = RtlGetLastNtStatus();
-                DPRINT1("Failed thread creation, Status = 0x%08lx\n", Status);
-            }
-            else
-            {
+                ASSERT(Thread);
                 DPRINT("ProcessData->CtrlRoutine remote thread creation succeeded, ProcessId = %x, Process = 0x%p\n",
                        ProcessData->Process->ClientId.UniqueProcess, ProcessData->Process);
                 WaitForSingleObject(Thread, Timeout);
             }
+            else
+            {
+                DPRINT1("Failed thread creation, Status = 0x%08lx\n", Status);
+            }
         }
         _SEH2_FINALLY
         {
-            CloseHandle(Thread);
+            NtClose(Thread);
         }
         _SEH2_END;
     }
