@@ -101,6 +101,13 @@ ConvertInputUnicodeToAnsi(PCONSRV_CONSOLE Console,
 
 /* PRIVATE FUNCTIONS **********************************************************/
 
+VOID
+InitConsoleAliases(
+    IN PCONSRV_CONSOLE Console)
+{
+    Console->Aliases = NULL;
+}
+
 static PALIAS_HEADER
 IntFindAliasHeader(PCONSRV_CONSOLE Console,
                    PVOID    ExeName,

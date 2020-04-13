@@ -9,6 +9,13 @@
 #pragma once
 
 VOID
+InitConsoleHistory(
+    IN PCONSRV_CONSOLE Console,
+    IN ULONG HistoryBufferSize,
+    IN ULONG MaxNumberOfHistoryBuffers,
+    IN BOOLEAN HistoryNoDup);
+
+VOID
 HistoryAddEntry(PCONSRV_CONSOLE Console,
                 PUNICODE_STRING ExeName,
                 PUNICODE_STRING Entry);

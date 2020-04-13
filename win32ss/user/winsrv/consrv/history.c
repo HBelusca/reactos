@@ -43,6 +43,20 @@ ConvertInputUnicodeToAnsi(PCONSRV_CONSOLE Console,
 
 /* PRIVATE FUNCTIONS **********************************************************/
 
+VOID
+InitConsoleHistory(
+    IN PCONSRV_CONSOLE Console,
+    IN ULONG HistoryBufferSize,
+    IN ULONG MaxNumberOfHistoryBuffers,
+    IN BOOLEAN HistoryNoDup)
+{
+    InitializeListHead(&Console->HistoryBuffers);
+    Console->NumberOfHistoryBuffers = 0;
+    Console->MaxNumberOfHistoryBuffers = MaxNumberOfHistoryBuffers;
+    Console->HistoryBufferSize = HistoryBufferSize;
+    Console->HistoryNoDup      = HistoryNoDup;
+}
+
 static PHISTORY_BUFFER
 HistoryCurrentBuffer(
     IN PCONSRV_CONSOLE Console,

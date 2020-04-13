@@ -9,4 +9,8 @@
 
 #pragma once
 
+VOID
+InitConsoleAliases(
+    IN PCONSRV_CONSOLE Console);
+
 VOID IntDeleteAllAliases(PCONSRV_CONSOLE Console);

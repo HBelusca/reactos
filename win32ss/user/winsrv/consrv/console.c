@@ -734,13 +734,11 @@ ConSrvInitConsole(OUT PHANDLE NewConsoleHandle,
     InitializeListHead(&Console->WriteWaitQueue);
 
     /* Initialize the alias and history buffers */
-    // InitAliasesHistory(Console);
-    Console->Aliases = NULL;
-    InitializeListHead(&Console->HistoryBuffers);
-    Console->NumberOfHistoryBuffers = 0;
-    Console->MaxNumberOfHistoryBuffers = ConsoleInfo->NumberOfHistoryBuffers;
-    Console->HistoryBufferSize = ConsoleInfo->HistoryBufferSize;
-    Console->HistoryNoDup      = ConsoleInfo->HistoryNoDup;
+    InitConsoleAliases(Console);
+    InitConsoleHistory(Console,
+                       ConsoleInfo->HistoryBufferSize,
+                       ConsoleInfo->NumberOfHistoryBuffers,
+                       ConsoleInfo->HistoryNoDup);
 
     /* Initialize the Input Line Discipline */
     // InitLineInput(Console);
