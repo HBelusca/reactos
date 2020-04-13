@@ -138,7 +138,7 @@ typedef struct _CONSRV_SCREEN_BUFFER
 #endif
 
 
-typedef struct _CONSRV_CONSOLE
+typedef struct _CONSRV_CONSOLE /* : CONSOLE */
 {
 /******************************* Console Set-up *******************************/
     /* This **MUST** be FIRST!! */
@@ -147,7 +147,7 @@ typedef struct _CONSRV_CONSOLE
     // // PCONSOLE Console;
 
     LONG ReferenceCount;                    /* Is incremented each time a handle to something in the console (a screen-buffer or the input buffer of this console) gets referenced */
-    // CRITICAL_SECTION Lock;
+    CRITICAL_SECTION Lock;
     // CONSOLE_STATE State;                    /* State of the console */
 
     // ULONG ConsoleID;                        /* The ID of the console */

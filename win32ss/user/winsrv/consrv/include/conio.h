@@ -124,7 +124,7 @@ typedef struct _TEXTMODE_BUFFER_INFO
     BOOLEAN IsCursorVisible;
 } TEXTMODE_BUFFER_INFO, *PTEXTMODE_BUFFER_INFO;
 
-typedef struct _TEXTMODE_SCREEN_BUFFER
+typedef struct _TEXTMODE_SCREEN_BUFFER /* : CONSOLE_SCREEN_BUFFER */
 {
     CONSOLE_SCREEN_BUFFER;      /* Screen buffer base class - MUST BE IN FIRST PLACE */
 
@@ -145,7 +145,7 @@ typedef struct _GRAPHICS_BUFFER_INFO
     CONSOLE_GRAPHICS_BUFFER_INFO Info;
 } GRAPHICS_BUFFER_INFO, *PGRAPHICS_BUFFER_INFO;
 
-typedef struct _GRAPHICS_SCREEN_BUFFER
+typedef struct _GRAPHICS_SCREEN_BUFFER /* : CONSOLE_SCREEN_BUFFER */
 {
     CONSOLE_SCREEN_BUFFER;          /* Screen buffer base class - MUST BE IN FIRST PLACE */
 
@@ -289,8 +289,6 @@ typedef enum _CONSOLE_STATE
 typedef struct _CONSOLE
 {
 /******************************* Console Set-up *******************************/
-    CRITICAL_SECTION Lock;
-
     CONSOLE_STATE State;                    /* State of the console */
     TERMINAL TermIFace;                     /* Terminal-specific interface */
 
