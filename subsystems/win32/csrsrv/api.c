@@ -313,6 +313,84 @@ CsrpCheckRequestThreads(VOID)
 }
 
 /*++
+ * @name CsrpHandleHardError
+ *
+ * The CsrpHandleHardError routine handles hard error messages received
+ * from the CSR API LPC Port.
+ *
+ * @param CsrThread
+ *        Pointer to the CSR Thread to which is associated this hard error.
+ *
+ * @param HardErrorMsg
+ *        Pointer to the hard error message structure.
+ *
+ * @return The hard error message structure to reply to (== HardErrorMsg)
+ *         if it has been handled, otherwise NULL.
+ *
+ *--*/
+PHARDERROR_MSG
+CsrpHandleHardError(
+    IN PCSR_THREAD CsrThread,
+    IN PHARDERROR_MSG HardErrorMsg)
+{
+    PCSR_SERVER_DLL ServerDll;
+    ULONG i;
+
+    /* Default it to unhandled */
+    HardErrorMsg->Response = ResponseNotHandled;
+
+    /* Check if there are free api threads */
+    CsrpCheckRequestThreads();
+    if (CsrpStaticThreadCount)
+    {
+        /* Loop every Server DLL */
+        for (i = 0; i < CSR_SERVER_DLL_MAX; i++)
+        {
+            /* Get the Server DLL */
+            ServerDll = CsrLoadedServerDll[i];
+
+            /* Check if it's valid and if it has a Hard Error Callback */
+            if (ServerDll && ServerDll->HardErrorCallback)
+            {
+                /* Start SEH */
+                _SEH2_TRY
+                {
+                    /* Call it */
+                    ServerDll->HardErrorCallback(CsrThread, HardErrorMsg);
+                }
+                _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+                {
+                    /* If we got an exception, return access violation */
+                    HardErrorMsg->Status = STATUS_ACCESS_VIOLATION;
+                    HardErrorMsg->Response = ResponseNotHandled;
+                }
+                _SEH2_END;
+
+                /* If it's handled, get out of here */
+                if (HardErrorMsg->Response != ResponseNotHandled)
+                    break;
+            }
+        }
+    }
+
+    /* Increase the thread count */
+    InterlockedIncrementUL(&CsrpStaticThreadCount);
+
+    /* If the response was 0xFFFFFFFF, we ignore it */
+    if (HardErrorMsg->Response == 0xFFFFFFFF)
+    {
+        /* No message to reply to */
+        return NULL;
+    }
+    else
+    {
+        /* Reply to the hard error message */
+        // if (CsrThread) CsrDereferenceThread(CsrThread);
+        return HardErrorMsg;
+    }
+}
+
+/*++
  * @name CsrApiRequestThread
  *
  * The CsrApiRequestThread routine handles incoming messages or connection
@@ -335,17 +413,16 @@ CsrApiRequestThread(IN PVOID Parameter)
     LARGE_INTEGER TimeOut;
     PCSR_THREAD CurrentThread, CsrThread;
     NTSTATUS Status;
+    HANDLE ReplyPort;
     CSR_REPLY_CODE ReplyCode;
     PCSR_API_MESSAGE ReplyMsg;
     CSR_API_MESSAGE ReceiveMsg;
     PCSR_PROCESS CsrProcess;
-    PHARDERROR_MSG HardErrorMsg;
     PVOID PortContext;
     PCSR_SERVER_DLL ServerDll;
     PCLIENT_DIED_MSG ClientDiedMsg;
     PDBGKM_MSG DebugMessage;
-    ULONG ServerId, ApiId, MessageType, i;
-    HANDLE ReplyPort;
+    ULONG ServerId, ApiId, MessageType;
 
     /* Setup LPC loop port and message */
     ReplyMsg = NULL;
@@ -482,47 +559,13 @@ CsrApiRequestThread(IN PVOID Parameter)
             else if (MessageType == LPC_ERROR_EVENT)
             {
                 /* If it's a hard error, handle this too */
-                HardErrorMsg = (PHARDERROR_MSG)&ReceiveMsg;
+                ReplyMsg = (PCSR_API_MESSAGE)
+                    CsrpHandleHardError(NULL /* == CsrThread */,
+                                        (PHARDERROR_MSG)&ReceiveMsg);
 
-                /* Default it to unhandled */
-                HardErrorMsg->Response = ResponseNotHandled;
+                /* If ReplyMsg == NULL, there was no hard error response and we ignore it */
 
-                /* Check if there are free api threads */
-                CsrpCheckRequestThreads();
-                if (CsrpStaticThreadCount)
-                {
-                    /* Loop every Server DLL */
-                    for (i = 0; i < CSR_SERVER_DLL_MAX; i++)
-                    {
-                        /* Get the Server DLL */
-                        ServerDll = CsrLoadedServerDll[i];
-
-                        /* Check if it's valid and if it has a Hard Error Callback */
-                        if ((ServerDll) && (ServerDll->HardErrorCallback))
-                        {
-                            /* Call it */
-                            ServerDll->HardErrorCallback(NULL /* == CsrThread */, HardErrorMsg);
-
-                            /* If it's handled, get out of here */
-                            if (HardErrorMsg->Response != ResponseNotHandled) break;
-                        }
-                    }
-                }
-
-                /* Increase the thread count */
-                InterlockedIncrementUL(&CsrpStaticThreadCount);
-
-                /* If the response was 0xFFFFFFFF, we'll ignore it */
-                if (HardErrorMsg->Response == 0xFFFFFFFF)
-                {
-                    ReplyMsg = NULL;
-                    ReplyPort = CsrApiPort;
-                }
-                else
-                {
-                    ReplyMsg = &ReceiveMsg;
-                    ReplyPort = CsrApiPort;
-                }
+                ReplyPort = CsrApiPort;
             }
             else if (MessageType == LPC_REQUEST)
             {
@@ -679,48 +722,15 @@ CsrApiRequestThread(IN PVOID Parameter)
             else if (MessageType == LPC_ERROR_EVENT)
             {
                 /* If it's a hard error, handle this too */
-                HardErrorMsg = (PHARDERROR_MSG)&ReceiveMsg;
+                ReplyMsg = (PCSR_API_MESSAGE)
+                    CsrpHandleHardError(CsrThread,
+                                        (PHARDERROR_MSG)&ReceiveMsg);
 
-                /* Default it to unhandled */
-                HardErrorMsg->Response = ResponseNotHandled;
-
-                /* Check if there are free api threads */
-                CsrpCheckRequestThreads();
-                if (CsrpStaticThreadCount)
-                {
-                    /* Loop every Server DLL */
-                    for (i = 0; i < CSR_SERVER_DLL_MAX; i++)
-                    {
-                        /* Get the Server DLL */
-                        ServerDll = CsrLoadedServerDll[i];
-
-                        /* Check if it's valid and if it has a Hard Error Callback */
-                        if ((ServerDll) && (ServerDll->HardErrorCallback))
-                        {
-                            /* Call it */
-                            ServerDll->HardErrorCallback(CsrThread, HardErrorMsg);
-
-                            /* If it's handled, get out of here */
-                            if (HardErrorMsg->Response != ResponseNotHandled) break;
-                        }
-                    }
-                }
-
-                /* Increase the thread count */
-                InterlockedIncrementUL(&CsrpStaticThreadCount);
-
-                /* If the response was 0xFFFFFFFF, we'll ignore it */
-                if (HardErrorMsg->Response == 0xFFFFFFFF)
-                {
-                    ReplyMsg = NULL;
-                    ReplyPort = CsrApiPort;
-                }
-                else
-                {
+                /* If ReplyMsg == NULL, there was no hard error response and we ignore it */
+                if (ReplyMsg != NULL)
                     CsrDereferenceThread(CsrThread);
-                    ReplyMsg = &ReceiveMsg;
-                    ReplyPort = CsrApiPort;
-                }
+
+                ReplyPort = CsrApiPort;
             }
             else
             {
@@ -1007,7 +1017,7 @@ CsrApiPortInitialize(VOID)
  *
  * @param None
  *
- * @return A pointer to the CSR Thread
+ * @return A pointer to the CSR Thread.
  *
  * @remarks None.
  *
