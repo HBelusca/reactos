@@ -394,6 +394,17 @@ UserpFormatMessages(
     size_t cszBuffer;
 
     /* Open client process */
+    //
+    // TODO: Investigate: On Windows >= 2003, for the following IO hard errors:
+    // STATUS_NO_MEDIA_IN_DEVICE, STATUS_MEDIA_WRITE_PROTECTED, STATUS_WRONG_VOLUME,
+    // STATUS_IO_TIMEOUT, STATUS_DEVICE_NOT_READY, and STATUS_UNRECOGNIZED_MEDIA,
+    // a different process than the one from the message, and whose CID appears
+    // to be somehow specified via the string parameters of the message, is
+    // attempted to be opened.
+    // Also if the caller is not SYSTEM, a client impersonation is done.
+    // This may be related to the resolution of NT --> Drive letter names, or
+    // the removal of "\\??\\", for NT paths that may be mentioned in these errors...
+    //
     InitializeObjectAttributes(&ObjectAttributes, NULL, 0, NULL, NULL);
     Status = NtOpenProcess(&hProcess,
                            PROCESS_VM_READ | PROCESS_QUERY_INFORMATION,
