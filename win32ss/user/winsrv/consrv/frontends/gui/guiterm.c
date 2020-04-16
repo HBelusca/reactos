@@ -312,6 +312,7 @@ GuiInit(IN PCONSOLE_INIT_INFO ConsoleInitInfo,
      * one console input thread per desktop.
      */
 
+    /* Impersonate the caller in order to retrieve settings in its context */
     if (!CsrImpersonateClient(NULL))
         // return STATUS_BAD_IMPERSONATION_LEVEL;
         return FALSE;

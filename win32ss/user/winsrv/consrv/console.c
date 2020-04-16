@@ -1552,7 +1552,7 @@ CON_API_NOCONSOLE(SrvAttachConsole,
                   CONSOLE_ATTACHCONSOLE, AttachConsoleRequest)
 {
     NTSTATUS Status = STATUS_SUCCESS;
-    PCSR_PROCESS SourceProcess = NULL;  // The parent process.
+    PCSR_PROCESS SourceProcess = NULL;  // The source process.
     PCSR_PROCESS TargetProcess = CsrGetClientThread()->Process; // Ourselves.
     HANDLE ProcessId = ULongToHandle(AttachConsoleRequest->ProcessId);
     PCONSOLE_PROCESS_DATA SourceProcessData, TargetProcessData;
@@ -1573,13 +1573,13 @@ CON_API_NOCONSOLE(SrvAttachConsole,
         return STATUS_INVALID_PARAMETER;
     }
 
-    /* Check whether we try to attach to the parent's console */
+    /* Check whether we try to attach to the parent process' console */
     if (ProcessId == ULongToHandle(ATTACH_PARENT_PROCESS))
     {
         PROCESS_BASIC_INFORMATION ProcessInfo;
         ULONG Length = sizeof(ProcessInfo);
 
-        /* Get the real parent's PID */
+        /* Get the real parent process' PID */
 
         Status = NtQueryInformationProcess(TargetProcess->ProcessHandle,
                                            ProcessBasicInformation,
@@ -1596,10 +1596,50 @@ CON_API_NOCONSOLE(SrvAttachConsole,
 
     /* Lock the source process via its PID */
     Status = CsrLockProcessByClientId(ProcessId, &SourceProcess);
-    if (!NT_SUCCESS(Status)) return Status;
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    /* Verify whether the caller can somehow interact with the source process */
+
+    /* Impersonate the caller */
+    if (CsrImpersonateClient(NULL))
+    {
+        OBJECT_ATTRIBUTES ObjectAttributes;
+        HANDLE ProcessHandle;
+
+        /* Try to open the source process */
+        InitializeObjectAttributes(&ObjectAttributes, NULL, 0, NULL, NULL);
+        Status = NtOpenProcess(&ProcessHandle,
+                               /* Use all the possible access rights for the worst case scenario */
+                               PROCESS_ALL_ACCESS,
+                               &ObjectAttributes,
+                               &SourceProcess->ClientId);
+        if (NT_SUCCESS(Status))
+        {
+            /* Great, we have access. Close the handle. */
+            NtClose(ProcessHandle);
+        }
+        else
+        {
+            DPRINT1("NtOpenProcess failed with status 0x%08lx.\n", Status);
+        }
+
+        /* Revert impersonation */
+        CsrRevertToSelf();
+    }
+    else
+    {
+        Status = STATUS_BAD_IMPERSONATION_LEVEL;
+    }
+    if (!NT_SUCCESS(Status))
+    {
+        CsrUnlockProcess(SourceProcess);
+        return Status;
+    }
 
     SourceProcessData = ConsoleGetPerProcessData(SourceProcess);
 
+    /* Fail if the source process does not have any console */
     if (SourceProcessData->ConsoleHandle == NULL)
     {
         Status = STATUS_INVALID_HANDLE;
@@ -1607,7 +1647,7 @@ CON_API_NOCONSOLE(SrvAttachConsole,
     }
 
     /*
-     * Inherit the console from the parent,
+     * Inherit the console from the source process,
      * if any, otherwise return an error.
      */
     Status = ConSrvInheritConsole(TargetProcessData,
@@ -1630,7 +1670,7 @@ CON_API_NOCONSOLE(SrvAttachConsole,
     Status = STATUS_SUCCESS;
 
 Quit:
-    /* Unlock the "source" process and exit */
+    /* Unlock the source process and exit */
     CsrUnlockProcess(SourceProcess);
     return Status;
 }
