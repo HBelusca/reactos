@@ -781,7 +781,20 @@ CsrInitCsrRootProcess(VOID)
         if (ServerDll && ServerDll->NewProcessCallback)
         {
             /* Call the callback */
-            ServerDll->NewProcessCallback(NULL, CsrRootProcess);
+            _SEH2_TRY
+            {
+                ServerDll->NewProcessCallback(NULL, CsrRootProcess);
+            }
+            _SEH2_EXCEPT(CsrUnhandledExceptionFilter(_SEH2_GetExceptionInformation()))
+            {
+#ifdef CSR_DBG
+                // Status = _SEH2_GetExceptionCode();
+                DPRINT1("*** CSRSS: Took exception %x during New-Process server call 0x%x\n",
+                        _SEH2_GetExceptionCode(), ServerDll);
+                if (NtCurrentPeb()->BeingDebugged) DbgBreakPoint();
+#endif
+            }
+            _SEH2_END;
         }
     }
 

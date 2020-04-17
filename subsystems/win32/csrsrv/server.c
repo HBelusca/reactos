@@ -317,9 +317,22 @@ CSR_API(CsrSrvClientConnect)
     if (ServerDll->ConnectCallback)
     {
         /* Call the callback */
-        Status = ServerDll->ConnectCallback(CurrentProcess,
-                                            ClientConnect->ConnectionInfo,
-                                            &ClientConnect->ConnectionInfoSize);
+        _SEH2_TRY
+        {
+            Status = ServerDll->ConnectCallback(CurrentProcess,
+                                                ClientConnect->ConnectionInfo,
+                                                &ClientConnect->ConnectionInfoSize);
+        }
+        _SEH2_EXCEPT(CsrUnhandledExceptionFilter(_SEH2_GetExceptionInformation()))
+        {
+            Status = _SEH2_GetExceptionCode();
+#ifdef CSR_DBG
+            DPRINT1("*** CSRSS: Took exception %x during Connect server call 0x%x\n",
+                    Status, ServerDll);
+            if (NtCurrentPeb()->BeingDebugged) DbgBreakPoint();
+#endif
+        }
+        _SEH2_END;
     }
     else
     {

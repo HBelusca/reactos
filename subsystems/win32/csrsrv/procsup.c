@@ -131,7 +131,8 @@ CsrProcessRefcountZero(IN PCSR_PROCESS CsrProcess)
     }
 
     /* Close the Client Port if there is one */
-    if (CsrProcess->ClientPort) NtClose(CsrProcess->ClientPort);
+    if (CsrProcess->ClientPort)
+        NtClose(CsrProcess->ClientPort);
 
     /* Close the process handle */
     NtClose(CsrProcess->ProcessHandle);
@@ -337,8 +338,21 @@ CsrRemoveProcess(IN PCSR_PROCESS CsrProcess)
         /* Check if it's valid and if it has a Disconnect Callback */
         if (ServerDll && ServerDll->DisconnectCallback)
         {
-            /* Call it */
-            ServerDll->DisconnectCallback(CsrProcess);
+            /* Call the callback */
+            _SEH2_TRY
+            {
+                ServerDll->DisconnectCallback(CsrProcess);
+            }
+            _SEH2_EXCEPT(CsrUnhandledExceptionFilter(_SEH2_GetExceptionInformation()))
+            {
+#ifdef CSR_DBG
+                // Status = _SEH2_GetExceptionCode();
+                DPRINT1("*** CSRSS: Took exception %x during Disconnect server call 0x%x\n",
+                        _SEH2_GetExceptionCode(), ServerDll);
+                if (NtCurrentPeb()->BeingDebugged) DbgBreakPoint();
+#endif
+            }
+            _SEH2_END;
         }
     }
 }
@@ -381,7 +395,21 @@ CsrInsertProcess(IN PCSR_PROCESS ParentProcess OPTIONAL,
         /* Make sure it's valid and that it has callback */
         if (ServerDll && ServerDll->NewProcessCallback)
         {
-            ServerDll->NewProcessCallback(ParentProcess, CsrProcess);
+            /* Call the callback */
+            _SEH2_TRY
+            {
+                ServerDll->NewProcessCallback(ParentProcess, CsrProcess);
+            }
+            _SEH2_EXCEPT(CsrUnhandledExceptionFilter(_SEH2_GetExceptionInformation()))
+            {
+#ifdef CSR_DBG
+                // Status = _SEH2_GetExceptionCode();
+                DPRINT1("*** CSRSS: Took exception %x during New-Process server call 0x%x\n",
+                        _SEH2_GetExceptionCode(), ServerDll);
+                if (NtCurrentPeb()->BeingDebugged) DbgBreakPoint();
+#endif
+            }
+            _SEH2_END;
         }
     }
 }
@@ -1276,9 +1304,10 @@ NTAPI
 CsrShutdownProcesses(IN PLUID CallerLuid,
                      IN ULONG Flags)
 {
+    NTSTATUS Status;
     PLIST_ENTRY NextEntry;
     PCSR_PROCESS CsrProcess;
-    NTSTATUS Status;
+    BOOLEAN GotException;
     BOOLEAN FirstTry;
     ULONG i;
     PCSR_SERVER_DLL ServerDll;
@@ -1318,6 +1347,7 @@ CsrShutdownProcesses(IN PLUID CallerLuid,
         /* Increase reference to process */
         CsrLockedReferenceProcess(CsrProcess);
 
+        GotException = FALSE;
         FirstTry = TRUE;
         while (TRUE)
         {
@@ -1332,9 +1362,29 @@ CsrShutdownProcesses(IN PLUID CallerLuid,
                 {
                     /* Release the lock, make the callback, and acquire it back */
                     CsrReleaseProcessLock();
-                    Result = ServerDll->ShutdownProcessCallback(CsrProcess,
-                                                                Flags,
-                                                                FirstTry);
+
+                    _SEH2_TRY
+                    {
+                        Result = ServerDll->ShutdownProcessCallback(CsrProcess,
+                                                                    Flags,
+                                                                    FirstTry);
+                    }
+                    _SEH2_EXCEPT(CsrUnhandledExceptionFilter(_SEH2_GetExceptionInformation()))
+                    {
+#ifdef CSR_DBG
+                        DPRINT1("*** CSRSS: Took exception %x during Shutdown server call 0x%x\n",
+                                _SEH2_GetExceptionCode(), ServerDll);
+                        if (NtCurrentPeb()->BeingDebugged) DbgBreakPoint();
+#endif
+                        /*
+                         * We've got an exception, remember this for later, and
+                         * give the other servers a chance to handle the process.
+                         */
+                        GotException = TRUE;
+                        Result = CsrShutdownNonCsrProcess;
+                    }
+                    _SEH2_END;
+
                     CsrAcquireProcessLock();
 
                     /* Check the result */
@@ -1361,6 +1411,20 @@ CsrShutdownProcesses(IN PLUID CallerLuid,
                         goto Quickie;
                     }
                 }
+            }
+
+            if (GotException && (Result == CsrShutdownNonCsrProcess))
+            {
+                /*
+                 * We've got an exception during shutdown and no server handled
+                 * the process, but we really want to shutdown and not block
+                 * everything else!
+                 * So we are going to do what the callback should have done,
+                 * namely kill and unlock the process.
+                 */
+                NtTerminateProcess(CsrProcess->ProcessHandle, STATUS_ABANDONED);
+                CsrLockedDereferenceProcess(CsrProcess);
+                Result = CsrShutdownCsrProcess;
             }
 
             /* No matches during the first try, so loop again */

@@ -352,10 +352,9 @@ CsrpHandleHardError(
             /* Check if it's valid and if it has a Hard Error Callback */
             if (ServerDll && ServerDll->HardErrorCallback)
             {
-                /* Start SEH */
+                /* Call the callback */
                 _SEH2_TRY
                 {
-                    /* Call it */
                     ServerDll->HardErrorCallback(CsrThread, HardErrorMsg);
                 }
                 _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
@@ -607,8 +606,8 @@ CsrApiRequestThread(IN PVOID Parameter)
                             CSR_API_NUMBER_TO_API_ID(ReceiveMsg.ApiNumber),
                             &ServerDll->Name);
 
-                    ReplyPort = CsrApiPort;
                     ReplyMsg = NULL;
+                    ReplyPort = CsrApiPort;
                     continue;
                 }
 
@@ -627,26 +626,33 @@ CsrApiRequestThread(IN PVOID Parameter)
                 /* Assume success */
                 ReceiveMsg.Status = STATUS_SUCCESS;
 
+                /* Make sure we have enough threads */
+                CsrpCheckRequestThreads();
+
+                /* Prepare for the API call */
+                ReplyMsg = NULL;
+                ReplyPort = CsrApiPort;
+
                 /* Validation complete, start SEH */
                 _SEH2_TRY
                 {
-                    /* Make sure we have enough threads */
-                    CsrpCheckRequestThreads();
-
                     /* Call the API and get the reply code */
-                    ReplyMsg = NULL;
-                    ReplyPort = CsrApiPort;
                     ServerDll->DispatchTable[ApiId](&ReceiveMsg, &ReplyCode);
-
-                    /* Increase the static thread count */
-                    InterlockedIncrementUL(&CsrpStaticThreadCount);
                 }
                 _SEH2_EXCEPT(CsrUnhandledExceptionFilter(_SEH2_GetExceptionInformation()))
                 {
-                    ReplyMsg = NULL;
-                    ReplyPort = CsrApiPort;
+#ifdef CSR_DBG
+                    DPRINT1("*** CSRSS: Took exception %x during server call dispatch (0x%x, %lu)\n",
+                            _SEH2_GetExceptionCode(), ServerDll, ApiId);
+                    if (NtCurrentPeb()->BeingDebugged) DbgBreakPoint();
+#endif
+                    /* We've got an exception, return the error code */
+                    ReceiveMsg.Status = _SEH2_GetExceptionCode();
                 }
                 _SEH2_END;
+
+                /* Increase the static thread count */
+                InterlockedIncrementUL(&CsrpStaticThreadCount);
             }
             else
             {
@@ -820,66 +826,77 @@ CsrApiRequestThread(IN PVOID Parameter)
             }
         }
 
+        /* Make sure we have enough threads */
+        CsrpCheckRequestThreads();
+
+        /* Prepare for the API call */
+        Teb->CsrClientThread = CsrThread;
+
+        ReplyCode = CsrReplyImmediately;
+
         /* Validation complete, start SEH */
         _SEH2_TRY
         {
-            /* Make sure we have enough threads */
-            CsrpCheckRequestThreads();
-
-            Teb->CsrClientThread = CsrThread;
-
             /* Call the API, get the reply code and return the result */
-            ReplyCode = CsrReplyImmediately;
             ReplyMsg->Status = ServerDll->DispatchTable[ApiId](&ReceiveMsg, &ReplyCode);
-
-            /* Increase the static thread count */
-            InterlockedIncrementUL(&CsrpStaticThreadCount);
-
-            Teb->CsrClientThread = CurrentThread;
-
-            if (ReplyCode == CsrReplyAlreadySent)
-            {
-                if (ReceiveMsg.CsrCaptureData)
-                {
-                    CsrReleaseCapturedArguments(&ReceiveMsg);
-                }
-                ReplyMsg = NULL;
-                ReplyPort = CsrApiPort;
-                CsrDereferenceThread(CsrThread);
-            }
-            else if (ReplyCode == CsrReplyDeadClient)
-            {
-                /* Reply to the death message */
-                NTSTATUS Status2;
-                Status2 = NtReplyPort(ReplyPort, &ReplyMsg->Header);
-                if (!NT_SUCCESS(Status2))
-                    DPRINT1("CSRSS: Error while replying to the death message, Status 0x%lx\n", Status2);
-
-                /* Reply back to the API port now */
-                ReplyMsg = NULL;
-                ReplyPort = CsrApiPort;
-                CsrDereferenceThread(CsrThread);
-            }
-            else if (ReplyCode == CsrReplyPending)
-            {
-                ReplyMsg = NULL;
-                ReplyPort = CsrApiPort;
-            }
-            else
-            {
-                if (ReceiveMsg.CsrCaptureData)
-                {
-                    CsrReleaseCapturedArguments(&ReceiveMsg);
-                }
-                CsrDereferenceThread(CsrThread);
-            }
         }
         _SEH2_EXCEPT(CsrUnhandledExceptionFilter(_SEH2_GetExceptionInformation()))
+        {
+#ifdef CSR_DBG
+            DPRINT1("*** CSRSS: Took exception %x during server call dispatch (0x%x, %lu)\n",
+                    _SEH2_GetExceptionCode(), ServerDll, ApiId);
+            if (NtCurrentPeb()->BeingDebugged) DbgBreakPoint();
+#endif
+            /* If we got an exception, return the error code */
+            // ReplyMsg->Status = _SEH2_GetExceptionCode();
+
+            ReplyCode = CsrReplyImmediately;
+            // ReplyMsg = NULL;
+            // ReplyPort = CsrApiPort;
+        }
+        _SEH2_END;
+
+        /* Increase the static thread count */
+        InterlockedIncrementUL(&CsrpStaticThreadCount);
+
+        Teb->CsrClientThread = CurrentThread;
+
+        if (ReplyCode == CsrReplyAlreadySent)
+        {
+            if (ReceiveMsg.CsrCaptureData)
+            {
+                CsrReleaseCapturedArguments(&ReceiveMsg);
+            }
+            ReplyMsg = NULL;
+            ReplyPort = CsrApiPort;
+            CsrDereferenceThread(CsrThread);
+        }
+        else if (ReplyCode == CsrReplyDeadClient)
+        {
+            /* Reply to the death message */
+            NTSTATUS Status2;
+            Status2 = NtReplyPort(ReplyPort, &ReplyMsg->Header);
+            if (!NT_SUCCESS(Status2))
+                DPRINT1("CSRSS: Error while replying to the death message, Status 0x%lx\n", Status2);
+
+            /* Reply back to the API port now */
+            ReplyMsg = NULL;
+            ReplyPort = CsrApiPort;
+            CsrDereferenceThread(CsrThread);
+        }
+        else if (ReplyCode == CsrReplyPending)
         {
             ReplyMsg = NULL;
             ReplyPort = CsrApiPort;
         }
-        _SEH2_END;
+        else
+        {
+            if (ReceiveMsg.CsrCaptureData)
+            {
+                CsrReleaseCapturedArguments(&ReceiveMsg);
+            }
+            CsrDereferenceThread(CsrThread);
+        }
     }
 
     /* We're out of the loop for some reason, terminate! */
