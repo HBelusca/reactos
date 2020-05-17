@@ -233,6 +233,14 @@ INT cmd_start (LPTSTR Rest)
     _tcscpy(szUnquotedName, Rest);
     StripQuotes(szUnquotedName);
 
+
+    //
+    // FIXME: TODO: Handle basic handling of calling internal CMD.exe commands!!
+    //
+
+
+    ZeroMemory(&prci, sizeof(prci));
+
     /* get the PATH environment variable and parse it */
     /* search the PATH environment variable for the binary */
     if (SearchForExecutable(szUnquotedName, szFullName))
@@ -259,8 +267,8 @@ INT cmd_start (LPTSTR Rest)
         }
 
         /* fill startup info */
-        memset (&stui, 0, sizeof (STARTUPINFO));
-        stui.cb = sizeof (STARTUPINFO);
+        ZeroMemory(&stui, sizeof(stui));
+        stui.cb = sizeof(stui);
         stui.dwFlags = STARTF_USESHOWWINDOW;
         stui.lpTitle = lpTitle;
         stui.wShowWindow = wShowWindow;

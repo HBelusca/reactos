@@ -289,8 +289,8 @@ HANDLE RunFile(DWORD flags, LPTSTR filename, LPTSTR params,
 
     TRACE ("RunFile: ShellExecuteExA/W is at %x\n", hShExt);
 
-    memset(&sei, 0, sizeof sei);
-    sei.cbSize = sizeof sei;
+    ZeroMemory(&sei, sizeof(sei));
+    sei.cbSize = sizeof(sei);
     sei.fMask = flags;
     sei.lpFile = filename;
     sei.lpParameters = params;
@@ -447,7 +447,7 @@ Execute(LPTSTR Full, LPTSTR First, LPTSTR Rest, PARSED_COMMAND *Cmd)
         TRACE ("[EXEC: %s]\n", debugstr_aw(szFullCmdLine));
 
         /* fill startup info */
-        memset(&stui, 0, sizeof(stui));
+        ZeroMemory(&stui, sizeof(stui));
         stui.cb = sizeof(stui);
         stui.lpTitle = Full;
         stui.dwFlags = STARTF_USESHOWWINDOW;
@@ -457,6 +457,7 @@ Execute(LPTSTR Full, LPTSTR First, LPTSTR Rest, PARSED_COMMAND *Cmd)
         SetConsoleMode(ConStreamGetOSHandle(StdIn),
                        ENABLE_PROCESSED_INPUT | ENABLE_LINE_INPUT | ENABLE_ECHO_INPUT);
 
+        ZeroMemory(&prci, sizeof(prci));
         if (CreateProcess(szFullName,
                           szFullCmdLine,
                           NULL,
@@ -472,7 +473,7 @@ Execute(LPTSTR Full, LPTSTR First, LPTSTR Rest, PARSED_COMMAND *Cmd)
         }
         else
         {
-            // See if we can run this with ShellExecute() ie myfile.xls
+            // See if we can run this with ShellExecute(), i.e. myfile.xls
             prci.hProcess = RunFile(SEE_MASK_NOCLOSEPROCESS | SEE_MASK_NO_CONSOLE,
                                     szFullName,
                                     rest,
@@ -652,40 +653,135 @@ INT ParseCommandLine(LPTSTR cmd)
 
 /* Execute a command without waiting for it to finish. If it's an internal
  * command or batch file, we must create a new cmd.exe process to handle it.
- * TODO: For now, this just always creates a cmd.exe process.
- *       This works, but is inefficient for running external programs,
- *       which could just be run directly. */
+ */
 static HANDLE
 ExecuteAsync(PARSED_COMMAND *Cmd)
 {
-    TCHAR CmdPath[MAX_PATH];
-    TCHAR CmdParams[CMDLINE_LENGTH], *ParamsEnd;
+    BOOL bUseCmd = FALSE;
     STARTUPINFO stui;
     PROCESS_INFORMATION prci;
+    TCHAR *ParamsEnd;
+    TCHAR CmdPath[MAX_PATH];
+    TCHAR CmdParams[CMDLINE_LENGTH];
 
-    /* Get the path to cmd.exe */
-    GetModuleFileName(NULL, CmdPath, ARRAYSIZE(CmdPath));
-
-    /* Build the parameter string to pass to cmd.exe */
-    ParamsEnd = _stpcpy(CmdParams, _T("/S/D/C\""));
-    ParamsEnd = UnparseCommand(Cmd, ParamsEnd, &CmdParams[CMDLINE_LENGTH - 2]);
-    if (!ParamsEnd)
+    /*
+     * If the command is a simple one and is not internal, run it directly;
+     * otherwise use a new cmd.exe instance.
+     */
+    if (Cmd->Type == C_COMMAND)
     {
-        error_out_of_memory();
-        return NULL;
-    }
-    _tcscpy(ParamsEnd, _T("\""));
+        LPCOMMAND cmdptr;
+        BOOL nointernal = FALSE;
+        TCHAR *dot;
+        TCHAR *cp;
+        INT cl;
 
-    memset(&stui, 0, sizeof stui);
+        _tcscpy(CmdPath, Cmd->Command.First);
+
+        /* If present in the first word, these characters end the name of an
+         * internal command and become the beginning of its parameters. */
+        cp = CmdPath + _tcscspn(CmdPath, _T("\t +,/;=[]"));
+
+        for (cl = 0; cl < (cp - CmdPath); cl++)
+        {
+            /* These characters do it too, but if one of them is present,
+             * then we check to see if the word is a file name and skip
+             * checking for internal commands if so.
+             * This allows running programs with names like "echo.exe" */
+            if (_tcschr(_T(".:\\"), CmdPath[cl]))
+            {
+                TCHAR tmp = *cp;
+                *cp = _T('\0');
+                nointernal = IsExistingFile(CmdPath);
+                *cp = tmp;
+                break;
+            }
+        }
+
+        /* Check whether this is an internal command */
+        for (cmdptr = cmds; !nointernal && cmdptr->name; cmdptr++)
+        {
+            if (!_tcsnicmp(CmdPath, cmdptr->name, cl) && cmdptr->name[cl] == _T('\0'))
+            {
+                /* This is internal command to be run with cmd */
+                bUseCmd = TRUE;
+                break;
+            }
+        }
+
+        if (!bUseCmd)
+        {
+            /* get the PATH environment variable and parse it */
+            /* search the PATH environment variable for the binary */
+            StripQuotes(CmdPath);
+            if (!SearchForExecutable(CmdPath, CmdParams))
+            {
+                error_bad_command(Cmd->Command.First);
+                return NULL;
+            }
+
+            /* .BAT or .CMD files are executed explicitly using cmd.exe */
+            dot = _tcsrchr(CmdParams, _T('.'));
+            if (dot && (!_tcsicmp(dot, _T(".bat")) || !_tcsicmp(dot, _T(".cmd"))))
+            {
+                bUseCmd = TRUE;
+            }
+        }
+    }
+    else
+    {
+        /* Compound command: run with cmd */
+        bUseCmd = TRUE;
+    }
+
+    ZeroMemory(&stui, sizeof(stui));
     stui.cb = sizeof(STARTUPINFO);
-    if (!CreateProcess(CmdPath, CmdParams, NULL, NULL, TRUE, 0,
-                       NULL, NULL, &stui, &prci))
+
+    ZeroMemory(&prci, sizeof(prci));
+
+    if (bUseCmd)
+    {
+        /* Get the path to cmd.exe */
+        GetModuleFileName(NULL, CmdPath, ARRAYSIZE(CmdPath));
+
+        /* Build the parameter string to pass to cmd.exe */
+        ParamsEnd = _stpcpy(CmdParams, _T("/S/D/C\""));
+        ParamsEnd = UnparseCommand(Cmd, ParamsEnd, &CmdParams[CMDLINE_LENGTH - 2]);
+        if (!ParamsEnd)
+        {
+            error_out_of_memory();
+            return NULL;
+        }
+        _tcscpy(ParamsEnd, _T("\""));
+
+        if (CreateProcess(CmdPath, CmdParams, NULL, NULL, TRUE, 0,
+                          NULL, NULL, &stui, &prci))
+        {
+            CloseHandle(prci.hThread);
+        }
+    }
+    else
+    {
+        if (CreateProcess(Cmd->Command.First, Cmd->Command.Rest, NULL, NULL, TRUE, 0,
+                          NULL, NULL, &stui, &prci))
+        {
+            CloseHandle(prci.hThread);
+        }
+        else
+        {
+            // See if we can run this with ShellExecute(), i.e. myfile.xls
+            prci.hProcess = RunFile(SEE_MASK_NOCLOSEPROCESS | SEE_MASK_NO_CONSOLE,
+                                    Cmd->Command.First, Cmd->Command.Rest,
+                                    NULL, SW_SHOWNORMAL);
+        }
+    }
+
+    if (!prci.hProcess)
     {
         ErrorMessage(GetLastError(), NULL);
         return NULL;
     }
 
-    CloseHandle(prci.hThread);
     return prci.hProcess;
 }
 
