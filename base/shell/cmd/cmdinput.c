@@ -154,8 +154,10 @@ BOOL ReadCommand(LPTSTR str, INT maxlen)
     TCHAR  ch;
     BOOL bReturn = FALSE;
     BOOL bCharInput;
+#if 0
 #ifdef FEATURE_4NT_FILENAME_COMPLETION
     TCHAR szPath[MAX_PATH];
+#endif
 #endif
 #ifdef FEATURE_HISTORY
     //BOOL bContinue=FALSE;/*is TRUE the second case will not be executed*/
@@ -347,6 +349,7 @@ BOOL ReadCommand(LPTSTR str, INT maxlen)
                 }
                 break;
 
+#if 0
             case VK_TAB:
 #ifdef FEATURE_UNIX_FILENAME_COMPLETION
                 /* expand current file name */
@@ -448,6 +451,7 @@ BOOL ReadCommand(LPTSTR str, INT maxlen)
                 GetCursorXY(&curx, &cury);
 #endif
                 break;
+#endif
 
             case _T('C'):
                 if ((ir.Event.KeyEvent.dwControlKeyState &
@@ -673,10 +677,10 @@ BOOL ReadCommand(LPTSTR str, INT maxlen)
             }
 #ifdef _UNICODE
             ch = ir.Event.KeyEvent.uChar.UnicodeChar;
-            if (ch >= 32 && (charcount != (maxlen - 2)) && bCharInput)
+            if ((ch == 0x09 || ch >= 32) && (charcount != (maxlen - 2)) && bCharInput)
 #else
             ch = ir.Event.KeyEvent.uChar.AsciiChar;
-            if ((UCHAR)ch >= 32 && (charcount != (maxlen - 2)) && bCharInput)
+            if (((UCHAR)ch == 0x09 || (UCHAR)ch >= 32) && (charcount != (maxlen - 2)) && bCharInput)
 #endif /* _UNICODE */
             {
                 /* insert character into string... */
