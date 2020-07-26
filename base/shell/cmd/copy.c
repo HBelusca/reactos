@@ -71,12 +71,12 @@ copy(TCHAR source[MAX_PATH],
     if (CheckCtrlBreak(BREAK_INPUT))
         return 0;
 
-    TRACE ("checking mode\n");
+    TRACE("checking mode\n");
 
     if (bTouch)
     {
-        hFileSrc = CreateFile (source, GENERIC_WRITE, FILE_SHARE_READ,
-            NULL, OPEN_EXISTING, 0, NULL);
+        hFileSrc = CreateFile(source, GENERIC_WRITE, FILE_SHARE_READ,
+                              NULL, OPEN_EXISTING, 0, NULL);
         if (hFileSrc == INVALID_HANDLE_VALUE)
         {
             ConOutResPrintf(STRING_COPY_ERROR1, source);
@@ -100,10 +100,10 @@ copy(TCHAR source[MAX_PATH],
         }
     }
 
-    dwAttrib = GetFileAttributes (source);
+    dwAttrib = GetFileAttributes(source);
 
-    hFileSrc = CreateFile (source, GENERIC_READ, FILE_SHARE_READ,
-        NULL, OPEN_EXISTING, 0, NULL);
+    hFileSrc = CreateFile(source, GENERIC_READ, FILE_SHARE_READ,
+                          NULL, OPEN_EXISTING, 0, NULL);
     if (hFileSrc == INVALID_HANDLE_VALUE)
     {
         ConOutResPrintf(STRING_COPY_ERROR1, source);
@@ -111,11 +111,11 @@ copy(TCHAR source[MAX_PATH],
         return 0;
     }
 
-    TRACE ("getting time\n");
+    TRACE("getting time\n");
 
-    GetFileTime (hFileSrc, &srctime, NULL, NULL);
+    GetFileTime(hFileSrc, &srctime, NULL, NULL);
 
-    TRACE ("copy: flags has %s\n",
+    TRACE("copy: flags has %s\n",
         lpdwFlags & COPY_ASCII ? "ASCII" : "BINARY");
 
     /* Check to see if /D or /Z are true, if so we need a middle
@@ -136,7 +136,7 @@ copy(TCHAR source[MAX_PATH],
         _tcscat(TempSrc,_T(".decrypt"));
         if (!CopyFileEx(source, TempSrc, NULL, NULL, FALSE, COPY_FILE_ALLOW_DECRYPTED_DESTINATION))
         {
-            CloseHandle (hFileSrc);
+            CloseHandle(hFileSrc);
             nErrorLevel = 1;
             return 0;
         }
@@ -155,46 +155,44 @@ copy(TCHAR source[MAX_PATH],
     }
 
 
-    if (!IsExistingFile (dest))
+    if (!IsExistingFile(dest))
     {
-        TRACE ("opening/creating\n");
-        hFileDest =
-            CreateFile (dest, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL);
+        TRACE("opening/creating\n");
+        hFileDest = CreateFile(dest, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL);
     }
     else if (!append)
     {
-        TRACE ("SetFileAttributes (%s, FILE_ATTRIBUTE_NORMAL);\n", debugstr_aw(dest));
-        SetFileAttributes (dest, FILE_ATTRIBUTE_NORMAL);
+        TRACE("SetFileAttributes(%s, FILE_ATTRIBUTE_NORMAL);\n", debugstr_aw(dest));
+        SetFileAttributes(dest, FILE_ATTRIBUTE_NORMAL);
 
-        TRACE ("DeleteFile (%s);\n", debugstr_aw(dest));
-        DeleteFile (dest);
+        TRACE("DeleteFile(%s);\n", debugstr_aw(dest));
+        DeleteFile(dest);
 
-        hFileDest =	CreateFile (dest, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL);
+        hFileDest = CreateFile(dest, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL);
     }
     else
     {
         LONG lFilePosHigh = 0;
 
-        if (!_tcscmp (dest, source))
+        if (!_tcscmp(dest, source))
         {
-            CloseHandle (hFileSrc);
+            CloseHandle(hFileSrc);
             return 0;
         }
 
-        TRACE ("opening/appending\n");
-        SetFileAttributes (dest, FILE_ATTRIBUTE_NORMAL);
+        TRACE("opening/appending\n");
+        SetFileAttributes(dest, FILE_ATTRIBUTE_NORMAL);
 
-        hFileDest =
-            CreateFile (dest, GENERIC_WRITE, 0, NULL, OPEN_EXISTING, 0, NULL);
+        hFileDest = CreateFile(dest, GENERIC_WRITE, 0, NULL, OPEN_EXISTING, 0, NULL);
 
         /* Move to end of file to start writing */
-        SetFilePointer (hFileDest, 0, &lFilePosHigh,FILE_END);
+        SetFilePointer(hFileDest, 0, &lFilePosHigh,FILE_END);
     }
 
 
     if (hFileDest == INVALID_HANDLE_VALUE)
     {
-        CloseHandle (hFileSrc);
+        CloseHandle(hFileSrc);
         ConOutResPuts(STRING_ERROR_PATH_NOT_FOUND);
         nErrorLevel = 1;
         return 0;
@@ -204,8 +202,8 @@ copy(TCHAR source[MAX_PATH],
     buffer = VirtualAlloc(NULL, BUFF_SIZE, MEM_COMMIT, PAGE_READWRITE);
     if (buffer == NULL)
     {
-        CloseHandle (hFileDest);
-        CloseHandle (hFileSrc);
+        CloseHandle(hFileDest);
+        CloseHandle(hFileSrc);
         ConOutResPuts(STRING_ERROR_OUT_OF_MEMORY);
         nErrorLevel = 1;
         return 0;
@@ -213,7 +211,7 @@ copy(TCHAR source[MAX_PATH],
 
     do
     {
-        ReadFile (hFileSrc, buffer, BUFF_SIZE, &dwRead, NULL);
+        ReadFile(hFileSrc, buffer, BUFF_SIZE, &dwRead, NULL);
         if (lpdwFlags & COPY_ASCII)
         {
             LPBYTE pEof = memchr(buffer, 0x1A, dwRead);
@@ -228,37 +226,37 @@ copy(TCHAR source[MAX_PATH],
         if (dwRead == 0)
             break;
 
-        WriteFile (hFileDest, buffer, dwRead, &dwWritten, NULL);
+        WriteFile(hFileDest, buffer, dwRead, &dwWritten, NULL);
         if (dwWritten != dwRead || CheckCtrlBreak(BREAK_INPUT))
         {
             ConOutResPuts(STRING_COPY_ERROR3);
 
-            VirtualFree (buffer, 0, MEM_RELEASE);
-            CloseHandle (hFileDest);
-            CloseHandle (hFileSrc);
+            VirtualFree(buffer, 0, MEM_RELEASE);
+            CloseHandle(hFileDest);
+            CloseHandle(hFileSrc);
             nErrorLevel = 1;
             return 0;
         }
     }
     while (!bEof);
 
-    TRACE ("setting time\n");
-    SetFileTime (hFileDest, &srctime, NULL, NULL);
+    TRACE("setting time\n");
+    SetFileTime(hFileDest, &srctime, NULL, NULL);
 
     if ((lpdwFlags & COPY_ASCII) && !bEof)
     {
         /* we're dealing with ASCII files! */
         buffer[0] = 0x1A;
-        TRACE ("appending ^Z\n");
-        WriteFile (hFileDest, buffer, sizeof(CHAR), &dwWritten, NULL);
+        TRACE("appending ^Z\n");
+        WriteFile(hFileDest, buffer, sizeof(CHAR), &dwWritten, NULL);
     }
 
-    VirtualFree (buffer, 0, MEM_RELEASE);
-    CloseHandle (hFileDest);
-    CloseHandle (hFileSrc);
+    VirtualFree(buffer, 0, MEM_RELEASE);
+    CloseHandle(hFileDest);
+    CloseHandle(hFileSrc);
 
-    TRACE ("setting mode\n");
-    SetFileAttributes (dest, dwAttrib);
+    TRACE("setting mode\n");
+    SetFileAttributes(dest, dwAttrib);
 
     /* Now finish off the copy if needed with CopyFileEx */
     if (lpdwFlags & COPY_RESTART)
@@ -281,12 +279,12 @@ copy(TCHAR source[MAX_PATH],
 }
 
 
-static INT CopyOverwrite (LPTSTR fn)
+static INT CopyOverwrite(LPTSTR fn)
 {
     /*ask the user if they want to override*/
     INT res;
     ConOutResPrintf(STRING_COPY_HELP1, fn);
-    res = FilePromptYNA (0);
+    res = FilePromptYNA(0);
     return res;
 }
 
@@ -373,14 +371,14 @@ INT cmd_copy(LPTSTR param)
     if (evar == NULL)
         size = 0;
     else
-        size = GetEnvironmentVariable (_T("COPYCMD"), evar, 512);
+        size = GetEnvironmentVariable(_T("COPYCMD"), evar, 512);
 
     if (size > 512)
     {
         TCHAR *old_evar = evar;
         evar = cmd_realloc(evar,size * sizeof(TCHAR) );
         if (evar!=NULL)
-            size = GetEnvironmentVariable (_T("COPYCMD"), evar, size);
+            size = GetEnvironmentVariable(_T("COPYCMD"), evar, size);
         else
         {
             size=0;
@@ -396,42 +394,42 @@ INT cmd_copy(LPTSTR param)
         /* scan and set the flags */
         for (t = 0; t < size; t++)
         {
-            if (_tcsncicmp(_T("/A"),&evar[t],2) == 0)
+            if (_tcsncicmp(_T("/A"), &evar[t], 2) == 0)
             {
-                dwFlags |=COPY_ASCII;
+                dwFlags |= COPY_ASCII;
                 t++;
             }
-            else if (_tcsncicmp(_T("/B"),&evar[t],2) == 0)
+            else if (_tcsncicmp(_T("/B"), &evar[t], 2) == 0)
             {
                 dwFlags |= COPY_BINARY;
                 t++;
             }
-            else if (_tcsncicmp(_T("/D"),&evar[t],2) == 0)
+            else if (_tcsncicmp(_T("/D"), &evar[t], 2) == 0)
             {
                 dwFlags |= COPY_DECRYPT;
                 t++;
             }
-            else if (_tcsncicmp(_T("/V"),&evar[t],2) == 0)
+            else if (_tcsncicmp(_T("/V"), &evar[t], 2) == 0)
             {
                 dwFlags |= COPY_VERIFY;
                 t++;
             }
-            else if (_tcsncicmp(_T("/N"),&evar[t],2) == 0)
+            else if (_tcsncicmp(_T("/N"), &evar[t], 2) == 0)
             {
                 dwFlags |= COPY_SHORTNAME;
                 t++;
             }
-            else if (_tcsncicmp(_T("/Y"),&evar[t],2) == 0)
+            else if (_tcsncicmp(_T("/Y"), &evar[t], 2) == 0)
             {
                 dwFlags |= COPY_NO_PROMPT;
                 t++;
             }
-            else if (_tcsncicmp(_T("/-Y"),&evar[t],3) == 0)
+            else if (_tcsncicmp(_T("/-Y"), &evar[t], 3) == 0)
             {
                 dwFlags |= COPY_PROMPT;
                 t+=2;
             }
-            else if (_tcsncicmp(_T("/Z"),&evar[t],2) == 0)
+            else if (_tcsncicmp(_T("/Z"), &evar[t], 2) == 0)
             {
                 dwFlags |= COPY_PROMPT;
                 t++;
@@ -499,7 +497,7 @@ INT cmd_copy(LPTSTR param)
                         /* Invalid switch */
                         ConOutResPrintf(STRING_ERROR_INVALID_SWITCH, _totupper(arg[i][1]));
                         nErrorLevel = 1;
-                        freep (arg);
+                        freep(arg);
                         return 1;
                         break;
                 }
@@ -664,7 +662,7 @@ INT cmd_copy(LPTSTR param)
 
             /* Loop through the source file name and copy all
                the chars one at a time until we reach the separator */
-            while(TRUE)
+            while (TRUE)
             {
                 if (appendPointer[0] == _T('|'))
                 {
@@ -692,7 +690,7 @@ INT cmd_copy(LPTSTR param)
                 {
                     ConErrResPrintf(STRING_ERROR_INVALID_PARAM_FORMAT,arg[nSrc]);
                     nErrorLevel = 1;
-                    freep (arg);
+                    freep(arg);
                     return 1;
                 }
                 bTouch = TRUE;
@@ -803,7 +801,9 @@ INT cmd_copy(LPTSTR param)
 
             /* Copy over the destination path name */
             if (bSrcName)
+            {
                 _tcscat(tmpDestPath, findBuffer.cFileName);
+            }
             else
             {
                 /* If there is no wildcard, use the name the user entered */
@@ -828,7 +828,7 @@ INT cmd_copy(LPTSTR param)
 
             /* Build the string path to the source file */
             _tcscpy(tmpSrcPath,szSrcPath);
-            _tcscat (tmpSrcPath, findBuffer.cFileName);
+            _tcscat(tmpSrcPath, findBuffer.cFileName);
 
             /* Check to see if the file is the same file */
             if (!bTouch && !_tcscmp(tmpSrcPath, tmpDestPath))
@@ -844,7 +844,7 @@ INT cmd_copy(LPTSTR param)
                 ConOutPrintf(_T("%s\n"), tmpSrcPath);
 
             /* Handle any overriding / prompting that needs to be done */
-            if (((!(dwFlags & COPY_NO_PROMPT) && IsExistingFile (tmpDestPath)) || dwFlags & COPY_PROMPT) && !bTouch)
+            if (((!(dwFlags & COPY_NO_PROMPT) && IsExistingFile(tmpDestPath)) || (dwFlags & COPY_PROMPT)) && !bTouch)
                 nOverwrite = CopyOverwrite(tmpDestPath);
             if (nOverwrite == PROMPT_NO || nOverwrite == PROMPT_BREAK)
                 continue;
@@ -860,7 +860,7 @@ INT cmd_copy(LPTSTR param)
             {
                 /* print out the error message */
                 ConOutResPrintf(STRING_COPY_ERROR3);
-                ConOutFormatMessage (GetLastError(), szSrcPath);
+                ConOutFormatMessage(GetLastError(), szSrcPath);
                 nErrorLevel = 1;
             }
 
