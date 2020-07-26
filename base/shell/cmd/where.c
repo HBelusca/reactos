@@ -82,7 +82,7 @@
 
 /* searches for file using path info. */
 
-BOOL
+static BOOL
 SearchForExecutableSingle (LPCTSTR pFileName, LPTSTR pFullName, LPTSTR pPathExt, LPTSTR pDirectory)
 {
     TCHAR  szPathBuffer[CMDLINE_LENGTH], *pszPathEnd;
