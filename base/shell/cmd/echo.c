@@ -32,22 +32,23 @@ BOOL
 OnOffCommand(LPTSTR param, LPBOOL flag, INT message)
 {
     TCHAR *p2;
-    if (_tcsnicmp(param, D_OFF, sizeof(D_OFF)/sizeof(TCHAR) - 1) == 0)
+
+    if (_tcsnicmp(param, D_OFF, ARRAYSIZE(D_OFF) - 1) == 0)
     {
-        p2 = param + sizeof(D_OFF)/sizeof(TCHAR) - 1;
+        p2 = param + ARRAYSIZE(D_OFF) - 1;
         while (_istspace(*p2))
-            p2++;
+            ++p2;
         if (*p2 == _T('\0'))
         {
             *flag = FALSE;
             return TRUE;
         }
     }
-    else if (_tcsnicmp(param, D_ON, sizeof(D_ON)/sizeof(TCHAR) - 1) == 0)
+    else if (_tcsnicmp(param, D_ON, ARRAYSIZE(D_ON) - 1) == 0)
     {
-        p2 = param + sizeof(D_ON)/sizeof(TCHAR) - 1;
+        p2 = param + ARRAYSIZE(D_ON) - 1;
         while (_istspace(*p2))
-            p2++;
+            ++p2;
         if (*p2 == _T('\0'))
         {
             *flag = TRUE;
@@ -62,16 +63,16 @@ OnOffCommand(LPTSTR param, LPBOOL flag, INT message)
     return FALSE;
 }
 
-INT CommandEcho (LPTSTR param)
+INT CommandEcho(LPTSTR param)
 {
     LPTSTR p1;
 
     TRACE ("CommandEcho: '%s'\n", debugstr_aw(param));
 
-    /* skip all spaces for the check of '/?', 'ON' and 'OFF' */
+    /* Skip all spaces for the check of 'ON' and 'OFF' */
     p1 = param;
-    while(_istspace(*p1))
-            p1++;
+    while (_istspace(*p1))
+        ++p1;
 
     if (!_tcsncmp (p1, _T("/?"), 2))
     {
@@ -81,14 +82,14 @@ INT CommandEcho (LPTSTR param)
 
     if (!OnOffCommand(p1, &bEcho, STRING_ECHO_HELP5))
     {
-        /* skip the first character */
+        /* Skip the first character */
         ConOutPuts(param + 1);
         ConOutChar(_T('\n'));
     }
     return 0;
 }
 
-INT CommandEchos (LPTSTR param)
+INT CommandEchos(LPTSTR param)
 {
     TRACE ("CommandEchos: '%s'\n", debugstr_aw(param));
 
@@ -102,8 +103,7 @@ INT CommandEchos (LPTSTR param)
     return 0;
 }
 
-
-INT CommandEchoerr (LPTSTR param)
+INT CommandEchoerr(LPTSTR param)
 {
     TRACE ("CommandEchoerr: '%s'\n", debugstr_aw(param));
 
@@ -117,8 +117,7 @@ INT CommandEchoerr (LPTSTR param)
     return 0;
 }
 
-
-INT CommandEchoserr (LPTSTR param)
+INT CommandEchoserr(LPTSTR param)
 {
     TRACE ("CommandEchoserr: '%s'\n", debugstr_aw(param));
 
