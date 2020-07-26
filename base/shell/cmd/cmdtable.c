@@ -24,7 +24,6 @@
  * to the functions to process them.
  */
 
-
 COMMAND cmds[] =
 {
     {_T("?"), 0, CommandShowCommands},
