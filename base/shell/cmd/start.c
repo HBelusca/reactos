@@ -15,8 +15,8 @@
 
 #ifdef INCLUDE_CMD_START
 
-/* Find the end of an option, and turn it into a nul-terminated string
- * in place. (It's moved back one character, to make room for the nul) */
+/* Find the end of an option, and turn it into a NULL-terminated string
+ * in place. (It's moved back one character, to make room for the NULL.) */
 static TCHAR *GetParameter(TCHAR **pPointer)
 {
     BOOL bInQuote = FALSE;
