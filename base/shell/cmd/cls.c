@@ -32,12 +32,6 @@
 
 INT cmd_cls(LPTSTR param)
 {
-    if (!_tcsncmp(param, _T("/?"), 2))
-    {
-        ConOutResPaging(TRUE, STRING_CLS_HELP);
-        return 0;
-    }
-
     ConClearScreen(&StdOutScreen);
     return 0;
 }

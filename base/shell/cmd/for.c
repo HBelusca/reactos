@@ -37,17 +37,10 @@
 #define MSCMD_FOR_QUIRKS
 
 
-/* FOR is a special command, so this function is only used for showing help now */
+/* FOR is a special parsed command */
 INT cmd_for(LPTSTR param)
 {
-    TRACE("cmd_for(\'%s\')\n", debugstr_aw(param));
-
-    if (!_tcsncmp(param, _T("/?"), 2))
-    {
-        ConOutResPaging(TRUE, STRING_FOR_HELP1);
-        return 0;
-    }
-
+    ASSERT(FALSE);
     ParseErrorEx(param);
     return 1;
 }

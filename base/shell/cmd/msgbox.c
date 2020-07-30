@@ -40,17 +40,11 @@ INT CommandMsgbox (LPTSTR param)
     GetConsoleTitle(buff, ARRAYSIZE(buff));
     title = buff;
 
-    if (_tcsncmp (param, _T("/?"), 2) == 0)
-    {
-        ConOutResPaging(TRUE,STRING_MSGBOX_HELP);
-        return 0;
-    }
-
     //yes here things are quite massed up :)
 
-    //skip spaces
-    while(_istspace(*param))
-        param++;
+    /* Strip leading whitespace */
+    while (_istspace(*param))
+        ++param;
 
     //search for type of messagebox (ok, okcancel, ...)
     if (_tcsnicmp(param, _T("ok "), 3) == 0)

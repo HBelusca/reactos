@@ -33,15 +33,11 @@ INT CommandColor(LPTSTR rest)
 {
     WORD wColor = 0x00;
 
-    /* The user asked for help */
-    if (_tcsncmp(rest, _T("/?"), 2) == 0)
-    {
-        ConOutResPaging(TRUE, STRING_COLOR_HELP1);
-        return 0;
-    }
-
-    /* Let's prepare %ERRORLEVEL% */
     nErrorLevel = 0;
+
+    /* Strip leading whitespace */
+    while (_istspace(*rest))
+        ++rest;
 
     /* No parameter: Set the default colors */
     if (rest[0] == _T('\0'))

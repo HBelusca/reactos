@@ -32,6 +32,14 @@
 
 #include "precomp.h"
 
+/* IF is a special parsed command */
+INT cmd_if(LPTSTR param)
+{
+    ASSERT(FALSE);
+    ParseErrorEx(param);
+    return 1;
+}
+
 static INT GenericCmp(INT (WINAPI *StringCmp)(LPCTSTR, LPCTSTR),
                       LPCTSTR Left, LPCTSTR Right)
 {
@@ -47,20 +55,6 @@ static INT GenericCmp(INT (WINAPI *StringCmp)(LPCTSTR, LPCTSTR),
         }
     }
     return StringCmp(Left, Right);
-}
-
-INT cmd_if(LPTSTR param)
-{
-    TRACE("cmd_if(\'%s\')\n", debugstr_aw(param));
-
-    if (!_tcsncmp (param, _T("/?"), 2))
-    {
-        ConOutResPaging(TRUE, STRING_IF_HELP1);
-        return 0;
-    }
-
-    ParseErrorEx(param);
-    return 1;
 }
 
 INT ExecuteIf(PARSED_COMMAND *Cmd)

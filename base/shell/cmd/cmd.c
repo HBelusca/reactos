@@ -544,7 +544,6 @@ Execute(LPTSTR Full, LPTSTR First, LPTSTR Rest, PARSED_COMMAND *Cmd)
     return dwExitCode;
 }
 
-
 /*
  * Look through the internal commands and determine whether or not this
  * command is one of them. If it is, call the command. If not, call
@@ -603,20 +602,55 @@ DoCommand(LPTSTR first, LPTSTR rest, PARSED_COMMAND *Cmd)
             _tcscat(com, rest);
             param = &com[cl];
 
-            /* Skip over whitespace to rest of line, exclude 'echo' command */
-            if (_tcsicmp(cmdptr->name, _T("echo")) != 0)
+            ret = 0;
+
+            /* Check for help */
+            if (CheckForHelp(cmdptr, param))
             {
-                while (_istspace(*param))
-                    param++;
+                /* Display the help if we have an ID, otherwise warn the user */
+                if (cmdptr->helpID)
+                {
+                    /* Check whether the ID is a message ID
+                     * or an actual help function pointer. */
+                    if (IS_INTRESOURCE(cmdptr->helpID))
+                        ConOutResPaging(TRUE, cmdptr->helpID);
+                    else
+                        cmdptr->helpFunc();
+                }
+                else
+                {
+                    com[cl] = 0;
+                    _tcsupr(com);
+                    ConOutPrintf(_T("%s help not implemented yet!\n"), com);
+                }
             }
+            else if (cmdptr->func)
+            {
+                /*
+                 * Special parsed commands: FOR,IF,REM, are executed in a
+                 * different way; if we are here it's because we are trying
+                 * to execute them with an unrecognized syntax that was
+                 * ignored by the parser, for example:
+                 *
+                 *   FOR/option
+                 *   IF/option
+                 *
+                 * with no space between the command and the options.
+                 * (Note that "FOR/?" and "IF/?" are handled separately above.)
+                 * In this case, the commands are considered to be external.
+                 */
+                if (cmdptr->flags & CMD_SPECIAL_PARSE)
+                    break;
 
-            /* Set the new console title */
-            SetConTitle(com);
+                /* Set the new console title */
+                SetConTitle(com);
 
-            ret = cmdptr->func(param);
+                ret = cmdptr->func(param);
 
-            /* Restore the original console title */
-            ResetConTitle();
+                /* Restore the original console title */
+                ResetConTitle();
+            }
+            /* else, this is the REM command, always ignored */
 
             cmd_free(com);
             return ret;

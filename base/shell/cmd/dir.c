@@ -221,17 +221,13 @@ static ULONG recurse_dir_cnt;
 static ULONG recurse_file_cnt;
 static ULONGLONG recurse_bytes;
 
-/*
- * help
- *
- * displays help screen for dir
- * Rob Lake
- */
+#if 0
 static VOID
 DirHelp(VOID)
 {
     ConOutResPaging(TRUE, STRING_DIR_HELP1);
 }
+#endif
 
 /* Check whether this is a dot-directory "." or "..", speed-optimized */
 FORCEINLINE
@@ -368,11 +364,13 @@ DirReadParam(LPTSTR Line,               /* [IN] The line with the parameters & s
                 lpFlags->bDataStreams = ! bNegative;
             else if (cCurChar == _T('4'))
                 lpFlags->b4Digit = ! bNegative;
+#if 0
             else if (cCurChar == _T('?'))
             {
                 DirHelp();
                 return FALSE;
             }
+#endif
             else
             {
                 error_invalid_switch ((TCHAR)_totupper(*Line));

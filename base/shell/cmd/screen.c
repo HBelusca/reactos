@@ -21,20 +21,11 @@ INT CommandScreen(LPTSTR param)
     SHORT maxx, maxy;
     BOOL bSkipText = FALSE;
 
-    if (_tcsncmp(param, _T("/?"), 2) == 0)
-    {
-        ConOutResPaging(TRUE,STRING_SCREEN_HELP);
-        return 0;
-    }
-
     nErrorLevel = 0;
 
-    /* Retrieve the screen dimensions */
-    GetScreenSize(&maxx, &maxy);
-
-    /* Get row */
+    /* Strip leading whitespace */
     while (_istspace(*param))
-        param++;
+        ++param;
 
     if (!*param)
     {
@@ -42,6 +33,10 @@ INT CommandScreen(LPTSTR param)
         return 1;
     }
 
+    /* Retrieve the screen dimensions */
+    GetScreenSize(&maxx, &maxy);
+
+    /* Get row */
     y = _ttoi(param);
     if (y < 0 || y > (maxy-1))
     {

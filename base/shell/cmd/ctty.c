@@ -107,12 +107,9 @@ INT cmd_ctty(LPTSTR param)
     WORD DeviceType;
     HANDLE hDevice, hStdHandles[3]; // hStdIn, hStdOut, hStdErr;
 
-    /* The user asked for help */
-    if (_tcsncmp(param, _T("/?"), 2) == 0)
-    {
-        ConOutResPaging(TRUE, STRING_CTTY_HELP);
-        return 0;
-    }
+    /* Strip leading whitespace */
+    while (_istspace(*param))
+        ++param;
 
     if (!*param)
     {

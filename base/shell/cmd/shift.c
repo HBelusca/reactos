@@ -40,12 +40,6 @@ INT cmd_shift (LPTSTR param)
     INT i = 0;
     TRACE ("cmd_shift: (\'%s\')\n", debugstr_aw(param));
 
-    if (!_tcsncmp (param, _T("/?"), 2))
-    {
-        ConOutResPaging(TRUE,STRING_SHIFT_HELP);
-        return 0;
-    }
-
     nErrorLevel = 0;
 
     if (bc == NULL)
@@ -54,6 +48,10 @@ INT cmd_shift (LPTSTR param)
         nErrorLevel = 1;
         return 1;
     }
+
+    /* Strip leading whitespace */
+    while (_istspace(*param))
+        ++param;
 
     if (!_tcsicmp (param, _T("down")))
     {

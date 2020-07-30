@@ -67,18 +67,10 @@ INT CommandEcho(LPTSTR param)
 {
     LPTSTR p1;
 
-    TRACE ("CommandEcho: '%s'\n", debugstr_aw(param));
-
     /* Skip all spaces for the check of 'ON' and 'OFF' */
     p1 = param;
     while (_istspace(*p1))
         ++p1;
-
-    if (!_tcsncmp (p1, _T("/?"), 2))
-    {
-        ConOutResPaging(TRUE,STRING_ECHO_HELP4);
-        return 0;
-    }
 
     if (!OnOffCommand(p1, &bEcho, STRING_ECHO_HELP5))
     {
@@ -91,43 +83,23 @@ INT CommandEcho(LPTSTR param)
 
 INT CommandEchos(LPTSTR param)
 {
-    TRACE ("CommandEchos: '%s'\n", debugstr_aw(param));
-
-    if (!_tcsncmp (param, _T("/?"), 2))
-    {
-        ConOutResPuts(STRING_ECHO_HELP1);
-        return 0;
-    }
-
-    ConOutPrintf (_T("%s"), param);
+    /* Skip the first character */
+    ConOutPuts(param + 1);
     return 0;
 }
 
 INT CommandEchoerr(LPTSTR param)
 {
-    TRACE ("CommandEchoerr: '%s'\n", debugstr_aw(param));
-
-    if (!_tcsncmp (param, _T("/?"), 2))
-    {
-        ConOutResPuts(STRING_ECHO_HELP2);
-        return 0;
-    }
-
-    ConErrPuts (param);
+    /* Skip the first character */
+    ConErrPuts(param + 1);
+    ConErrChar(_T('\n'));
     return 0;
 }
 
 INT CommandEchoserr(LPTSTR param)
 {
-    TRACE ("CommandEchoserr: '%s'\n", debugstr_aw(param));
-
-    if (!_tcsncmp (param, _T("/?"), 2))
-    {
-        ConOutResPuts(STRING_ECHO_HELP3);
-        return 0;
-    }
-
-    ConErrPrintf (_T("%s"), param);
+    /* Skip the first character */
+    ConErrPuts(param + 1);
     return 0;
 }
 

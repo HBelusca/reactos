@@ -27,12 +27,6 @@ INT CommandMemory (LPTSTR param)
     TCHAR szAvailVirtual[40];
     BOOL (WINAPI *GlobalMemoryStatusEx)(LPMEMORYSTATUSEX);
 
-    if (!_tcsncmp (param, _T("/?"), 2))
-    {
-        ConOutResPaging(TRUE,STRING_MEMORY_HELP1);
-        return 0;
-    }
-
     GlobalMemoryStatusEx
         = (BOOL (WINAPI *)(LPMEMORYSTATUSEX))GetProcAddress(GetModuleHandle(_T("KERNEL32")), "GlobalMemoryStatusEx");
     if (GlobalMemoryStatusEx)

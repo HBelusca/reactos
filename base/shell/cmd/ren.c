@@ -79,12 +79,6 @@ INT cmd_rename (LPTSTR param)
 
     HANDLE hFile;
     WIN32_FIND_DATA f;
-    /*If the PARAM=/? then show the help*/
-    if (!_tcsncmp(param, _T("/?"), 2))
-    {
-        ConOutResPaging(TRUE,STRING_REN_HELP1);
-        return 0;
-    }
 
     nErrorLevel = 0;
 

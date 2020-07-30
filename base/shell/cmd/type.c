@@ -232,11 +232,9 @@ INT cmd_type(LPTSTR param)
     HANDLE hFind;
     WIN32_FIND_DATA FindData;
 
-    if (!_tcsncmp(param, _T("/?"), 2))
-    {
-        ConOutResPaging(TRUE, STRING_TYPE_HELP1);
-        return 0;
-    }
+    /* Strip leading whitespace */
+    while (_istspace(*param))
+        ++param;
 
     if (!*param)
     {

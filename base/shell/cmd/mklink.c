@@ -131,12 +131,6 @@ cmd_mklink(LPTSTR param)
     INT argc, i;
     LPTSTR *arg;
 
-    if (!_tcsncmp(param, _T("/?"), 2))
-    {
-        ConOutResPuts(STRING_MKLINK_HELP);
-        return 0;
-    }
-
     arg = split(param, &argc, FALSE, FALSE);
     for (i = 0; i < argc; i++)
     {

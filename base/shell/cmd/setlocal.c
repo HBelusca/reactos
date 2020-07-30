@@ -45,13 +45,6 @@ INT cmd_setlocal(LPTSTR param)
     LPTSTR* arg;
     INT argc, i;
 
-    if (!_tcscmp(param, _T("/?")))
-    {
-        // FIXME
-        ConOutPuts(_T("SETLOCAL help not implemented yet!\n"));
-        return 0;
-    }
-
     /* SETLOCAL only works inside a batch context */
     if (!bc)
         return 0;
@@ -113,13 +106,6 @@ INT cmd_endlocal(LPTSTR param)
     PSETLOCAL Saved;
     TCHAR drvEnvVar[] = _T("=?:");
     TCHAR szCurrent[MAX_PATH];
-
-    if (!_tcscmp(param, _T("/?")))
-    {
-        // FIXME
-        ConOutPuts(_T("ENDLOCAL help not implemented yet!\n"));
-        return 0;
-    }
 
     /* Pop a SETLOCAL struct off of this batch context's stack */
     if (!bc || !(Saved = bc->setlocal))

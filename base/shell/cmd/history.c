@@ -75,6 +75,10 @@ INT CommandHistory(LPTSTR param)
     LPHIST_ENTRY h_tmp;
     TCHAR szBuffer[2048];
 
+    /* Strip leading whitespace */
+    while (_istspace(*param))
+        ++param;
+
     tmp=_tcschr(param,_T('/'));
 
     if (tmp)

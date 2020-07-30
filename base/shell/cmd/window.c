@@ -34,7 +34,7 @@
  * param is a string to parse for options/actions
  * hWnd is the handle of window on which to perform actions
  */
-static INT ServiceActivate (LPTSTR param, HWND hWnd)
+static INT ServiceActivate(LPTSTR param, HWND hWnd)
 {
     LPTSTR *p = 0, p_tmp;
     INT argc = 0, i;
@@ -43,6 +43,10 @@ static INT ServiceActivate (LPTSTR param, HWND hWnd)
     WINDOWPLACEMENT wp;
     RECT pos;
     LPTSTR tmp;
+
+    /* Strip leading whitespace */
+    while (_istspace(*param))
+        ++param;
 
     if (*param)
         p = split(param, &argc, FALSE);
@@ -167,42 +171,24 @@ static INT ServiceActivate (LPTSTR param, HWND hWnd)
     return 0;
 }
 
-
-
-
-INT CommandWindow (LPTSTR param)
+INT CommandWindow(LPTSTR param)
 {
-    HWND hwnd;
-
-    if (_tcsncmp (param, _T("/?"), 2) == 0)
-    {
-    ConOutResPaging(TRUE,STRING_WINDOW_HELP1);
-        return 0;
-    }
-
-    hwnd = GetConsoleWindow();
+    HWND hwnd = GetConsoleWindow();
     Sleep(0);
     return ServiceActivate(param, hwnd);
 }
 
-
-INT CommandActivate (LPTSTR param)
+INT CommandActivate(LPTSTR param)
 {
     HWND hwnd;
     LPTSTR *arg;
     INT argc;
 
-    if (_tcsncmp (param, _T("/?"), 2) == 0)
-    {
-        ConOutResPaging(TRUE,STRING_WINDOW_HELP2);
-        return 0;
-    }
-
-    if (!(*param))
+    if (!*param)
         return 1;
 
     /* Split the user input into array */
-    arg = split (param, &argc, FALSE);
+    arg = split(param, &argc, FALSE);
     if (argc < 2)
     {
         if (arg != NULL)

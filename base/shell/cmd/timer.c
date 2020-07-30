@@ -55,6 +55,11 @@ PrintElapsedTime (DWORD time,INT format)
     }
 }
 
+VOID cmd_timer_help(VOID)
+{
+    ConOutResPrintf(STRING_TIMER_HELP3,
+                    cTimeSeparator, cTimeSeparator, cDecimalSeparator);
+}
 
 INT CommandTimer (LPTSTR param)
 {
@@ -87,12 +92,6 @@ INT CommandTimer (LPTSTR param)
     LPTSTR *p;
 
     INT i;
-
-    if (_tcsncmp (param, _T("/?"), 2) == 0)
-    {
-        ConOutResPrintf(STRING_TIMER_HELP3, cTimeSeparator, cTimeSeparator, cDecimalSeparator);
-        return 0;
-    }
 
     nErrorLevel = 0;
 

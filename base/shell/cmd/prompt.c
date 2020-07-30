@@ -241,19 +241,22 @@ VOID PrintPrompt(VOID)
 
 #ifdef INCLUDE_CMD_PROMPT
 
+VOID cmd_prompt_help(VOID)
+{
+    ConOutResPaging(TRUE, STRING_PROMPT_HELP1);
+#ifdef FEATURE_DIRECTORY_STACK
+    ConOutResPaging(FALSE, STRING_PROMPT_HELP2);
+#endif
+    ConOutResPaging(FALSE, STRING_PROMPT_HELP3);
+}
+
 INT cmd_prompt(LPTSTR param)
 {
     INT retval = 0;
 
-    if (!_tcsncmp(param, _T("/?"), 2))
-    {
-        ConOutResPaging(TRUE, STRING_PROMPT_HELP1);
-#ifdef FEATURE_DIRECTORY_STACK
-        ConOutResPaging(FALSE, STRING_PROMPT_HELP2);
-#endif
-        ConOutResPaging(FALSE, STRING_PROMPT_HELP3);
-        return 0;
-    }
+    /* Strip leading whitespace */
+    while (_istspace(*param))
+        ++param;
 
     /*
      * Set the PROMPT environment variable. If 'param' is NULL or is

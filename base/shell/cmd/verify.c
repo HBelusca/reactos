@@ -22,26 +22,22 @@
 
 #ifdef INCLUDE_CMD_VERIFY
 
-
-/* global verify flag */
+/* Global VERIFY flag */
 static BOOL bVerify = FALSE;
 
-
-INT cmd_verify (LPTSTR param)
+INT cmd_verify(LPTSTR param)
 {
-    if (!_tcsncmp (param, _T("/?"), 2))
-    {
-        ConOutResPaging(TRUE,STRING_VERIFY_HELP1);
-        return 0;
-    }
+    /* Skip all spaces for the check of 'ON' and 'OFF' */
+    while (_istspace(*param))
+        ++param;
 
     if (!OnOffCommand(param, &bVerify, STRING_VERIFY_HELP2))
     {
         ConErrResPuts(STRING_VERIFY_HELP3);
-        return nErrorLevel = 1;
+        return (nErrorLevel = 1);
     }
 
-    return nErrorLevel = 0;
+    return (nErrorLevel = 0);
 }
 
 #endif

@@ -379,12 +379,6 @@ INT CommandDelete (LPTSTR param)
         LoadStrings();
     }
 
-    if (!_tcsncmp (param, _T("/?"), 2))
-    {
-        ConOutResPaging(TRUE,STRING_DEL_HELP1);
-        return 0;
-    }
-
     nErrorLevel = 0;
 
     arg = split (param, &args, FALSE, FALSE);
