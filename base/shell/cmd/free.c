@@ -90,11 +90,9 @@ INT CommandFree (LPTSTR param)
     INT argc, i;
     LPTSTR *arg;
 
-    if (!_tcsncmp (param, _T("/?"), 2))
-    {
-        ConOutResPaging(TRUE,STRING_FREE_HELP2);
-        return 0;
-    }
+    /* Strip leading whitespace */
+    while (_istspace(*param))
+        ++param;
 
     if (!param || *param == _T('\0'))
     {

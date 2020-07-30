@@ -37,11 +37,9 @@ INT cmd_path(LPTSTR param)
 {
     INT retval = 0;
 
-    if (!_tcsncmp(param, _T("/?"), 2))
-    {
-        ConOutResPaging(TRUE, STRING_PATH_HELP1);
-        return 0;
-    }
+    /* Strip leading whitespace */
+    while (_istspace(*param))
+        ++param;
 
     /* If param is empty, display the PATH environment variable */
     if (!param || !*param)

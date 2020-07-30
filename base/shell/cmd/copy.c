@@ -358,14 +358,6 @@ INT cmd_copy(LPTSTR param)
     /* Used for something like "copy c*.exe d*.exe" */
     BOOL bMultipleSource = FALSE, bMultipleDest = FALSE;
 
-
-    /* Show help/usage info */
-    if (!_tcsncmp(param, _T("/?"), 2))
-    {
-        ConOutResPaging(TRUE, STRING_COPY_HELP2);
-        return 0;
-    }
-
     nErrorLevel = 0;
 
     /* Get the env variable value if it exists */

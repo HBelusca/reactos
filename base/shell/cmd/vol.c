@@ -64,13 +64,15 @@ INT cmd_vol(LPTSTR param)
     TCHAR szRootPath[] = _T("A:\\");
     TCHAR szPath[MAX_PATH];
 
-    if (!_tcsncmp(param, _T("/?"), 2))
-    {
-        ConOutResPaging(TRUE,STRING_VOL_HELP4);
-        return 0;
-    }
-
     nErrorLevel = 0;
+
+    //
+    // FIXME: Do this in a loop for each volume specified.
+    //
+
+    /* Strip leading whitespace */
+    while (_istspace(*param))
+        ++param;
 
     if (param[0] == _T('\0'))
     {

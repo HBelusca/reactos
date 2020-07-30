@@ -389,7 +389,8 @@ INT recFindSubDirs(DWORD dwFlags,
     return filesReplaced;
 }
 
-INT cmd_replace (LPTSTR param)
+/* NOTE: External command */
+INT cmd_replace(LPTSTR param)
 {
     LPTSTR *arg;
     INT argc, i,filesReplaced = 0, nFiles, srcIndex = -1, destIndex = -1;
@@ -397,15 +398,17 @@ INT cmd_replace (LPTSTR param)
     TCHAR szDestPath[MAX_PATH], szSrcPath[MAX_PATH], tmpSrcPath[MAX_PATH];
     BOOL doMore = TRUE;
 
+#if 0
     /* Help wanted? */
     if (!_tcsncmp (param, _T("/?"), 2))
     {
-        ConOutResPaging(TRUE,STRING_REPLACE_HELP1);
+        ConOutResPaging(TRUE, STRING_REPLACE_HELP1);
         return 0;
     }
+#endif
 
     /* Divide the argument in to an array of c-strings */
-    arg = split (param, &argc, FALSE, FALSE);
+    arg = split(param, &argc, FALSE, FALSE);
     nFiles = argc;
 
     /* Read options */

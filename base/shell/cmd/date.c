@@ -182,12 +182,6 @@ INT cmd_date(LPTSTR param)
     INT nDateString = -1;
     TCHAR szDate[40];
 
-    if (!_tcsncmp(param, _T("/?"), 2))
-    {
-        ConOutResPaging(TRUE, STRING_DATE_HELP4);
-        return 0;
-    }
-
     nErrorLevel = 0;
 
     /* Build the parameter array */

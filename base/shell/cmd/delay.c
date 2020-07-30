@@ -13,27 +13,24 @@
 
 #ifdef INCLUDE_CMD_DELAY
 
-
-INT CommandDelay (LPTSTR param)
+INT CommandDelay(LPTSTR param)
 {
     DWORD val;
-    DWORD mul=1000;
-
-    if (_tcsncmp (param, _T("/?"), 2) == 0)
-    {
-        ConOutResPaging(TRUE,STRING_DELAY_HELP);
-        return 0;
-    }
+    DWORD mul = 1000;
 
     nErrorLevel = 0;
 
-    if (*param==0)
+    /* Strip leading whitespace */
+    while (_istspace(*param))
+        ++param;
+
+    if (*param == 0)
     {
-        error_req_param_missing ();
+        error_req_param_missing();
         return 1;
     }
 
-    if (_tcsnicmp(param,_T("/m"),2) == 0)
+    if (_tcsnicmp(param, _T("/m"), 2) == 0)
     {
         mul = 1;
         param += 2;

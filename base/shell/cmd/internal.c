@@ -245,12 +245,9 @@ INT cmd_chdir(LPTSTR param)
 
     /* Filter out special cases first */
 
-    /* Print help */
-    if (!_tcsncmp(param, _T("/?"), 2))
-    {
-        ConOutResPaging(TRUE, STRING_CD_HELP);
-        return 0;
-    }
+    /* Strip leading whitespace */
+    while (_istspace(*param))
+        ++param;
 
     //
     // FIXME: Use the split() tokenizer if bEnableExtensions == FALSE,
@@ -362,12 +359,6 @@ INT cmd_mkdir (LPTSTR param)
     LPTSTR *p;
     INT argc, i;
     DWORD dwLastError;
-
-    if (!_tcsncmp (param, _T("/?"), 2))
-    {
-        ConOutResPaging(TRUE,STRING_MKDIR_HELP);
-        return 0;
-    }
 
     p = split (param, &argc, FALSE, FALSE);
     if (argc == 0)
@@ -530,12 +521,6 @@ INT cmd_rmdir(LPTSTR param)
     BOOL bRecurseDir = FALSE;
     BOOL bQuiet = FALSE;
 
-    if (!_tcsncmp(param, _T("/?"), 2))
-    {
-        ConOutResPaging(TRUE,STRING_RMDIR_HELP);
-        return 0;
-    }
-
     arg = split(param, &args, FALSE, FALSE);
     dirCount = 0;
 
@@ -620,14 +605,9 @@ INT cmd_rmdir(LPTSTR param)
 
 INT CommandExit(LPTSTR param)
 {
-    if (!_tcsncmp(param, _T("/?"), 2))
-    {
-        ConOutResPaging(TRUE, STRING_EXIT_HELP);
-
-        /* Just make sure we don't exit */
-        bExit = FALSE;
-        return 0;
-    }
+    /* Strip leading whitespace */
+    while (_istspace(*param))
+        ++param;
 
     if (_tcsnicmp(param, _T("/B"), 2) == 0)
     {
@@ -687,21 +667,6 @@ INT CommandExit(LPTSTR param)
 
     return (bExit ? nErrorLevel : 0);
 }
-
-#ifdef INCLUDE_CMD_REM
-/*
- * does nothing
- */
-INT CommandRem (LPTSTR param)
-{
-    if (_tcsstr(param, _T("/?")) == param)
-    {
-        ConOutResPaging(TRUE,STRING_REM_HELP);
-    }
-
-    return 0;
-}
-#endif /* INCLUDE_CMD_REM */
 
 
 INT CommandShowCommands(LPTSTR param)

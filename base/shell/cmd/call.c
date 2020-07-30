@@ -50,12 +50,6 @@ INT cmd_call(LPTSTR param)
 
     TRACE("cmd_call(\'%s\')\n", debugstr_aw(param));
 
-    if (!_tcsncmp(param, _T("/?"), 2))
-    {
-        ConOutResPaging(TRUE, STRING_CALL_HELP);
-        return 0;
-    }
-
     /* Fail if no command or label has been provided */
     if (*param == _T('\0'))
         return (nErrorLevel = 1);

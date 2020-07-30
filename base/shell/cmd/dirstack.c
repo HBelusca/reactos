@@ -105,15 +105,13 @@ INT CommandPushd(LPTSTR rest)
 {
     TCHAR curPath[MAX_PATH];
 
-    if (!_tcsncmp(rest, _T("/?"), 2))
-    {
-        ConOutResPuts(STRING_DIRSTACK_HELP1);
-        return 0;
-    }
-
     //
     // FIXME: Handle UNC paths, creating temporary drive letter.
     //
+
+    /* Strip leading whitespace */
+    while (_istspace(*rest))
+        ++rest;
 
     GetCurrentDirectory(ARRAYSIZE(curPath), curPath);
 
@@ -131,12 +129,7 @@ INT CommandPushd(LPTSTR rest)
  */
 INT CommandPopd(LPTSTR rest)
 {
-    INT ret = 0;
-    if (!_tcsncmp(rest, _T("/?"), 2))
-    {
-        ConOutResPuts(STRING_DIRSTACK_HELP2);
-        return 0;
-    }
+    INT ret;
 
     if (nStackDepth == 0)
         return 1;
@@ -153,12 +146,6 @@ INT CommandPopd(LPTSTR rest)
 INT CommandDirs(LPTSTR rest)
 {
     PDIRENTRY lpDir;
-
-    if (!_tcsncmp(rest, _T("/?"), 2))
-    {
-        ConOutResPuts(STRING_DIRSTACK_HELP3);
-        return 0;
-    }
 
     nErrorLevel = 0;
 

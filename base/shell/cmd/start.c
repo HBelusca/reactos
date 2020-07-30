@@ -77,7 +77,7 @@ INT cmd_start (LPTSTR Rest)
             option = GetParameter(&Rest);
             if (*option == _T('?'))
             {
-                ConOutResPaging(TRUE,STRING_START_HELP1);
+                ConOutResPaging(TRUE, STRING_START_HELP1);
                 return 0;
             }
             else if (_totupper(*option) == _T('D'))

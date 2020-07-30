@@ -240,12 +240,9 @@ INT CommandAssoc(LPTSTR param)
     INT retval = 0;
     PTCHAR pEqualSign;
 
-    /* Print help */
-    if (!_tcsncmp(param, _T("/?"), 2))
-    {
-        ConOutResPaging(TRUE, STRING_ASSOC_HELP);
-        return 0;
-    }
+    /* Strip leading whitespace */
+    while (_istspace(*param))
+        ++param;
 
     /* Print all associations if no parameter has been specified */
     if (!*param)

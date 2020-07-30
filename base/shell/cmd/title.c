@@ -17,16 +17,13 @@ extern BOOL bTitleSet;
 
 INT cmd_title(LPTSTR param)
 {
+    /* Strip leading whitespace */
+    while (_istspace(*param))
+        ++param;
+
     /* Do nothing if no args */
     if (*param == _T('\0'))
         return 0;
-
-    /* Asking help? */
-    if (!_tcsncmp(param, _T("/?"), 2))
-    {
-        ConOutResPaging(TRUE, STRING_TITLE_HELP);
-        return 0;
-    }
 
     /* Set the new console title, and tell CMD to not reset it */
     bTitleSet = FALSE;

@@ -175,13 +175,11 @@ INT CommandAlias (LPTSTR param)
 {
     LPTSTR ptr;
 
-    if (!_tcsncmp (param, _T("/?"), 2))
-    {
-        ConOutResPaging(TRUE,STRING_ALIAS_HELP);
-        return 0;
-    }
-
     nErrorLevel = 0;
+
+    /* Strip leading whitespace */
+    while (_istspace(*param))
+        ++param;
 
     if (param[0] == _T('\0'))
     {

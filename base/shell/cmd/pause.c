@@ -38,11 +38,9 @@ INT cmd_pause(LPTSTR param)
 {
     TRACE("cmd_pause: \'%s\')\n", debugstr_aw(param));
 
-    if (!_tcsncmp(param, _T("/?"), 2))
-    {
-        ConOutResPaging(TRUE,STRING_PAUSE_HELP1);
-        return 0;
-    }
+    /* Strip leading whitespace */
+    while (_istspace(*param))
+        ++param;
 
     if (*param)
         ConOutPuts(param);

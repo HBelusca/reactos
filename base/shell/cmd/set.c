@@ -76,12 +76,6 @@ INT cmd_set(LPTSTR param)
     LPTSTR lpEnv;
     LPTSTR lpOutput;
 
-    if (!_tcsncmp(param, _T("/?"), 2))
-    {
-        ConOutResPaging(TRUE,STRING_SET_HELP);
-        return 0;
-    }
-
     param = (LPTSTR)skip_ws(param);
 
     /* If no parameters, show the environment */

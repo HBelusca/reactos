@@ -98,6 +98,7 @@ IsKeyInString (LPTSTR lpString, TCHAR cKey, BOOL bCaseSensitive)
 }
 
 
+/* NOTE: External command */
 INT
 CommandChoice (LPTSTR param)
 {
@@ -123,11 +124,17 @@ CommandChoice (LPTSTR param)
     LoadString(CMD_ModuleHandle, STRING_CHOICE_OPTION, Options, 4);
     lpOptions = Options;
 
+#if 0
     if (_tcsncmp (param, _T("/?"), 2) == 0)
     {
         ConOutResPaging(TRUE,STRING_CHOICE_HELP);
         return 0;
     }
+#endif
+
+    /* Strip leading whitespace */
+    while (_istspace(*param))
+        ++param;
 
     /* retrieve text */
     p = param;

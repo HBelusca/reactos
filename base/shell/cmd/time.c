@@ -137,12 +137,6 @@ INT cmd_time(LPTSTR param)
     INT nTimeString = -1;
     TCHAR szTime[40];
 
-    if (!_tcsncmp(param, _T("/?"), 2))
-    {
-        ConOutResPaging(TRUE, STRING_TIME_HELP1);
-        return 0;
-    }
-
     nErrorLevel = 0;
 
     /* Build the parameter array */

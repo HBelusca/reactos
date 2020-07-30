@@ -129,16 +129,14 @@ INT cmd_ver (LPTSTR param)
 
     nErrorLevel = 0;
 
-    if (_tcsstr(param, _T("/?")) != NULL)
-    {
-        ConOutResPaging(TRUE,STRING_VERSION_HELP1);
-        return 0;
-    }
-
     ConOutResPrintf(STRING_CMD_SHELLINFO, _T(KERNEL_VERSION_STR), _T(KERNEL_VERSION_BUILD_STR));
     ConOutChar(_T('\n'));
     ConOutResPuts(STRING_VERSION_RUNNING_ON);
     PrintOSVersion();
+
+    /* Strip leading whitespace */
+    while (_istspace(*param))
+        ++param;
 
     /* Basic copyright notice */
     if (param[0] != _T('\0'))

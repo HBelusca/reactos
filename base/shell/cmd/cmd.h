@@ -137,8 +137,16 @@ extern TCHAR PathCompletionChar;
 
 
 /* Prototypes for CMDTABLE.C */
-#define CMD_SPECIAL     1
+
+/* Commands that are parsed differently by the parser */
+#define CMD_SPECIAL_PARSE   1
+
+// Has never been really used.
+// The concerned commands do their own checks, and some
+// perform minimal action in non-batch mode (e.g. CALL ...)
 #define CMD_BATCHONLY   2
+
+// Obsolete: Was for "hiding" e.g. "echo." commands (hardcoded)
 #define CMD_HIDE        4
 
 typedef struct tagCOMMAND
@@ -146,13 +154,22 @@ typedef struct tagCOMMAND
     LPTSTR name;
     INT    flags;
     INT    (*func)(LPTSTR);
+    union
+    {
+        /* Help message ID, or (VOID (*)(VOID) helper function */
+        UINT_PTR helpID;
+        VOID (*helpFunc)(VOID);
+    };
 } COMMAND, *LPCOMMAND;
 
 extern COMMAND cmds[];  /* The internal command table */
 
-VOID PrintCommandList (VOID);
+VOID PrintCommandList(VOID);
 
-LPCTSTR GetParsedEnvVar ( LPCTSTR varName, UINT* varNameLen, BOOL ModeSetA );
+BOOL
+CheckForHelp(
+    IN LPCOMMAND cmdptr,
+    IN LPCTSTR param);
 
 /* Prototypes for CTTY.C */
 #ifdef INCLUDE_CMD_CTTY
@@ -283,7 +300,6 @@ INT  cmd_chdir (LPTSTR);
 INT  cmd_mkdir (LPTSTR);
 INT  cmd_rmdir (LPTSTR);
 INT  CommandExit (LPTSTR);
-INT  CommandRem (LPTSTR);
 INT  CommandShowCommands (LPTSTR);
 
 /* Prototypes for LOCALE.C */
@@ -450,6 +466,7 @@ INT cmd_path (LPTSTR);
 /* Prototypes from PROMPT.C */
 VOID InitPrompt (VOID);
 VOID PrintPrompt (VOID);
+VOID cmd_prompt_help(VOID);
 INT  cmd_prompt (LPTSTR);
 
 /* Prototypes for REDIR.C */
@@ -502,6 +519,7 @@ BOOL StringToColor (LPWORD, LPTSTR *);
 INT cmd_time (LPTSTR);
 
 /* Prototypes for TIMER.C */
+VOID cmd_timer_help(VOID);
 INT CommandTimer (LPTSTR param);
 
 /* Prototypes for TITLE.C */

@@ -30,18 +30,6 @@
 
 INT cmd_beep(LPTSTR param)
 {
-    if (_tcsncmp(param, _T("/?"), 2) == 0)
-    {
-        ConOutResPaging(TRUE, STRING_BEEP_HELP);
-        return 0;
-    }
-
-#if 0
-    /* check if run in batch mode */
-    if (bc == NULL)
-        return 1;
-#endif
-
     ConRingBell(ConStreamGetOSHandle(StdOut));
     return 0;
 }
