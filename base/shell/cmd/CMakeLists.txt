@@ -57,6 +57,7 @@ list(APPEND SOURCE
     time.c
     timer.c
     title.c
+    tokstr.c
     type.c
     ver.c
     verify.c

@@ -34,6 +34,7 @@
 #include "cmd.h"
 #include "config.h"
 #include "batch.h"
+#include "tokstr.h"
 
 #include <wine/debug.h>
 WINE_DEFAULT_DEBUG_CHANNEL(cmd);
