@@ -315,12 +315,29 @@ GetRootPath(
 BOOL SetRootPath(TCHAR *oldpath,TCHAR *InPath);
 TCHAR  cgetchar (VOID);
 BOOL   CheckCtrlBreak (INT);
-BOOL add_entry (LPINT ac, LPTSTR **arg, LPCTSTR entry);
-LPTSTR *split (LPTSTR, LPINT, BOOL, BOOL);
-LPTSTR *splitspace (LPTSTR, LPINT);
-VOID   freep (LPTSTR *);
-LPTSTR _stpcpy (LPTSTR, LPCTSTR);
-VOID   StripQuotes(LPTSTR);
+
+
+BOOL add_entry(LPINT ac, LPTSTR** arg, LPCTSTR entry);
+
+LPTSTR* splitex(
+    IN LPCTSTR s,
+    OUT LPINT pArgc,
+    IN LPCTSTR optsDelims OPTIONAL,
+    IN BOOL expand_wildcards,
+    IN BOOL handle_plus);
+
+#define split(/*LPTSTR*/ s, /*LPINT*/ pArgc, \
+              /*BOOL*/ expand_wildcards, /*BOOL*/ handle_plus) \
+    splitex((s), (pArgc), _T("/"), (expand_wildcards), (handle_plus))
+
+#define splitspace(/*LPTSTR*/ s, /*LPINT*/ pArgc) \
+    splitex((s), (pArgc), NULL, FALSE, FALSE)
+
+VOID freep(LPTSTR* p);
+
+LPTSTR _stpcpy(LPTSTR dest, LPCTSTR src);
+VOID StripQuotes(LPTSTR in);
+
 
 BOOL IsValidPathName(IN LPCTSTR pszPath);
 BOOL IsExistingFile(IN LPCTSTR pszPath);

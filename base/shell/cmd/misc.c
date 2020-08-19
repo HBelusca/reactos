@@ -179,6 +179,8 @@ BOOL CheckCtrlBreak(INT mode)
     return TRUE;
 }
 
+
+
 /* Add new entry for new argument */
 BOOL add_entry(LPINT ac, LPTSTR** arg, LPCTSTR entry)
 {
@@ -278,170 +280,87 @@ static BOOL expand(LPINT ac, LPTSTR** arg, LPCTSTR pattern)
 /*
  * split - splits a line up into separate arguments, delimiters
  *         are spaces and slashes ('/').
+ *
+ * splitspace() is a function which uses JUST spaces as delimiters,
+ * and is needed for commands such as "move" where paths as
+ * C:\this/is\allowed/ are allowed.
+ * On the contrary, split() uses both "/" AND spaces.
+ *
+ * Both are implemented using splitex().
  */
-LPTSTR *split (LPTSTR s, LPINT args, BOOL expand_wildcards, BOOL handle_plus)
+LPTSTR* splitex(
+    IN LPCTSTR s,
+    OUT LPINT pArgc,
+    IN LPCTSTR optsDelims OPTIONAL,
+    IN BOOL expand_wildcards,
+    IN BOOL handle_plus)
 {
-    LPTSTR *arg;
-    LPTSTR start;
-    LPTSTR q;
-    INT  ac;
-    INT_PTR  len;
+    LPTSTR* argv;
+    LPCTSTR start;
+    LPTSTR tok;
+    INT ac;
+    SIZE_T len;
+    DWORD Flags = /*TS_STRIP_QUOTES |*/
+        (optsDelims ? TS_DELIMS1_PFX_TOKENS : 0) |
+        (handle_plus ? TS_DELIMS2_AS_TOKENS : 0);
 
-    arg = cmd_alloc (sizeof (LPTSTR));
-    if (!arg)
+    argv = cmd_alloc(sizeof(LPTSTR));
+    if (!argv)
     {
-        WARN("Cannot allocate memory for arg!\n");
+        WARN("Cannot allocate memory for argv!\n");
         return NULL;
     }
-    *arg = NULL;
+    *argv = NULL;
 
     ac = 0;
-    while (*s)
+    while (s)
     {
-        BOOL bQuoted = FALSE;
+        start = TokStrIter(&s, &len, Flags, TRUE,
+                           NULL /*STANDARD_SEPS*/, optsDelims,
+                           handle_plus ? _T("+") : NULL);
+        if (!start)
+            break;
 
-        /* skip leading spaces */
-        while (*s && (_istspace(*s) || _istcntrl(*s)))
-            ++s;
-
-        start = s;
-
-        /* the first character can be '/' */
-        if (*s == _T('/'))
-            ++s;
-
-        /* skip to next word delimiter or start of next option */
-        while (_istprint(*s))
+        tok = cmd_alloc((len + 1) * sizeof(TCHAR));
+        if (!tok)
         {
-            /* if quote (") then set bQuoted */
-            bQuoted ^= (*s == _T('\"'));
-
-            /* Check if we have unquoted text */
-            if (!bQuoted)
-            {
-                /* check for separators */
-                if (_istspace(*s) ||
-                    (*s == _T('/')) ||
-                    (handle_plus && (*s == _T('+'))))
-                {
-                    /* Make length at least one character */
-                    if (s == start) s++;
-                    break;
-                }
-            }
-
-            ++s;
+            WARN("Cannot allocate memory for tok!\n");
+            freep(argv);
+            return NULL;
         }
+        memcpy(tok, start, len * sizeof(TCHAR));
+        tok[len] = _T('\0');
 
-        /* a word was found */
-        if (s != start)
+        StripQuotes(tok);
+
+        if (expand_wildcards && !(optsDelims && _tcschr(optsDelims, *start)) &&
+            (_tcschr(tok, _T('*')) != NULL || _tcschr(tok, _T('?')) != NULL))
         {
-            q = cmd_alloc (((len = s - start) + 1) * sizeof (TCHAR));
-            if (!q)
+            if (!expand(&ac, &argv, tok))
             {
-                WARN("Cannot allocate memory for q!\n");
+                cmd_free(tok);
+                freep(argv);
                 return NULL;
             }
-            memcpy (q, start, len * sizeof (TCHAR));
-            q[len] = _T('\0');
-            StripQuotes(q);
-            if (expand_wildcards && (_T('/') != *start) &&
-                (NULL != _tcschr(q, _T('*')) || NULL != _tcschr(q, _T('?'))))
-            {
-                if (! expand(&ac, &arg, q))
-                {
-                    cmd_free (q);
-                    freep (arg);
-                    return NULL;
-                }
-            }
-            else
-            {
-                if (! add_entry(&ac, &arg, q))
-                {
-                    cmd_free (q);
-                    freep (arg);
-                    return NULL;
-                }
-            }
-            cmd_free (q);
         }
+        else
+        {
+            if (!add_entry(&ac, &argv, tok))
+            {
+                cmd_free(tok);
+                freep(argv);
+                return NULL;
+            }
+        }
+        cmd_free(tok);
     }
 
-    *args = ac;
-
-    return arg;
+    *pArgc = ac;
+    return argv;
 }
 
 /*
- * splitspace() is a function which uses JUST spaces as delimiters. split() uses "/" AND spaces.
- * The way it works is real similar to split(), search the difference ;)
- * splitspace is needed for commands such as "move" where paths as C:\this/is\allowed/ are allowed
- */
-LPTSTR *splitspace (LPTSTR s, LPINT args)
-{
-    LPTSTR *arg;
-    LPTSTR start;
-    LPTSTR q;
-    INT  ac;
-    INT_PTR  len;
-
-    arg = cmd_alloc (sizeof (LPTSTR));
-    if (!arg)
-    {
-        WARN("Cannot allocate memory for arg!\n");
-        return NULL;
-    }
-    *arg = NULL;
-
-    ac = 0;
-    while (*s)
-    {
-        BOOL bQuoted = FALSE;
-
-        /* skip leading spaces */
-        while (*s && (_istspace (*s) || _istcntrl (*s)))
-            ++s;
-
-        start = s;
-
-        /* skip to next word delimiter or start of next option */
-        while (_istprint(*s) && (bQuoted || !_istspace(*s)))
-        {
-            /* if quote (") then set bQuoted */
-            bQuoted ^= (*s == _T('\"'));
-            ++s;
-        }
-
-        /* a word was found */
-        if (s != start)
-        {
-            q = cmd_alloc (((len = s - start) + 1) * sizeof (TCHAR));
-            if (!q)
-            {
-                WARN("Cannot allocate memory for q!\n");
-                return NULL;
-            }
-            memcpy (q, start, len * sizeof (TCHAR));
-            q[len] = _T('\0');
-            StripQuotes(q);
-            if (! add_entry(&ac, &arg, q))
-            {
-                cmd_free (q);
-                freep (arg);
-                return NULL;
-            }
-            cmd_free (q);
-        }
-    }
-
-    *args = ac;
-
-    return arg;
-}
-
-/*
- * freep - frees memory used for a call to split.
+ * freep - frees memory used for a call to split(ex).
  */
 VOID freep(LPTSTR* p)
 {
@@ -474,6 +393,7 @@ VOID StripQuotes(LPTSTR in)
     }
     *out = _T('\0');
 }
+
 
 
 /*
