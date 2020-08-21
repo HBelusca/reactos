@@ -44,6 +44,9 @@ add_compile_flags("-pipe -fms-extensions -fno-strict-aliasing")
 # Prevent GCC from searching any of the default directories
 add_compile_flags("-nostdinc")
 
+# Define dummy wrapper macros for binary literals.
+add_compile_flags("-include ${REACTOS_SOURCE_DIR}/sdk/include/reactos/binconst.h")
+
 add_compile_flags("-mstackrealign")
 add_compile_flags("-fno-aggressive-loop-optimizations")
 
