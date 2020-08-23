@@ -16,13 +16,14 @@ IDI_MAIN        ICON "res/setup.ico"
 IDI_ROSICON     ICON "res/roslogo.ico"
 IDI_WINICON     ICON "res/winlogo.ico"
 IDI_DISKDRIVE   ICON "res/drive_disk.ico"
-IDI_PARTITION   ICON "res/partition.ico"
+IDI_PARTITION   ICON "res/partition.ico" // "res/statistics.ico" // "res/disk_space.ico"
 
 /* Bitmaps */
 IDB_WATERMARK   BITMAP "res/watermark.bmp"
 IDB_HEADER      BITMAP "res/header.bmp"
 
-CREATEPROCESS_MANIFEST_RESOURCE_ID RT_MANIFEST "reactos.exe.manifest"
+// CREATEPROCESS_MANIFEST_RESOURCE_ID RT_MANIFEST "reactos.exe.manifest"
+#include <reactos/manifest_exe.rc>
 
 /* UTF-8 */
 #pragma code_page(65001)
