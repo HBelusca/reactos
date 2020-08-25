@@ -2755,7 +2755,7 @@ StartPartitionOperationsPage(PINPUT_RECORD Ir)
                                   FsVolCallback,
                                   &FsVolContext);
     if (Success)
-        return INSTALL_DIRECTORY_PAGE;
+        return BOOT_LOADER_PAGE;
     else
         return FsVolContext.NextPageOnAbort;
 }
@@ -3544,6 +3544,372 @@ FsVolCallback(
 }
 
 
+/*
+ * Displays the BootLoaderPage.
+ *
+ * Next pages:
+ *  InstallDirectoryPage (if RepairUpdate)
+ *  BootLoaderHarddiskMbrPage
+ *  BootLoaderHarddiskVbrPage
+ *  BootLoaderFloppyPage
+ *  InstallDirectoryPage
+ *  QuitPage
+ *
+ * RETURNS
+ *   Number of the next page.
+ */
+static PAGE_NUMBER
+BootLoaderPage(PINPUT_RECORD Ir)
+{
+    UCHAR PartitionType;
+    BOOLEAN InstallOnFloppy;
+    USHORT Line = 12;
+    WCHAR PathBuffer[MAX_PATH];
+
+    CONSOLE_SetStatusText(MUIGetString(STRING_PLEASEWAIT));
+
+    ASSERT(SystemPartition->IsPartitioned && SystemPartition->PartitionNumber != 0);
+
+    RtlFreeUnicodeString(&USetupData.SystemRootPath);
+    RtlStringCchPrintfW(PathBuffer, ARRAYSIZE(PathBuffer),
+            L"\\Device\\Harddisk%lu\\Partition%lu\\",
+            SystemPartition->DiskEntry->DiskNumber,
+            SystemPartition->PartitionNumber);
+    RtlCreateUnicodeString(&USetupData.SystemRootPath, PathBuffer);
+    DPRINT1("SystemRootPath: %wZ\n", &USetupData.SystemRootPath);
+
+    PartitionType = SystemPartition->PartitionType;
+
+    /* For unattended setup, skip MBR installation or install on floppy if needed */
+    if (IsUnattendedSetup)
+    {
+        if ((USetupData.MBRInstallType == 0) ||
+            (USetupData.MBRInstallType == 1))
+        {
+            goto Quit;
+        }
+    }
+
+    /*
+     * We may install an MBR or VBR, but before that, check whether
+     * we need to actually install the VBR on floppy.
+     */
+    if (PartitionType == PARTITION_ENTRY_UNUSED)
+    {
+        DPRINT("Error: system partition invalid (unused)\n");
+        InstallOnFloppy = TRUE;
+    }
+    else if (PartitionType == PARTITION_OS2BOOTMGR)
+    {
+        /* OS/2 boot manager partition */
+        DPRINT("Found OS/2 boot manager partition\n");
+        InstallOnFloppy = TRUE;
+    }
+    else if (PartitionType == PARTITION_LINUX)
+    {
+        /* Linux partition */
+        DPRINT("Found Linux native partition (ext2/ext3/ReiserFS/BTRFS/etc)\n");
+        InstallOnFloppy = FALSE;
+    }
+    else if (PartitionType == PARTITION_IFS)
+    {
+        /* NTFS partition */
+        DPRINT("Found NTFS partition\n");
+
+        // FIXME: Make it FALSE when we'll support NTFS installation!
+        InstallOnFloppy = TRUE;
+    }
+    else if ((PartitionType == PARTITION_FAT_12) ||
+             (PartitionType == PARTITION_FAT_16) ||
+             (PartitionType == PARTITION_HUGE)   ||
+             (PartitionType == PARTITION_XINT13) ||
+             (PartitionType == PARTITION_FAT32)  ||
+             (PartitionType == PARTITION_FAT32_XINT13))
+    {
+        DPRINT("Found FAT partition\n");
+        InstallOnFloppy = FALSE;
+    }
+    else
+    {
+        /* Unknown partition */
+        DPRINT("Unknown partition found\n");
+        InstallOnFloppy = TRUE;
+    }
+
+    /* We should install on floppy */
+    if (InstallOnFloppy)
+    {
+        USetupData.MBRInstallType = 1;
+        goto Quit;
+    }
+
+    /* Is it an unattended install on hdd? */
+    if (IsUnattendedSetup)
+    {
+        if ((USetupData.MBRInstallType == 2) ||
+            (USetupData.MBRInstallType == 3))
+        {
+            goto Quit;
+        }
+    }
+
+    MUIDisplayPage(BOOT_LOADER_PAGE);
+    CONSOLE_InvertTextXY(8, Line, 60, 1);
+
+    while (TRUE)
+    {
+        CONSOLE_ConInKey(Ir);
+
+        if ((Ir->Event.KeyEvent.uChar.AsciiChar == 0x00) &&
+            (Ir->Event.KeyEvent.wVirtualKeyCode == VK_DOWN))  /* DOWN */
+        {
+            CONSOLE_NormalTextXY(8, Line, 60, 1);
+
+            Line++;
+            if (Line < 12)
+                Line = 15;
+
+            if (Line > 15)
+                Line = 12;
+
+            CONSOLE_InvertTextXY(8, Line, 60, 1);
+        }
+        else if ((Ir->Event.KeyEvent.uChar.AsciiChar == 0x00) &&
+                 (Ir->Event.KeyEvent.wVirtualKeyCode == VK_UP))  /* UP */
+        {
+            CONSOLE_NormalTextXY(8, Line, 60, 1);
+
+            Line--;
+            if (Line < 12)
+                Line = 15;
+
+            if (Line > 15)
+                Line = 12;
+
+            CONSOLE_InvertTextXY(8, Line, 60, 1);
+        }
+        else if ((Ir->Event.KeyEvent.uChar.AsciiChar == 0x00) &&
+                 (Ir->Event.KeyEvent.wVirtualKeyCode == VK_HOME))  /* HOME */
+        {
+            CONSOLE_NormalTextXY(8, Line, 60, 1);
+
+            Line = 12;
+
+            CONSOLE_InvertTextXY(8, Line, 60, 1);
+        }
+        else if ((Ir->Event.KeyEvent.uChar.AsciiChar == 0x00) &&
+                 (Ir->Event.KeyEvent.wVirtualKeyCode == VK_END))  /* END */
+        {
+            CONSOLE_NormalTextXY(8, Line, 60, 1);
+
+            Line = 15;
+            
+            CONSOLE_InvertTextXY(8, Line, 60, 1);
+        }
+        else if ((Ir->Event.KeyEvent.uChar.AsciiChar == 0x00) &&
+                 (Ir->Event.KeyEvent.wVirtualKeyCode == VK_F3))  /* F3 */
+        {
+            if (ConfirmQuit(Ir))
+                return QUIT_PAGE;
+
+            break;
+        }
+        else if (Ir->Event.KeyEvent.uChar.AsciiChar == 0x0D)    /* ENTER */
+        {
+            if (Line == 12)
+            {
+                /* Install on both MBR and VBR */
+                USetupData.MBRInstallType = 2;
+                break;
+            }
+            else if (Line == 13)
+            {
+                /* Install on VBR only */
+                USetupData.MBRInstallType = 3;
+                break;
+            }
+            else if (Line == 14)
+            {
+                /* Install on floppy */
+                USetupData.MBRInstallType = 1;
+                break;
+            }
+            else if (Line == 15)
+            {
+                /* Skip MBR installation */
+                USetupData.MBRInstallType = 0;
+                break;
+            }
+
+            return BOOT_LOADER_PAGE;
+        }
+    }
+
+Quit:
+    switch (USetupData.MBRInstallType)
+    {
+        /* Skip MBR installation */
+        case 0:
+            return INSTALL_DIRECTORY_PAGE;
+
+        /* Install on floppy */
+        case 1:
+            return BOOT_LOADER_FLOPPY_PAGE;
+
+        /* Install on both MBR and VBR */
+        case 2:
+            return BOOT_LOADER_HARDDISK_MBR_PAGE;
+
+        /* Install on VBR only */
+        case 3:
+            return BOOT_LOADER_HARDDISK_VBR_PAGE;
+    }
+
+    return BOOT_LOADER_PAGE;
+}
+
+
+/*
+ * Displays the BootLoaderFloppyPage.
+ *
+ * Next pages:
+ *  SuccessPage (At once)
+ *  QuitPage
+ *
+ * SIDEEFFECTS
+ *  Calls InstallFatBootcodeToFloppy()
+ *
+ * RETURNS
+ *   Number of the next page.
+ */
+static PAGE_NUMBER
+BootLoaderFloppyPage(PINPUT_RECORD Ir)
+{
+    NTSTATUS Status;
+
+    MUIDisplayPage(BOOT_LOADER_FLOPPY_PAGE);
+
+//  CONSOLE_SetStatusText(MUIGetString(STRING_PLEASEWAIT));
+
+    while (TRUE)
+    {
+        CONSOLE_ConInKey(Ir);
+
+        if ((Ir->Event.KeyEvent.uChar.AsciiChar == 0x00) &&
+            (Ir->Event.KeyEvent.wVirtualKeyCode == VK_F3))  /* F3 */
+        {
+            if (ConfirmQuit(Ir))
+                return QUIT_PAGE;
+
+            break;
+        }
+        else if (Ir->Event.KeyEvent.uChar.AsciiChar == 0x0D)    /* ENTER */
+        {
+            Status = InstallFatBootcodeToFloppy(&USetupData.SourceRootPath,
+                                                &USetupData.DestinationArcPath);
+            if (!NT_SUCCESS(Status))
+            {
+                if (Status == STATUS_DEVICE_NOT_READY)
+                    MUIDisplayError(ERROR_NO_FLOPPY, Ir, POPUP_WAIT_ENTER);
+
+                /* TODO: Print error message */
+                return BOOT_LOADER_FLOPPY_PAGE;
+            }
+
+            return INSTALL_DIRECTORY_PAGE;
+        }
+    }
+
+    return BOOT_LOADER_FLOPPY_PAGE;
+}
+
+
+/*
+ * Displays the BootLoaderHarddiskVbrPage.
+ *
+ * Next pages:
+ *  SuccessPage (At once)
+ *  QuitPage
+ *
+ * SIDEEFFECTS
+ *  Calls InstallVBRToPartition()
+ *
+ * RETURNS
+ *   Number of the next page.
+ */
+static PAGE_NUMBER
+BootLoaderHarddiskVbrPage(PINPUT_RECORD Ir)
+{
+    NTSTATUS Status;
+
+    Status = InstallVBRToPartition(&USetupData.SystemRootPath,
+                                   &USetupData.SourceRootPath,
+                                   &USetupData.DestinationArcPath,
+                                   SystemPartition->FileSystem);
+    if (!NT_SUCCESS(Status))
+    {
+        MUIDisplayError(ERROR_WRITE_BOOT, Ir, POPUP_WAIT_ENTER,
+                        SystemPartition->FileSystem);
+        return QUIT_PAGE;
+    }
+
+    return INSTALL_DIRECTORY_PAGE;
+}
+
+
+/*
+ * Displays the BootLoaderHarddiskMbrPage.
+ *
+ * Next pages:
+ *  SuccessPage (At once)
+ *  QuitPage
+ *
+ * SIDEEFFECTS
+ *  Calls InstallVBRToPartition()
+ *  Calls InstallMbrBootCodeToDisk()
+ *
+ * RETURNS
+ *   Number of the next page.
+ */
+static PAGE_NUMBER
+BootLoaderHarddiskMbrPage(PINPUT_RECORD Ir)
+{
+    NTSTATUS Status;
+    WCHAR DestinationDevicePathBuffer[MAX_PATH];
+
+    /* Step 1: Write the VBR */
+    Status = InstallVBRToPartition(&USetupData.SystemRootPath,
+                                   &USetupData.SourceRootPath,
+                                   &USetupData.DestinationArcPath,
+                                   SystemPartition->FileSystem);
+    if (!NT_SUCCESS(Status))
+    {
+        MUIDisplayError(ERROR_WRITE_BOOT, Ir, POPUP_WAIT_ENTER,
+                        SystemPartition->FileSystem);
+        return QUIT_PAGE;
+    }
+
+    /* Step 2: Write the MBR if the disk containing the system partition is not a super-floppy */
+    if (!IsSuperFloppy(SystemPartition->DiskEntry))
+    {
+        RtlStringCchPrintfW(DestinationDevicePathBuffer, ARRAYSIZE(DestinationDevicePathBuffer),
+                L"\\Device\\Harddisk%d\\Partition0",
+                SystemPartition->DiskEntry->DiskNumber);
+        Status = InstallMbrBootCodeToDisk(&USetupData.SystemRootPath,
+                                          &USetupData.SourceRootPath,
+                                          DestinationDevicePathBuffer);
+        if (!NT_SUCCESS(Status))
+        {
+            DPRINT1("InstallMbrBootCodeToDisk() failed (Status %lx)\n", Status);
+            MUIDisplayError(ERROR_INSTALL_BOOTCODE, Ir, POPUP_WAIT_ENTER, L"MBR");
+            return QUIT_PAGE;
+        }
+    }
+
+    return INSTALL_DIRECTORY_PAGE;
+}
+
+
 static BOOLEAN
 IsValidPath(
     IN PCWSTR InstallDir)
@@ -4151,380 +4517,8 @@ RegistryPage(PINPUT_RECORD Ir)
     else
     {
         CONSOLE_SetStatusText(MUIGetString(STRING_DONE));
-        return BOOT_LOADER_PAGE;
+        return SUCCESS_PAGE;
     }
-}
-
-
-/*
- * Displays the BootLoaderPage.
- *
- * Next pages:
- *  SuccessPage (if RepairUpdate)
- *  BootLoaderHarddiskMbrPage
- *  BootLoaderHarddiskVbrPage
- *  BootLoaderFloppyPage
- *  SuccessPage
- *  QuitPage
- *
- * SIDEEFFECTS
- *  Calls RegInitializeRegistry
- *  Calls ImportRegistryFile
- *  Calls SetDefaultPagefile
- *  Calls SetMountedDeviceValues
- *
- * RETURNS
- *   Number of the next page.
- */
-static PAGE_NUMBER
-BootLoaderPage(PINPUT_RECORD Ir)
-{
-    UCHAR PartitionType;
-    BOOLEAN InstallOnFloppy;
-    USHORT Line = 12;
-    WCHAR PathBuffer[MAX_PATH];
-
-    CONSOLE_SetStatusText(MUIGetString(STRING_PLEASEWAIT));
-
-    ASSERT(SystemPartition->IsPartitioned && SystemPartition->PartitionNumber != 0);
-
-    RtlFreeUnicodeString(&USetupData.SystemRootPath);
-    RtlStringCchPrintfW(PathBuffer, ARRAYSIZE(PathBuffer),
-            L"\\Device\\Harddisk%lu\\Partition%lu\\",
-            SystemPartition->DiskEntry->DiskNumber,
-            SystemPartition->PartitionNumber);
-    RtlCreateUnicodeString(&USetupData.SystemRootPath, PathBuffer);
-    DPRINT1("SystemRootPath: %wZ\n", &USetupData.SystemRootPath);
-
-    PartitionType = SystemPartition->PartitionType;
-
-    /* For unattended setup, skip MBR installation or install on floppy if needed */
-    if (IsUnattendedSetup)
-    {
-        if ((USetupData.MBRInstallType == 0) ||
-            (USetupData.MBRInstallType == 1))
-        {
-            goto Quit;
-        }
-    }
-
-    /*
-     * We may install an MBR or VBR, but before that, check whether
-     * we need to actually install the VBR on floppy.
-     */
-    if (PartitionType == PARTITION_ENTRY_UNUSED)
-    {
-        DPRINT("Error: system partition invalid (unused)\n");
-        InstallOnFloppy = TRUE;
-    }
-    else if (PartitionType == PARTITION_OS2BOOTMGR)
-    {
-        /* OS/2 boot manager partition */
-        DPRINT("Found OS/2 boot manager partition\n");
-        InstallOnFloppy = TRUE;
-    }
-    else if (PartitionType == PARTITION_LINUX)
-    {
-        /* Linux partition */
-        DPRINT("Found Linux native partition (ext2/ext3/ReiserFS/BTRFS/etc)\n");
-        InstallOnFloppy = FALSE;
-    }
-    else if (PartitionType == PARTITION_IFS)
-    {
-        /* NTFS partition */
-        DPRINT("Found NTFS partition\n");
-
-        // FIXME: Make it FALSE when we'll support NTFS installation!
-        InstallOnFloppy = TRUE;
-    }
-    else if ((PartitionType == PARTITION_FAT_12) ||
-             (PartitionType == PARTITION_FAT_16) ||
-             (PartitionType == PARTITION_HUGE)   ||
-             (PartitionType == PARTITION_XINT13) ||
-             (PartitionType == PARTITION_FAT32)  ||
-             (PartitionType == PARTITION_FAT32_XINT13))
-    {
-        DPRINT("Found FAT partition\n");
-        InstallOnFloppy = FALSE;
-    }
-    else
-    {
-        /* Unknown partition */
-        DPRINT("Unknown partition found\n");
-        InstallOnFloppy = TRUE;
-    }
-
-    /* We should install on floppy */
-    if (InstallOnFloppy)
-    {
-        USetupData.MBRInstallType = 1;
-        goto Quit;
-    }
-
-    /* Is it an unattended install on hdd? */
-    if (IsUnattendedSetup)
-    {
-        if ((USetupData.MBRInstallType == 2) ||
-            (USetupData.MBRInstallType == 3))
-        {
-            goto Quit;
-        }
-    }
-
-    MUIDisplayPage(BOOT_LOADER_PAGE);
-    CONSOLE_InvertTextXY(8, Line, 60, 1);
-
-    while (TRUE)
-    {
-        CONSOLE_ConInKey(Ir);
-
-        if ((Ir->Event.KeyEvent.uChar.AsciiChar == 0x00) &&
-            (Ir->Event.KeyEvent.wVirtualKeyCode == VK_DOWN))  /* DOWN */
-        {
-            CONSOLE_NormalTextXY(8, Line, 60, 1);
-
-            Line++;
-            if (Line < 12)
-                Line = 15;
-
-            if (Line > 15)
-                Line = 12;
-
-            CONSOLE_InvertTextXY(8, Line, 60, 1);
-        }
-        else if ((Ir->Event.KeyEvent.uChar.AsciiChar == 0x00) &&
-                 (Ir->Event.KeyEvent.wVirtualKeyCode == VK_UP))  /* UP */
-        {
-            CONSOLE_NormalTextXY(8, Line, 60, 1);
-
-            Line--;
-            if (Line < 12)
-                Line = 15;
-
-            if (Line > 15)
-                Line = 12;
-
-            CONSOLE_InvertTextXY(8, Line, 60, 1);
-        }
-        else if ((Ir->Event.KeyEvent.uChar.AsciiChar == 0x00) &&
-                 (Ir->Event.KeyEvent.wVirtualKeyCode == VK_HOME))  /* HOME */
-        {
-            CONSOLE_NormalTextXY(8, Line, 60, 1);
-
-            Line = 12;
-
-            CONSOLE_InvertTextXY(8, Line, 60, 1);
-        }
-        else if ((Ir->Event.KeyEvent.uChar.AsciiChar == 0x00) &&
-                 (Ir->Event.KeyEvent.wVirtualKeyCode == VK_END))  /* END */
-        {
-            CONSOLE_NormalTextXY(8, Line, 60, 1);
-
-            Line = 15;
-            
-            CONSOLE_InvertTextXY(8, Line, 60, 1);
-        }
-        else if ((Ir->Event.KeyEvent.uChar.AsciiChar == 0x00) &&
-                 (Ir->Event.KeyEvent.wVirtualKeyCode == VK_F3))  /* F3 */
-        {
-            if (ConfirmQuit(Ir))
-                return QUIT_PAGE;
-
-            break;
-        }
-        else if (Ir->Event.KeyEvent.uChar.AsciiChar == 0x0D)    /* ENTER */
-        {
-            if (Line == 12)
-            {
-                /* Install on both MBR and VBR */
-                USetupData.MBRInstallType = 2;
-                break;
-            }
-            else if (Line == 13)
-            {
-                /* Install on VBR only */
-                USetupData.MBRInstallType = 3;
-                break;
-            }
-            else if (Line == 14)
-            {
-                /* Install on floppy */
-                USetupData.MBRInstallType = 1;
-                break;
-            }
-            else if (Line == 15)
-            {
-                /* Skip MBR installation */
-                USetupData.MBRInstallType = 0;
-                break;
-            }
-
-            return BOOT_LOADER_PAGE;
-        }
-    }
-
-Quit:
-    switch (USetupData.MBRInstallType)
-    {
-        /* Skip MBR installation */
-        case 0:
-            return SUCCESS_PAGE;
-
-        /* Install on floppy */
-        case 1:
-            return BOOT_LOADER_FLOPPY_PAGE;
-
-        /* Install on both MBR and VBR */
-        case 2:
-            return BOOT_LOADER_HARDDISK_MBR_PAGE;
-
-        /* Install on VBR only */
-        case 3:
-            return BOOT_LOADER_HARDDISK_VBR_PAGE;
-    }
-
-    return BOOT_LOADER_PAGE;
-}
-
-
-/*
- * Displays the BootLoaderFloppyPage.
- *
- * Next pages:
- *  SuccessPage (At once)
- *  QuitPage
- *
- * SIDEEFFECTS
- *  Calls InstallFatBootcodeToFloppy()
- *
- * RETURNS
- *   Number of the next page.
- */
-static PAGE_NUMBER
-BootLoaderFloppyPage(PINPUT_RECORD Ir)
-{
-    NTSTATUS Status;
-
-    MUIDisplayPage(BOOT_LOADER_FLOPPY_PAGE);
-
-//  CONSOLE_SetStatusText(MUIGetString(STRING_PLEASEWAIT));
-
-    while (TRUE)
-    {
-        CONSOLE_ConInKey(Ir);
-
-        if ((Ir->Event.KeyEvent.uChar.AsciiChar == 0x00) &&
-            (Ir->Event.KeyEvent.wVirtualKeyCode == VK_F3))  /* F3 */
-        {
-            if (ConfirmQuit(Ir))
-                return QUIT_PAGE;
-
-            break;
-        }
-        else if (Ir->Event.KeyEvent.uChar.AsciiChar == 0x0D)    /* ENTER */
-        {
-            Status = InstallFatBootcodeToFloppy(&USetupData.SourceRootPath,
-                                                &USetupData.DestinationArcPath);
-            if (!NT_SUCCESS(Status))
-            {
-                if (Status == STATUS_DEVICE_NOT_READY)
-                    MUIDisplayError(ERROR_NO_FLOPPY, Ir, POPUP_WAIT_ENTER);
-
-                /* TODO: Print error message */
-                return BOOT_LOADER_FLOPPY_PAGE;
-            }
-
-            return SUCCESS_PAGE;
-        }
-    }
-
-    return BOOT_LOADER_FLOPPY_PAGE;
-}
-
-
-/*
- * Displays the BootLoaderHarddiskVbrPage.
- *
- * Next pages:
- *  SuccessPage (At once)
- *  QuitPage
- *
- * SIDEEFFECTS
- *  Calls InstallVBRToPartition()
- *
- * RETURNS
- *   Number of the next page.
- */
-static PAGE_NUMBER
-BootLoaderHarddiskVbrPage(PINPUT_RECORD Ir)
-{
-    NTSTATUS Status;
-
-    Status = InstallVBRToPartition(&USetupData.SystemRootPath,
-                                   &USetupData.SourceRootPath,
-                                   &USetupData.DestinationArcPath,
-                                   SystemPartition->FileSystem);
-    if (!NT_SUCCESS(Status))
-    {
-        MUIDisplayError(ERROR_WRITE_BOOT, Ir, POPUP_WAIT_ENTER,
-                        SystemPartition->FileSystem);
-        return QUIT_PAGE;
-    }
-
-    return SUCCESS_PAGE;
-}
-
-
-/*
- * Displays the BootLoaderHarddiskMbrPage.
- *
- * Next pages:
- *  SuccessPage (At once)
- *  QuitPage
- *
- * SIDEEFFECTS
- *  Calls InstallVBRToPartition()
- *  Calls InstallMbrBootCodeToDisk()
- *
- * RETURNS
- *   Number of the next page.
- */
-static PAGE_NUMBER
-BootLoaderHarddiskMbrPage(PINPUT_RECORD Ir)
-{
-    NTSTATUS Status;
-    WCHAR DestinationDevicePathBuffer[MAX_PATH];
-
-    /* Step 1: Write the VBR */
-    Status = InstallVBRToPartition(&USetupData.SystemRootPath,
-                                   &USetupData.SourceRootPath,
-                                   &USetupData.DestinationArcPath,
-                                   SystemPartition->FileSystem);
-    if (!NT_SUCCESS(Status))
-    {
-        MUIDisplayError(ERROR_WRITE_BOOT, Ir, POPUP_WAIT_ENTER,
-                        SystemPartition->FileSystem);
-        return QUIT_PAGE;
-    }
-
-    /* Step 2: Write the MBR if the disk containing the system partition is not a super-floppy */
-    if (!IsSuperFloppy(SystemPartition->DiskEntry))
-    {
-        RtlStringCchPrintfW(DestinationDevicePathBuffer, ARRAYSIZE(DestinationDevicePathBuffer),
-                L"\\Device\\Harddisk%d\\Partition0",
-                SystemPartition->DiskEntry->DiskNumber);
-        Status = InstallMbrBootCodeToDisk(&USetupData.SystemRootPath,
-                                          &USetupData.SourceRootPath,
-                                          DestinationDevicePathBuffer);
-        if (!NT_SUCCESS(Status))
-        {
-            DPRINT1("InstallMbrBootCodeToDisk() failed (Status %lx)\n", Status);
-            MUIDisplayError(ERROR_INSTALL_BOOTCODE, Ir, POPUP_WAIT_ENTER, L"MBR");
-            return QUIT_PAGE;
-        }
-    }
-
-    return SUCCESS_PAGE;
 }
 
 
@@ -4912,6 +4906,7 @@ RunUSetup(VOID)
                 Page = LayoutSettingsPage(&Ir);
                 break;
 
+            /* Partitioning pages */
             case SELECT_PARTITION_PAGE:
                 Page = SelectPartitionPage(&Ir);
                 break;
@@ -4941,23 +4936,6 @@ RunUSetup(VOID)
                 Page = StartPartitionOperationsPage(&Ir);
                 break;
 
-            /* Installation pages */
-            case INSTALL_DIRECTORY_PAGE:
-                Page = InstallDirectoryPage(&Ir);
-                break;
-
-            case PREPARE_COPY_PAGE:
-                Page = PrepareCopyPage(&Ir);
-                break;
-
-            case FILE_COPY_PAGE:
-                Page = FileCopyPage(&Ir);
-                break;
-
-            case REGISTRY_PAGE:
-                Page = RegistryPage(&Ir);
-                break;
-
             /* Bootloader installation pages */
             case BOOT_LOADER_PAGE:
                 Page = BootLoaderPage(&Ir);
@@ -4973,6 +4951,23 @@ RunUSetup(VOID)
 
             case BOOT_LOADER_HARDDISK_VBR_PAGE:
                 Page = BootLoaderHarddiskVbrPage(&Ir);
+                break;
+
+            /* Installation pages */
+            case INSTALL_DIRECTORY_PAGE:
+                Page = InstallDirectoryPage(&Ir);
+                break;
+
+            case PREPARE_COPY_PAGE:
+                Page = PrepareCopyPage(&Ir);
+                break;
+
+            case FILE_COPY_PAGE:
+                Page = FileCopyPage(&Ir);
+                break;
+
+            case REGISTRY_PAGE:
+                Page = RegistryPage(&Ir);
                 break;
 
             /* Repair pages */
