@@ -1241,7 +1241,8 @@ PrepareAndDoCopyThread(
                                  pSetupData->PartitionList,
                                  L'D', // DestinationDriveLetter,   // FIXME!!
                                  pSetupData->SelectedLanguageId,
-                                 NULL /*RegistryStatus*/);
+                                 NULL, //RegistryStatus
+                                 NULL /* SubstSettings */);
     UNREFERENCED_PARAMETER(ErrorNumber);
 
 
