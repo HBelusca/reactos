@@ -575,15 +575,18 @@ DoCommand(LPTSTR first, LPTSTR rest, PARSED_COMMAND *Cmd)
 
     /* If present in the first word, these characters end the name of an
      * internal command and become the beginning of its parameters. */
-    cp = first + _tcscspn(first, _T("\t +,/;=[]"));
+    cp = first + _tcscspn(first, _T("\t ,;=+/[]")); // FIXME: '\"' too ?
 
     for (cl = 0; cl < (cp - first); cl++)
     {
-        /* These characters do it too, but if one of them is present,
+        /*
+         * These characters do it too, but if one of them is present,
          * then we check to see if the word is a file name and skip
          * checking for internal commands if so.
-         * This allows running programs with names like "echo.exe" */
-        if (_tcschr(_T(".:\\"), first[cl]))
+         * This allows running programs with names like "echo.exe".
+         * Check this only if extensions are enabled.
+         */
+        if (bEnableExtensions && _tcschr(_T(".:\\"), first[cl]))
         {
             TCHAR tmp = *cp;
             *cp = _T('\0');

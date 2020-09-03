@@ -80,13 +80,12 @@
 #define ENV_BUFFER_SIZE  1024
 
 
-/* searches for file using path info. */
-
+/* Searches for an executable file using path information */
 BOOL
 SearchForExecutableSingle (LPCTSTR pFileName, LPTSTR pFullName, LPTSTR pPathExt, LPTSTR pDirectory)
 {
     TCHAR  szPathBuffer[CMDLINE_LENGTH], *pszPathEnd;
-    LPTSTR s,f;
+    LPTSTR pExt, s, f;
     /* initialize full name buffer */
     *pFullName = _T('\0');
 
@@ -103,12 +102,22 @@ SearchForExecutableSingle (LPCTSTR pFileName, LPTSTR pFullName, LPTSTR pPathExt,
     _tcscpy(pszPathEnd, pFileName);
     pszPathEnd += _tcslen(pszPathEnd);
 
-    if (IsExistingFile (szPathBuffer))
+    /*
+     * We enforce executable files to have an explicit extension,
+     * i.e. a dot in the file name, and something after it.
+     */
+
+    pExt = _tcsrchr(pFileName, _T('.'));
+    if (pExt && pExt[1])
     {
-        TRACE ("Found: \'%s\'\n", debugstr_aw(szPathBuffer));
-        GetFullPathName(szPathBuffer, MAX_PATH, pFullName, NULL);
-        return TRUE;
+        if (IsExistingFile(szPathBuffer))
+        {
+            TRACE("Found: \'%s\'\n", debugstr_aw(szPathBuffer));
+            GetFullPathName(szPathBuffer, MAX_PATH, pFullName, NULL);
+            return TRUE;
+        }
     }
+    /* else, try appending known executable extensions */
 
     s = pPathExt;
     while (s && *s)
@@ -127,9 +136,9 @@ SearchForExecutableSingle (LPCTSTR pFileName, LPTSTR pFullName, LPTSTR pPathExt,
             s = NULL;
         }
 
-        if (IsExistingFile (szPathBuffer))
+        if (IsExistingFile(szPathBuffer))
         {
-            TRACE ("Found: \'%s\'\n", debugstr_aw(szPathBuffer));
+            TRACE("Found: \'%s\'\n", debugstr_aw(szPathBuffer));
             GetFullPathName(szPathBuffer, MAX_PATH, pFullName, NULL);
             return TRUE;
         }
@@ -144,32 +153,36 @@ SearchForExecutable (LPCTSTR pFileName, LPTSTR pFullName)
     static TCHAR pszDefaultPathExt[] = _T(".com;.exe;.bat;.cmd");
     LPTSTR pszPathExt, pszPath;
     LPTSTR pCh;
-    DWORD  dwBuffer;
+    DWORD  dwBuffer = 0;
     TRACE ("SearchForExecutable: \'%s\'\n", debugstr_aw(pFileName));
 
-    /* load environment variable PATHEXT */
-    pszPathExt = (LPTSTR)cmd_alloc (ENV_BUFFER_SIZE * sizeof(TCHAR));
+    /* Allocate a buffer for the list of executable extensions */
+    pszPathExt = (LPTSTR)cmd_alloc(ENV_BUFFER_SIZE * sizeof(TCHAR));
     if (!pszPathExt)
     {
         WARN("Cannot allocate memory for pszPathExt!\n");
         return FALSE;
     }
 
-    dwBuffer = GetEnvironmentVariable (_T("PATHEXT"), pszPathExt, ENV_BUFFER_SIZE);
-    if (dwBuffer > ENV_BUFFER_SIZE)
+    if (bEnableExtensions)
     {
-        LPTSTR pszOldPathExt = pszPathExt;
-        pszPathExt = (LPTSTR)cmd_realloc (pszPathExt, dwBuffer * sizeof (TCHAR));
-        if (!pszPathExt)
+        /* Load environment variable PATHEXT */
+        dwBuffer = GetEnvironmentVariable(_T("PATHEXT"), pszPathExt, ENV_BUFFER_SIZE);
+        if (dwBuffer > ENV_BUFFER_SIZE)
         {
-            WARN("Cannot reallocate memory for pszPathExt!\n");
-            cmd_free(pszOldPathExt);
-            return FALSE;
+            LPTSTR pszOldPathExt = pszPathExt;
+            pszPathExt = (LPTSTR)cmd_realloc(pszPathExt, dwBuffer * sizeof(TCHAR));
+            if (!pszPathExt)
+            {
+                WARN("Cannot reallocate memory for pszPathExt!\n");
+                cmd_free(pszOldPathExt);
+                return FALSE;
+            }
+            GetEnvironmentVariable(_T("PATHEXT"), pszPathExt, dwBuffer);
+            _tcslwr(pszPathExt);
         }
-        GetEnvironmentVariable (_T("PATHEXT"), pszPathExt, dwBuffer);
-        _tcslwr(pszPathExt);
     }
-    else if (0 == dwBuffer)
+    /*else*/ if (dwBuffer == 0)
     {
         _tcscpy(pszPathExt, pszDefaultPathExt);
     }
@@ -192,7 +205,7 @@ SearchForExecutable (LPCTSTR pFileName, LPTSTR pFullName)
         return FALSE;
     }
 
-    /* load environment variable PATH into buffer */
+    /* Load environment variable PATH into buffer */
     pszPath = (LPTSTR)cmd_alloc (ENV_BUFFER_SIZE * sizeof(TCHAR));
     if (!pszPath)
     {
