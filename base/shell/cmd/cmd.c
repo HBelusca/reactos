@@ -1003,49 +1003,49 @@ GetEnhancedVar(
 
     static TCHAR Result[CMDLINE_LENGTH];
 
-     /* Check whether the current character is a recognized variable.
-      * If it is not, then restore the previous one: there is indeed
-      * ambiguity between modifier characters and FOR variables;
-      * the rule that CMD uses is to pick the longest possible match.
-      * This case can happen if we have a FOR-variable specification
-      * of the following form:
-      *
-      *   %~<modifiers><actual FOR variable character><other characters>
-      *
-      * where the FOR variable character is also a similar to a modifier,
-      * but should not be interpreted as is, and the following other
-      * characters are not part of the possible modifier characters, and
-      * are unrelated to the FOR variable (they can be part of a command).
-      * For example, if there is a %n variable, then out of %~anxnd,
-      * %~anxn will be substituted rather than just %~an.
-      *
-      * In the following examples, all characters 'd','p','n','x' are valid modifiers.
-      *
-      * 1. In this example, the FOR variable character is 'x' and the actual
-      *    modifiers are 'dpn'. Parsing will first determine that 'dpnx'
-      *    are modifiers, with the possible (last) valid variable being 'x',
-      *    and will stop at the letter 'g'. Since 'g' is not a valid
-      *    variable, then the actual variable is the lattest one 'x',
-      *    and the modifiers are then actually 'dpn'.
-      *    The FOR-loop will then display the %x variable formatted with 'dpn'
-      *    and will append any other characters following, 'g'.
-      *
-      *  C:\Temp>for %x in (foo.exe bar.txt) do @echo %~dpnxg
-      *  C:\Temp\foog
-      *  C:\Temp\barg
-      *
-      *
-      * 2. In this second example, the FOR variable character is 'g' and
-      *    the actual modifiers are 'dpnx'. Parsing will determine also that
-      *    the possible (last) valid variable could be 'x', but since it's
-      *    not present in the FOR-variables list, it won't be the case.
-      *    This means that the actual FOR variable character must follow,
-      *    in this case, 'g'.
-      *
-      *  C:\Temp>for %g in (foo.exe bar.txt) do @echo %~dpnxg
-      *  C:\Temp\foo.exe
-      *  C:\Temp\bar.txt
-      */
+    /* Check whether the current character is a recognized variable.
+     * If it is not, then restore the previous one: there is indeed
+     * ambiguity between modifier characters and FOR variables;
+     * the rule that CMD uses is to pick the longest possible match.
+     * This case can happen if we have a FOR-variable specification
+     * of the following form:
+     *
+     *   %~<modifiers><actual FOR variable character><other characters>
+     *
+     * where the FOR variable character is also a similar to a modifier,
+     * but should not be interpreted as is, and the following other
+     * characters are not part of the possible modifier characters, and
+     * are unrelated to the FOR variable (they can be part of a command).
+     * For example, if there is a %n variable, then out of %~anxnd,
+     * %~anxn will be substituted rather than just %~an.
+     *
+     * In the following examples, all characters 'd','p','n','x' are valid modifiers.
+     *
+     * 1. In this example, the FOR variable character is 'x' and the actual
+     *    modifiers are 'dpn'. Parsing will first determine that 'dpnx'
+     *    are modifiers, with the possible (last) valid variable being 'x',
+     *    and will stop at the letter 'g'. Since 'g' is not a valid
+     *    variable, then the actual variable is the lattest one 'x',
+     *    and the modifiers are then actually 'dpn'.
+     *    The FOR-loop will then display the %x variable formatted with 'dpn'
+     *    and will append any other characters following, 'g'.
+     *
+     *  C:\Temp>for %x in (foo.exe bar.txt) do @echo %~dpnxg
+     *  C:\Temp\foog
+     *  C:\Temp\barg
+     *
+     *
+     * 2. In this second example, the FOR variable character is 'g' and
+     *    the actual modifiers are 'dpnx'. Parsing will determine also that
+     *    the possible (last) valid variable could be 'x', but since it's
+     *    not present in the FOR-variables list, it won't be the case.
+     *    This means that the actual FOR variable character must follow,
+     *    in this case, 'g'.
+     *
+     *  C:\Temp>for %g in (foo.exe bar.txt) do @echo %~dpnxg
+     *  C:\Temp\foo.exe
+     *  C:\Temp\bar.txt
+     */
 
     /* First, go through as many modifier characters as possible */
     FormatEnd = Format = *pFormat;

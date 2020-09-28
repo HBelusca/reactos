@@ -18,23 +18,23 @@
 
 #ifdef FEATURE_DIRECTORY_STACK
 
-typedef struct tagDIRENTRY
+typedef struct _DIRENTRY
 {
-    struct tagDIRENTRY *prev;
-    struct tagDIRENTRY *next;
+    struct _DIRENTRY *prev;
+    struct _DIRENTRY *next;
     TCHAR szPath[1];
-} DIRENTRY, *LPDIRENTRY;
+} DIRENTRY, *PDIRENTRY;
 
 
 static INT nStackDepth;
-static LPDIRENTRY lpStackTop;
-static LPDIRENTRY lpStackBottom;
+static PDIRENTRY lpStackTop;
+static PDIRENTRY lpStackBottom;
 
 
 static INT
-PushDirectory (LPTSTR pszPath)
+PushDirectory(LPCTSTR pszPath)
 {
-    LPDIRENTRY lpDir = cmd_alloc(FIELD_OFFSET(DIRENTRY, szPath[_tcslen(pszPath) + 1]));
+    PDIRENTRY lpDir = cmd_alloc(FIELD_OFFSET(DIRENTRY, szPath[_tcslen(pszPath) + 1]));
     if (!lpDir)
     {
         WARN("Cannot allocate memory for lpDir\n");
@@ -52,16 +52,15 @@ PushDirectory (LPTSTR pszPath)
 
     _tcscpy(lpDir->szPath, pszPath);
 
-    nStackDepth++;
+    ++nStackDepth;
 
     return nErrorLevel = 0;
 }
 
-
 static VOID
-PopDirectory (VOID)
+PopDirectory(VOID)
 {
-    LPDIRENTRY lpDir = lpStackTop;
+    PDIRENTRY lpDir = lpStackTop;
     lpStackTop = lpDir->next;
     if (lpStackTop != NULL)
         lpStackTop->prev = NULL;
@@ -70,32 +69,30 @@ PopDirectory (VOID)
 
     cmd_free (lpDir);
 
-    nStackDepth--;
+    --nStackDepth;
 }
 
 
 /*
  * initialize directory stack
  */
-VOID InitDirectoryStack (VOID)
+VOID InitDirectoryStack(VOID)
 {
     nStackDepth = 0;
     lpStackTop = NULL;
     lpStackBottom = NULL;
 }
 
-
 /*
  * destroy directory stack
  */
-VOID DestroyDirectoryStack (VOID)
+VOID DestroyDirectoryStack(VOID)
 {
     while (nStackDepth)
-        PopDirectory ();
+        PopDirectory();
 }
 
-
-INT GetDirectoryStackDepth (VOID)
+INT GetDirectoryStackDepth(VOID)
 {
     return nStackDepth;
 }
@@ -104,17 +101,21 @@ INT GetDirectoryStackDepth (VOID)
 /*
  * pushd command
  */
-INT CommandPushd (LPTSTR rest)
+INT CommandPushd(LPTSTR rest)
 {
     TCHAR curPath[MAX_PATH];
 
-    if (!_tcsncmp (rest, _T("/?"), 2))
+    if (!_tcsncmp(rest, _T("/?"), 2))
     {
         ConOutResPuts(STRING_DIRSTACK_HELP1);
         return 0;
     }
 
-    GetCurrentDirectory (MAX_PATH, curPath);
+    //
+    // FIXME: Handle UNC paths, creating temporary drive letter.
+    //
+
+    GetCurrentDirectory(ARRAYSIZE(curPath), curPath);
 
     if (rest[0] != _T('\0'))
     {
@@ -125,11 +126,10 @@ INT CommandPushd (LPTSTR rest)
     return PushDirectory(curPath);
 }
 
-
 /*
  * popd command
  */
-INT CommandPopd (LPTSTR rest)
+INT CommandPopd(LPTSTR rest)
 {
     INT ret = 0;
     if (!_tcsncmp(rest, _T("/?"), 2))
@@ -142,18 +142,17 @@ INT CommandPopd (LPTSTR rest)
         return 1;
 
     ret = _tchdir(lpStackTop->szPath) != 0;
-    PopDirectory ();
+    PopDirectory();
 
     return ret;
 }
 
-
 /*
  * dirs command
  */
-INT CommandDirs (LPTSTR rest)
+INT CommandDirs(LPTSTR rest)
 {
-    LPDIRENTRY lpDir;
+    PDIRENTRY lpDir;
 
     if (!_tcsncmp(rest, _T("/?"), 2))
     {

@@ -128,7 +128,6 @@ VOID GetPathCase( TCHAR * Path, TCHAR * OutPath)
 /*
  * Check if Ctrl-Break was pressed during the last calls
  */
-
 BOOL CheckCtrlBreak(INT mode)
 {
     static BOOL bLeaveAll = FALSE; /* leave all batch files */
@@ -180,38 +179,38 @@ BOOL CheckCtrlBreak(INT mode)
     return TRUE;
 }
 
-/* add new entry for new argument */
-BOOL add_entry (LPINT ac, LPTSTR **arg, LPCTSTR entry)
+/* Add new entry for new argument */
+BOOL add_entry(LPINT ac, LPTSTR** arg, LPCTSTR entry)
 {
     LPTSTR q;
-    LPTSTR *oldarg;
+    LPTSTR* oldarg;
 
-    q = cmd_alloc ((_tcslen(entry) + 1) * sizeof (TCHAR));
+    q = cmd_alloc((_tcslen(entry) + 1) * sizeof(TCHAR));
     if (!q)
     {
         WARN("Cannot allocate memory for q!\n");
         return FALSE;
     }
 
-    _tcscpy (q, entry);
+    _tcscpy(q, entry);
     oldarg = *arg;
-    *arg = cmd_realloc (oldarg, (*ac + 2) * sizeof (LPTSTR));
+    *arg = cmd_realloc(oldarg, (*ac + 2) * sizeof(LPTSTR));
     if (!*arg)
     {
         WARN("Cannot reallocate memory for arg!\n");
         *arg = oldarg;
-        cmd_free (q);
+        cmd_free(q);
         return FALSE;
     }
 
-    /* save new entry */
+    /* Save new entry */
     (*arg)[*ac] = q;
     (*arg)[++(*ac)] = NULL;
 
     return TRUE;
 }
 
-static BOOL expand (LPINT ac, LPTSTR **arg, LPCTSTR pattern)
+static BOOL expand(LPINT ac, LPTSTR** arg, LPCTSTR pattern)
 {
     HANDLE hFind;
     WIN32_FIND_DATA FindData;
@@ -219,8 +218,8 @@ static BOOL expand (LPINT ac, LPTSTR **arg, LPCTSTR pattern)
     LPCTSTR pathend;
     LPTSTR dirpart, fullname;
 
-    pathend = _tcsrchr (pattern, _T('\\'));
-    if (NULL != pathend)
+    pathend = _tcsrchr(pattern, _T('\\'));
+    if (pathend != NULL)
     {
         dirpart = cmd_alloc((pathend - pattern + 2) * sizeof(TCHAR));
         if (!dirpart)
@@ -235,12 +234,13 @@ static BOOL expand (LPINT ac, LPTSTR **arg, LPCTSTR pattern)
     {
         dirpart = NULL;
     }
-    hFind = FindFirstFile (pattern, &FindData);
-    if (INVALID_HANDLE_VALUE != hFind)
+
+    hFind = FindFirstFile(pattern, &FindData);
+    if (hFind != INVALID_HANDLE_VALUE)
     {
         do
         {
-            if (NULL != dirpart)
+            if (dirpart != NULL)
             {
                 fullname = cmd_alloc((_tcslen(dirpart) + _tcslen(FindData.cFileName) + 1) * sizeof(TCHAR));
                 if (!fullname)
@@ -250,26 +250,26 @@ static BOOL expand (LPINT ac, LPTSTR **arg, LPCTSTR pattern)
                 }
                 else
                 {
-                    _tcscat (_tcscpy (fullname, dirpart), FindData.cFileName);
+                    _tcscat(_tcscpy(fullname, dirpart), FindData.cFileName);
                     ok = add_entry(ac, arg, fullname);
-                    cmd_free (fullname);
+                    cmd_free(fullname);
                 }
             }
             else
             {
                 ok = add_entry(ac, arg, FindData.cFileName);
             }
-        } while (FindNextFile (hFind, &FindData) && ok);
-        FindClose (hFind);
+        } while (FindNextFile(hFind, &FindData) && ok);
+        FindClose(hFind);
     }
     else
     {
         ok = add_entry(ac, arg, pattern);
     }
 
-    if (NULL != dirpart)
+    if (dirpart != NULL)
     {
-        cmd_free (dirpart);
+        cmd_free(dirpart);
     }
 
     return ok;
@@ -441,11 +441,11 @@ LPTSTR *splitspace (LPTSTR s, LPINT args)
 }
 
 /*
- * freep -- frees memory used for a call to split
+ * freep - frees memory used for a call to split.
  */
-VOID freep (LPTSTR *p)
+VOID freep(LPTSTR* p)
 {
-    LPTSTR *q;
+    LPTSTR* q;
 
     if (!p)
         return;
@@ -457,17 +457,17 @@ VOID freep (LPTSTR *p)
     cmd_free(p);
 }
 
-LPTSTR _stpcpy (LPTSTR dest, LPCTSTR src)
+LPTSTR _stpcpy(LPTSTR dest, LPCTSTR src)
 {
-    _tcscpy (dest, src);
-    return (dest + _tcslen (src));
+    _tcscpy(dest, src);
+    return (dest + _tcslen(src));
 }
 
-VOID
-StripQuotes(TCHAR *in)
+VOID StripQuotes(LPTSTR in)
 {
     TCHAR *out = in;
-    for (; *in; in++)
+
+    for (; *in; ++in)
     {
         if (*in != _T('"'))
             *out++ = *in;

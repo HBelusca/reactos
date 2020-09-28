@@ -24,44 +24,42 @@
 
 #ifdef INCLUDE_CMD_VOL
 
-
 static INT
-PrintVolumeHeader (LPTSTR pszRootPath)
+PrintVolumeHeader(LPTSTR pszRootPath)
 {
     TCHAR szVolName[80];
     DWORD dwSerialNr;
 
-    /* get the volume information of the drive */
+    /* Get the volume information of the drive */
     if (!GetVolumeInformation(pszRootPath,
                              szVolName,
-                             80,
+                             ARRAYSIZE(szVolName),
                              &dwSerialNr,
                              NULL,
                              NULL,
                              NULL,
                              0))
     {
-        ErrorMessage(GetLastError (), NULL);
+        ErrorMessage(GetLastError(), NULL);
         return 1;
     }
 
-    /* print drive info */
+    /* Print drive info */
     if (szVolName[0] != '\0')
     {
-        ConOutResPrintf(STRING_VOL_HELP1, pszRootPath[0],szVolName);
+        ConOutResPrintf(STRING_VOL_HELP1, pszRootPath[0], szVolName);
     }
     else
     {
         ConOutResPrintf(STRING_VOL_HELP2, pszRootPath[0]);
     }
 
-    /* print the volume serial number */
+    /* Print the volume serial number */
     ConOutResPrintf(STRING_VOL_HELP3, HIWORD(dwSerialNr), LOWORD(dwSerialNr));
     return 0;
 }
 
-
-INT cmd_vol (LPTSTR param)
+INT cmd_vol(LPTSTR param)
 {
     TCHAR szRootPath[] = _T("A:\\");
     TCHAR szPath[MAX_PATH];
@@ -76,39 +74,36 @@ INT cmd_vol (LPTSTR param)
 
     if (param[0] == _T('\0'))
     {
-        GetCurrentDirectory(MAX_PATH, szPath);
+        GetCurrentDirectory(ARRAYSIZE(szPath), szPath);
         szRootPath[0] = szPath[0];
     }
     else
     {
-        _tcsupr (param);
+        _tcsupr(param);
         if (param[1] == _T(':'))
         {
             szRootPath[0] = param[0];
         }
         else
         {
-            error_invalid_drive ();
-            nErrorLevel = 1;
-            return 1;
+            error_invalid_drive();
+            return (nErrorLevel = 1);
         }
     }
 
-    if (!IsValidPathName (szRootPath))
+    if (!IsValidPathName(szRootPath))
     {
-        error_invalid_drive ();
-        nErrorLevel = 1;
-        return 1;
+        error_invalid_drive();
+        return (nErrorLevel = 1);
     }
 
-    /* print the header */
-    if (!PrintVolumeHeader (szRootPath))
+    /* Print the header */
+    if (!PrintVolumeHeader(szRootPath))
     {
-        nErrorLevel = 1;
-        return 1;
+        return (nErrorLevel = 1);
     }
 
-    return 0;
+    return (nErrorLevel = 0);
 }
 
 #endif
