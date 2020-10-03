@@ -233,7 +233,7 @@
 @ stdcall SetupCloseFileQueue(ptr)
 @ stdcall SetupCloseInfFile(long)
 @ stdcall SetupCloseLog()
-@ stdcall SetupCommitFileQueue(long long ptr ptr) SetupCommitFileQueueA
+@ stdcall SetupCommitFileQueue(long long ptr ptr) SetupCommitFileQueueW
 @ stdcall SetupCommitFileQueueA(long long ptr ptr)
 @ stdcall SetupCommitFileQueueW(long long ptr ptr)
 @ stub SetupConfigureWmiFromInfSectionA
@@ -246,7 +246,7 @@
 @ stdcall SetupCreateDiskSpaceListW(ptr long long)
 @ stdcall SetupDecompressOrCopyFileA(str str ptr)
 @ stdcall SetupDecompressOrCopyFileW(wstr wstr ptr)
-@ stdcall SetupDefaultQueueCallback(ptr long long long) SetupDefaultQueueCallbackA
+@ stdcall SetupDefaultQueueCallback(ptr long long long) SetupDefaultQueueCallbackW
 @ stdcall SetupDefaultQueueCallbackA(ptr long long long)
 @ stdcall SetupDefaultQueueCallbackW(ptr long long long)
 @ stdcall SetupDeleteErrorA(long str str long long)
@@ -286,7 +286,7 @@
 @ stdcall SetupDiDestroyClassImageList(ptr)
 @ stdcall SetupDiDestroyDeviceInfoList(long)
 @ stdcall SetupDiDestroyDriverInfoList(long ptr long)
-@ stub SetupDiDrawMiniIcon
+@ stdcall -stub SetupDiDrawMiniIcon(ptr int128 long long)
 @ stdcall SetupDiEnumDeviceInfo(long long ptr)
 @ stdcall SetupDiEnumDeviceInterfaces(long ptr ptr long ptr)
 @ stdcall SetupDiEnumDriverInfoA(long ptr long long ptr)
@@ -439,8 +439,8 @@
 @ stdcall SetupInitializeFileLogA(str long)
 @ stdcall SetupInitializeFileLogW(wstr long)
 @ stdcall SetupInstallFileA(ptr ptr str str str long ptr ptr)
-@ stub SetupInstallFileExA
-@ stub SetupInstallFileExW
+@ stdcall SetupInstallFileExA(ptr ptr str str str long ptr ptr ptr)
+@ stdcall SetupInstallFileExW(ptr ptr wstr wstr wstr long ptr ptr ptr)
 @ stdcall SetupInstallFileW(ptr ptr wstr wstr wstr long ptr ptr)
 @ stdcall SetupInstallFilesFromInfSectionA(long long long str str long)
 @ stdcall SetupInstallFilesFromInfSectionW(long long long wstr wstr long)
@@ -469,7 +469,7 @@
 @ stdcall SetupPromptForDiskW(ptr wstr wstr wstr wstr wstr long ptr long ptr)
 @ stdcall SetupPromptReboot(ptr ptr long)
 @ stdcall -stub SetupQueryDrivesInDiskSpaceListA(ptr ptr long ptr)
-@ stub SetupQueryDrivesInDiskSpaceListW
+@ stdcall -stub SetupQueryDrivesInDiskSpaceListW(ptr ptr long ptr)
 @ stub SetupQueryFileLogA
 @ stub SetupQueryFileLogW
 @ stdcall SetupQueryInfFileInformationA(ptr long str long ptr)
@@ -510,7 +510,7 @@
 @ stub SetupRemoveSectionFromDiskSpaceListW
 @ stdcall SetupRenameErrorA(long str str str long long)
 @ stdcall SetupRenameErrorW(long wstr wstr wstr long long)
-@ stdcall SetupScanFileQueue(long long long ptr ptr ptr) SetupScanFileQueueA
+@ stdcall SetupScanFileQueue(long long long ptr ptr ptr) SetupScanFileQueueW
 @ stdcall SetupScanFileQueueA(long long long ptr ptr ptr)
 @ stdcall SetupScanFileQueueW(long long long ptr ptr ptr)
 @ stdcall SetupSetDirectoryIdA(long long str)

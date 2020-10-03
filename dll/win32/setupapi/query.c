@@ -464,11 +464,11 @@ BOOL WINAPI SetupGetSourceInfoA( HINF hinf, UINT source_id, UINT info,
 BOOL WINAPI SetupGetSourceInfoW( HINF hinf, UINT source_id, UINT info,
                                  PWSTR buffer, DWORD buffer_size, LPDWORD required_size )
 {
-    WCHAR Section[MAX_PATH];
     INFCONTEXT ctx;
     WCHAR source_id_str[11];
     static const WCHAR fmt[] = {'%','d',0};
     DWORD index;
+    WCHAR Section[MAX_PATH];
 
     TRACE("%p, %d, %d, %p, %d, %p\n", hinf, source_id, info, buffer, buffer_size,
           required_size);
@@ -487,6 +487,12 @@ BOOL WINAPI SetupGetSourceInfoW( HINF hinf, UINT source_id, UINT info,
     case SRCINFO_PATH:          index = 4; break;
     case SRCINFO_TAGFILE:       index = 2; break;
     case SRCINFO_DESCRIPTION:   index = 1; break;
+#ifdef __REACTOS__
+    case SRCINFO_FLAGS:         index = 5; break;
+#if (_SETUPAPI_VER >= 0x0501)
+    case SRCINFO_TAGFILE2:      index = 6; break;
+#endif
+#endif
     default:
         WARN("unknown info level: %d\n", info);
         return FALSE;
@@ -674,8 +680,7 @@ BOOL WINAPI SetupQueryInfOriginalFileInformationW(
 
     if (!SetupGetLineTextW(NULL, hinf, wszVersion, wszCatalogFile,
                            OriginalFileInfo->OriginalCatalogName,
-                           sizeof(OriginalFileInfo->OriginalCatalogName)/sizeof(OriginalFileInfo->OriginalCatalogName[0]),
-                           NULL))
+                           ARRAY_SIZE(OriginalFileInfo->OriginalCatalogName), NULL))
     {
         OriginalFileInfo->OriginalCatalogName[0] = '\0';
     }

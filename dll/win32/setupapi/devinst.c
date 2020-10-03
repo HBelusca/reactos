@@ -5544,7 +5544,7 @@ SetupDiInstallDevice(
         if (!Context)
             goto cleanup;
     }
-    *pSectionName = '\0';
+    *pSectionName = UNICODE_NULL;
     Result = SetupInstallFromInfSectionW(InstallParams.hwndParent,
         SelectedDriver->InfFileDetails->hInf, SectionName,
         DoAction, hKey, SelectedDriver->InfFileDetails->DirectoryName, SP_COPY_NEWER,

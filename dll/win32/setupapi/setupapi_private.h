@@ -47,12 +47,17 @@
 #include <mscat.h>
 #include <lzexpand.h>
 #include <shlobj.h>
-#include <wine/unicode.h>
+
 #define NTOS_MODE_USER
 #include <ndk/rtlfuncs.h>
 
+#include <wine/heap.h>
+#include <wine/unicode.h>
+
 #include <wine/debug.h>
 WINE_DEFAULT_DEBUG_CHANNEL(setupapi);
+
+#define ARRAY_SIZE ARRAYSIZE
 
 #ifdef __REACTOS__
 #undef __WINESRC__
