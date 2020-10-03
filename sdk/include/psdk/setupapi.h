@@ -637,10 +637,17 @@ extern "C" {
 
 #define SPWPT_SELECTDEVICE	0x00000001
 #define SPWP_USE_DEVINFO_DATA	0x00000001
+
 #define SRCINFO_PATH	1
 #define SRCINFO_TAGFILE	2
 #define SRCINFO_DESCRIPTION	3
 #define SRCINFO_FLAGS	4
+
+#if (_SETUPAPI_VER >= 0x0501)
+#define SRCINFO_TAGFILE2	5	/* Alternate tagfile, when SRCINFO_TAGFILE is a cabfile */
+#define SRC_FLAGS_CABFILE	0x0010	/* Treat SRCINFO_TAGFILE as a cabfile and specify alternate tagfile */
+#endif
+
 #define SRCLIST_TEMPORARY	0x00000001
 #define SRCLIST_NOBROWSE	0x00000002
 #define SRCLIST_SYSTEM	0x00000010

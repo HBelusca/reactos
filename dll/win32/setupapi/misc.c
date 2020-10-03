@@ -27,6 +27,9 @@
 /* Unicode constants */
 static const WCHAR BackSlash[] = {'\\',0};
 static const WCHAR TranslationRegKey[] = {'\\','V','e','r','F','i','l','e','I','n','f','o','\\','T','r','a','n','s','l','a','t','i','o','n',0};
+static const WCHAR InfDirectory[] = {'i','n','f','\\',0};
+static const WCHAR OemFileMask[] = {'o','e','m','*','.','i','n','f',0};
+static const WCHAR OemFileSpecification[] = {'o','e','m','%','l','u','.','i','n','f',0};
 
 /* Handles and critical sections for the SetupLog API */
 static HANDLE setupact = INVALID_HANDLE_VALUE;
@@ -927,6 +930,430 @@ VOID WINAPI AssertFail(LPSTR lpFile, UINT uLine, LPSTR lpMessage)
         DebugBreak();
 }
 
+/***********************************************************************
+ *		SetupCopyOEMInfA  (SETUPAPI.@)
+ */
+BOOL WINAPI SetupCopyOEMInfA(
+        IN PCSTR SourceInfFileName,
+        IN PCSTR OEMSourceMediaLocation,
+        IN DWORD OEMSourceMediaType,
+        IN DWORD CopyStyle,
+        OUT PSTR DestinationInfFileName OPTIONAL,
+        IN DWORD DestinationInfFileNameSize,
+        OUT PDWORD RequiredSize OPTIONAL,
+        OUT PSTR* DestinationInfFileNameComponent OPTIONAL)
+{
+    PWSTR SourceInfFileNameW = NULL;
+    PWSTR OEMSourceMediaLocationW = NULL;
+    PWSTR DestinationInfFileNameW = NULL;
+    PWSTR DestinationInfFileNameComponentW = NULL;
+    BOOL ret = FALSE;
+    DWORD size;
+
+    TRACE("%s %s 0x%lx 0x%lx %p 0%lu %p %p\n",
+        SourceInfFileName, OEMSourceMediaLocation, OEMSourceMediaType,
+        CopyStyle, DestinationInfFileName, DestinationInfFileNameSize,
+        RequiredSize, DestinationInfFileNameComponent);
+
+    if (!DestinationInfFileName && DestinationInfFileNameSize > 0)
+        SetLastError(ERROR_INVALID_PARAMETER);
+    else if (!(SourceInfFileNameW = pSetupMultiByteToUnicode(SourceInfFileName, CP_ACP)))
+        SetLastError(ERROR_INVALID_PARAMETER);
+    else if (OEMSourceMediaType != SPOST_NONE && !(OEMSourceMediaLocationW = pSetupMultiByteToUnicode(OEMSourceMediaLocation, CP_ACP)))
+        SetLastError(ERROR_INVALID_PARAMETER);
+    else
+    {
+        if (DestinationInfFileNameSize != 0)
+        {
+            DestinationInfFileNameW = MyMalloc(DestinationInfFileNameSize * sizeof(WCHAR));
+            if (!DestinationInfFileNameW)
+            {
+                SetLastError(ERROR_NOT_ENOUGH_MEMORY);
+                goto cleanup;
+            }
+        }
+
+        ret = SetupCopyOEMInfW(
+            SourceInfFileNameW,
+            OEMSourceMediaLocationW,
+            OEMSourceMediaType,
+            CopyStyle,
+            DestinationInfFileNameW,
+            DestinationInfFileNameSize,
+            &size,
+            DestinationInfFileNameComponent ? &DestinationInfFileNameComponentW : NULL);
+        if (!ret)
+        {
+            if (RequiredSize) *RequiredSize = size;
+            goto cleanup;
+        }
+
+        if (DestinationInfFileNameSize != 0)
+        {
+            if (WideCharToMultiByte(CP_ACP, 0, DestinationInfFileNameW, -1,
+                DestinationInfFileName, DestinationInfFileNameSize, NULL, NULL) == 0)
+            {
+                DestinationInfFileName[0] = '\0';
+                goto cleanup;
+            }
+        }
+        if (DestinationInfFileNameComponent)
+        {
+            if (DestinationInfFileNameComponentW)
+                *DestinationInfFileNameComponent = &DestinationInfFileName[DestinationInfFileNameComponentW - DestinationInfFileNameW];
+            else
+                *DestinationInfFileNameComponent = NULL;
+        }
+        ret = TRUE;
+    }
+
+cleanup:
+    MyFree(SourceInfFileNameW);
+    MyFree(OEMSourceMediaLocationW);
+    MyFree(DestinationInfFileNameW);
+    TRACE("Returning %d\n", ret);
+    if (ret) SetLastError(ERROR_SUCCESS);
+    return ret;
+}
+
+static int compare_files( HANDLE file1, HANDLE file2 )
+{
+    char buffer1[2048];
+    char buffer2[2048];
+    DWORD size1;
+    DWORD size2;
+
+    while( ReadFile(file1, buffer1, sizeof(buffer1), &size1, NULL) &&
+           ReadFile(file2, buffer2, sizeof(buffer2), &size2, NULL) )
+    {
+        int ret;
+        if (size1 != size2)
+            return size1 > size2 ? 1 : -1;
+        if (!size1)
+            return 0;
+        ret = memcmp( buffer1, buffer2, size1 );
+        if (ret)
+            return ret;
+    }
+
+    return 0;
+}
+
+#ifdef __REACTOS__
+#define OEM_INDEX_LIMIT 99999
+#else
+#define OEM_INDEX_LIMIT 999
+#endif
+
+/***********************************************************************
+ *		SetupCopyOEMInfW  (SETUPAPI.@)
+ */
+BOOL WINAPI SetupCopyOEMInfW(
+        IN PCWSTR SourceInfFileName,
+        IN PCWSTR OEMSourceMediaLocation,
+        IN DWORD OEMSourceMediaType,
+        IN DWORD CopyStyle,
+        OUT PWSTR DestinationInfFileName OPTIONAL,
+        IN DWORD DestinationInfFileNameSize,
+        OUT PDWORD RequiredSize OPTIONAL,
+        OUT PWSTR* DestinationInfFileNameComponent OPTIONAL)
+{
+    BOOL ret = FALSE;
+
+    TRACE("%s %s 0x%lx 0x%lx %p 0%lu %p %p\n",
+        debugstr_w(SourceInfFileName), debugstr_w(OEMSourceMediaLocation), OEMSourceMediaType,
+        CopyStyle, DestinationInfFileName, DestinationInfFileNameSize,
+        RequiredSize, DestinationInfFileNameComponent);
+
+    if (!SourceInfFileName)
+        SetLastError(ERROR_INVALID_PARAMETER);
+    else if (OEMSourceMediaType != SPOST_NONE && OEMSourceMediaType != SPOST_PATH && OEMSourceMediaType != SPOST_URL)
+        SetLastError(ERROR_INVALID_PARAMETER);
+    else if (CopyStyle & ~(SP_COPY_DELETESOURCE | SP_COPY_REPLACEONLY | SP_COPY_NOOVERWRITE | SP_COPY_OEMINF_CATALOG_ONLY))
+    {
+        TRACE("Unknown flags: 0x%08lx\n", CopyStyle & ~(SP_COPY_DELETESOURCE | SP_COPY_REPLACEONLY | SP_COPY_NOOVERWRITE | SP_COPY_OEMINF_CATALOG_ONLY));
+        SetLastError(ERROR_INVALID_FLAGS);
+    }
+    else if (!DestinationInfFileName && DestinationInfFileNameSize > 0)
+        SetLastError(ERROR_INVALID_PARAMETER);
+    else if (CopyStyle & SP_COPY_OEMINF_CATALOG_ONLY)
+    {
+        FIXME("CopyStyle 0x%x not supported\n", SP_COPY_OEMINF_CATALOG_ONLY);
+        SetLastError(ERROR_CALL_NOT_IMPLEMENTED);
+    }
+    else
+    {
+        HANDLE hSearch = INVALID_HANDLE_VALUE;
+        WIN32_FIND_DATAW FindFileData;
+        BOOL AlreadyExists;
+        DWORD NextFreeNumber = 0;
+        SIZE_T len;
+        LPWSTR pFullFileName = NULL;
+        LPWSTR pFileName; /* Pointer into pFullFileName buffer */
+        HANDLE hSourceFile = INVALID_HANDLE_VALUE;
+
+        if (OEMSourceMediaType == SPOST_PATH || OEMSourceMediaType == SPOST_URL)
+            FIXME("OEMSourceMediaType 0x%lx ignored\n", OEMSourceMediaType);
+
+        /* Check if source file exists, and open it */
+        if (strchrW(SourceInfFileName, '\\' ) || strchrW(SourceInfFileName, '/' ))
+        {
+            WCHAR *path;
+
+            if (!(len = GetFullPathNameW(SourceInfFileName, 0, NULL, NULL)))
+                return FALSE;
+            if (!(path = MyMalloc(len * sizeof(WCHAR))))
+            {
+                SetLastError(ERROR_NOT_ENOUGH_MEMORY);
+                return FALSE;
+            }
+            GetFullPathNameW(SourceInfFileName, len, path, NULL);
+            hSourceFile = CreateFileW(
+                path, FILE_READ_DATA | FILE_READ_ATTRIBUTES,
+                FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                NULL, OPEN_EXISTING, 0, NULL);
+            MyFree(path);
+        }
+        else  /* try Windows directory */
+        {
+            WCHAR *path, *p;
+            static const WCHAR Inf[]      = {'\\','i','n','f','\\',0};
+            static const WCHAR System32[] = {'\\','s','y','s','t','e','m','3','2','\\',0};
+
+            len = GetWindowsDirectoryW(NULL, 0) + strlenW(SourceInfFileName) + 12;
+            if (!(path = MyMalloc(len * sizeof(WCHAR))))
+            {
+                SetLastError(ERROR_NOT_ENOUGH_MEMORY);
+                return FALSE;
+            }
+            GetWindowsDirectoryW(path, len);
+            p = path + strlenW(path);
+            strcpyW(p, Inf);
+            strcatW(p, SourceInfFileName);
+            hSourceFile = CreateFileW(
+                path, FILE_READ_DATA | FILE_READ_ATTRIBUTES,
+                FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                NULL, OPEN_EXISTING, 0, NULL);
+            if (hSourceFile == INVALID_HANDLE_VALUE)
+            {
+                strcpyW(p, System32);
+                strcatW(p, SourceInfFileName);
+                hSourceFile = CreateFileW(
+                    path, FILE_READ_DATA | FILE_READ_ATTRIBUTES,
+                    FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                    NULL, OPEN_EXISTING, 0, NULL);
+            }
+            MyFree(path);
+        }
+        if (hSourceFile == INVALID_HANDLE_VALUE)
+        {
+            SetLastError(ERROR_FILE_NOT_FOUND);
+            goto cleanup;
+        }
+
+        /* Prepare .inf file specification */
+        len = MAX_PATH + 1 + strlenW(InfDirectory) + 13;
+        pFullFileName = MyMalloc(len * sizeof(WCHAR));
+        if (!pFullFileName)
+        {
+            SetLastError(ERROR_NOT_ENOUGH_MEMORY);
+            goto cleanup;
+        }
+        len = GetSystemWindowsDirectoryW(pFullFileName, MAX_PATH);
+        if (len == 0 || len > MAX_PATH)
+            goto cleanup;
+        if (pFullFileName[strlenW(pFullFileName) - 1] != '\\')
+            strcatW(pFullFileName, BackSlash);
+        strcatW(pFullFileName, InfDirectory);
+        pFileName = &pFullFileName[strlenW(pFullFileName)];
+
+        /* Search if the specified .inf file already exists in %WINDIR%\Inf */
+        AlreadyExists = FALSE;
+        strcpyW(pFileName, OemFileMask);
+        hSearch = FindFirstFileW(pFullFileName, &FindFileData);
+        if (hSearch != INVALID_HANDLE_VALUE)
+        {
+            LARGE_INTEGER SourceFileSize;
+
+            if (GetFileSizeEx(hSourceFile, &SourceFileSize))
+            {
+                do
+                {
+                    LARGE_INTEGER DestFileSize;
+                    HANDLE hDestFile;
+
+                    strcpyW(pFileName, FindFileData.cFileName);
+                    hDestFile = CreateFileW(
+                        pFullFileName, FILE_READ_DATA | FILE_READ_ATTRIBUTES,
+                        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                        NULL, OPEN_EXISTING, 0, NULL);
+                    if (hDestFile != INVALID_HANDLE_VALUE)
+                    {
+                        if (GetFileSizeEx(hDestFile, &DestFileSize)
+                         && DestFileSize.QuadPart == SourceFileSize.QuadPart
+                         && !compare_files(hSourceFile, hDestFile))
+                        {
+                            TRACE("%s already exists as %s\n",
+                                debugstr_w(SourceInfFileName), debugstr_w(pFileName));
+                            AlreadyExists = TRUE;
+                        }
+                    }
+                } while (!AlreadyExists && FindNextFileW(hSearch, &FindFileData));
+            }
+            FindClose(hSearch);
+            hSearch = INVALID_HANDLE_VALUE;
+        }
+
+        if (!AlreadyExists && CopyStyle & SP_COPY_REPLACEONLY)
+        {
+            /* FIXME: set DestinationInfFileName, RequiredSize, DestinationInfFileNameComponent */
+            SetLastError(ERROR_FILE_NOT_FOUND);
+            goto cleanup;
+        }
+        else if (AlreadyExists && (CopyStyle & SP_COPY_NOOVERWRITE))
+        {
+            DWORD Size = strlenW(pFileName) + 1;
+
+            if (RequiredSize)
+                *RequiredSize = Size;
+            if (DestinationInfFileNameSize == 0)
+                SetLastError(ERROR_FILE_EXISTS);
+            else if (DestinationInfFileNameSize < Size)
+                SetLastError(ERROR_INSUFFICIENT_BUFFER);
+            else
+            {
+                SetLastError(ERROR_FILE_EXISTS);
+                strcpyW(DestinationInfFileName, pFileName);
+            }
+            goto cleanup;
+        }
+
+        /* Search the number to give to OEM??.INF */
+        strcpyW(pFileName, OemFileMask);
+        hSearch = FindFirstFileW(pFullFileName, &FindFileData);
+        if (hSearch == INVALID_HANDLE_VALUE)
+        {
+            if (GetLastError() != ERROR_FILE_NOT_FOUND)
+                goto cleanup;
+        }
+        else
+        {
+            do
+            {
+                DWORD CurrentNumber;
+                if (swscanf(FindFileData.cFileName, OemFileSpecification, &CurrentNumber) == 1
+                    && CurrentNumber <= OEM_INDEX_LIMIT)
+                {
+                    if (CurrentNumber >= NextFreeNumber)
+                        NextFreeNumber = CurrentNumber + 1;
+                }
+            } while (FindNextFileW(hSearch, &FindFileData));
+        }
+
+        if (NextFreeNumber > OEM_INDEX_LIMIT)
+        {
+            ERR("Too much custom .inf files\n");
+            SetLastError(ERROR_GEN_FAILURE);
+            goto cleanup;
+        }
+
+        /* Create the full path: %WINDIR%\Inf\OEM{XXXXX}.inf */
+        sprintfW(pFileName, OemFileSpecification, NextFreeNumber);
+        TRACE("Next available file is %s\n", debugstr_w(pFileName));
+
+        if (!CopyFileW(SourceInfFileName, pFullFileName, TRUE))
+        {
+            TRACE("CopyFileW() failed with error 0x%lx\n", GetLastError());
+            goto cleanup;
+        }
+
+        len = strlenW(pFullFileName) + 1;
+        if (RequiredSize)
+            *RequiredSize = len;
+        if (DestinationInfFileName)
+        {
+            if (DestinationInfFileNameSize >= len)
+            {
+                strcpyW(DestinationInfFileName, pFullFileName);
+                if (DestinationInfFileNameComponent)
+                    *DestinationInfFileNameComponent = &DestinationInfFileName[pFileName - pFullFileName];
+            }
+            else
+            {
+                SetLastError(ERROR_INSUFFICIENT_BUFFER);
+                goto cleanup;
+            }
+        }
+
+        if (CopyStyle & SP_COPY_DELETESOURCE)
+        {
+            if (!DeleteFileW(SourceInfFileName))
+            {
+                TRACE("DeleteFileW() failed with error 0x%lx\n", GetLastError());
+                goto cleanup;
+            }
+        }
+
+        ret = TRUE;
+
+cleanup:
+        if (hSourceFile != INVALID_HANDLE_VALUE)
+            CloseHandle(hSourceFile);
+        if (hSearch != INVALID_HANDLE_VALUE)
+            FindClose(hSearch);
+        MyFree(pFullFileName);
+    }
+
+    TRACE("Returning %d\n", ret);
+    if (ret) SetLastError(ERROR_SUCCESS);
+    return ret;
+}
+
+/***********************************************************************
+ *      SetupUninstallOEMInfA  (SETUPAPI.@)
+ */
+BOOL WINAPI SetupUninstallOEMInfA( PCSTR inf_file, DWORD flags, PVOID reserved )
+{
+    BOOL ret;
+    WCHAR *inf_fileW = NULL;
+
+    TRACE("%s, 0x%08x, %p\n", debugstr_a(inf_file), flags, reserved);
+
+    if (inf_file && !(inf_fileW = strdupAtoW( inf_file ))) return FALSE;
+    ret = SetupUninstallOEMInfW( inf_fileW, flags, reserved );
+    HeapFree( GetProcessHeap(), 0, inf_fileW );
+    return ret;
+}
+
+/***********************************************************************
+ *      SetupUninstallOEMInfW  (SETUPAPI.@)
+ */
+BOOL WINAPI SetupUninstallOEMInfW( PCWSTR inf_file, DWORD flags, PVOID reserved )
+{
+    static const WCHAR infW[] = {'\\','i','n','f','\\',0};
+    WCHAR target[MAX_PATH];
+
+    TRACE("%s, 0x%08x, %p\n", debugstr_w(inf_file), flags, reserved);
+
+    if (!inf_file)
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return FALSE;
+    }
+
+    if (!GetWindowsDirectoryW( target, ARRAY_SIZE( target ))) return FALSE;
+
+    strcatW( target, infW );
+    strcatW( target, inf_file );
+
+    if (flags & SUOI_FORCEDELETE)
+        return DeleteFileW(target);
+
+    FIXME("not deleting %s\n", debugstr_w(target));
+
+    return TRUE;
+}
+
 
 /**************************************************************************
  * GetSetFileTimestamp [SETUPAPI.@]
@@ -1206,51 +1633,6 @@ pSetupGetVersionInfoFromImage(LPWSTR lpFileName,
     MyFree(lpInfo);
 
     return TRUE;
-}
-
-/***********************************************************************
- *      SetupUninstallOEMInfW  (SETUPAPI.@)
- */
-BOOL WINAPI SetupUninstallOEMInfW( PCWSTR inf_file, DWORD flags, PVOID reserved )
-{
-    static const WCHAR infW[] = {'\\','i','n','f','\\',0};
-    WCHAR target[MAX_PATH];
-
-    TRACE("%s, 0x%08x, %p\n", debugstr_w(inf_file), flags, reserved);
-
-    if (!inf_file)
-    {
-        SetLastError(ERROR_INVALID_PARAMETER);
-        return FALSE;
-    }
-
-    if (!GetWindowsDirectoryW( target, sizeof(target)/sizeof(WCHAR) )) return FALSE;
-
-    strcatW( target, infW );
-    strcatW( target, inf_file );
-
-    if (flags & SUOI_FORCEDELETE)
-        return DeleteFileW(target);
-
-    FIXME("not deleting %s\n", debugstr_w(target));
-
-    return TRUE;
-}
-
-/***********************************************************************
- *      SetupUninstallOEMInfA  (SETUPAPI.@)
- */
-BOOL WINAPI SetupUninstallOEMInfA( PCSTR inf_file, DWORD flags, PVOID reserved )
-{
-    BOOL ret;
-    WCHAR *inf_fileW = NULL;
-
-    TRACE("%s, 0x%08x, %p\n", debugstr_a(inf_file), flags, reserved);
-
-    if (inf_file && !(inf_fileW = strdupAtoW( inf_file ))) return FALSE;
-    ret = SetupUninstallOEMInfW( inf_fileW, flags, reserved );
-    HeapFree( GetProcessHeap(), 0, inf_fileW );
-    return ret;
 }
 
 /***********************************************************************
@@ -1565,7 +1947,8 @@ DWORD WINAPI SetupGetFileCompressionInfoW( PCWSTR source, PWSTR *name, PDWORD so
         return ERROR_INVALID_PARAMETER;
 
     ret = SetupGetFileCompressionInfoExW( source, NULL, 0, &required, NULL, NULL, NULL );
-    if (!(actual_name = MyMalloc( required*sizeof(WCHAR) ))) return ERROR_NOT_ENOUGH_MEMORY;
+    if (!(actual_name = MyMalloc( required * sizeof(WCHAR) )))
+        return ERROR_NOT_ENOUGH_MEMORY;
 
     ret = SetupGetFileCompressionInfoExW( source, actual_name, required, &required,
                                           source_size, target_size, type );
@@ -1692,10 +2075,20 @@ DWORD WINAPI SetupDecompressOrCopyFileW( PCWSTR source, PCWSTR target, PUINT typ
     UINT comp;
     DWORD ret = ERROR_INVALID_PARAMETER;
 
+    TRACE("(%s, %s, %p)\n", debugstr_w(source), debugstr_w(target), type);
+
     if (!source || !target) return ERROR_INVALID_PARAMETER;
 
-    if (!type) comp = detect_compression_type( source );
-    else comp = *type;
+    if (!type)
+    {
+        comp = detect_compression_type( source );
+        TRACE("Detected compression type %u\n", comp);
+    }
+    else
+    {
+        comp = *type;
+        TRACE("Using specified compression type %u\n", comp);
+    }
 
     switch (comp)
     {
