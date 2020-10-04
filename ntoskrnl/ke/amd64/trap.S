@@ -1204,43 +1204,27 @@ FUNC KeSwitchKernelStack
 ENDFUNC
 
 
-
-
 #ifdef _MSC_VER
-#undef lgdt
-#undef lidt
 
-//void __lgdt(void *Source);
-PUBLIC __lgdt
-__lgdt:
-    lgdt fword ptr [rcx]
-    ret
-
-//void __sgdt(void *Destination);
-PUBLIC __sgdt
-__sgdt:
-    sgdt fword ptr [rcx]
-    ret
-
-// void __lldt(unsigned short Value)
+// void __lldt(unsigned short Value<cx>)
 PUBLIC __lldt
 __lldt:
     lldt cx
     ret
 
-//void __sldt(void *Destination);
+// void __sldt(void *Destination<rcx>);
 PUBLIC __sldt
 __sldt:
     sldt word ptr [rcx]
     ret
 
-//void __ltr(unsigned short Source);
+// void __ltr(unsigned short Source<cx>);
 PUBLIC __ltr
 __ltr:
     ltr cx
     ret
 
-//void __str(unsigned short *Destination);
+// void __str(unsigned short *Destination<rcx>);
 PUBLIC __str
 __str:
     str word ptr [rcx]
