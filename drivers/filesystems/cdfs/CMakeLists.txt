@@ -34,7 +34,7 @@ list(APPEND SOURCE
 
 add_library(cdfs MODULE ${SOURCE} cdfs.rc)
 set_module_type(cdfs kernelmodedriver)
-target_link_libraries(cdfs ${PSEH_LIB} memcmp)
+target_link_libraries(cdfs ${PSEH_LIB} memcmp libcntpr)
 add_importlibs(cdfs ntoskrnl hal)
 set_property(TARGET cdfs PROPERTY C_STANDARD 90)
 add_cd_file(TARGET cdfs DESTINATION reactos/system32/drivers NO_CAB FOR all)

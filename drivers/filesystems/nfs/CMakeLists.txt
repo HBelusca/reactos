@@ -11,7 +11,7 @@ add_definitions(-DRDBSS_TRACKER)
 
 add_library(nfs41_driver MODULE ${SOURCE} nfs.rc)
 set_module_type(nfs41_driver kernelmodedriver)
-target_link_libraries(nfs41_driver ntoskrnl_vista rdbsslib rxce copysup memcmp ${PSEH_LIB})
+target_link_libraries(nfs41_driver ntoskrnl_vista rdbsslib rxce copysup memcmp ${PSEH_LIB} libcntpr)
 add_importlibs(nfs41_driver ntoskrnl hal)
 
 if(GCC OR CLANG)

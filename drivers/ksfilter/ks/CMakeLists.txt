@@ -42,7 +42,7 @@ add_library(ks MODULE
 
 set_module_type(ks kernelmodedriver ENTRYPOINT 0)
 
-target_link_libraries(ks ${PSEH_LIB})
+target_link_libraries(ks ${PSEH_LIB} libcntpr)
 add_pch(ks precomp.h SOURCE)
 add_importlibs(ks ntoskrnl hal)
 add_dependencies(ks psdk)

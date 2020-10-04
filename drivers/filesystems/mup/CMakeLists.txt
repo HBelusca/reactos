@@ -7,7 +7,7 @@ list(APPEND SOURCE
 
 add_library(mup MODULE ${SOURCE} mup.rc)
 set_module_type(mup kernelmodedriver)
-target_link_libraries(mup ${PSEH_LIB})
+target_link_libraries(mup ${PSEH_LIB} libcntpr)
 add_importlibs(mup ntoskrnl hal)
 add_pch(mup mup.h SOURCE)
 add_cd_file(TARGET mup DESTINATION reactos/system32/drivers FOR all)

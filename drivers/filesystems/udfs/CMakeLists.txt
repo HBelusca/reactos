@@ -55,7 +55,7 @@ if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
 endif()
 
 set_module_type(udfs kernelmodedriver)
-target_link_libraries(udfs ${PSEH_LIB})
+target_link_libraries(udfs ${PSEH_LIB} libcntpr)
 add_importlibs(udfs ntoskrnl hal)
 add_pch(udfs udffs.h SOURCE)
 add_cd_file(TARGET udfs DESTINATION reactos/system32/drivers FOR all)

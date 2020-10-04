@@ -18,6 +18,7 @@ list(APPEND SOURCE
 
 add_library(ndisuio MODULE ${SOURCE} ndisuio.rc)
 set_module_type(ndisuio kernelmodedriver)
+target_link_libraries(ndisuio libcntpr)
 add_importlibs(ndisuio ndis ntoskrnl hal)
 add_pch(ndisuio ndisuio.h SOURCE)
 add_cd_file(TARGET ndisuio DESTINATION reactos/system32/drivers FOR all)

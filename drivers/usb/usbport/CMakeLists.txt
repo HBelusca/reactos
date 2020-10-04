@@ -28,5 +28,6 @@ add_library(usbport MODULE
 
 add_pch(usbport usbport.h "${PCH_SKIP_SOURCE}")
 set_module_type(usbport kernelmodedriver)
+target_link_libraries(usbport libcntpr)
 add_importlibs(usbport ntoskrnl hal)
 add_cd_file(TARGET usbport DESTINATION reactos/system32/drivers NO_CAB FOR all)

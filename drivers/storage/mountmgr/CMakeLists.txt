@@ -10,7 +10,7 @@ list(APPEND SOURCE
     mntmgr.h)
 
 add_library(mountmgr MODULE ${SOURCE} mountmgr.rc)
-target_link_libraries(mountmgr wdmguid ioevent memcmp)
+target_link_libraries(mountmgr wdmguid ioevent memcmp libcntpr)
 set_module_type(mountmgr kernelmodedriver)
 add_importlibs(mountmgr ntoskrnl hal)
 add_pch(mountmgr mntmgr.h SOURCE)

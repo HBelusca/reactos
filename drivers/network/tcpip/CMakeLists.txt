@@ -33,7 +33,7 @@ add_library(tcpip MODULE
     tcpip.rc
     ${CMAKE_CURRENT_BINARY_DIR}/tcpip.def)
 
-target_link_libraries(tcpip ip lwip ${PSEH_LIB} chew)
+target_link_libraries(tcpip ip lwip ${PSEH_LIB} chew libcntpr)
 set_module_type(tcpip kernelmodedriver)
 add_importlibs(tcpip ndis ntoskrnl hal)
 add_pch(tcpip include/precomp.h SOURCE)

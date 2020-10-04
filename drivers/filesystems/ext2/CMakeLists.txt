@@ -112,7 +112,7 @@ if(CLANG)
         "-Wno-#pragma-messages;-Wno-cast-calling-convention")
 endif()
 
-target_link_libraries(ext2fs memcmp ${PSEH_LIB})
+target_link_libraries(ext2fs memcmp ${PSEH_LIB} libcntpr)
 add_definitions(-D__KERNEL__ -D_CRT_NO_POSIX_ERROR_CODES)
 set_module_type(ext2fs kernelmodedriver)
 add_importlibs(ext2fs ntoskrnl hal)

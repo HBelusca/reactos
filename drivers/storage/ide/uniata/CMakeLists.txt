@@ -40,6 +40,7 @@ endif()
 
 add_pch(uniata stdafx.h SOURCE)
 set_module_type(uniata kernelmodedriver)
+target_link_libraries(uniata libcntpr)
 add_importlibs(uniata scsiport ntoskrnl hal)
 add_cd_file(TARGET uniata DESTINATION reactos/system32/drivers NO_CAB FOR all)
 add_registry_inf(uniata_reg.inf)

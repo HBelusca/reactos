@@ -27,5 +27,6 @@ add_library(scsiport MODULE
 
 add_pch(scsiport scsiport.h "${PCH_SKIP_SOURCE}")
 set_module_type(scsiport kernelmodedriver)
+target_link_libraries(scsiport libcntpr)
 add_importlibs(scsiport ntoskrnl hal)
 add_cd_file(TARGET scsiport DESTINATION reactos/system32/drivers NO_CAB FOR all)

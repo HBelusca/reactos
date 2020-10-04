@@ -21,7 +21,7 @@ add_library(usbccgp MODULE
     ${PCH_SKIP_SOURCE}
     usbccgp.rc)
 
-target_link_libraries(usbccgp ${PSEH_LIB})
+target_link_libraries(usbccgp ${PSEH_LIB} libcntpr)
 set_module_type(usbccgp kernelmodedriver)
 add_importlibs(usbccgp ntoskrnl hal usbd)
 add_pch(usbccgp usbccgp.h "${PCH_SKIP_SOURCE}")

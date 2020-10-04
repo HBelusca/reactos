@@ -39,6 +39,7 @@ add_library(ndis MODULE
     ${CMAKE_CURRENT_BINARY_DIR}/ndis.def)
 
 set_module_type(ndis kernelmodedriver)
+target_link_libraries(ndis libcntpr)
 add_importlibs(ndis ntoskrnl hal)
 add_pch(ndis include/ndissys.h SOURCE)
 add_cd_file(TARGET ndis DESTINATION reactos/system32/drivers FOR all)

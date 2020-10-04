@@ -26,7 +26,7 @@ list(APPEND SOURCE
 
 add_library(fastfat MODULE ${SOURCE} vfatfs.rc)
 set_module_type(fastfat kernelmodedriver)
-target_link_libraries(fastfat ${PSEH_LIB})
+target_link_libraries(fastfat ${PSEH_LIB} libcntpr)
 add_importlibs(fastfat ntoskrnl hal)
 add_pch(fastfat vfat.h SOURCE)
 add_cd_file(TARGET fastfat DESTINATION reactos/system32/drivers NO_CAB FOR all)

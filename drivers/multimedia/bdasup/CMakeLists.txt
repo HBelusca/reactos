@@ -5,6 +5,7 @@ add_library(bdasup MODULE
             ${CMAKE_CURRENT_BINARY_DIR}/bdasup.def)
 
 set_module_type(bdasup kernelmodedriver ENTRYPOINT 0)
+target_link_libraries(bdasup libcntpr)
 add_importlibs(bdasup ks ntoskrnl hal)
 add_cd_file(TARGET bdasup DESTINATION reactos/system32/drivers FOR all)
 

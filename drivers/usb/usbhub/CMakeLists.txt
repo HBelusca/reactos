@@ -17,7 +17,7 @@ add_library(usbhub MODULE
     ${PCH_SKIP_SOURCE}
     usbhub.rc)
 
-target_link_libraries(usbhub ${PSEH_LIB})
+target_link_libraries(usbhub ${PSEH_LIB} libcntpr)
 set_module_type(usbhub kernelmodedriver)
 add_importlibs(usbhub ntoskrnl hal wmilib usbd)
 add_pch(usbhub usbhub.h "${PCH_SKIP_SOURCE}")

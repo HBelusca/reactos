@@ -22,6 +22,7 @@ if(MSVC)
 endif()
 
 set_module_type(fbtusb kernelmodedriver)
+target_link_libraries(fbtusb libcntpr)
 add_importlibs(fbtusb ntoskrnl hal usbd)
 add_pch(fbtusb precomp.h SOURCE)
 add_cd_file(TARGET fbtusb DESTINATION reactos/system32/drivers FOR all)

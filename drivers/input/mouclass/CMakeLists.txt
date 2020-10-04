@@ -12,7 +12,7 @@ add_library(mouclass MODULE
     mouclass.rc)
 
 set_module_type(mouclass kernelmodedriver)
-target_link_libraries(mouclass ${PSEH_LIB})
+target_link_libraries(mouclass ${PSEH_LIB} libcntpr)
 add_importlibs(mouclass ntoskrnl hal)
 add_pch(mouclass mouclass.h "${PCH_SKIP_SOURCE}")
 add_cd_file(TARGET mouclass DESTINATION reactos/system32/drivers FOR all)

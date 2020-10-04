@@ -22,6 +22,7 @@ list(APPEND SOURCE
 
 add_library(netkvm MODULE ${SOURCE} wxp/parandis.rc)
 set_module_type(netkvm kernelmodedriver)
+target_link_libraries(netkvm libcntpr)
 add_importlibs(netkvm ndis ntoskrnl hal)
 add_cd_file(TARGET netkvm DESTINATION reactos/system32/drivers FOR all)
 add_driver_inf(netkvm netkvm.inf)

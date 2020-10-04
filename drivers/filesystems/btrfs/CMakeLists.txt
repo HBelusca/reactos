@@ -72,7 +72,7 @@ endif()
 
 add_definitions(-D__KERNEL__)
 set_module_type(btrfs kernelmodedriver)
-target_link_libraries(btrfs rtlver zlib_solo chkstk wdmguid ${PSEH_LIB})
+target_link_libraries(btrfs rtlver zlib_solo chkstk wdmguid ${PSEH_LIB} libcntpr)
 add_importlibs(btrfs ntoskrnl hal)
 add_cd_file(TARGET btrfs DESTINATION reactos/system32/drivers NO_CAB FOR all)
 add_driver_inf(btrfs btrfs.inf)

@@ -19,7 +19,7 @@ list(APPEND SOURCE
     include/afd.h)
 
 add_library(afd MODULE ${SOURCE} afd.rc)
-target_link_libraries(afd ${PSEH_LIB})
+target_link_libraries(afd ${PSEH_LIB} libcntpr)
 set_module_type(afd kernelmodedriver)
 add_importlibs(afd ntoskrnl hal)
 add_pch(afd include/afd.h SOURCE)
