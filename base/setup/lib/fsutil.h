@@ -44,6 +44,7 @@ NTSTATUS
 FormatFileSystem_UStr(
     _In_ PUNICODE_STRING DriveRoot,
     _In_ PCWSTR FileSystemName,
+    /**/_In_opt_ PCWSTR SourceRootPathForBootSector, /* HACK HACK! */
     _In_ FMIFS_MEDIA_FLAG MediaFlag,
     _In_opt_ PUNICODE_STRING Label,
     _In_ BOOLEAN QuickFormat,
@@ -54,6 +55,7 @@ NTSTATUS
 FormatFileSystem(
     _In_ PCWSTR DriveRoot,
     _In_ PCWSTR FileSystemName,
+    /**/_In_opt_ PCWSTR SourceRootPathForBootSector, /* HACK HACK! */
     _In_ FMIFS_MEDIA_FLAG MediaFlag,
     _In_opt_ PCWSTR Label,
     _In_ BOOLEAN QuickFormat,
@@ -121,6 +123,7 @@ NTSTATUS
 FormatPartition(
     _In_ PPARTENTRY PartEntry,
     _In_ PCWSTR FileSystemName,
+    /**/_In_opt_ PCWSTR SourceRootPathForBootSector, /* HACK HACK! */
     _In_ FMIFS_MEDIA_FLAG MediaFlag,
     _In_opt_ PCWSTR Label,
     _In_ BOOLEAN QuickFormat,
@@ -169,6 +172,7 @@ typedef struct _FORMAT_VOLUME_INFO
 
 /* Input information given by the 'FSVOLNOTIFY_STARTFORMAT' step ****/
     PCWSTR FileSystemName;
+    /**/PCWSTR SourceRootPathForBootSector; /* HACK HACK! */
     FMIFS_MEDIA_FLAG MediaFlag;
     PCWSTR Label;
     BOOLEAN QuickFormat;

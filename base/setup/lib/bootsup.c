@@ -617,7 +617,7 @@ SaveBootSector(
 }
 
 
-static
+// static
 NTSTATUS
 InstallBootCodeToDisk(
     IN PCWSTR SrcPath,
@@ -1548,7 +1548,8 @@ InstallBootManagerAndBootEntriesWorker(
             return Status;
         }
 
-        /* Install FAT12 bootsector */
+#if 0 // Already done by FormatFileSystem()
+        /* Install FAT12 bootcode */
         CombinePaths(SrcPath, ARRAYSIZE(SrcPath), 2, SourceRootPath->Buffer, L"\\loader\\fat.bin");
 
         DPRINT1("Install FAT12 bootcode: %S ==> %S\n", SrcPath, SystemRootPath->Buffer);
@@ -1558,6 +1559,7 @@ InstallBootManagerAndBootEntriesWorker(
             DPRINT1("InstallBootCodeToDisk(FAT12) failed (Status 0x%08lx)\n", Status);
             return Status;
         }
+#endif
     }
 
     return Status;
@@ -1873,6 +1875,7 @@ InstallBootcodeToRemovable(
     /* Format the removable disk */
     Status = FormatFileSystem_UStr(&RootDrive,
                                    FileSystemName,
+                                   /**/ SourceRootPath->Buffer, /* HACK HACK! */ /**/
                                    (IsFloppy ? FMIFS_FLOPPY : FMIFS_REMOVABLE),
                                    NULL,
                                    TRUE,

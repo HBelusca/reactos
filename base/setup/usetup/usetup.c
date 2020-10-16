@@ -2802,6 +2802,8 @@ FsVolCallback(
             return Result;
 
         StartFormat(FmtInfo, FileSystemList->Selected);
+        /** HACK HACK! **/
+        /**/ FmtInfo->SourceRootPathForBootSector = USetupData.SourceRootPath.Buffer; /**/
         return FSVOL_DOIT;
     }
 

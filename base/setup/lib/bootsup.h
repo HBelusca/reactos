@@ -22,4 +22,11 @@ InstallBootcodeToRemovable(
     _In_ PCUNICODE_STRING SourceRootPath,
     _In_ PCUNICODE_STRING DestinationArcPath);
 
+/** Temporary HACKs! **/
+NTSTATUS
+InstallBootCodeToDisk(
+    IN PCWSTR SrcPath,
+    IN PCWSTR RootPath,
+    IN PFS_INSTALL_BOOTCODE InstallBootCode);
+
 /* EOF */
