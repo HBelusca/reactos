@@ -3480,6 +3480,8 @@ FsVolCallback(
         {
             /* Set up the necessary formatting information */
             PrepareFormat(PartInfo, FileSystemList->Selected);
+            /** HACK HACK! **/
+            /**/ PartInfo->SourceRootPathForBootSector = USetupData.SourceRootPath.Buffer; /**/
 
             /* Display the formatting page */
             Result = FormatPartitionPage(FsVolContext);

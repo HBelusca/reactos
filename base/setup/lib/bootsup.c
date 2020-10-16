@@ -548,7 +548,7 @@ SaveBootSector(
 }
 
 
-static
+// static
 NTSTATUS
 InstallBootCodeToDisk(
     IN PCWSTR SrcPath,
@@ -1272,6 +1272,7 @@ InstallFatBootcodeToFloppy(
     // FormatPartition(...)
     Status = FormatFileSystem(FloppyDevice,
                               L"FAT",
+                              /**/ SourceRootPath->Buffer, /* HACK HACK! */ /**/
                               FMIFS_FLOPPY,
                               NULL,
                               TRUE,
@@ -1308,7 +1309,8 @@ InstallFatBootcodeToFloppy(
         return Status;
     }
 
-    /* Install FAT12 boosector */
+#if 0 // Already done by FormatFileSystem()
+    /* Install FAT12 bootcode */
     CombinePaths(SrcPath, ARRAYSIZE(SrcPath), 2, SourceRootPath->Buffer, L"\\loader\\fat.bin");
     CombinePaths(DstPath, ARRAYSIZE(DstPath), 1, FloppyDevice);
 
@@ -1319,6 +1321,7 @@ InstallFatBootcodeToFloppy(
         DPRINT1("InstallBootCodeToDisk(FAT12) failed (Status %lx)\n", Status);
         return Status;
     }
+#endif
 
     return STATUS_SUCCESS;
 }

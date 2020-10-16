@@ -20,6 +20,8 @@
 #include "fsrec.h"
 #include "bootcode.h"
 #include "fsutil.h"
+#include "filesup.h" // For CombinePaths().
+#include "bootsup.h" // For InstallBootCodeToDisk().
 
 #include <fslib/vfatlib.h>
 #include <fslib/btrfslib.h>
@@ -231,6 +233,7 @@ ChkdskFileSystem_UStr(
     {
         // BOOLEAN Argument = FALSE;
         // Callback(DONE, 0, &Argument);
+        DPRINT1("Unknown file system '%S'\n", FileSystemName);
         return STATUS_NOT_SUPPORTED;
     }
 
@@ -270,13 +273,16 @@ NTSTATUS
 FormatFileSystem_UStr(
     IN PUNICODE_STRING DriveRoot,
     IN PCWSTR FileSystemName,
+    /**/IN PCWSTR SourceRootPathForBootSector OPTIONAL, /* HACK HACK! */
     IN FMIFS_MEDIA_FLAG MediaFlag,
     IN PUNICODE_STRING Label,
     IN BOOLEAN QuickFormat,
     IN ULONG ClusterSize,
     IN PFMIFSCALLBACK Callback)
 {
+    NTSTATUS Status;
     PFILE_SYSTEM FileSystem;
+    WCHAR SrcPath[MAX_PATH];
 
     FileSystem = GetFileSystemByName(FileSystemName);
 
@@ -284,21 +290,137 @@ FormatFileSystem_UStr(
     {
         // BOOLEAN Argument = FALSE;
         // Callback(DONE, 0, &Argument);
+        DPRINT1("Unknown file system '%S'\n", FileSystemName);
         return STATUS_NOT_SUPPORTED;
     }
 
-    return FileSystem->FormatFunc(DriveRoot,
-                                  MediaFlag,
-                                  Label,
-                                  QuickFormat,
-                                  ClusterSize,
-                                  Callback);
+    /* Do the formatting */
+    Status = FileSystem->FormatFunc(DriveRoot,
+                                    MediaFlag,
+                                    Label,
+                                    QuickFormat,
+                                    ClusterSize,
+                                    Callback);
+
+    /* If no path to source root for finding any boot sector file, we are done */
+    if (!SourceRootPathForBootSector)
+        return Status;
+
+    /* Install a sane boot sector */
+
+    if (wcsicmp(FileSystemName, L"FAT")   == 0 ||
+        wcsicmp(FileSystemName, L"FAT32") == 0)
+    {
+        if (wcsicmp(FileSystemName, L"FAT32") == 0 /* ||
+            PartitionType == PARTITION_FAT32   ||
+            PartitionType == PARTITION_FAT32_XINT13 */)
+        {
+            /* Install FAT32 bootcode */
+
+            /** HACK: In the future bootsector handling, these will be
+             ** pre-loaded separately, at the same time the Format/ChkDsk
+             ** handlers are initialized. **/
+            CombinePaths(SrcPath, ARRAYSIZE(SrcPath), 2,
+                         SourceRootPathForBootSector,
+                         L"\\loader\\fat32.bin");
+
+            DPRINT1("Install FAT32 bootcode: %S ==> %S\n", SrcPath, DriveRoot->Buffer);
+            Status = InstallBootCodeToDisk(SrcPath, DriveRoot->Buffer, InstallFat32BootCode);
+            if (!NT_SUCCESS(Status))
+            {
+                DPRINT1("InstallBootCodeToDisk(FAT32) failed (Status %lx)\n", Status);
+                // return Status;
+            }
+        }
+        else if (/*(PartitionType == PARTITION_FAT_12) &&*/ (MediaFlag == FMIFS_FLOPPY))
+        {
+            /* Install FAT12 bootcode */
+
+            /** HACK: In the future bootsector handling, these will be
+             ** pre-loaded separately, at the same time the Format/ChkDsk
+             ** handlers are initialized. **/
+            CombinePaths(SrcPath, ARRAYSIZE(SrcPath), 2,
+                         SourceRootPathForBootSector,
+                         L"\\loader\\fat.bin");
+
+            DPRINT1("Install FAT12 bootcode: %S ==> %S\n", SrcPath, DriveRoot->Buffer);
+            Status = InstallBootCodeToDisk(SrcPath, DriveRoot->Buffer, InstallFat12BootCode);
+            if (!NT_SUCCESS(Status))
+            {
+                DPRINT1("InstallBootCodeToDisk(FAT12) failed (Status %lx)\n", Status);
+                // return Status;
+            }
+        }
+        else
+        {
+            /* Install FAT16 bootcode */
+
+            /** HACK: In the future bootsector handling, these will be
+             ** pre-loaded separately, at the same time the Format/ChkDsk
+             ** handlers are initialized. **/
+            CombinePaths(SrcPath, ARRAYSIZE(SrcPath), 2,
+                         SourceRootPathForBootSector,
+                         L"\\loader\\fat.bin");
+
+            DPRINT1("Install FAT16 bootcode: %S ==> %S\n", SrcPath, DriveRoot->Buffer);
+            Status = InstallBootCodeToDisk(SrcPath, DriveRoot->Buffer, InstallFat16BootCode);
+            if (!NT_SUCCESS(Status))
+            {
+                DPRINT1("InstallBootCodeToDisk(FAT16) failed (Status %lx)\n", Status);
+                // return Status;
+            }
+        }
+    }
+    /*
+    else if (wcsicmp(FileSystemName, L"NTFS") == 0)
+    {
+        return Status;
+    }
+    */
+    else if (wcsicmp(FileSystemName, L"BTRFS") == 0)
+    {
+        /* Install BTRFS bootcode */
+
+        /** HACK: In the future bootsector handling, these will be
+         ** pre-loaded separately, at the same time the Format/ChkDsk
+         ** handlers are initialized. **/
+        CombinePaths(SrcPath, ARRAYSIZE(SrcPath), 2,
+                     SourceRootPathForBootSector,
+                     L"\\loader\\btrfs.bin");
+
+        DPRINT1("Install BTRFS bootcode: %S ==> %S\n", SrcPath, DriveRoot->Buffer);
+        Status = InstallBootCodeToDisk(SrcPath, DriveRoot->Buffer, InstallBtrfsBootCode);
+        if (!NT_SUCCESS(Status))
+        {
+            DPRINT1("InstallBootCodeToDisk(BTRFS) failed (Status %lx)\n", Status);
+            // return Status;
+        }
+    }
+    /*
+    else if (wcsicmp(FileSystemName, L"EXT2")  == 0 ||
+             wcsicmp(FileSystemName, L"EXT3")  == 0 ||
+             wcsicmp(FileSystemName, L"EXT4")  == 0 ||
+             wcsicmp(FileSystemName, L"FFS")   == 0 ||
+             wcsicmp(FileSystemName, L"REISERFS") == 0)
+    {
+        return Status;
+    }
+    */
+    else
+    {
+        /* Unknown file system */
+        DPRINT1("Unknown file system '%S'\n", FileSystemName);
+        // return STATUS_NOT_SUPPORTED;
+    }
+
+    return Status;
 }
 
 NTSTATUS
 FormatFileSystem(
     IN PCWSTR DriveRoot,
     IN PCWSTR FileSystemName,
+    /**/IN PCWSTR SourceRootPathForBootSector OPTIONAL, /* HACK HACK! */
     IN FMIFS_MEDIA_FLAG MediaFlag,
     IN PCWSTR Label,
     IN BOOLEAN QuickFormat,
@@ -313,6 +435,7 @@ FormatFileSystem(
 
     return FormatFileSystem_UStr(&DriveRootU,
                                  FileSystemName,
+                                 /**/ SourceRootPathForBootSector, /**/
                                  MediaFlag,
                                  &LabelU,
                                  QuickFormat,
@@ -669,6 +792,7 @@ NTSTATUS // ERROR_NUMBER
 FormatPartition(
     IN PPARTENTRY PartEntry,
     IN PCWSTR FileSystemName,
+    /**/IN PCWSTR SourceRootPathForBootSector OPTIONAL, /* HACK HACK! */
     IN FMIFS_MEDIA_FLAG MediaFlag,
     IN PCWSTR Label,
     IN BOOLEAN QuickFormat,
@@ -744,6 +868,7 @@ FormatPartition(
     /* Format the partition */
     Status = FormatFileSystem(PartitionRootPath,
                               FileSystemName,
+                              /**/ SourceRootPathForBootSector, /**/
                               MediaFlag,
                               Label,
                               QuickFormat,
@@ -851,6 +976,7 @@ RetryFormat:
     /* Format the partition */
     Status = FormatPartition(PartEntry,
                              PartInfo.FileSystemName,
+                             /**/ PartInfo.SourceRootPathForBootSector, /* HACK HACK! */ /**/
                              PartInfo.MediaFlag,
                              PartInfo.Label,
                              PartInfo.QuickFormat,

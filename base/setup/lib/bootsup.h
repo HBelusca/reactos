@@ -44,4 +44,11 @@ InstallFatBootcodeToFloppy(
     IN PUNICODE_STRING SourceRootPath,
     IN PUNICODE_STRING DestinationArcPath);
 
+/** Temporary HACKs! **/
+NTSTATUS
+InstallBootCodeToDisk(
+    IN PCWSTR SrcPath,
+    IN PCWSTR RootPath,
+    IN PFS_INSTALL_BOOTCODE InstallBootCode);
+
 /* EOF */
