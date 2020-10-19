@@ -16,7 +16,8 @@
  *  with this program; if not, write to the Free Software Foundation, Inc.,
  *  51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
-/* COPYRIGHT:       See COPYING in the top level directory
+/*
+ * COPYRIGHT:       See COPYING in the top level directory
  * PROJECT:         ReactOS text-mode setup
  * FILE:            base/setup/usetup/chkdsk.c
  * PURPOSE:         Filesystem chkdsk support functions
@@ -52,13 +53,23 @@ ChkdskCallback(
     return TRUE;
 }
 
+// VOID
+// PrepareCheck(
+    // IN OUT PCHECK_PARTITION_INFO PartInfo)
+// {
+// }
 
-NTSTATUS
-ChkdskPartition(
-    IN PUNICODE_STRING DriveRoot,
-    IN PCWSTR FileSystemName)
+VOID
+StartCheck(
+    IN OUT PCHECK_PARTITION_INFO PartInfo)
 {
-    NTSTATUS Status;
+    // TODO: Think about which values could be defaulted...
+    // PartInfo->FileSystemName = PartInfo->PartEntry->FileSystem;
+    PartInfo->FixErrors = TRUE;
+    PartInfo->Verbose = FALSE;
+    PartInfo->CheckOnlyIfDirty = TRUE;
+    PartInfo->ScanDrive = FALSE;
+    PartInfo->Callback = ChkdskCallback;
 
     ChkdskProgressBar = CreateProgressBar(6,
                                           yScreen - 14,
@@ -70,21 +81,16 @@ ChkdskPartition(
                                           MUIGetString(STRING_CHECKINGDISK));
 
     ProgressSetStepCount(ChkdskProgressBar, 100);
+}
 
-    Status = ChkdskFileSystem_UStr(DriveRoot,
-                                   FileSystemName,
-                                   TRUE,            /* FixErrors */
-                                   FALSE,           /* Verbose */
-                                   TRUE,            /* CheckOnlyIfDirty */
-                                   FALSE,           /* ScanDrive */
-                                   ChkdskCallback); /* Callback */
-
+VOID
+EndCheck(
+    IN NTSTATUS Status)
+{
     DestroyProgressBar(ChkdskProgressBar);
     ChkdskProgressBar = NULL;
 
     DPRINT("ChkdskPartition() finished with status 0x%08lx\n", Status);
-
-    return Status;
 }
 
 /* EOF */

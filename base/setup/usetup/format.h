@@ -26,10 +26,16 @@
 
 #pragma once
 
-NTSTATUS
-FormatPartition(
-    IN PUNICODE_STRING DriveRoot,
-    IN PCWSTR FileSystemName,
-    IN BOOLEAN QuickFormat);
+VOID
+PrepareFormat(
+    IN OUT PFORMAT_PARTITION_INFO PartInfo,
+    IN PFILE_SYSTEM_ITEM SelectedFileSystem);
+
+VOID
+StartFormat(VOID);
+
+VOID
+EndFormat(
+    IN NTSTATUS Status);
 
 /* EOF */

@@ -25,9 +25,16 @@
 
 #pragma once
 
-NTSTATUS
-ChkdskPartition(
-    IN PUNICODE_STRING DriveRoot,
-    IN PCWSTR FileSystemName);
+// VOID
+// PrepareCheck(
+    // IN OUT PCHECK_PARTITION_INFO PartInfo);
+
+VOID
+StartCheck(
+    IN OUT PCHECK_PARTITION_INFO PartInfo);
+
+VOID
+EndCheck(
+    IN NTSTATUS Status);
 
 /* EOF */

@@ -16,7 +16,8 @@
  *  with this program; if not, write to the Free Software Foundation, Inc.,
  *  51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
-/* COPYRIGHT:       See COPYING in the top level directory
+/*
+ * COPYRIGHT:       See COPYING in the top level directory
  * PROJECT:         ReactOS text-mode setup
  * FILE:            base/setup/usetup/format.c
  * PURPOSE:         Filesystem format support functions
@@ -84,15 +85,25 @@ FormatCallback(
     return TRUE;
 }
 
-
-NTSTATUS
-FormatPartition(
-    IN PUNICODE_STRING DriveRoot,
-    IN PCWSTR FileSystemName,
-    IN BOOLEAN QuickFormat)
+VOID
+PrepareFormat(
+    IN OUT PFORMAT_PARTITION_INFO PartInfo,
+    IN PFILE_SYSTEM_ITEM SelectedFileSystem)
 {
-    NTSTATUS Status;
+    ASSERT(SelectedFileSystem && SelectedFileSystem->FileSystem);
 
+    // TODO: Think about which values could be defaulted...
+    PartInfo->FileSystemName = SelectedFileSystem->FileSystem;
+    PartInfo->MediaFlag = FMIFS_HARDDISK;
+    PartInfo->Label = NULL;
+    PartInfo->QuickFormat = SelectedFileSystem->QuickFormat;
+    PartInfo->ClusterSize = 0;
+    PartInfo->Callback = FormatCallback;
+}
+
+VOID
+StartFormat(VOID)
+{
     FormatProgressBar = CreateProgressBar(6,
                                           yScreen - 14,
                                           xScreen - 7,
@@ -103,21 +114,16 @@ FormatPartition(
                                           MUIGetString(STRING_FORMATTINGDISK));
 
     ProgressSetStepCount(FormatProgressBar, 100);
+}
 
-    Status = FormatFileSystem_UStr(DriveRoot,
-                                   FileSystemName,
-                                   FMIFS_HARDDISK,  /* MediaFlag */
-                                   NULL,            /* Label */
-                                   QuickFormat,     /* QuickFormat */
-                                   0,               /* ClusterSize */
-                                   FormatCallback); /* Callback */
-
+VOID
+EndFormat(
+    IN NTSTATUS Status)
+{
     DestroyProgressBar(FormatProgressBar);
     FormatProgressBar = NULL;
 
     DPRINT("FormatPartition() finished with status 0x%08lx\n", Status);
-
-    return Status;
 }
 
 /* EOF */
