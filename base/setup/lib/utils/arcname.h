@@ -2,15 +2,17 @@
  * PROJECT:     ReactOS Setup Library
  * LICENSE:     GPL-2.0+ (https://spdx.org/licenses/GPL-2.0+)
  * PURPOSE:     ARC path to-and-from NT path resolver.
- * COPYRIGHT:   Copyright 2017-2018 Hermes Belusca-Maito
+ * COPYRIGHT:   Copyright 2017-2020 Hermes Belusca-Maito
  */
 
 #pragma once
 
+#if 0
 BOOLEAN
 ArcPathNormalize(
     OUT PUNICODE_STRING NormalizedArcPath,
     IN  PCWSTR ArcPath);
+#endif
 
 BOOLEAN
 ArcPathToNtPath(

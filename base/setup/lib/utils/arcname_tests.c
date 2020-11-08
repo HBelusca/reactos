@@ -3,7 +3,7 @@
  * LICENSE:     GPL-2.0+ (https://spdx.org/licenses/GPL-2.0+)
  * PURPOSE:     Tests for the arcname.c functions:
  *              ArcPathNormalize(), ArcPathToNtPath().
- * COPYRIGHT:   Copyright 2017-2018 Hermes Belusca-Maito
+ * COPYRIGHT:   Copyright 2017-2020 Hermes Belusca-Maito
  *
  * You may need to fix the included headers before being able to
  * compile this file (this file has only been compiled under VS).
@@ -21,8 +21,6 @@
 #include <ntstatus.h>
 
 #include "arcname.h"
-
-#define OBJ_NAME_PATH_SEPARATOR ((WCHAR)L'\\')
 
 int _tmain(int argc, _TCHAR* argv[])
 {
