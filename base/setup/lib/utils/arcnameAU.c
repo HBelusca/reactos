@@ -151,19 +151,14 @@ NAME_AU(ArcGetNextToken)(
         return NULL;
 #endif
 
-    /* We should have succeeded, copy the token specifier in the buffer */
-    Status = RtlStringCbCopyN(TokenSpecifier->Buffer,
-                              TokenSpecifier->MaximumLength,
-                              ArcPath, SpecifierLength);
-    if (!NT_SUCCESS(Status))
-        return NULL;
-
+    /* Initialize the token specifier to the buffer */
+    RtlInitEmptyString(TokenSpecifier, ArcPath, (USHORT)SpecifierLength)
     TokenSpecifier->Length = (USHORT)SpecifierLength;
 
     /* We succeeded, return the token key value */
     *Key = KeyValue;
 
-    /* Next token starts just after */
+    /* The next token starts just after */
     return ++p;
 }
 
@@ -243,7 +238,6 @@ NAME_AU(ParseArcName)(
     OUT PBOOLEAN pUseSignature)
 {
     // NTSTATUS Status;
-    TCHAR TokenBuffer[50];
     STRING Token;
     PCTSTR p, q;
     ULONG AdapterKey = 0;
@@ -261,8 +255,6 @@ NAME_AU(ParseArcName)(
      * where the [filepath] part is not being parsed.
      */
 
-    RtlInitEmptyString(&Token, TokenBuffer, sizeof(TokenBuffer));
-
     p = *ArcNamePath;
 
     /* Retrieve the adapter */
@@ -274,7 +266,8 @@ NAME_AU(ParseArcName)(
     }
 
     /* Check for the 'signature()' pseudo-adapter, introduced in Windows 2000 */
-    if (_tcsicmp(Token.Buffer, TEXT("signature")) == 0)
+    if ((Token.Length == sizeof(TEXT("signature"))-sizeof(CHAR_NULL)) &&
+        _tcsnicmp(Token.Buffer, TEXT("signature"), Token.Length / sizeof(TCHAR)) == 0)
     {
         /*
          * We've got a signature! Remember this for later, and set the adapter type to SCSI.
@@ -287,7 +280,6 @@ NAME_AU(ParseArcName)(
     else
     {
         /* Check for regular adapters */
-        // ArcMatchToken(Token.Buffer, AdapterTypes);
         AdapterType = (ADAPTER_TYPE)ArcMatchToken_Str(&Token, AdapterTypes);
         if (AdapterType >= AdapterTypeMax)
         {
@@ -336,7 +328,6 @@ NAME_AU(ParseArcName)(
 #endif
         return STATUS_OBJECT_PATH_SYNTAX_BAD;
     }
-    // ArcMatchToken(Token.Buffer, ControllerTypes);
     ControllerType = (CONTROLLER_TYPE)ArcMatchToken_Str(&Token, ControllerTypes);
     if (ControllerType >= ControllerTypeMax)
     {
@@ -404,7 +395,6 @@ NAME_AU(ParseArcName)(
 #endif
         return STATUS_OBJECT_PATH_SYNTAX_BAD;
     }
-    // ArcMatchToken(Token.Buffer, PeripheralTypes);
     PeripheralType = (PERIPHERAL_TYPE)ArcMatchToken_Str(&Token, PeripheralTypes);
     if (PeripheralType >= PeripheralTypeMax)
     {
@@ -469,7 +459,8 @@ NAME_AU(ParseArcName)(
 
     /* Check for the optional 'partition' specifier */
     q = ArcGetNextToken(p, &Token, &PartitionNumber);
-    if (q && _tcsicmp(Token.Buffer, TEXT("partition")) == 0)
+    if (q && (Token.Length == sizeof(TEXT("partition"))-sizeof(CHAR_NULL)) &&
+        _tcsnicmp(Token.Buffer, TEXT("partition"), Token.Length / sizeof(TCHAR)) == 0)
     {
         /* We've got a partition! */
         p = q;
