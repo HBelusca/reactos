@@ -53,6 +53,9 @@
 #define RtlStringToInteger  RtlUnicodeStringToInteger
 #endif
 
+#undef RtlGUIDFromStringEx
+#define RtlGUIDFromStringEx NAME_AU(RtlGUIDFromStringEx) /* Private, see below */
+
 #undef RtlStringCbCopyN
 #define RtlStringCbCopyN    NAME_AW(RtlStringCbCopyN)
 #undef RtlStringCbCatN
@@ -91,6 +94,118 @@ RtlAnsiStringToInteger(
 
     RtlStringCbCopyNA(buffer, sizeof(buffer), ptr, min(len, sizeof(buffer)));
     return RtlCharToInteger(buffer, base, value);
+}
+
+#define GUID_STRING_LENGTH 36
+
+/*
+ * Wraps RtlGUIDFromString() functionality around
+ * so as to accept GUID strings with optional braces.
+ */
+NTSTATUS
+NTAPI
+RtlGUIDFromStringExU(
+    IN PCUNICODE_STRING str,
+    OUT PGUID guid)
+{
+    /*
+     * The RtlGUIDFromString() function only accepts GUID strings that
+     * start and end with braces, while we want to make these optional.
+     * Since a GUID string has a known fixed length, use such a buffer
+     * to always store the braces (if not already present in the string)
+     * for making the RtlGUIDFromString() function happy.
+     *
+     * A GUID string has the format: {XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX}
+     *                                DWORD... WORD WORD BYTES............
+     */
+    WCHAR strGuid[GUID_STRING_LENGTH + 2 + 1];
+    UNICODE_STRING strUGuid = RTL_CONSTANT_STRING(strGuid);
+
+    /* Check whether the string has braces, or does not */
+    if (str->Length == GUID_STRING_LENGTH * sizeof(WCHAR))
+    {
+        /* Does not have braces: copy the string in the temporary
+         * buffer, add the braces and use that buffer instead. */
+        RtlCopyMemory(&strGuid[1], str->Buffer, str->Length);
+        strGuid[0] = L'{';
+        strGuid[GUID_STRING_LENGTH + 1] = L'}';
+        str = &strUGuid;
+    }
+    else if ((str->Length == (GUID_STRING_LENGTH + 2) * sizeof(WCHAR)) &&
+             (str->Buffer[0] == L'{') &&
+             (str->Buffer[GUID_STRING_LENGTH + 1] == L'}'))
+    {
+        /* Does have braces: just use the string */
+    }
+    else
+    {
+        /* Definitively wrong format */
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    /* Call the RTL UNICODE function */
+    return RtlGUIDFromString(str, guid);
+}
+
+/*
+ * Does the same job as RtlGUIDFromStringExU(), but takes an ANSI string.
+ */
+NTSTATUS
+NTAPI
+RtlGUIDFromStringExA(
+    IN PCANSI_STRING str,
+    OUT PGUID guid)
+{
+    /*
+     * The RtlGUIDFromString() function only accepts GUID strings that
+     * start and end with braces, while we want to make these optional.
+     * Since a GUID string has a known fixed length, use such a buffer
+     * to always store the braces (if not already present in the string)
+     * for making the RtlGUIDFromString() function happy.
+     *
+     * A GUID string has the format: {XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX}
+     *                                DWORD... WORD WORD BYTES............
+     */
+    WCHAR strGuid[GUID_STRING_LENGTH + 2 + 1];
+    UNICODE_STRING strUGuid = RTL_CONSTANT_STRING(strGuid);
+    PWCHAR Src, Dst;
+    USHORT Length;
+
+    /*
+     * Check whether the string has braces, or does not.
+     * In all cases we will manually "convert" the string to "UCS-2"
+     * by extending each character to two bytes: this is OK since
+     * the string representation of a GUID uses only [0-9a-fA-F] and {}-
+     * characters, which are ANSI.
+     */
+    if (str->Length == GUID_STRING_LENGTH * sizeof(CHAR))
+    {
+        /* Does not have braces: add the braces */
+        strGuid[0] = L'{';
+        strGuid[GUID_STRING_LENGTH + 1] = L'}';
+        Dst = strGuid+1;
+    }
+    else if ((str->Length == (GUID_STRING_LENGTH + 2) * sizeof(CHAR)) &&
+             (str->Buffer[0] == '{') &&
+             (str->Buffer[GUID_STRING_LENGTH + 1] == '}'))
+    {
+        /* Does have braces: copy from the beginning */
+        Dst = strGuid;
+    }
+    else
+    {
+        /* Definitively wrong format */
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    /* Manually convert the string */
+    Src = str->Buffer;
+    Length = str->Length / sizeof(CHAR);
+    while (Length--)
+        *Dst++ = (WCHAR)*Src++;
+
+    /* Call the RTL UNICODE function */
+    return RtlGUIDFromString(&strUGuid, guid);
 }
 
 
@@ -319,10 +434,10 @@ NAME_AU(ParseArcName)(
     OUT PADAPTER_TYPE pAdapterType,
     OUT PCONTROLLER_TYPE pControllerType,
     OUT PPERIPHERAL_TYPE pPeripheralType,
-    OUT PBOOLEAN pUseSignature)
+    OUT PDEVICE_SIGNATURE pSignature)
 {
-    // NTSTATUS Status;
-    STRING Token;
+    NTSTATUS Status;
+    STRING Token, KeyStr;
     PCTSTR p, q;
     ULONG AdapterKey = 0;
     ULONG ControllerKey = 0;
@@ -331,7 +446,7 @@ NAME_AU(ParseArcName)(
     ADAPTER_TYPE AdapterType = AdapterTypeMax;
     CONTROLLER_TYPE ControllerType = ControllerTypeMax;
     PERIPHERAL_TYPE PeripheralType = PeripheralTypeMax;
-    BOOLEAN UseSignature = FALSE;
+    DEVICE_SIGNATURE Signature = {SignatureNone, {0}};
 
     /*
      * The format of ArcName is:
@@ -342,7 +457,7 @@ NAME_AU(ParseArcName)(
     p = *ArcNamePath;
 
     /* Retrieve the adapter */
-    p = ArcGetNextToken(p, &Token, &AdapterKey);
+    p = ArcGetNextTokenEx(p, &Token, &KeyStr);
     if (!p)
     {
         DPRINT1("No adapter specified!\n");
@@ -354,15 +469,65 @@ NAME_AU(ParseArcName)(
         _tcsnicmp(Token.Buffer, TEXT("signature"), Token.Length / sizeof(TCHAR)) == 0)
     {
         /*
-         * We've got a signature! Remember this for later, and set the adapter type to SCSI.
-         * We however check that the rest of the ARC path is valid by parsing the other tokens.
-         * AdapterKey stores the disk signature value (that holds in a ULONG).
+         * We have a signature. Set the adapter type to SCSI and parse
+         * the key value, determining whether it is a ULONG or as a GUID.
+         * Default to ULONG value 0 if the key value is empty.
          */
-        UseSignature = TRUE;
+        AdapterKey = 0;
         AdapterType = ScsiAdapter;
+
+        /*
+         * If the key value length is smaller than 2+8 characters,
+         * (optional prefix '0x' followed by 8 digits [0-9a-f])
+         * consider it possibly represents a ULONG in hexadecimal;
+         * otherwise consider it to be a GUID.
+         */
+        if (KeyStr.Length / sizeof(TCHAR) <= 2+8)
+        {
+            Signature.Type = SignatureLong;
+            if (KeyStr.Length / sizeof(TCHAR) == 0)
+            {
+                Signature.Long = 0;
+                Status = STATUS_SUCCESS;
+            }
+            else
+            {
+                Status = RtlStringToInteger(&KeyStr, 16, &Signature.Long);
+            }
+        }
+        else
+        {
+            Signature.Type = SignatureGuid;
+            Status = RtlGUIDFromStringEx(&KeyStr, &Signature.Guid);
+        }
+        if (!NT_SUCCESS(Status))
+        {
+            DPRINT1("Invalid signature key value!\n");
+            return STATUS_OBJECT_PATH_SYNTAX_BAD;
+        }
     }
     else
     {
+        /*
+         * If the token is "specifier()", i.e. the key is empty, default to
+         * ULONG value 0 so as to make the token equivalent to "specifier(0)",
+         * as it should be.
+         */
+        if (KeyStr.Length / sizeof(TCHAR) == 0)
+        {
+            AdapterKey = 0;
+            Status = STATUS_SUCCESS;
+        }
+        else
+        {
+            Status = RtlStringToInteger(&KeyStr, 10, &AdapterKey);
+        }
+        if (!NT_SUCCESS(Status))
+        {
+            DPRINT1("Invalid adapter key value!\n");
+            return STATUS_OBJECT_PATH_SYNTAX_BAD;
+        }
+
         /* Check for regular adapters */
         AdapterType = (ADAPTER_TYPE)ArcMatchToken_Str(&Token, AdapterTypes);
         if (AdapterType >= AdapterTypeMax)
@@ -570,7 +735,7 @@ Quit:
     *pAdapterType     = AdapterType;
     *pControllerType  = ControllerType;
     *pPeripheralType  = PeripheralType;
-    *pUseSignature    = UseSignature;
+    *pSignature       = Signature;
 
     return STATUS_SUCCESS;
 }
@@ -654,6 +819,8 @@ NAME_AU(ArcPathNormalize)(
 #undef RtlInitEmptyString
 #undef RtlEqualString
 #undef RtlStringToInteger
+
+#undef RtlGUIDFromStringEx
 
 #undef RtlStringCbCopyN
 #undef RtlStringCbCatN
