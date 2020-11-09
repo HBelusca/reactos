@@ -206,7 +206,7 @@ PartitionDescription(
                           "%c%c %c %s(%lu) ",
                           (PartEntry->DriveLetter == 0) ? '-' : (CHAR)PartEntry->DriveLetter,
                           (PartEntry->DriveLetter == 0) ? '-' : ':',
-                          PartEntry->BootIndicator ? '*' : ' ',
+                          PartEntry->IsSystemPartition ? '*' : ' ',
                           PartEntry->LogicalPartition ? "  " : "", // Optional indentation
                           PartEntry->PartitionNumber);
 
@@ -382,10 +382,11 @@ InitPartitionListUi(
             ListUi->CurrentDisk = CONTAINING_RECORD(List->DiskListHead.Flink,
                                                     DISKENTRY, ListEntry);
 
-            if (!IsListEmpty(&ListUi->CurrentDisk->PrimaryPartListHead))
+            if (!IsListEmpty(&ListUi->CurrentDisk->PartList[PRIMARY_PARTITIONS]))
             {
-                ListUi->CurrentPartition = CONTAINING_RECORD(ListUi->CurrentDisk->PrimaryPartListHead.Flink,
-                                                             PARTENTRY, ListEntry);
+                ListUi->CurrentPartition =
+                    CONTAINING_RECORD(ListUi->CurrentDisk->PartList[PRIMARY_PARTITIONS].Flink,
+                                      PARTENTRY, ListEntry);
             }
         }
     }
@@ -549,9 +550,9 @@ PrintDiskData(
     PrintEmptyLine(ListUi);
 
     /* Print partition lines */
-    for (PrimaryEntry = DiskEntry->PrimaryPartListHead.Flink;
-         PrimaryEntry != &DiskEntry->PrimaryPartListHead;
-         PrimaryEntry = PrimaryEntry->Flink)
+    for (PrimaryEntry =  DiskEntry->PartList[PRIMARY_PARTITIONS].Flink;
+         PrimaryEntry != &DiskEntry->PartList[PRIMARY_PARTITIONS];
+         PrimaryEntry =  PrimaryEntry->Flink)
     {
         PrimaryPartEntry = CONTAINING_RECORD(PrimaryEntry, PARTENTRY, ListEntry);
 
@@ -561,9 +562,9 @@ PrintDiskData(
 
         if (IsContainerPartition(PrimaryPartEntry->PartitionType))
         {
-            for (LogicalEntry = DiskEntry->LogicalPartListHead.Flink;
-                 LogicalEntry != &DiskEntry->LogicalPartListHead;
-                 LogicalEntry = LogicalEntry->Flink)
+            for (LogicalEntry =  DiskEntry->PartList[LOGICAL_PARTITIONS].Flink;
+                 LogicalEntry != &DiskEntry->PartList[LOGICAL_PARTITIONS];
+                 LogicalEntry =  LogicalEntry->Flink)
             {
                 LogicalPartEntry = CONTAINING_RECORD(LogicalEntry, PARTENTRY, ListEntry);
 
@@ -617,9 +618,9 @@ DrawPartitionList(
             CurrentPartLine += 2;
         }
 
-        for (Entry2 = DiskEntry->PrimaryPartListHead.Flink;
-             Entry2 != &DiskEntry->PrimaryPartListHead;
-             Entry2 = Entry2->Flink)
+        for (Entry2 =  DiskEntry->PartList[PRIMARY_PARTITIONS].Flink;
+             Entry2 != &DiskEntry->PartList[PRIMARY_PARTITIONS];
+             Entry2 =  Entry2->Flink)
         {
             PartEntry = CONTAINING_RECORD(Entry2, PARTENTRY, ListEntry);
             if (PartEntry == ListUi->CurrentPartition)
@@ -637,9 +638,9 @@ DrawPartitionList(
 
         if (CurrentPartLineFound == FALSE)
         {
-            for (Entry2 = DiskEntry->LogicalPartListHead.Flink;
-                 Entry2 != &DiskEntry->LogicalPartListHead;
-                 Entry2 = Entry2->Flink)
+            for (Entry2 =  DiskEntry->PartList[LOGICAL_PARTITIONS].Flink;
+                 Entry2 != &DiskEntry->PartList[LOGICAL_PARTITIONS];
+                 Entry2 =  Entry2->Flink)
             {
                 PartEntry = CONTAINING_RECORD(Entry2, PARTENTRY, ListEntry);
                 if (PartEntry == ListUi->CurrentPartition)

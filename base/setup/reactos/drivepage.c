@@ -396,7 +396,7 @@ PrintPartitionData(
     {
         StringCchPrintfW(LineBuffer, ARRAYSIZE(LineBuffer),
                          // MUIGetString(STRING_HDDINFOUNK5),
-                         PartEntry->BootIndicator ? L"Active" : L"");
+                         PartEntry->IsSystemPartition ? L"Active" : L"");
     }
     TreeList_SetItemText(hWndList, htiPart, 3, LineBuffer);
 
@@ -557,20 +557,21 @@ PrintDiskData(
 
 
     /* Print partition lines */
-    for (PrimaryEntry = DiskEntry->PrimaryPartListHead.Flink;
-         PrimaryEntry != &DiskEntry->PrimaryPartListHead;
-         PrimaryEntry = PrimaryEntry->Flink)
+    for (PrimaryEntry =  DiskEntry->PartList[PRIMARY_PARTITIONS].Flink;
+         PrimaryEntry != &DiskEntry->PartList[PRIMARY_PARTITIONS];
+         PrimaryEntry =  PrimaryEntry->Flink)
     {
         PrimaryPartEntry = CONTAINING_RECORD(PrimaryEntry, PARTENTRY, ListEntry);
 
         htiPart = PrintPartitionData(hWndList, List, htiDisk,
                                      DiskEntry, PrimaryPartEntry);
 
-        if (IsContainerPartition(PrimaryPartEntry->PartitionType))
+        if (IsContainerPartition(PrimaryPartEntry->PartitionType) &&
+            (DiskEntry->DiskStyle == PARTITION_STYLE_MBR))
         {
-            for (LogicalEntry = DiskEntry->LogicalPartListHead.Flink;
-                 LogicalEntry != &DiskEntry->LogicalPartListHead;
-                 LogicalEntry = LogicalEntry->Flink)
+            for (LogicalEntry =  DiskEntry->PartList[LOGICAL_PARTITIONS].Flink;
+                 LogicalEntry != &DiskEntry->PartList[LOGICAL_PARTITIONS];
+                 LogicalEntry =  LogicalEntry->Flink)
             {
                 LogicalPartEntry = CONTAINING_RECORD(LogicalEntry, PARTENTRY, ListEntry);
 

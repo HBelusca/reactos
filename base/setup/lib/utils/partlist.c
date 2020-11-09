@@ -4,6 +4,9 @@
  * PURPOSE:     Partition list functions
  * COPYRIGHT:   Copyright 2003-2019 Casper S. Hornstrup (chorns@users.sourceforge.net)
  *              Copyright 2018-2019 Hermes Belusca-Maito
+ *
+ * This code interfaces with the NT5+ storage stack and uses
+ * the new IOCTL_DISK_**_EX disk IOCTLs where possible.
  */
 
 #include "precomp.h"
@@ -28,8 +31,59 @@ typedef struct _REG_DISK_MOUNT_INFO
 
 #include <poppack.h>
 
+/* The maximum information a DISK_GEOMETRY_EX dynamic structure can contain */
+typedef struct _DISK_GEOMETRY_EX_INTERNAL
+{
+    DISK_GEOMETRY Geometry;
+    LARGE_INTEGER DiskSize;
+    DISK_PARTITION_INFO Partition;
+    DISK_DETECTION_INFO Detection;
+} DISK_GEOMETRY_EX_INTERNAL, *PDISK_GEOMETRY_EX_INTERNAL;
+
+static PCSTR PartitionStyleNames[] = {"MBR", "GPT", "RAW", "Unknown"};
+#define PARTITION_STYLE_NAME(PartStyle) \
+    ( ((PartStyle) <= PARTITION_STYLE_RAW)   \
+          ? PartitionStyleNames[(PartStyle)] \
+          : PartitionStyleNames[RTL_NUMBER_OF(PartitionStyleNames)-1] )
+
+#define DRIVE_LAYOUT_INFOEX_ENTRY_SIZE \
+    RTL_FIELD_SIZE(DRIVE_LAYOUT_INFORMATION_EX, PartitionEntry[0])
+
+#define DRIVE_LAYOUT_INFOEX_SIZE(n) \
+    (FIELD_OFFSET(DRIVE_LAYOUT_INFORMATION_EX, PartitionEntry) + \
+        ((n) * DRIVE_LAYOUT_INFOEX_ENTRY_SIZE))
+
+/* Rounding up for number; not the same as ROUND_UP() with power-of-two sizes */
+#define ROUND_UP_NUM(num, up)   ((((num) + (up) - 1) / (up)) * (up))
+
+/* Provides the maximum number of partition entries that can be
+ * described by any given partition table in the disk. */
+// TODO: For NEC98: Use IsNEC_98 ?
+#define MAX_PARTITION_ENTRIES_LAYOUT(LayoutBuffer) \
+    ( ((LayoutBuffer)->PartitionStyle == PARTITION_STYLE_MBR) ? 4 : \
+      ((LayoutBuffer)->PartitionStyle == PARTITION_STYLE_GPT) ? (LayoutBuffer)->Gpt.MaxPartitionCount : \
+      ((LayoutBuffer)->PartitionStyle == PARTITION_STYLE_BRFR ) ? 5 : \
+      ((LayoutBuffer)->PartitionStyle == PARTITION_STYLE_NEC98) ? 16 : \
+      ((LayoutBuffer)->PartitionStyle == PARTITION_STYLE_SUPERFLOPPY) ? 1 : \
+      0 )
+
+// TODO: For NEC98: Use IsNEC_98 ?
+#define MAX_PARTITION_ENTRIES_DISKENTRY(DiskEntry) \
+    ( ((DiskEntry)->DiskStyle == PARTITION_STYLE_MBR) ? 4 : \
+      ((DiskEntry)->DiskStyle == PARTITION_STYLE_GPT) ? (DiskEntry)->LayoutBuffer->Gpt.MaxPartitionCount : \
+      ((DiskEntry)->DiskStyle == PARTITION_STYLE_BRFR ) ? 5 : \
+      ((DiskEntry)->DiskStyle == PARTITION_STYLE_NEC98) ? 16 : \
+      ((DiskEntry)->DiskStyle == PARTITION_STYLE_SUPERFLOPPY) ? 1 : \
+      0 )
+
 
 /* FUNCTIONS ****************************************************************/
+
+#define GUID_FORMAT_STR "%08x-%04x-%04x-%02x%02x-%02x%02x%02x%02x%02x%02x"
+#define GUID_ELEMENTS(Guid) \
+    (Guid)->Data1, (Guid)->Data2, (Guid)->Data3, \
+    (Guid)->Data4[0], (Guid)->Data4[1], (Guid)->Data4[2], (Guid)->Data4[3], \
+    (Guid)->Data4[4], (Guid)->Data4[5], (Guid)->Data4[6], (Guid)->Data4[7]
 
 #ifdef DUMP_PARTITION_TABLE
 static
@@ -37,24 +91,31 @@ VOID
 DumpPartitionTable(
     PDISKENTRY DiskEntry)
 {
-    PPARTITION_INFORMATION PartitionInfo;
+    PPARTITION_INFORMATION_EX PartitionInfo;
     ULONG i;
 
-    DbgPrint("\n");
-    DbgPrint("Index  Start         Length        Hidden      Nr  Type  Boot  RW\n");
-    DbgPrint("-----  ------------  ------------  ----------  --  ----  ----  --\n");
+    DbgPrint("\n"
+             "Disk Style: %s (%d)\n"
+             "Index  Start         Length        Hidden      Nr  Type  Boot  RW\n"
+             "-----  ------------  ------------  ----------  --  ----  ----  --\n",
+             "n/a",
+             DiskEntry->DiskStyle);
 
     for (i = 0; i < DiskEntry->LayoutBuffer->PartitionCount; i++)
     {
         PartitionInfo = &DiskEntry->LayoutBuffer->PartitionEntry[i];
+        ASSERT(PartitionInfo->PartitionStyle == DiskEntry->DiskStyle);
+
+// TODO: Different display depending on MBR or GPT.
+//
         DbgPrint("  %3lu  %12I64u  %12I64u  %10lu  %2lu    %2x     %c   %c\n",
                  i,
                  PartitionInfo->StartingOffset.QuadPart / DiskEntry->BytesPerSector,
                  PartitionInfo->PartitionLength.QuadPart / DiskEntry->BytesPerSector,
-                 PartitionInfo->HiddenSectors,
+//               PartitionInfo->HiddenSectors,
                  PartitionInfo->PartitionNumber,
-                 PartitionInfo->PartitionType,
-                 PartitionInfo->BootIndicator ? '*': ' ',
+//               PartitionInfo->PartitionType,
+//               PartitionInfo->BootIndicator ? '*': ' ',
                  PartitionInfo->RewritePartition ? 'Y': 'N');
     }
 
@@ -133,6 +194,15 @@ GetDriverName(
     }
 }
 
+/*
+ * FIXME: Rely on the MOUNTMGR to assign the drive letters.
+ *
+ * For the moment, we do it ourselves, by assigning drives to partitions
+ * that are *only on MBR disks*. We first assign letters to each active
+ * partition on each disk, then assign letters to each logical partition,
+ * and finish by assigning letters to the remaining primary partitions.
+ * (This algorithm is the one that can be observed in the Windows installer.)
+ */
 static
 VOID
 AssignDriveLetters(
@@ -142,31 +212,68 @@ AssignDriveLetters(
     PPARTENTRY PartEntry;
     PLIST_ENTRY Entry1;
     PLIST_ENTRY Entry2;
+    UINT i;
     WCHAR Letter;
 
-    Letter = L'C';
+    /* Start at letter 'C' ('A' and 'B' are reserved for floppy disks)
+     * on PC-AT compatibles, except on NEC PC-98 where we start at 'A'. */
+    Letter = IsNEC_98 ? L'A' : L'C';
 
-    /* Assign drive letters to primary partitions */
+    /* First, clean up all drive letters */
     for (Entry1 = List->DiskListHead.Flink;
          Entry1 != &List->DiskListHead;
          Entry1 = Entry1->Flink)
     {
         DiskEntry = CONTAINING_RECORD(Entry1, DISKENTRY, ListEntry);
 
-        for (Entry2 = DiskEntry->PrimaryPartListHead.Flink;
-             Entry2 != &DiskEntry->PrimaryPartListHead;
+        /* Ignore disks that are not MBR */
+        if (DiskEntry->DiskStyle != PARTITION_STYLE_MBR)
+            continue;
+
+        for (i = PRIMARY_PARTITIONS;
+             i <= (/*(DiskEntry->DiskStyle == PARTITION_STYLE_MBR)
+                      ?*/ LOGICAL_PARTITIONS /*: PRIMARY_PARTITIONS*/);
+             ++i)
+        {
+            for (Entry2 =  DiskEntry->PartList[i].Flink;
+                 Entry2 != &DiskEntry->PartList[i];
+                 Entry2 =  Entry2->Flink)
+            {
+                PartEntry = CONTAINING_RECORD(Entry2, PARTENTRY, ListEntry);
+                PartEntry->DriveLetter = 0;
+            }
+        }
+    }
+
+    /* Assign drive letters to active (boot) partitions */
+    for (Entry1 = List->DiskListHead.Flink;
+         Entry1 != &List->DiskListHead;
+         Entry1 = Entry1->Flink)
+    {
+        DiskEntry = CONTAINING_RECORD(Entry1, DISKENTRY, ListEntry);
+
+        /* Ignore disks that are not MBR */
+        if (DiskEntry->DiskStyle != PARTITION_STYLE_MBR)
+            continue;
+
+        for (Entry2 = DiskEntry->PartList[PRIMARY_PARTITIONS].Flink;
+             Entry2 != &DiskEntry->PartList[PRIMARY_PARTITIONS];
              Entry2 = Entry2->Flink)
         {
             PartEntry = CONTAINING_RECORD(Entry2, PARTENTRY, ListEntry);
 
-            PartEntry->DriveLetter = 0;
-
+            /* Check if the partition is partitioned, used and active */
+            // if (IsSystemPartition(PartEntry))
             if (PartEntry->IsPartitioned &&
-                !IsContainerPartition(PartEntry->PartitionType))
+                // !IsContainerPartition(PartEntry->PartitionType.MbrType) &&
+                PartEntry->IsSystemPartition)
             {
-                ASSERT(PartEntry->PartitionType != PARTITION_ENTRY_UNUSED);
+                /* Yes it is */
+                ASSERT(PartEntry->PartitionType.MbrType != PARTITION_ENTRY_UNUSED);
+                ASSERT(!IsContainerPartition(PartEntry->PartitionType.MbrType));
 
-                if (IsRecognizedPartition(PartEntry->PartitionType) ||
+                // NOTE: Windows installer does not check for a recognized partition.
+                if (IsRecognizedPartition(PartEntry->PartitionType.MbrType) ||
                     PartEntry->SectorCount.QuadPart != 0LL)
                 {
                     if (Letter <= L'Z')
@@ -179,26 +286,66 @@ AssignDriveLetters(
         }
     }
 
-    /* Assign drive letters to logical drives */
+    /* Assign drive letters to logical partitions */
     for (Entry1 = List->DiskListHead.Flink;
          Entry1 != &List->DiskListHead;
          Entry1 = Entry1->Flink)
     {
         DiskEntry = CONTAINING_RECORD(Entry1, DISKENTRY, ListEntry);
 
-        for (Entry2 = DiskEntry->LogicalPartListHead.Flink;
-             Entry2 != &DiskEntry->LogicalPartListHead;
+        /* Ignore disks that are not MBR */
+        if (DiskEntry->DiskStyle != PARTITION_STYLE_MBR)
+            continue;
+
+        for (Entry2 = DiskEntry->PartList[LOGICAL_PARTITIONS].Flink;
+             Entry2 != &DiskEntry->PartList[LOGICAL_PARTITIONS];
              Entry2 = Entry2->Flink)
         {
             PartEntry = CONTAINING_RECORD(Entry2, PARTENTRY, ListEntry);
 
-            PartEntry->DriveLetter = 0;
-
-            if (PartEntry->IsPartitioned)
+            if (PartEntry->IsPartitioned /**/ && PartEntry->DriveLetter == 0/**/)
             {
-                ASSERT(PartEntry->PartitionType != PARTITION_ENTRY_UNUSED);
+                ASSERT(PartEntry->PartitionType.MbrType != PARTITION_ENTRY_UNUSED);
 
-                if (IsRecognizedPartition(PartEntry->PartitionType) ||
+                // NOTE: Windows installer does not check for a recognized partition.
+                if (IsRecognizedPartition(PartEntry->PartitionType.MbrType) ||
+                    PartEntry->SectorCount.QuadPart != 0LL)
+                {
+                    if (Letter <= L'Z')
+                    {
+                        PartEntry->DriveLetter = Letter;
+                        Letter++;
+                    }
+                }
+            }
+        }
+    }
+
+    /* Assign drive letters to the remaining primary partitions */
+    for (Entry1 = List->DiskListHead.Flink;
+         Entry1 != &List->DiskListHead;
+         Entry1 = Entry1->Flink)
+    {
+        DiskEntry = CONTAINING_RECORD(Entry1, DISKENTRY, ListEntry);
+
+        /* Ignore disks that are not MBR */
+        if (DiskEntry->DiskStyle != PARTITION_STYLE_MBR)
+            continue;
+
+        for (Entry2 = DiskEntry->PartList[PRIMARY_PARTITIONS].Flink;
+             Entry2 != &DiskEntry->PartList[PRIMARY_PARTITIONS];
+             Entry2 = Entry2->Flink)
+        {
+            PartEntry = CONTAINING_RECORD(Entry2, PARTENTRY, ListEntry);
+
+            if (PartEntry->IsPartitioned &&
+                !IsContainerPartition(PartEntry->PartitionType.MbrType)
+                /**/ && PartEntry->DriveLetter == 0/**/)
+            {
+                ASSERT(PartEntry->PartitionType.MbrType != PARTITION_ENTRY_UNUSED);
+
+                // NOTE: Windows installer does not check for a recognized partition.
+                if (IsRecognizedPartition(PartEntry->PartitionType.MbrType) ||
                     PartEntry->SectorCount.QuadPart != 0LL)
                 {
                     if (Letter <= L'Z')
@@ -241,6 +388,8 @@ DiskIdentifierQueryRoutine(
 
     return STATUS_UNSUCCESSFUL;
 }
+
+#ifdef LEGACY_BIOS_DATA
 
 static NTSTATUS
 NTAPI
@@ -332,24 +481,32 @@ SystemConfigurationDataQueryRoutine(
     return STATUS_UNSUCCESSFUL;
 }
 
+#endif // LEGACY_BIOS_DATA
 
 static VOID
 EnumerateBiosDiskEntries(
     IN PPARTLIST PartList)
 {
+#ifdef LEGACY_BIOS_DATA
     RTL_QUERY_REGISTRY_TABLE QueryTable[3];
+#else
+    RTL_QUERY_REGISTRY_TABLE QueryTable[2];
+#endif
     WCHAR Name[120];
     ULONG AdapterCount;
     ULONG ControllerCount;
     ULONG DiskCount;
     NTSTATUS Status;
+#ifdef LEGACY_BIOS_DATA
     PCM_INT13_DRIVE_PARAMETER Int13Drives;
+#endif
     PBIOSDISKENTRY BiosDiskEntry;
 
 #define ROOT_NAME   L"\\Registry\\Machine\\HARDWARE\\DESCRIPTION\\System\\MultifunctionAdapter"
 
-    memset(QueryTable, 0, sizeof(QueryTable));
+    RtlZeroMemory(QueryTable, sizeof(QueryTable));
 
+#ifdef LEGACY_BIOS_DATA
     QueryTable[1].Name = L"Configuration Data";
     QueryTable[1].QueryRoutine = SystemConfigurationDataQueryRoutine;
     Int13Drives = NULL;
@@ -363,6 +520,7 @@ EnumerateBiosDiskEntries(
         DPRINT1("Unable to query the 'Configuration Data' key in '\\Registry\\Machine\\HARDWARE\\DESCRIPTION\\System', status=%lx\n", Status);
         return;
     }
+#endif // LEGACY_BIOS_DATA
 
     for (AdapterCount = 0; ; ++AdapterCount)
     {
@@ -371,7 +529,11 @@ EnumerateBiosDiskEntries(
                             ROOT_NAME, AdapterCount);
         Status = RtlQueryRegistryValues(RTL_REGISTRY_ABSOLUTE,
                                         Name,
+#ifdef LEGACY_BIOS_DATA
                                         &QueryTable[2],
+#else
+                                        &QueryTable[1],
+#endif
                                         NULL,
                                         NULL);
         if (!NT_SUCCESS(Status))
@@ -384,7 +546,11 @@ EnumerateBiosDiskEntries(
                             ROOT_NAME, AdapterCount);
         Status = RtlQueryRegistryValues(RTL_REGISTRY_ABSOLUTE,
                                         Name,
+#ifdef LEGACY_BIOS_DATA
                                         &QueryTable[2],
+#else
+                                        &QueryTable[1],
+#endif
                                         NULL,
                                         NULL);
         if (NT_SUCCESS(Status))
@@ -396,12 +562,18 @@ EnumerateBiosDiskEntries(
                                     ROOT_NAME, AdapterCount, ControllerCount);
                 Status = RtlQueryRegistryValues(RTL_REGISTRY_ABSOLUTE,
                                                 Name,
+#ifdef LEGACY_BIOS_DATA
                                                 &QueryTable[2],
+#else
+                                                &QueryTable[1],
+#endif
                                                 NULL,
                                                 NULL);
                 if (!NT_SUCCESS(Status))
                 {
+#ifdef LEGACY_BIOS_DATA
                     RtlFreeHeap(ProcessHeap, 0, Int13Drives);
+#endif
                     return;
                 }
 
@@ -410,22 +582,30 @@ EnumerateBiosDiskEntries(
                                     ROOT_NAME, AdapterCount, ControllerCount);
                 Status = RtlQueryRegistryValues(RTL_REGISTRY_ABSOLUTE,
                                                 Name,
+#ifdef LEGACY_BIOS_DATA
                                                 &QueryTable[2],
+#else
+                                                &QueryTable[1],
+#endif
                                                 NULL,
                                                 NULL);
                 if (NT_SUCCESS(Status))
                 {
                     QueryTable[0].Name = L"Identifier";
                     QueryTable[0].QueryRoutine = DiskIdentifierQueryRoutine;
+#ifdef LEGACY_BIOS_DATA
                     QueryTable[1].Name = L"Configuration Data";
                     QueryTable[1].QueryRoutine = DiskConfigurationDataQueryRoutine;
+#endif
 
                     for (DiskCount = 0; ; ++DiskCount)
                     {
                         BiosDiskEntry = (BIOSDISKENTRY*)RtlAllocateHeap(ProcessHeap, HEAP_ZERO_MEMORY, sizeof(BIOSDISKENTRY));
                         if (BiosDiskEntry == NULL)
                         {
+#ifdef LEGACY_BIOS_DATA
                             RtlFreeHeap(ProcessHeap, 0, Int13Drives);
+#endif
                             return;
                         }
 
@@ -440,7 +620,9 @@ EnumerateBiosDiskEntries(
                         if (!NT_SUCCESS(Status))
                         {
                             RtlFreeHeap(ProcessHeap, 0, BiosDiskEntry);
+#ifdef LEGACY_BIOS_DATA
                             RtlFreeHeap(ProcessHeap, 0, Int13Drives);
+#endif
                             return;
                         }
 
@@ -449,6 +631,7 @@ EnumerateBiosDiskEntries(
                         BiosDiskEntry->DiskNumber = DiskCount;
                         BiosDiskEntry->DiskEntry = NULL;
 
+#ifdef LEGACY_BIOS_DATA
                         if (DiskCount < Int13Drives[0].NumberDrives)
                         {
                             BiosDiskEntry->Int13DiskData = Int13Drives[DiskCount];
@@ -457,6 +640,7 @@ EnumerateBiosDiskEntries(
                         {
                             DPRINT1("Didn't find Int13 drive data for disk %u\n", DiskCount);
                         }
+#endif // LEGACY_BIOS_DATA
 
                         InsertTailList(&PartList->BiosDiskListHead, &BiosDiskEntry->ListEntry);
 
@@ -468,6 +652,7 @@ EnumerateBiosDiskEntries(
                         DPRINT("DiskNumber:        %lu\n", BiosDiskEntry->DiskNumber);
                         DPRINT("Signature:         %08lx\n", BiosDiskEntry->Signature);
                         DPRINT("Checksum:          %08lx\n", BiosDiskEntry->Checksum);
+#ifdef LEGACY_BIOS_DATA
                         DPRINT("BytesPerSector:    %lu\n", BiosDiskEntry->DiskGeometry.BytesPerSector);
                         DPRINT("NumberOfCylinders: %lu\n", BiosDiskEntry->DiskGeometry.NumberOfCylinders);
                         DPRINT("NumberOfHeads:     %lu\n", BiosDiskEntry->DiskGeometry.NumberOfHeads);
@@ -476,6 +661,7 @@ EnumerateBiosDiskEntries(
                         DPRINT("SectorsPerTrack:   %d\n", BiosDiskEntry->Int13DiskData.SectorsPerTrack);
                         DPRINT("MaxHeads:          %d\n", BiosDiskEntry->Int13DiskData.MaxHeads);
                         DPRINT("NumberDrives:      %d\n", BiosDiskEntry->Int13DiskData.NumberDrives);
+#endif // LEGACY_BIOS_DATA
                         DPRINT("<---\n");
 #undef DPRINT
 #define DPRINT
@@ -485,9 +671,78 @@ EnumerateBiosDiskEntries(
         }
     }
 
+#ifdef LEGACY_BIOS_DATA
     RtlFreeHeap(ProcessHeap, 0, Int13Drives);
+#endif
 
 #undef ROOT_NAME
+}
+
+
+NTSTATUS
+OpenDiskPartition(
+    OUT PHANDLE PartitionHandle,    // IN OUT PHANDLE OPTIONAL
+    IN HANDLE DiskHandle OPTIONAL,
+    IN ULONG DiskNumber OPTIONAL,
+    IN ULONG PartitionNumber,
+    IN BOOLEAN ReadWriteAccess,
+    IN BOOLEAN ReadWriteShare)
+{
+    NTSTATUS Status;
+    UNICODE_STRING FileName;
+    OBJECT_ATTRIBUTES ObjectAttributes;
+    IO_STATUS_BLOCK IoStatusBlock;
+    WCHAR PathBuffer[MAX_PATH];
+
+    /* Open the disk and partition */
+
+    if (DiskHandle == NULL)
+    {
+        RtlStringCchPrintfW(PathBuffer, ARRAYSIZE(PathBuffer),
+                            L"\\Device\\Harddisk%lu\\Partition%lu",
+                            DiskNumber,
+                            PartitionNumber);
+    }
+    else
+    {
+        RtlStringCchPrintfW(PathBuffer, ARRAYSIZE(PathBuffer),
+                            L"Partition%lu",
+                            PartitionNumber);
+    }
+
+    RtlInitUnicodeString(&FileName, PathBuffer);
+    InitializeObjectAttributes(&ObjectAttributes,
+                               &FileName,
+                               OBJ_CASE_INSENSITIVE,
+                               DiskHandle,
+                               NULL);
+
+    *PartitionHandle = NULL;
+    Status = NtOpenFile(PartitionHandle,
+                        // FILE_READ_DATA | /* FILE_READ_ATTRIBUTES | */ SYNCHRONIZE
+                        FILE_GENERIC_READ | // Contains SYNCHRONIZE
+                            (ReadWriteAccess ? FILE_GENERIC_WRITE : 0),
+                        &ObjectAttributes,
+                        &IoStatusBlock,
+                        FILE_SHARE_READ |
+                            (ReadWriteShare ? FILE_SHARE_WRITE : 0),
+                        FILE_SYNCHRONOUS_IO_NONALERT | FILE_NON_DIRECTORY_FILE);
+    if (!NT_SUCCESS(Status))
+    {
+        if (DiskHandle == NULL)
+        {
+            DPRINT1("Failed to open partition %lu in disk %lu, Status 0x%08lx\n",
+                    PartitionNumber, DiskNumber, Status);
+        }
+        else
+        {
+            DPRINT1("Failed to open partition %lu in disk 0x%p, Status 0x%08lx\n",
+                    PartitionNumber, DiskHandle, Status);
+        }
+        return Status;
+    }
+
+    return STATUS_SUCCESS;
 }
 
 
@@ -500,16 +755,25 @@ EnumerateBiosDiskEntries(
  * Note also that accessing \Device\HarddiskN\Partition0 or Partition1 returns
  * the same data.
  */
-// static
+static
 BOOLEAN
 IsSuperFloppy(
     IN PDISKENTRY DiskEntry)
 {
-    PPARTITION_INFORMATION PartitionInfo;
+    PPARTITION_INFORMATION_EX PartitionInfo;
     ULONGLONG PartitionLengthEstimate;
 
     /* No layout buffer: we cannot say anything yet */
     if (DiskEntry->LayoutBuffer == NULL)
+        return FALSE;
+
+    /* If the disk has already been checked as such, return success */
+    if (DiskEntry->DiskStyle == PARTITION_STYLE_SUPERFLOPPY)
+        return TRUE;
+
+    /* Only MBR-reported type disks can be super-floppy */
+    ASSERT(DiskEntry->DiskStyle == DiskEntry->LayoutBuffer->PartitionStyle);
+    if (DiskEntry->DiskStyle != PARTITION_STYLE_MBR)
         return FALSE;
 
     /* We must have only one partition */
@@ -518,10 +782,11 @@ IsSuperFloppy(
 
     /* Get the single partition entry */
     PartitionInfo = DiskEntry->LayoutBuffer->PartitionEntry;
+    ASSERT(PartitionInfo->PartitionStyle == DiskEntry->LayoutBuffer->PartitionStyle);
 
     /* The single partition must start at the beginning of the disk */
     if (!(PartitionInfo->StartingOffset.QuadPart == 0 &&
-          PartitionInfo->HiddenSectors == 0))
+          PartitionInfo->Mbr.HiddenSectors == 0))
     {
         return FALSE;
     }
@@ -539,9 +804,9 @@ IsSuperFloppy(
      */
     if ((PartitionInfo->PartitionNumber != 0 &&
          PartitionInfo->PartitionNumber != 1) ||
-        PartitionInfo->RecognizedPartition != TRUE ||
-        PartitionInfo->PartitionType != PARTITION_FAT_16 ||
-        PartitionInfo->BootIndicator != FALSE)
+        PartitionInfo->Mbr.RecognizedPartition != TRUE ||
+        PartitionInfo->Mbr.PartitionType != PARTITION_FAT_16 ||
+        PartitionInfo->Mbr.BootIndicator != FALSE)
     {
         DPRINT1("Super-Floppy disk %lu does not return default settings!\n"
                 "    PartitionNumber = %lu, expected 0\n"
@@ -550,9 +815,9 @@ IsSuperFloppy(
                 "    BootIndicator = %s, expected FALSE\n",
                 DiskEntry->DiskNumber,
                 PartitionInfo->PartitionNumber,
-                PartitionInfo->RecognizedPartition ? "TRUE" : "FALSE",
-                PartitionInfo->PartitionType,
-                PartitionInfo->BootIndicator ? "TRUE" : "FALSE");
+                PartitionInfo->Mbr.RecognizedPartition ? "TRUE" : "FALSE",
+                PartitionInfo->Mbr.PartitionType,
+                PartitionInfo->Mbr.BootIndicator ? "TRUE" : "FALSE");
     }
 
     /* The partition lengths should agree */
@@ -567,135 +832,303 @@ IsSuperFloppy(
 }
 
 
-#if 0
 
+// Detect if disk is "dynamic": Find the presence of any partition
+// with ID == PARTITION_LDM / GUID == PARTITION_LDM_DATA_GUID .
+
+#if 0
 static BOOLEAN
 UninitializeDisk(
     IN PDISKENTRY DiskEntry)
 {
+    NTSTATUS Status;
+    PPARTENTRY PartEntry;
+    PLIST_ENTRY Entry;
+    UINT i;
+    HANDLE FileHandle;
+    IO_STATUS_BLOCK Iosb;
+    CREATE_DISK CreateInfo;
+
     /* Do nothing if the disk is already uninitialized */
     if (DiskEntry->DiskStyle == PARTITION_STYLE_RAW)
         return TRUE;
 
+    // TODO: Dismount all volumes on this disk.
+
+    /* Free the partition lists */
+    for (i = PRIMARY_PARTITIONS; i <= LOGICAL_PARTITIONS; ++i)
+    {
+        while (!IsListEmpty(&DiskEntry->PartList[i]))
+        {
+            Entry = RemoveHeadList(&DiskEntry->PartList[i]);
+            PartEntry = CONTAINING_RECORD(Entry, PARTENTRY, ListEntry);
+            RtlFreeHeap(ProcessHeap, 0, PartEntry);
+        }
+    }
+
+    /* Free the layout buffer */
+    if (DiskEntry->LayoutBuffer != NULL)
+        RtlFreeHeap(ProcessHeap, 0, DiskEntry->LayoutBuffer);
+    DiskEntry->LayoutBuffer = NULL;
+
+
     // TODO: Patch MBR/GPT to uninitialize the disk, or call
     // IOCTL_DISK_CREATE_DISK with PARTITION_STYLE_RAW
-    // which does the job. Alternatively, IOCTL_DISK_DELETE_DRIVE_LAYOUT
-    // does the same thing.
+    // which does the job.
 
     DiskEntry->DiskStyle = PARTITION_STYLE_RAW;
+
+    Status = OpenDiskPartition(&FileHandle,
+                               NULL,
+                               DiskEntry->DiskNumber, 0,
+                               TRUE, FALSE); // Actually, no share flags whatsoever.
+    if (!NT_SUCCESS(Status))
+    {
+        DPRINT1("ERROR: Could not open disk %lu for reset, Status 0x%08lx\n",
+                DiskEntry->DiskNumber, Status);
+        return FALSE;
+    }
+
+    CreateInfo.PartitionStyle = DiskEntry->DiskStyle;
+    Status = NtDeviceIoControlFile(FileHandle,
+                                   NULL,
+                                   NULL,
+                                   NULL,
+                                   &Iosb,
+                                   IOCTL_DISK_CREATE_DISK,
+                                   CreateInfo,
+                                   sizeof(CreateInfo),
+                                   NULL,
+                                   0);
+    /* Use a legacy call in case "invalid function" has been emitted */
+    if (Status == STATUS_INVALID_DEVICE_REQUEST)
+    {
+        Status = NtDeviceIoControlFile(FileHandle,
+                                       NULL,
+                                       NULL,
+                                       NULL,
+                                       &Iosb,
+                                       IOCTL_DISK_DELETE_DRIVE_LAYOUT,
+                                       NULL,
+                                       0,
+                                       NULL,
+                                       0);
+    }
+
+    NtClose(FileHandle);
+
     return TRUE;
 }
-
-static BOOLEAN
-InitializeDiskSuperFloppy(
-    IN PDISKENTRY DiskEntry)
-{
-    /* Fail if the disk is already initialized */
-    if (DiskEntry->DiskStyle != PARTITION_STYLE_RAW)
-        return FALSE;
-
-    UNIMPLEMENTED;
-    return FALSE;
-}
-
-static NTSTATUS
-InitializeDiskMBR(
-    IN PDISKENTRY DiskEntry)
-{
-    NTSTATUS Status;
-    CREATE_DISK CreateDiskInfo;
-
-    /* Fail if the disk is already initialized */
-    if (DiskEntry->DiskStyle != PARTITION_STYLE_RAW)
-        return STATUS_PARTITION_FAILURE;
-
-    CreateDiskInfo.PartitionStyle = PARTITION_STYLE_MBR;
-    CreateDiskInfo.Mbr.Signature = xxxxxxxxx;
-
-    Status = NtDeviceIoControlFile(FileHandle,
-                                   NULL,
-                                   NULL,
-                                   NULL,
-                                   &Iosb,
-                                   IOCTL_DISK_CREATE_DISK,
-                                   CreateDiskInfo,
-                                   sizeof(CreateDiskInfo),
-                                   NULL,
-                                   0);
-
-    return Status;
-}
-
-static NTSTATUS
-InitializeDiskGPT(
-    IN PDISKENTRY DiskEntry)
-{
-    NTSTATUS Status;
-    CREATE_DISK CreateDiskInfo;
-
-    /* Fail if the disk is already initialized */
-    if (DiskEntry->DiskStyle != PARTITION_STYLE_RAW)
-        return STATUS_PARTITION_FAILURE;
-
-    CreateDiskInfo.PartitionStyle = PARTITION_STYLE_GPT;
-    CreateDiskInfo.Gpt.DiskId = xxxxx;
-    CreateDiskInfo.Gpt.MaxPartitionCount = 128; // Minimum required.
-
-    Status = NtDeviceIoControlFile(FileHandle,
-                                   NULL,
-                                   NULL,
-                                   NULL,
-                                   &Iosb,
-                                   IOCTL_DISK_CREATE_DISK,
-                                   CreateDiskInfo,
-                                   sizeof(CreateDiskInfo),
-                                   NULL,
-                                   0);
-
-    return Status;
-}
-
 #endif
 
 
+static ULONG KsecRandomSeed = 0x62b409a1;
+
+// A private function, based on KeQueryTickCount(), that would be nice if
+// MS ever created it. The Rtl/NtGetTickCount() instead packs everything
+// in a ULONG, thus losing precision.
+VOID
+NTAPI
+NtQueryTickCount(
+    OUT PLARGE_INTEGER TickCount)
+{
+#ifdef _WIN64
+    TickCount->QuadPart = *((volatile ULONG64*)&SharedUserData->TickCount);
+#else
+    /* Loop until we get a perfect match */
+    for (;;)
+    {
+        /* Read the tick count value */
+        TickCount->HighPart = SharedUserData->TickCount.High1Time;
+        TickCount->LowPart = SharedUserData->TickCount.LowPart;
+        if (TickCount->HighPart == SharedUserData->TickCount.High2Time)
+            break;
+        YieldProcessor();
+    }
+#endif
+}
+
+// RtlGenRandom
+/* Implementation copied from ksecdd!KsecGenRandom() */
+BOOLEAN
+NTAPI
+SystemFunction036(
+    OUT PVOID Buffer,
+    IN /*SIZE_T*/ ULONG Length)
+{
+    LARGE_INTEGER TickCount;
+    ULONG i, RandomValue;
+    PULONG P;
+
+    /* Try to generate a more random seed */
+    RtlQueryTickCount(&TickCount);
+    KsecRandomSeed ^= _rotl(TickCount.LowPart, (KsecRandomSeed % 23));
+
+    P = Buffer;
+    for (i = 0; i < Length / sizeof(ULONG); i++)
+    {
+        P[i] = RtlRandomEx(&KsecRandomSeed);
+    }
+    Length &= (sizeof(ULONG) - 1);
+    if (Length > 0)
+    {
+        RandomValue = RtlRandomEx(&KsecRandomSeed);
+        RtlCopyMemory(&P[i], &RandomValue, Length);
+    }
+
+    return TRUE;
+}
+
+
+#if 0
+
+VOID
+DiskGenMbrSignature(
+    OUT PULONG Signature)
+{
+    LARGE_INTEGER SystemTime;
+    TIME_FIELDS TimeFields;
+    PUCHAR Buffer = (PUCHAR)Signature;
+
+    NtQuerySystemTime(&SystemTime);
+    RtlTimeToTimeFields(&SystemTime, &TimeFields);
+
+    Buffer[0] = (UCHAR)(TimeFields.Year & 0xFF) + (UCHAR)(TimeFields.Hour & 0xFF);
+    Buffer[1] = (UCHAR)(TimeFields.Year >> 8) + (UCHAR)(TimeFields.Minute & 0xFF);
+    Buffer[2] = (UCHAR)(TimeFields.Month & 0xFF) + (UCHAR)(TimeFields.Second & 0xFF);
+    Buffer[3] = (UCHAR)(TimeFields.Day & 0xFF) + (UCHAR)(TimeFields.Milliseconds & 0xFF);
+}
+
+#else
+
+#define DiskGenMbrSignature(Signature) \
+    (*(Signature) = RtlRandomEx(&KsecRandomSeed))
+
+#endif
+
+// #define DiskGenGptSignature(Guid) \
+    UuidCreate((UUID*)Guid)
+
+/* Implementation similar to rpcrt4!UuidCreate() */
+VOID
+DiskGenGptSignature(
+    OUT GUID* Guid)
+{
+    if (!Guid)
+        return;
+
+    RtlGenRandom(Guid, sizeof(*Guid));
+    /* Clear the version bits and set the version (4) */
+    Guid->Data3 &= 0x0fff;
+    Guid->Data3 |= (4 << 12);
+    /* Set the topmost bits of Data4 (clock_seq_hi_and_reserved) as
+     * specified in RFC 4122, section 4.4. */
+    Guid->Data4[0] &= 0x3f;
+    Guid->Data4[0] |= 0x80;
+}
+
+NTSTATUS
+InitializeDisk(
+    IN PDISKENTRY DiskEntry,
+    IN PARTITION_STYLE DiskStyle,
+    IN PCREATE_DISK DiskInfo OPTIONAL)
+{
+    NTSTATUS Status;
+    IO_STATUS_BLOCK Iosb;
+    CREATE_DISK CreateInfo;
+
+    /* Fail if the disk is already initialized */
+    if (DiskEntry->DiskStyle != PARTITION_STYLE_RAW)
+        return STATUS_PARTITION_FAILURE;
+
+    switch (DiskStyle)
+    {
+    case PARTITION_STYLE_MBR:
+        CreateInfo.PartitionStyle = PARTITION_STYLE_MBR;
+        DiskGenMbrSignature(&CreateInfo.Mbr.Signature);
+        break;
+
+    case PARTITION_STYLE_GPT:
+        CreateInfo.PartitionStyle = PARTITION_STYLE_GPT;
+        DiskGenGptSignature(&CreateInfo.Gpt.DiskId);
+        // The underlying code will adjust to the actual minimum value (128).
+        CreateInfo.Gpt.MaxPartitionCount = 0;
+        break;
+
+    case PARTITION_STYLE_SUPERFLOPPY:
+        UNIMPLEMENTED;
+        return STATUS_NOT_IMPLEMENTED;
+
+    // case PARTITION_STYLE_BRFR:
+    //    break;
+
+    default:
+        break;
+    }
+
+    Status = OpenDiskPartition(&FileHandle,
+                               NULL,
+                               DiskEntry->DiskNumber, 0,
+                               TRUE, FALSE); // Actually, no share flags whatsoever.
+    if (!NT_SUCCESS(Status))
+    {
+        DPRINT1("ERROR: Could not open disk %lu for reset, Status 0x%08lx\n",
+                DiskEntry->DiskNumber, Status);
+        return Status;
+    }
+
+    Status = NtDeviceIoControlFile(FileHandle,
+                                   NULL,
+                                   NULL,
+                                   NULL,
+                                   &Iosb,
+                                   IOCTL_DISK_CREATE_DISK,
+                                   CreateInfo,
+                                   sizeof(CreateInfo),
+                                   NULL,
+                                   0);
+    if (NT_SUCCESS(Status))
+        DiskEntry->DiskStyle = DiskStyle;
+
+    NtClose(FileHandle);
+
+    return Status;
+}
+
+
 /*
- * Inserts the disk region represented by PartEntry into either the primary
- * or the logical partition list of the given disk.
+ * Inserts the disk region represented by PartEntry into the adequate
+ * partition list of a given disk.
  * The lists are kept sorted by increasing order of start sectors.
  * Of course no disk region should overlap at all with one another.
  */
 static
 BOOLEAN
 InsertDiskRegion(
-    IN PDISKENTRY DiskEntry,
-    IN PPARTENTRY PartEntry,
-    IN BOOLEAN LogicalPartition)
+    IN OUT PLIST_ENTRY ListHead,
+    IN PPARTENTRY PartEntry)
 {
-    PLIST_ENTRY List;
     PLIST_ENTRY Entry;
     PPARTENTRY PartEntry2;
 
-    /* Use the correct partition list */
-    if (LogicalPartition)
-        List = &DiskEntry->LogicalPartListHead;
-    else
-        List = &DiskEntry->PrimaryPartListHead;
-
     /* Find the first disk region before which we need to insert the new one */
-    for (Entry = List->Flink; Entry != List; Entry = Entry->Flink)
+    for (Entry = ListHead->Flink; Entry != ListHead; Entry = Entry->Flink)
     {
         PartEntry2 = CONTAINING_RECORD(Entry, PARTENTRY, ListEntry);
 
         /* Ignore any unused empty region */
-        if ((PartEntry2->PartitionType == PARTITION_ENTRY_UNUSED &&
+        if ((IS_PARTITION_UNUSED(PartEntry2) &&
              PartEntry2->StartSector.QuadPart == 0) || PartEntry2->SectorCount.QuadPart == 0)
         {
             continue;
         }
 
         /* If the current region ends before the one to be inserted, try again */
-        if (PartEntry2->StartSector.QuadPart + PartEntry2->SectorCount.QuadPart - 1 < PartEntry->StartSector.QuadPart)
+        if (PartEntry2->StartSector.QuadPart + PartEntry2->SectorCount.QuadPart - 1
+                < PartEntry->StartSector.QuadPart)
+        {
             continue;
+        }
 
         /*
          * One of the disk region boundaries crosses the desired region
@@ -754,7 +1187,7 @@ CreateInsertBlankRegion(
 
     NewPartEntry->LogicalPartition = LogicalSpace;
     NewPartEntry->IsPartitioned = FALSE;
-    NewPartEntry->PartitionType = PARTITION_ENTRY_UNUSED;
+    RtlZeroMemory(&NewPartEntry->PartitionType, sizeof(NewPartEntry->PartitionType));
     NewPartEntry->FormatState = Unformatted;
     NewPartEntry->FileSystem[0] = L'\0';
 
@@ -822,16 +1255,24 @@ InitializePartitionEntry(
     PartEntry->New = TRUE;
     PartEntry->IsPartitioned = TRUE;
 
-// FIXME: Use FileSystemToMBRPartitionType() only for MBR, otherwise use PARTITION_BASIC_DATA_GUID.
-    PartEntry->PartitionType = FileSystemToMBRPartitionType(L"RAW",
-                                                            PartEntry->StartSector.QuadPart,
-                                                            PartEntry->SectorCount.QuadPart);
-    ASSERT(PartEntry->PartitionType != PARTITION_ENTRY_UNUSED);
+    RtlZeroMemory(&PartEntry->PartInfo, sizeof(PartEntry->PartInfo));
+    if (DiskEntry->DiskStyle == PARTITION_STYLE_MBR)
+    {
+        PartEntry->PartitionType.MbrType =
+            FileSystemToMBRPartitionType(L"RAW",
+                                         PartEntry->StartSector.QuadPart,
+                                         PartEntry->SectorCount.QuadPart);
+        ASSERT(PartEntry->PartitionType.MbrType != PARTITION_ENTRY_UNUSED);
+    }
+    else if (DiskEntry->DiskStyle == PARTITION_STYLE_GPT)
+    {
+        PartEntry->PartitionType.GptType = PARTITION_BASIC_DATA_GUID;
+    }
 
     PartEntry->FormatState = Unformatted;
     PartEntry->FileSystem[0] = L'\0';
     // PartEntry->AutoCreate = AutoCreate;
-    PartEntry->BootIndicator = FALSE;
+    PartEntry->IsSystemPartition = FALSE;
 
     DPRINT1("First Sector : %I64u\n", PartEntry->StartSector.QuadPart);
     DPRINT1("Last Sector  : %I64u\n", PartEntry->StartSector.QuadPart + PartEntry->SectorCount.QuadPart - 1);
@@ -844,19 +1285,15 @@ InitializePartitionEntry(
 static
 VOID
 AddPartitionToDisk(
-    IN ULONG DiskNumber,
     IN PDISKENTRY DiskEntry,
     IN ULONG PartitionIndex,
     IN BOOLEAN LogicalPartition)
 {
     NTSTATUS Status;
-    PPARTITION_INFORMATION PartitionInfo;
+    PPARTITION_INFORMATION_EX PartitionInfo;
     PPARTENTRY PartEntry;
     HANDLE PartitionHandle;
-    OBJECT_ATTRIBUTES ObjectAttributes;
     IO_STATUS_BLOCK IoStatusBlock;
-    WCHAR PathBuffer[MAX_PATH];
-    UNICODE_STRING Name;
     UCHAR LabelBuffer[sizeof(FILE_FS_VOLUME_INFORMATION) + 256 * sizeof(WCHAR)];
     PFILE_FS_VOLUME_INFORMATION LabelInfo = (PFILE_FS_VOLUME_INFORMATION)LabelBuffer;
 
@@ -879,8 +1316,23 @@ AddPartitionToDisk(
     PartEntry->StartSector.QuadPart = (ULONGLONG)PartitionInfo->StartingOffset.QuadPart / DiskEntry->BytesPerSector;
     PartEntry->SectorCount.QuadPart = (ULONGLONG)PartitionInfo->PartitionLength.QuadPart / DiskEntry->BytesPerSector;
 
-    PartEntry->BootIndicator = PartitionInfo->BootIndicator;
-    PartEntry->PartitionType = PartitionInfo->PartitionType;
+    PartEntry->IsSystemPartition =
+        (DiskEntry->DiskStyle == PARTITION_STYLE_MBR ? PartitionInfo->Mbr.BootIndicator :
+         DiskEntry->DiskStyle == PARTITION_STYLE_GPT ? IsEqualPartitionType(PartitionInfo->Gpt.PartitionType,
+                                                                            PARTITION_SYSTEM_GUID) : FALSE);
+
+    RtlZeroMemory(&PartEntry->PartitionType, sizeof(PartEntry->PartitionType));
+    RtlZeroMemory(&PartEntry->PartInfo, sizeof(PartEntry->PartInfo));
+    if (DiskEntry->DiskStyle == PARTITION_STYLE_MBR)
+    {
+        PartEntry->PartitionType.MbrType = PartitionInfo->Mbr.PartitionType;
+        PartEntry->PartInfo.Mbr = PartitionInfo->Mbr;
+    }
+    else if (DiskEntry->DiskStyle == PARTITION_STYLE_GPT)
+    {
+        PartEntry->PartitionType.GptType = PartitionInfo->Gpt.PartitionType;
+        PartEntry->PartInfo.Gpt = PartitionInfo->Gpt;
+    }
 
     PartEntry->LogicalPartition = LogicalPartition;
     PartEntry->IsPartitioned = TRUE;
@@ -895,41 +1347,29 @@ AddPartitionToDisk(
     /* Initialize the partition volume label */
     RtlZeroMemory(PartEntry->VolumeLabel, sizeof(PartEntry->VolumeLabel));
 
-    if (IsContainerPartition(PartEntry->PartitionType))
+    if ((DiskEntry->DiskStyle == PARTITION_STYLE_MBR) &&
+        IsContainerPartition(PartEntry->PartitionType.MbrType))
     {
         PartEntry->FormatState = Unformatted;
 
         if (LogicalPartition == FALSE && DiskEntry->ExtendedPartition == NULL)
             DiskEntry->ExtendedPartition = PartEntry;
     }
-    else if (IsRecognizedPartition(PartEntry->PartitionType))
+    else if (IS_RECOGNIZED_PARTITION(DiskEntry->DiskStyle,
+                                     PartEntry->PartitionType))
     {
         ASSERT(PartitionInfo->RecognizedPartition);
         ASSERT(PartEntry->IsPartitioned && PartEntry->PartitionNumber != 0);
 
         /* Try to open the volume so as to mount it */
-        RtlStringCchPrintfW(PathBuffer, ARRAYSIZE(PathBuffer),
-                            L"\\Device\\Harddisk%lu\\Partition%lu",
-                            DiskEntry->DiskNumber,
-                            PartEntry->PartitionNumber);
-        RtlInitUnicodeString(&Name, PathBuffer);
-
-        InitializeObjectAttributes(&ObjectAttributes,
-                                   &Name,
-                                   OBJ_CASE_INSENSITIVE,
+        Status = OpenDiskPartition(&PartitionHandle,
                                    NULL,
-                                   NULL);
-
-        PartitionHandle = NULL;
-        Status = NtOpenFile(&PartitionHandle,
-                            FILE_READ_DATA | SYNCHRONIZE,
-                            &ObjectAttributes,
-                            &IoStatusBlock,
-                            FILE_SHARE_READ | FILE_SHARE_WRITE,
-                            FILE_SYNCHRONOUS_IO_NONALERT);
+                                   DiskEntry->DiskNumber,
+                                   PartEntry->PartitionNumber,
+                                   FALSE, TRUE);
         if (!NT_SUCCESS(Status))
         {
-            DPRINT1("NtOpenFile() failed, Status 0x%08lx\n", Status);
+            DPRINT1("OpenDiskPartition() failed, Status 0x%08lx\n", Status);
         }
 
         if (PartitionHandle)
@@ -954,6 +1394,7 @@ AddPartitionToDisk(
             if (wcsicmp(PartEntry->FileSystem, L"RAW") == 0)
             {
                 /*
+                 * For MBR disks only:
                  * True unformatted partitions on NT are created with their
                  * partition type set to either one of the following values,
                  * and are mounted with RawFS. This is done this way since we
@@ -966,12 +1407,17 @@ AddPartitionToDisk(
                  * any of these partition types must be considered as having
                  * an unknown format.
                  */
-                if (PartEntry->PartitionType == PARTITION_FAT_12 ||
-                    PartEntry->PartitionType == PARTITION_FAT_16 ||
-                    PartEntry->PartitionType == PARTITION_HUGE   ||
-                    PartEntry->PartitionType == PARTITION_XINT13 ||
-                    PartEntry->PartitionType == PARTITION_FAT32  ||
-                    PartEntry->PartitionType == PARTITION_FAT32_XINT13)
+                if ( ((DiskEntry->DiskStyle == PARTITION_STYLE_MBR) &&
+                      (PartEntry->PartitionType.MbrType == PARTITION_FAT_12 ||
+                       PartEntry->PartitionType.MbrType == PARTITION_FAT_16 ||
+                       PartEntry->PartitionType.MbrType == PARTITION_HUGE   ||
+                       PartEntry->PartitionType.MbrType == PARTITION_XINT13 ||
+                       PartEntry->PartitionType.MbrType == PARTITION_FAT32  ||
+                       PartEntry->PartitionType.MbrType == PARTITION_FAT32_XINT13)
+                      ) ||
+                     ((DiskEntry->DiskStyle == PARTITION_STYLE_GPT) &&
+                      IsEqualPartitionType(PartEntry->PartitionType.GptType,
+                                           PARTITION_BASIC_DATA_GUID)) )
                 {
                     PartEntry->FormatState = Unformatted;
                 }
@@ -1029,7 +1475,34 @@ AddPartitionToDisk(
         PartEntry->FormatState = UnknownFormat;
     }
 
-    InsertDiskRegion(DiskEntry, PartEntry, LogicalPartition);
+    /* Use the correct partition list */
+    InsertDiskRegion(&DiskEntry->PartList[LogicalPartition
+                                            ? LOGICAL_PARTITIONS
+                                            : PRIMARY_PARTITIONS],
+                     PartEntry);
+}
+
+static
+VOID
+AddLogicalDiskSpace(
+    IN PDISKENTRY DiskEntry)
+{
+    ULONGLONG StartSector;
+    ULONGLONG SectorCount;
+    PPARTENTRY NewPartEntry;
+
+    /* Create a partition entry that represents the empty space in the container partition */
+
+    StartSector = DiskEntry->ExtendedPartition->StartSector.QuadPart + (ULONGLONG)DiskEntry->SectorAlignment;
+    SectorCount = DiskEntry->ExtendedPartition->SectorCount.QuadPart - (ULONGLONG)DiskEntry->SectorAlignment;
+
+    NewPartEntry = CreateInsertBlankRegion(DiskEntry,
+                                           &DiskEntry->PartList[LOGICAL_PARTITIONS],
+                                           StartSector,
+                                           SectorCount,
+                                           TRUE);
+    if (NewPartEntry == NULL)
+        DPRINT1("Failed to create a new empty region for full extended partition space!\n");
 }
 
 static
@@ -1048,7 +1521,7 @@ ScanForUnpartitionedDiskSpace(
 
     DPRINT("ScanForUnpartitionedDiskSpace()\n");
 
-    if (IsListEmpty(&DiskEntry->PrimaryPartListHead))
+    if (IsListEmpty(&DiskEntry->PartList[PRIMARY_PARTITIONS]))
     {
         DPRINT1("No primary partition!\n");
 
@@ -1061,7 +1534,7 @@ ScanForUnpartitionedDiskSpace(
         SectorCount = AlignDown(DiskEntry->SectorCount.QuadPart, DiskEntry->SectorAlignment) - StartSector;
 
         NewPartEntry = CreateInsertBlankRegion(DiskEntry,
-                                               &DiskEntry->PrimaryPartListHead,
+                                               &DiskEntry->PartList[PRIMARY_PARTITIONS],
                                                StartSector,
                                                SectorCount,
                                                FALSE);
@@ -1079,13 +1552,13 @@ ScanForUnpartitionedDiskSpace(
     LastSectorCount = 0ULL;
     LastUnusedSectorCount = 0ULL;
 
-    for (Entry = DiskEntry->PrimaryPartListHead.Flink;
-         Entry != &DiskEntry->PrimaryPartListHead;
+    for (Entry = DiskEntry->PartList[PRIMARY_PARTITIONS].Flink;
+         Entry != &DiskEntry->PartList[PRIMARY_PARTITIONS];
          Entry = Entry->Flink)
     {
         PartEntry = CONTAINING_RECORD(Entry, PARTENTRY, ListEntry);
 
-        if (PartEntry->PartitionType != PARTITION_ENTRY_UNUSED ||
+        if (!IS_PARTITION_UNUSED(PartEntry) ||
             PartEntry->SectorCount.QuadPart != 0ULL)
         {
             LastUnusedSectorCount =
@@ -1131,7 +1604,7 @@ ScanForUnpartitionedDiskSpace(
 
             /* Append the table to the list */
             NewPartEntry = CreateInsertBlankRegion(DiskEntry,
-                                                   &DiskEntry->PrimaryPartListHead,
+                                                   &DiskEntry->PartList[PRIMARY_PARTITIONS],
                                                    StartSector,
                                                    SectorCount,
                                                    FALSE);
@@ -1143,28 +1616,18 @@ ScanForUnpartitionedDiskSpace(
         }
     }
 
+    /* Ignore logical partitions for disks that are not MBR */
+    if (DiskEntry->DiskStyle != PARTITION_STYLE_MBR)
+        return NULL;
+
     if (DiskEntry->ExtendedPartition != NULL)
     {
-        if (IsListEmpty(&DiskEntry->LogicalPartListHead))
+        if (IsListEmpty(&DiskEntry->PartList[LOGICAL_PARTITIONS]))
         {
             DPRINT1("No logical partition!\n");
 
-            /* Create a partition entry that represents the empty extended partition */
-
-            StartSector = DiskEntry->ExtendedPartition->StartSector.QuadPart + (ULONGLONG)DiskEntry->SectorAlignment;
-            SectorCount = DiskEntry->ExtendedPartition->SectorCount.QuadPart - (ULONGLONG)DiskEntry->SectorAlignment;
-
-            NewPartEntry = CreateInsertBlankRegion(DiskEntry,
-                                                   &DiskEntry->LogicalPartListHead,
-                                                   StartSector,
-                                                   SectorCount,
-                                                   TRUE);
-            if (NewPartEntry == NULL)
-            {
-                DPRINT1("Failed to create a new empty region for full extended partition space!\n");
-                return;
-            }
-
+            /* Create a partition entry that represents the empty space in the container partition */
+            AddLogicalDiskSpace(DiskEntry);
             return;
         }
 
@@ -1173,13 +1636,13 @@ ScanForUnpartitionedDiskSpace(
         LastSectorCount = 0ULL;
         LastUnusedSectorCount = 0ULL;
 
-        for (Entry = DiskEntry->LogicalPartListHead.Flink;
-             Entry != &DiskEntry->LogicalPartListHead;
+        for (Entry = DiskEntry->PartList[LOGICAL_PARTITIONS].Flink;
+             Entry != &DiskEntry->PartList[LOGICAL_PARTITIONS];
              Entry = Entry->Flink)
         {
             PartEntry = CONTAINING_RECORD(Entry, PARTENTRY, ListEntry);
 
-            if (PartEntry->PartitionType != PARTITION_ENTRY_UNUSED ||
+            if (!IS_PARTITION_UNUSED(PartEntry) ||
                 PartEntry->SectorCount.QuadPart != 0ULL)
             {
                 LastUnusedSectorCount =
@@ -1227,7 +1690,7 @@ ScanForUnpartitionedDiskSpace(
 
                 /* Append the table to the list */
                 NewPartEntry = CreateInsertBlankRegion(DiskEntry,
-                                                       &DiskEntry->LogicalPartListHead,
+                                                       &DiskEntry->PartList[LOGICAL_PARTITIONS],
                                                        StartSector,
                                                        SectorCount,
                                                        TRUE);
@@ -1249,33 +1712,34 @@ SetDiskSignature(
     IN PPARTLIST List,
     IN PDISKENTRY DiskEntry)
 {
-    LARGE_INTEGER SystemTime;
-    TIME_FIELDS TimeFields;
     PLIST_ENTRY Entry2;
     PDISKENTRY DiskEntry2;
-    PUCHAR Buffer;
 
-    if (DiskEntry->DiskStyle == PARTITION_STYLE_GPT)
+    ASSERT(DiskEntry->LayoutBuffer);
+    ASSERT(DiskEntry->DiskStyle == DiskEntry->LayoutBuffer->PartitionStyle);
+
+    if (DiskEntry->DiskStyle != PARTITION_STYLE_MBR &&
+        DiskEntry->DiskStyle != PARTITION_STYLE_GPT)
     {
-        DPRINT("GPT-partitioned disk detected, not currently supported by SETUP!\n");
+        DPRINT("Disk of style %d does not support signatures.\n",
+               DiskEntry->DiskStyle);
         return;
     }
 
-    Buffer = (PUCHAR)&DiskEntry->LayoutBuffer->Signature;
-
+    /* Regenerate the disk signature as long as we have collisions with other disks */
     while (TRUE)
     {
-        NtQuerySystemTime(&SystemTime);
-        RtlTimeToTimeFields(&SystemTime, &TimeFields);
-
-        Buffer[0] = (UCHAR)(TimeFields.Year & 0xFF) + (UCHAR)(TimeFields.Hour & 0xFF);
-        Buffer[1] = (UCHAR)(TimeFields.Year >> 8) + (UCHAR)(TimeFields.Minute & 0xFF);
-        Buffer[2] = (UCHAR)(TimeFields.Month & 0xFF) + (UCHAR)(TimeFields.Second & 0xFF);
-        Buffer[3] = (UCHAR)(TimeFields.Day & 0xFF) + (UCHAR)(TimeFields.Milliseconds & 0xFF);
-
-        if (DiskEntry->LayoutBuffer->Signature == 0)
+        if (DiskEntry->DiskStyle == PARTITION_STYLE_MBR)
         {
-            continue;
+            DiskGenMbrSignature(&DiskEntry->LayoutBuffer->Mbr.Signature);
+            if (DiskEntry->LayoutBuffer->Mbr.Signature == 0)
+                continue;
+        }
+        else // if (DiskEntry->DiskStyle == PARTITION_STYLE_GPT)
+        {
+            DiskGenGptSignature(&DiskEntry->LayoutBuffer->Gpt.DiskId);
+            if (IsEqualGUID(&DiskEntry->LayoutBuffer->Gpt.DiskId, &GUID_NULL))
+                continue;
         }
 
         /* Check if the signature already exist */
@@ -1289,17 +1753,32 @@ SetDiskSignature(
         {
             DiskEntry2 = CONTAINING_RECORD(Entry2, DISKENTRY, ListEntry);
 
-            if (DiskEntry2->DiskStyle == PARTITION_STYLE_GPT)
+            /* Check that the disks are different, but have the same type */
+            if (!(DiskEntry != DiskEntry2 &&
+                  DiskEntry->DiskStyle == DiskEntry2->DiskStyle))
             {
-                DPRINT("GPT-partitioned disk detected, not currently supported by SETUP!\n");
                 continue;
             }
 
-            if (DiskEntry != DiskEntry2 &&
-                DiskEntry->LayoutBuffer->Signature == DiskEntry2->LayoutBuffer->Signature)
-                break;
+            /* Compare their signatures */
+            if (DiskEntry->DiskStyle == PARTITION_STYLE_MBR)
+            {
+                if (DiskEntry->LayoutBuffer->Mbr.Signature ==
+                    DiskEntry2->LayoutBuffer->Mbr.Signature)
+                {
+                    break;
+                }
+            }
+            else // if (DiskEntry->DiskStyle == PARTITION_STYLE_GPT)
+            {
+                if (IsEqualGUID(&DiskEntry->LayoutBuffer->Gpt.DiskId,
+                                &DiskEntry2->LayoutBuffer->Gpt.DiskId))
+                {
+                    break;
+                }
+            }
         }
-
+        /* No need to retry if we enumerated all the disks */
         if (Entry2 == &List->DiskListHead)
             break;
     }
@@ -1313,20 +1792,15 @@ UpdateDiskSignatures(
     PLIST_ENTRY Entry;
     PDISKENTRY DiskEntry;
 
-    /* Update each disk */
+    /* Update each already-initialized disk */
     for (Entry = List->DiskListHead.Flink;
          Entry != &List->DiskListHead;
          Entry = Entry->Flink)
     {
         DiskEntry = CONTAINING_RECORD(Entry, DISKENTRY, ListEntry);
 
-        if (DiskEntry->DiskStyle == PARTITION_STYLE_GPT)
-        {
-            DPRINT("GPT-partitioned disk detected, not currently supported by SETUP!\n");
-            continue;
-        }
-
-        if (DiskEntry->LayoutBuffer &&
+        if (DiskEntry->PartitionStyle != PARTITION_STYLE_RAW &&
+            DiskEntry->LayoutBuffer &&
             DiskEntry->LayoutBuffer->Signature == 0)
         {
             SetDiskSignature(List, DiskEntry);
@@ -1403,13 +1877,18 @@ AddDiskToList(
     IN ULONG DiskNumber,
     IN PPARTLIST List)
 {
-    DISK_GEOMETRY DiskGeometry;
+    NTSTATUS Status;
+    IO_STATUS_BLOCK Iosb;
+    DISK_GEOMETRY_EX_INTERNAL DiskInfo;
     SCSI_ADDRESS ScsiAddress;
     PDISKENTRY DiskEntry;
-    IO_STATUS_BLOCK Iosb;
-    NTSTATUS Status;
-    PPARTITION_SECTOR Mbr;
-    PULONG Buffer;
+
+    union
+    {
+        PPARTITION_SECTOR Mbr;
+        PULONG Buffer;
+    } DiskSector0;
+
     LARGE_INTEGER FileOffset;
     WCHAR Identifier[20];
     ULONG Checksum;
@@ -1418,25 +1897,30 @@ AddDiskToList(
     PLIST_ENTRY ListEntry;
     PBIOSDISKENTRY BiosDiskEntry;
     ULONG LayoutBufferSize;
-    PDRIVE_LAYOUT_INFORMATION NewLayoutBuffer;
+    PDRIVE_LAYOUT_INFORMATION_EX NewLayoutBuffer;
+    PPARTITION_INFORMATION_EX PartitionInfo;
 
-    /* Retrieve the drive geometry */
+    /* Retrieve the disk geometry, partition and detection information */
     Status = NtDeviceIoControlFile(FileHandle,
                                    NULL,
                                    NULL,
                                    NULL,
                                    &Iosb,
-                                   IOCTL_DISK_GET_DRIVE_GEOMETRY,
+                                   IOCTL_DISK_GET_DRIVE_GEOMETRY_EX,
                                    NULL,
                                    0,
-                                   &DiskGeometry,
-                                   sizeof(DiskGeometry));
+                                   &DiskInfo,
+                                   sizeof(DiskInfo));
     if (!NT_SUCCESS(Status))
-        return;
-
-    if (DiskGeometry.MediaType != FixedMedia &&
-        DiskGeometry.MediaType != RemovableMedia)
     {
+        DPRINT1("NtDeviceIoControlFile(IOCTL_DISK_GET_DRIVE_GEOMETRY_EX) failed (Status: 0x%08lx)\n", Status);
+        return;
+    }
+
+    if (DiskInfo.Geometry.MediaType != FixedMedia &&
+        DiskInfo.Geometry.MediaType != RemovableMedia)
+    {
+        DPRINT1("Disk %lu of unknown media type, ignoring it...\n", DiskNumber);
         return;
     }
 
@@ -1456,18 +1940,32 @@ AddDiskToList(
                                    &ScsiAddress,
                                    sizeof(ScsiAddress));
     if (!NT_SUCCESS(Status))
+    {
+        DPRINT1("NtDeviceIoControlFile(IOCTL_SCSI_GET_ADDRESS) failed (Status: 0x%08lx)\n", Status);
         return;
+    }
 
     /*
-     * Check whether the disk is initialized, by looking at its MBR.
-     * NOTE that this must be generalized to GPT disks as well!
+     * Read the first disk sector to retrieve the sector's signature
+     * and checksum.
+     *
+     * Here we are interested only in the first disk sector, regardless
+     * of the nature of the disk (MBR, GPT...) (in the GPT case we need
+     * the info from its protective compatibility MBR, that is not returned
+     * via the IOCTL_DISK_GET_DRIVE_GEOMETRY_EX call from above).
      */
-
-    Mbr = (PARTITION_SECTOR*)RtlAllocateHeap(ProcessHeap,
-                                             0,
-                                             DiskGeometry.BytesPerSector);
-    if (Mbr == NULL)
+    //
+    // FIXME: What about NEC PC-98 or XBOX?
+    //
+    DiskSector0.Mbr =
+        (PARTITION_SECTOR*)RtlAllocateHeap(ProcessHeap,
+                                           0,
+                                           DiskInfo.Geometry.BytesPerSector);
+    if (DiskSector0.Mbr == NULL)
+    {
+        DPRINT1("Disk %lu of unknown media type, ignoring it...\n", DiskNumber);
         return;
+    }
 
     FileOffset.QuadPart = 0;
     Status = NtReadFile(FileHandle,
@@ -1475,45 +1973,82 @@ AddDiskToList(
                         NULL,
                         NULL,
                         &Iosb,
-                        (PVOID)Mbr,
-                        DiskGeometry.BytesPerSector,
+                        (PVOID)DiskSector0.Mbr,
+                        DiskInfo.Geometry.BytesPerSector,
                         &FileOffset,
                         NULL);
     if (!NT_SUCCESS(Status))
     {
-        RtlFreeHeap(ProcessHeap, 0, Mbr);
-        DPRINT1("NtReadFile failed, status=%x\n", Status);
+        RtlFreeHeap(ProcessHeap, 0, DiskSector0.Mbr);
+        DPRINT1("NtReadFile() failed (Status: 0x%08lx)\n", Status);
         return;
     }
-    Signature = Mbr->Signature;
+
+    Signature = DiskSector0.Mbr->Signature;
 
     /* Calculate the MBR checksum */
     Checksum = 0;
-    Buffer = (PULONG)Mbr;
+    // DiskSector0.Buffer = (PULONG)DiskSector0.Mbr;
     for (i = 0; i < 128; i++)
     {
-        Checksum += Buffer[i];
+        Checksum += DiskSector0.Buffer[i];
     }
     Checksum = ~Checksum + 1;
 
+    /* If the disk was reported as of MBR type, compare our
+     * obtained signature and checksum with the reported ones. */
+    if (DiskInfo.Partition.PartitionStyle == PARTITION_STYLE_MBR)
+    {
+        if (DiskInfo.Partition.Mbr.Signature != Signature)
+        {
+            DPRINT1("Discrepancy between reported signature 0x%08x and calculated signature 0x%08x\n",
+                    DiskInfo.Partition.Mbr.Signature, Signature);
+        }
+        if (DiskInfo.Partition.Mbr.CheckSum != Checksum)
+        {
+            DPRINT1("Discrepancy between reported checksum 0x%08x and calculated checksum 0x%08x\n",
+                    DiskInfo.Partition.Mbr.CheckSum, Checksum);
+        }
+    }
+
+    /* Build the disk identifier string */
     RtlStringCchPrintfW(Identifier, ARRAYSIZE(Identifier),
                         L"%08x-%08x-%c",
                         Checksum, Signature,
-                        (Mbr->Magic == PARTITION_MAGIC) ? L'A' : L'X');
+                        (DiskSector0.Mbr->Magic == PARTITION_MAGIC) ? L'A' : L'X');
     DPRINT("Identifier: %S\n", Identifier);
 
+    /*
+     * Check for any discrepancy in the disk type.
+     * If we do not have the 0xAA55 then it's a RAW partition.
+     */
+    if ((DiskSector0.Mbr->Magic != PARTITION_MAGIC) &&
+        (DiskInfo.Partition.PartitionStyle != PARTITION_STYLE_RAW))
+    {
+        DPRINT1("Overwriting disk partition style to RAW !!\n");
+        DiskInfo.Partition.PartitionStyle = PARTITION_STYLE_RAW;
+    }
+
+    RtlFreeHeap(ProcessHeap, 0, DiskSector0.Mbr);
+
+    DPRINT1("Disk %lu of identifier '%S' is %s\n",
+            DiskNumber, Identifier,
+            PARTITION_STYLE_NAME(DiskInfo.Partition.PartitionStyle));
+
+
+    /* Allocate a new disk entry and make it reference the main list */
     DiskEntry = RtlAllocateHeap(ProcessHeap,
                                 HEAP_ZERO_MEMORY,
                                 sizeof(DISKENTRY));
     if (DiskEntry == NULL)
     {
-        RtlFreeHeap(ProcessHeap, 0, Mbr);
         DPRINT1("Failed to allocate a new disk entry.\n");
         return;
     }
 
     DiskEntry->PartList = List;
 
+    /* Retrieve the type of the disk */
     {
         FILE_FS_DEVICE_INFORMATION FileFsDevice;
 
@@ -1533,7 +2068,7 @@ AddDiskToList(
         }
     }
     // NOTE: We may also use NtQueryVolumeInformationFile(FileFsDeviceInformation).
-    DiskEntry->MediaType = DiskGeometry.MediaType;
+    DiskEntry->MediaType = DiskInfo.Geometry.MediaType;
     if (DiskEntry->MediaType == RemovableMedia)
     {
         DPRINT1("Disk %lu of identifier '%S' is removable\n", DiskNumber, Identifier);
@@ -1545,40 +2080,15 @@ AddDiskToList(
 
 //    DiskEntry->Checksum = Checksum;
 //    DiskEntry->Signature = Signature;
-    DiskEntry->BiosFound = FALSE;
+    DiskEntry->DiskStyle = DiskInfo.Partition.PartitionStyle;
+
 
     /*
-     * Check if this disk has a valid MBR: verify its signature,
-     * and whether its two first bytes are a valid instruction
-     * (related to this, see IsThereAValidBootSector() in partlist.c).
-     *
-     * See also ntoskrnl/fstub/fstubex.c!FstubDetectPartitionStyle().
+     * Check whether the disk has been recognized by the underlying
+     * boot firmware (is present in the list of FW recognized disks
+     * previously retrieved).
      */
-
-    // DiskEntry->NoMbr = (Mbr->Magic != PARTITION_MAGIC || (*(PUSHORT)Mbr->BootCode) == 0x0000);
-
-    /* If we have not the 0xAA55 then it's raw partition */
-    if (Mbr->Magic != PARTITION_MAGIC)
-    {
-        DiskEntry->DiskStyle = PARTITION_STYLE_RAW;
-    }
-    /* Check partitions types: if first is 0xEE and all the others 0, we have GPT */
-    else if (Mbr->Partition[0].PartitionType == EFI_PMBR_OSTYPE_EFI &&
-             Mbr->Partition[1].PartitionType == 0 &&
-             Mbr->Partition[2].PartitionType == 0 &&
-             Mbr->Partition[3].PartitionType == 0)
-    {
-        DiskEntry->DiskStyle = PARTITION_STYLE_GPT;
-    }
-    /* Otherwise, partition table is in MBR */
-    else
-    {
-        DiskEntry->DiskStyle = PARTITION_STYLE_MBR;
-    }
-
-    /* Free the MBR sector buffer */
-    RtlFreeHeap(ProcessHeap, 0, Mbr);
-
+    DiskEntry->BiosFound = FALSE;
 
     for (ListEntry = List->BiosDiskListHead.Flink;
          ListEntry != &List->BiosDiskListHead;
@@ -1629,23 +2139,23 @@ AddDiskToList(
         DPRINT1("WARNING: Setup could not find a matching BIOS disk entry. Disk %lu may not be bootable by the BIOS!\n", DiskNumber);
     }
 
-    DiskEntry->Cylinders = DiskGeometry.Cylinders.QuadPart;
-    DiskEntry->TracksPerCylinder = DiskGeometry.TracksPerCylinder;
-    DiskEntry->SectorsPerTrack = DiskGeometry.SectorsPerTrack;
-    DiskEntry->BytesPerSector = DiskGeometry.BytesPerSector;
+    DiskEntry->Cylinders = DiskInfo.Geometry.Cylinders.QuadPart;
+    DiskEntry->TracksPerCylinder = DiskInfo.Geometry.TracksPerCylinder;
+    DiskEntry->SectorsPerTrack = DiskInfo.Geometry.SectorsPerTrack;
+    DiskEntry->BytesPerSector = DiskInfo.Geometry.BytesPerSector;
 
     DPRINT("Cylinders %I64u\n", DiskEntry->Cylinders);
     DPRINT("TracksPerCylinder %lu\n", DiskEntry->TracksPerCylinder);
     DPRINT("SectorsPerTrack %lu\n", DiskEntry->SectorsPerTrack);
     DPRINT("BytesPerSector %lu\n", DiskEntry->BytesPerSector);
 
-    DiskEntry->SectorCount.QuadPart = DiskGeometry.Cylinders.QuadPart *
-                                      (ULONGLONG)DiskGeometry.TracksPerCylinder *
-                                      (ULONGLONG)DiskGeometry.SectorsPerTrack;
+    DiskEntry->SectorCount.QuadPart = DiskInfo.Geometry.Cylinders.QuadPart *
+                                      (ULONGLONG)DiskInfo.Geometry.TracksPerCylinder *
+                                      (ULONGLONG)DiskInfo.Geometry.SectorsPerTrack;
 
-    DiskEntry->SectorAlignment = DiskGeometry.SectorsPerTrack;
-    DiskEntry->CylinderAlignment = DiskGeometry.TracksPerCylinder *
-                                   DiskGeometry.SectorsPerTrack;
+    DiskEntry->SectorAlignment = DiskInfo.Geometry.SectorsPerTrack;
+    DiskEntry->CylinderAlignment = DiskInfo.Geometry.TracksPerCylinder *
+                                   DiskInfo.Geometry.SectorsPerTrack;
 
     DPRINT("SectorCount %I64u\n", DiskEntry->SectorCount.QuadPart);
     DPRINT("SectorAlignment %lu\n", DiskEntry->SectorAlignment);
@@ -1672,29 +2182,28 @@ AddDiskToList(
      * See examples in https://git.reactos.org/?p=reactos.git;a=blob;f=reactos/ntoskrnl/io/iomgr/error.c;hb=2f3a93ee9cec8322a86bf74b356f1ad83fc912dc#l267
      */
 
-    InitializeListHead(&DiskEntry->PrimaryPartListHead);
-    InitializeListHead(&DiskEntry->LogicalPartListHead);
+    InitializeListHead(&DiskEntry->PartList[PRIMARY_PARTITIONS]);
+    InitializeListHead(&DiskEntry->PartList[LOGICAL_PARTITIONS]);
 
     InsertAscendingList(&List->DiskListHead, DiskEntry, DISKENTRY, ListEntry, DiskNumber);
+
+
+    /* Stop there now if the disk is not MBR or GPT */
+    if (DiskEntry->DiskStyle != PARTITION_STYLE_MBR &&
+        DiskEntry->DiskStyle != PARTITION_STYLE_GPT)
+    {
+        DPRINT1("Disk of style %d is not MBR or GPT and is not supported!\n",
+                DiskEntry->DiskStyle);
+        return;
+    }
 
 
     /*
      * We now retrieve the disk partition layout
      */
 
-    /*
-     * Stop there now if the disk is GPT-partitioned,
-     * since we currently do not support such disks.
-     */
-    if (DiskEntry->DiskStyle == PARTITION_STYLE_GPT)
-    {
-        DPRINT1("GPT-partitioned disk detected, not currently supported by SETUP!\n");
-        return;
-    }
-
-    /* Allocate a layout buffer with 4 partition entries first */
-    LayoutBufferSize = sizeof(DRIVE_LAYOUT_INFORMATION) +
-                       ((4 - ANYSIZE_ARRAY) * sizeof(PARTITION_INFORMATION));
+    /* Allocate a layout buffer with initially 4 partition entries (or 16 for NEC PC-98) */
+    LayoutBufferSize = DRIVE_LAYOUT_INFOEX_SIZE(IsNEC_98 ? 16 : 4);
     DiskEntry->LayoutBuffer = RtlAllocateHeap(ProcessHeap,
                                               HEAP_ZERO_MEMORY,
                                               LayoutBufferSize);
@@ -1704,30 +2213,64 @@ AddDiskToList(
         return;
     }
 
-    /* Keep looping while the drive layout buffer is too small */
+    /*
+     * Keep looping while the drive layout buffer is too small.
+     * Iosb.Information or PartitionCount only contain actual info only
+     * once NtDeviceIoControlFile(IOCTL_DISK_GET_DRIVE_LAYOUT_EX) succeeds.
+     */
     for (;;)
     {
-        DPRINT1("Buffer size: %lu\n", LayoutBufferSize);
         Status = NtDeviceIoControlFile(FileHandle,
                                        NULL,
                                        NULL,
                                        NULL,
                                        &Iosb,
-                                       IOCTL_DISK_GET_DRIVE_LAYOUT,
+                                       IOCTL_DISK_GET_DRIVE_LAYOUT_EX,
                                        NULL,
                                        0,
                                        DiskEntry->LayoutBuffer,
                                        LayoutBufferSize);
         if (NT_SUCCESS(Status))
+        {
+            /* We succeeded; compactify the layout structure but keep the
+             * number of partition entries rounded up to a multiple of 4. */
+#if 1
+            LayoutBufferSize = DRIVE_LAYOUT_INFOEX_SIZE(ROUND_UP_NUM(DiskEntry->LayoutBuffer->PartitionCount, 4));
+#else
+            LayoutBufferSize = (ULONG)Iosb.Information;
+#endif
+            NewLayoutBuffer = RtlReAllocateHeap(ProcessHeap,
+                                                HEAP_REALLOC_IN_PLACE_ONLY,
+                                                DiskEntry->LayoutBuffer,
+                                                LayoutBufferSize);
+            if (!NewLayoutBuffer)
+            {
+                DPRINT1("Compactification failed; keeping original structure.\n");
+            }
+            else
+            {
+                DiskEntry->LayoutBuffer = NewLayoutBuffer;
+            }
+            Status = STATUS_SUCCESS;
             break;
+        }
 
         if (Status != STATUS_BUFFER_TOO_SMALL)
         {
-            DPRINT1("NtDeviceIoControlFile() failed (Status: 0x%08lx)\n", Status);
+            DPRINT1("NtDeviceIoControlFile(IOCTL_DISK_GET_DRIVE_LAYOUT_EX) failed (Status: 0x%08lx)\n", Status);
+
+            // /* Bail out if any other error than "invalid function" has been emitted */
+            // if (Status != STATUS_INVALID_DEVICE_REQUEST) ...
+            // TODO: Otherwise fall back to legacy IOCTL_DISK_GET_DRIVE_LAYOUT
+            // and convert the layout back to extended.
+
+            RtlFreeHeap(RtlGetProcessHeap(), 0, DiskEntry->LayoutBuffer);
+            DiskEntry->LayoutBuffer = NULL;
             return;
         }
 
-        LayoutBufferSize += 4 * sizeof(PARTITION_INFORMATION);
+        /* Reallocate the buffer by chunks of 4 entries */
+        LayoutBufferSize += 4 * DRIVE_LAYOUT_INFOEX_ENTRY_SIZE;
         NewLayoutBuffer = RtlReAllocateHeap(ProcessHeap,
                                             HEAP_ZERO_MEMORY,
                                             DiskEntry->LayoutBuffer,
@@ -1735,9 +2278,10 @@ AddDiskToList(
         if (NewLayoutBuffer == NULL)
         {
             DPRINT1("Failed to reallocate the disk layout buffer!\n");
+            RtlFreeHeap(RtlGetProcessHeap(), 0, DiskEntry->LayoutBuffer);
+            DiskEntry->LayoutBuffer = NULL;
             return;
         }
-
         DiskEntry->LayoutBuffer = NewLayoutBuffer;
     }
 
@@ -1748,52 +2292,82 @@ AddDiskToList(
 #endif
 
     if (IsSuperFloppy(DiskEntry))
-        DPRINT1("Disk %lu is a super-floppy\n", DiskNumber);
-
-    if (DiskEntry->LayoutBuffer->PartitionEntry[0].StartingOffset.QuadPart != 0 &&
-        DiskEntry->LayoutBuffer->PartitionEntry[0].PartitionLength.QuadPart != 0 &&
-        DiskEntry->LayoutBuffer->PartitionEntry[0].PartitionType != PARTITION_ENTRY_UNUSED)
     {
-        if ((DiskEntry->LayoutBuffer->PartitionEntry[0].StartingOffset.QuadPart / DiskEntry->BytesPerSector) % DiskEntry->SectorsPerTrack == 0)
+        DPRINT1("Disk %lu is a super-floppy\n", DiskNumber);
+        DiskEntry->DiskStyle = PARTITION_STYLE_SUPERFLOPPY;
+    }
+
+    /* Inform about default sector alignment being used */
+    PartitionInfo = DiskEntry->LayoutBuffer->PartitionEntry[0];
+    if (PartitionInfo->StartingOffset.QuadPart != 0 &&
+        PartitionInfo->PartitionLength.QuadPart != 0 &&
+        PartitionInfo->PartitionType != PARTITION_ENTRY_UNUSED)
+    {
+        if ((PartitionInfo->StartingOffset.QuadPart / DiskEntry->BytesPerSector) % DiskEntry->SectorsPerTrack == 0)
         {
             DPRINT("Use %lu Sector alignment!\n", DiskEntry->SectorsPerTrack);
         }
-        else if (DiskEntry->LayoutBuffer->PartitionEntry[0].StartingOffset.QuadPart % (1024 * 1024) == 0)
+        else if (PartitionInfo->StartingOffset.QuadPart % (1024 * 1024) == 0)
         {
-            DPRINT1("Use megabyte (%lu Sectors) alignment!\n", (1024 * 1024) / DiskEntry->BytesPerSector);
+            DPRINT1("Use megabyte (%lu Sectors) alignment!\n",
+                    (1024 * 1024) / DiskEntry->BytesPerSector);
         }
         else
         {
-            DPRINT1("No matching alignment found! Partition 1 starts at %I64u\n", DiskEntry->LayoutBuffer->PartitionEntry[0].StartingOffset.QuadPart);
+            DPRINT1("No matching alignment found! Partition 1 starts at %I64u\n",
+                    PartitionInfo->StartingOffset.QuadPart);
         }
     }
     else
     {
-        DPRINT1("No valid partition table found! Use megabyte (%lu Sectors) alignment!\n", (1024 * 1024) / DiskEntry->BytesPerSector);
+        DPRINT1("No valid partition table found! Use megabyte (%lu Sectors) alignment!\n",
+                (1024 * 1024) / DiskEntry->BytesPerSector);
     }
 
+    /*
+     * Add the partitions into the lists.
+     */
     if (DiskEntry->LayoutBuffer->PartitionCount == 0)
     {
         DiskEntry->NewDisk = TRUE;
-        DiskEntry->LayoutBuffer->PartitionCount = 4;
 
-        for (i = 0; i < 4; i++)
+        /* Initialize a partition count to a default
+         * non-zero value only if the disk is MBR. */
+        if (DiskEntry->DiskStyle == PARTITION_STYLE_MBR)
         {
-            DiskEntry->LayoutBuffer->PartitionEntry[i].RewritePartition = TRUE;
+            DiskEntry->LayoutBuffer->PartitionCount = (IsNEC_98 ? 16 : 4);
+
+            /* Invalidate these entries as well */
+            for (i = 0; i < DiskEntry->LayoutBuffer->PartitionCount; ++i)
+            {
+                DiskEntry->LayoutBuffer->PartitionEntry[i].RewritePartition = TRUE;
+            }
         }
     }
     else
     {
-        /* Enumerate and add the first four primary partitions */
-        for (i = 0; i < 4; i++)
+        if ((DiskEntry->DiskStyle == PARTITION_STYLE_MBR) && !IsNEC_98)
         {
-            AddPartitionToDisk(DiskNumber, DiskEntry, i, FALSE);
-        }
+            /* Enumerate and add the first four primary partitions */
+            for (i = 0; i < 4; ++i)
+            {
+                AddPartitionToDisk(DiskEntry, i, FALSE);
+            }
 
-        /* Enumerate and add the remaining partitions as logical ones */
-        for (i = 4; i < DiskEntry->LayoutBuffer->PartitionCount; i += 4)
+            /* Enumerate and add the remaining partitions as logical ones */
+            for (i = 4; i < DiskEntry->LayoutBuffer->PartitionCount; i += 4)
+            {
+                AddPartitionToDisk(DiskEntry, i, TRUE);
+            }
+        }
+        else // if ( ((DiskEntry->DiskStyle == PARTITION_STYLE_MBR) && IsNEC_98) ||
+             //       (DiskEntry->DiskStyle == PARTITION_STYLE_GPT) )
         {
-            AddPartitionToDisk(DiskNumber, DiskEntry, i, TRUE);
+            /* Enumerate and add the partitions (all primary) */
+            for (i = 0; i < DiskEntry->LayoutBuffer->PartitionCount; ++i)
+            {
+                AddPartitionToDisk(DiskEntry, i, FALSE);
+            }
         }
     }
 
@@ -1844,9 +2418,13 @@ GetSystemDisk(
         return NULL;
     }
 
-    if (DiskEntry->DiskStyle == PARTITION_STYLE_GPT)
+    /* Display warning if the disk is not MBR or GPT */
+    if (DiskEntry->DiskStyle != PARTITION_STYLE_MBR &&
+        DiskEntry->DiskStyle != PARTITION_STYLE_GPT)
     {
-        DPRINT1("System disk -- GPT-partitioned disk detected, not currently supported by SETUP!\n");
+        DPRINT1("System disk of style %d is not supported!\n",
+                DiskEntry->DiskStyle);
+        return NULL;
     }
 
     return DiskEntry;
@@ -1858,21 +2436,33 @@ GetSystemDisk(
  * on GPT disks, partition with the correct GUID.
  */
 BOOLEAN
-IsPartitionActive(
+IsSystemPartition(
     IN PPARTENTRY PartEntry)
 {
-    // TODO: Support for GPT disks!
+    PDISKENTRY DiskEntry = PartEntry->DiskEntry;
 
-    if (IsContainerPartition(PartEntry->PartitionType))
+    ASSERT(DiskEntry);
+
+    /* Fail if the disk is not MBR or GPT */
+    if (DiskEntry->DiskStyle != PARTITION_STYLE_MBR &&
+        DiskEntry->DiskStyle != PARTITION_STYLE_GPT)
+    {
+        DPRINT1("Disk of style %d is not MBR or GPT and does not support partitions.\n",
+                DiskEntry->DiskStyle);
         return FALSE;
+    }
+
+    if ((DiskEntry->DiskStyle == PARTITION_STYLE_MBR) &&
+        IsContainerPartition(PartEntry->PartitionType.MbrType))
+    {
+        return FALSE;
+    }
 
     /* Check if the partition is partitioned, used and active */
-    if (PartEntry->IsPartitioned &&
-        // !IsContainerPartition(PartEntry->PartitionType) &&
-        PartEntry->BootIndicator)
+    if (PartEntry->IsPartitioned && PartEntry->IsSystemPartition)
     {
         /* Yes it is */
-        ASSERT(PartEntry->PartitionType != PARTITION_ENTRY_UNUSED);
+        ASSERT(!IS_PARTITION_UNUSED(PartEntry));
         return TRUE;
     }
 
@@ -1894,23 +2484,26 @@ GetActiveDiskPartition(
         return NULL;
 
     /* Check for empty partition list */
-    if (IsListEmpty(&DiskEntry->PrimaryPartListHead))
+    if (IsListEmpty(&DiskEntry->PartList[PRIMARY_PARTITIONS]))
         return NULL;
 
-    if (DiskEntry->DiskStyle == PARTITION_STYLE_GPT)
+    /* Fail if the disk is not MBR or GPT */
+    if (DiskEntry->DiskStyle != PARTITION_STYLE_MBR &&
+        DiskEntry->DiskStyle != PARTITION_STYLE_GPT)
     {
-        DPRINT1("GPT-partitioned disk detected, not currently supported by SETUP!\n");
+        DPRINT1("Disk of style %d is not MBR or GPT and does not support partitions.\n",
+                DiskEntry->DiskStyle);
         return NULL;
     }
 
     /* Scan all (primary) partitions to find the active disk partition */
-    for (ListEntry = DiskEntry->PrimaryPartListHead.Flink;
-         ListEntry != &DiskEntry->PrimaryPartListHead;
+    for (ListEntry = DiskEntry->PartList[PRIMARY_PARTITIONS].Flink;
+         ListEntry != &DiskEntry->PartList[PRIMARY_PARTITIONS];
          ListEntry = ListEntry->Flink)
     {
         /* Retrieve the partition */
         PartEntry = CONTAINING_RECORD(ListEntry, PARTENTRY, ListEntry);
-        if (IsPartitionActive(PartEntry))
+        if (IsSystemPartition(PartEntry))
         {
             /* Yes, we've found it */
             ASSERT(DiskEntry == PartEntry->DiskEntry);
@@ -1941,15 +2534,11 @@ CreatePartitionList(VOID)
 {
     PPARTLIST List;
     PDISKENTRY SystemDisk;
-    OBJECT_ATTRIBUTES ObjectAttributes;
-    SYSTEM_DEVICE_INFORMATION Sdi;
-    IO_STATUS_BLOCK Iosb;
-    ULONG ReturnSize;
     NTSTATUS Status;
+    SYSTEM_DEVICE_INFORMATION Sdi;
+    ULONG ReturnSize;
     ULONG DiskNumber;
     HANDLE FileHandle;
-    UNICODE_STRING Name;
-    WCHAR Buffer[MAX_PATH];
 
     List = (PPARTLIST)RtlAllocateHeap(ProcessHeap,
                                       0,
@@ -1982,23 +2571,11 @@ CreatePartitionList(VOID)
 
     for (DiskNumber = 0; DiskNumber < Sdi.NumberOfDisks; DiskNumber++)
     {
-        RtlStringCchPrintfW(Buffer, ARRAYSIZE(Buffer),
-                            L"\\Device\\Harddisk%lu\\Partition0",
-                            DiskNumber);
-        RtlInitUnicodeString(&Name, Buffer);
-
-        InitializeObjectAttributes(&ObjectAttributes,
-                                   &Name,
-                                   OBJ_CASE_INSENSITIVE,
+        Status = OpenDiskPartition(&FileHandle,
                                    NULL,
-                                   NULL);
-
-        Status = NtOpenFile(&FileHandle,
-                            FILE_READ_DATA | FILE_READ_ATTRIBUTES | SYNCHRONIZE,
-                            &ObjectAttributes,
-                            &Iosb,
-                            FILE_SHARE_READ | FILE_SHARE_WRITE,
-                            FILE_SYNCHRONOUS_IO_NONALERT);
+                                   DiskNumber, 0,
+                                   FALSE, TRUE);
+                                   // FILE_READ_DATA | FILE_READ_ATTRIBUTES | SYNCHRONIZE
         if (NT_SUCCESS(Status))
         {
             AddDiskToList(FileHandle, DiskNumber, List);
@@ -2006,7 +2583,11 @@ CreatePartitionList(VOID)
         }
     }
 
+    // FIXME: Should not be needed originally ?? Unless we want to avoid
+    // signature collisions with existing disks. We also should not touch
+    // non-initialized disks as well...
     UpdateDiskSignatures(List);
+
     UpdateHwDiskNumbers(List);
     AssignDriveLetters(List);
 
@@ -2028,52 +2609,45 @@ DestroyPartitionList(
     PBIOSDISKENTRY BiosDiskEntry;
     PPARTENTRY PartEntry;
     PLIST_ENTRY Entry;
+    UINT i;
 
-    /* Release disk and partition info */
+    /* Free the disk and partition info */
     while (!IsListEmpty(&List->DiskListHead))
     {
         Entry = RemoveHeadList(&List->DiskListHead);
         DiskEntry = CONTAINING_RECORD(Entry, DISKENTRY, ListEntry);
 
-        /* Release driver name */
+        /* Free the driver name */
         RtlFreeUnicodeString(&DiskEntry->DriverName);
 
-        /* Release primary partition list */
-        while (!IsListEmpty(&DiskEntry->PrimaryPartListHead))
+        /* Free the partition lists */
+        for (i = PRIMARY_PARTITIONS; i <= LOGICAL_PARTITIONS; ++i)
         {
-            Entry = RemoveHeadList(&DiskEntry->PrimaryPartListHead);
-            PartEntry = CONTAINING_RECORD(Entry, PARTENTRY, ListEntry);
-
-            RtlFreeHeap(ProcessHeap, 0, PartEntry);
+            while (!IsListEmpty(&DiskEntry->PartList[i]))
+            {
+                Entry = RemoveHeadList(&DiskEntry->PartList[i]);
+                PartEntry = CONTAINING_RECORD(Entry, PARTENTRY, ListEntry);
+                RtlFreeHeap(ProcessHeap, 0, PartEntry);
+            }
         }
 
-        /* Release logical partition list */
-        while (!IsListEmpty(&DiskEntry->LogicalPartListHead))
-        {
-            Entry = RemoveHeadList(&DiskEntry->LogicalPartListHead);
-            PartEntry = CONTAINING_RECORD(Entry, PARTENTRY, ListEntry);
-
-            RtlFreeHeap(ProcessHeap, 0, PartEntry);
-        }
-
-        /* Release layout buffer */
+        /* Free the layout buffer */
         if (DiskEntry->LayoutBuffer != NULL)
             RtlFreeHeap(ProcessHeap, 0, DiskEntry->LayoutBuffer);
 
-        /* Release disk entry */
+        /* Free the disk entry */
         RtlFreeHeap(ProcessHeap, 0, DiskEntry);
     }
 
-    /* Release the bios disk info */
+    /* Free the bios disk info */
     while (!IsListEmpty(&List->BiosDiskListHead))
     {
         Entry = RemoveHeadList(&List->BiosDiskListHead);
         BiosDiskEntry = CONTAINING_RECORD(Entry, BIOSDISKENTRY, ListEntry);
-
         RtlFreeHeap(ProcessHeap, 0, BiosDiskEntry);
     }
 
-    /* Release list head */
+    /* Free the list head */
     RtlFreeHeap(ProcessHeap, 0, List);
 }
 
@@ -2162,7 +2736,7 @@ GetDiskBySCSI(
 PDISKENTRY
 GetDiskBySignature(
     IN PPARTLIST List,
-    IN ULONG Signature)
+    IN DEVICE_SIGNATURE Signature)
 {
     PDISKENTRY DiskEntry;
     PLIST_ENTRY Entry;
@@ -2174,10 +2748,28 @@ GetDiskBySignature(
     {
         DiskEntry = CONTAINING_RECORD(Entry, DISKENTRY, ListEntry);
 
-        if (DiskEntry->LayoutBuffer->Signature == Signature)
+        //
+        // FIXME: We can use LONG signatures with GPT disks
+        // as well (stored in the protective MBR).
+        //
+        if ((Signature.Type == SignatureLong) &&
+            (DiskEntry->DiskStyle == PARTITION_STYLE_MBR))
         {
-            /* Disk found */
-            return DiskEntry;
+            if (DiskEntry->LayoutBuffer->Mbr.Signature == Signature.Long)
+            {
+                /* Disk found */
+                return DiskEntry;
+            }
+        }
+        else if ((Signature.Type == SignatureGuid) &&
+                 (DiskEntry->DiskStyle == PARTITION_STYLE_GPT))
+        {
+            if (IsEqualGUID(&DiskEntry->LayoutBuffer->Gpt.DiskId,
+                            &Signature.Guid))
+            {
+                /* Disk found */
+                return DiskEntry;
+            }
         }
     }
 
@@ -2193,38 +2785,34 @@ GetPartition(
 {
     PPARTENTRY PartEntry;
     PLIST_ENTRY Entry;
+    UINT i;
 
-    if (DiskEntry->DiskStyle == PARTITION_STYLE_GPT)
+    /* Fail if the disk is not MBR or GPT */
+    if (DiskEntry->DiskStyle != PARTITION_STYLE_MBR &&
+        DiskEntry->DiskStyle != PARTITION_STYLE_GPT)
     {
-        DPRINT("GPT-partitioned disk detected, not currently supported by SETUP!\n");
+        DPRINT1("Disk of style %d is not MBR or GPT and does not support partitions.\n",
+                DiskEntry->DiskStyle);
         return NULL;
     }
 
-    /* Disk found, loop over the primary partitions first... */
-    for (Entry = DiskEntry->PrimaryPartListHead.Flink;
-         Entry != &DiskEntry->PrimaryPartListHead;
-         Entry = Entry->Flink)
+    /* Disk found, loop over the partitions */
+    for (i = PRIMARY_PARTITIONS;
+         i <= ((DiskEntry->DiskStyle == PARTITION_STYLE_MBR)
+                  ? LOGICAL_PARTITIONS : PRIMARY_PARTITIONS);
+         ++i)
     {
-        PartEntry = CONTAINING_RECORD(Entry, PARTENTRY, ListEntry);
-
-        if (PartEntry->PartitionNumber == PartitionNumber)
+        for (Entry =  DiskEntry->PartList[i].Flink;
+             Entry != &DiskEntry->PartList[i];
+             Entry =  Entry->Flink)
         {
-            /* Partition found */
-            return PartEntry;
-        }
-    }
+            PartEntry = CONTAINING_RECORD(Entry, PARTENTRY, ListEntry);
 
-    /* ... then over the logical partitions if needed */
-    for (Entry = DiskEntry->LogicalPartListHead.Flink;
-         Entry != &DiskEntry->LogicalPartListHead;
-         Entry = Entry->Flink)
-    {
-        PartEntry = CONTAINING_RECORD(Entry, PARTENTRY, ListEntry);
-
-        if (PartEntry->PartitionNumber == PartitionNumber)
-        {
-            /* Partition found */
-            return PartEntry;
+            if (PartEntry->PartitionNumber == PartitionNumber)
+            {
+                /* Partition found */
+                return PartEntry;
+            }
         }
     }
 
@@ -2251,12 +2839,6 @@ GetDiskOrPartition(
     /* If we have a partition (PartitionNumber != 0), find it */
     if (PartitionNumber != 0)
     {
-        if (DiskEntry->DiskStyle == PARTITION_STYLE_GPT)
-        {
-            DPRINT("GPT-partitioned disk detected, not currently supported by SETUP!\n");
-            return FALSE;
-        }
-
         PartEntry = GetPartition(/*List,*/ DiskEntry, PartitionNumber);
         if (!PartEntry)
             return FALSE;
@@ -2314,12 +2896,14 @@ GetNextPartition(
     {
         CurrentDisk = CurrentPart->DiskEntry;
 
-        if (CurrentPart->LogicalPartition)
+        /* Check the logical partitions only if the disk is MBR */
+        if ((CurrentDisk->DiskStyle == PARTITION_STYLE_MBR) &&
+            CurrentPart->LogicalPartition)
         {
             /* Logical partition */
 
             PartListEntry = CurrentPart->ListEntry.Flink;
-            if (PartListEntry != &CurrentDisk->LogicalPartListHead)
+            if (PartListEntry != &CurrentDisk->PartList[LOGICAL_PARTITIONS])
             {
                 /* Next logical partition */
                 CurrentPart = CONTAINING_RECORD(PartListEntry, PARTENTRY, ListEntry);
@@ -2328,7 +2912,7 @@ GetNextPartition(
             else
             {
                 PartListEntry = CurrentDisk->ExtendedPartition->ListEntry.Flink;
-                if (PartListEntry != &CurrentDisk->PrimaryPartListHead)
+                if (PartListEntry != &CurrentDisk->PartList[PRIMARY_PARTITIONS])
                 {
                     CurrentPart = CONTAINING_RECORD(PartListEntry, PARTENTRY, ListEntry);
                     return CurrentPart;
@@ -2339,12 +2923,15 @@ GetNextPartition(
         {
             /* Primary or extended partition */
 
-            if (CurrentPart->IsPartitioned &&
-                IsContainerPartition(CurrentPart->PartitionType))
+            /* Check the extended partition only if the disk is MBR */
+            if ((CurrentDisk->DiskStyle == PARTITION_STYLE_MBR) &&
+                CurrentPart->IsPartitioned &&
+                /*IsContainerPartition(CurrentPart->PartitionType.MbrType)*/
+                (CurrentDisk->ExtendedPartition == CurrentPart))
             {
                 /* First logical partition */
-                PartListEntry = CurrentDisk->LogicalPartListHead.Flink;
-                if (PartListEntry != &CurrentDisk->LogicalPartListHead)
+                PartListEntry = CurrentDisk->PartList[LOGICAL_PARTITIONS].Flink;
+                if (PartListEntry != &CurrentDisk->PartList[LOGICAL_PARTITIONS])
                 {
                     CurrentPart = CONTAINING_RECORD(PartListEntry, PARTENTRY, ListEntry);
                     return CurrentPart;
@@ -2354,7 +2941,7 @@ GetNextPartition(
             {
                 /* Next primary partition */
                 PartListEntry = CurrentPart->ListEntry.Flink;
-                if (PartListEntry != &CurrentDisk->PrimaryPartListHead)
+                if (PartListEntry != &CurrentDisk->PartList[PRIMARY_PARTITIONS])
                 {
                     CurrentPart = CONTAINING_RECORD(PartListEntry, PARTENTRY, ListEntry);
                     return CurrentPart;
@@ -2371,14 +2958,8 @@ GetNextPartition(
     {
         CurrentDisk = CONTAINING_RECORD(DiskListEntry, DISKENTRY, ListEntry);
 
-        if (CurrentDisk->DiskStyle == PARTITION_STYLE_GPT)
-        {
-            DPRINT("GPT-partitioned disk detected, not currently supported by SETUP!\n");
-            continue;
-        }
-
-        PartListEntry = CurrentDisk->PrimaryPartListHead.Flink;
-        if (PartListEntry != &CurrentDisk->PrimaryPartListHead)
+        PartListEntry = CurrentDisk->PartList[PRIMARY_PARTITIONS].Flink;
+        if (PartListEntry != &CurrentDisk->PartList[PRIMARY_PARTITIONS])
         {
             CurrentPart = CONTAINING_RECORD(PartListEntry, PARTENTRY, ListEntry);
             return CurrentPart;
@@ -2406,12 +2987,14 @@ GetPrevPartition(
     {
         CurrentDisk = CurrentPart->DiskEntry;
 
-        if (CurrentPart->LogicalPartition)
+        /* Check the logical partitions only if the disk is MBR */
+        if ((CurrentDisk->DiskStyle == PARTITION_STYLE_MBR) &&
+            CurrentPart->LogicalPartition)
         {
             /* Logical partition */
 
             PartListEntry = CurrentPart->ListEntry.Blink;
-            if (PartListEntry != &CurrentDisk->LogicalPartListHead)
+            if (PartListEntry != &CurrentDisk->PartList[LOGICAL_PARTITIONS])
             {
                 /* Previous logical partition */
                 CurrentPart = CONTAINING_RECORD(PartListEntry, PARTENTRY, ListEntry);
@@ -2428,14 +3011,17 @@ GetPrevPartition(
             /* Primary or extended partition */
 
             PartListEntry = CurrentPart->ListEntry.Blink;
-            if (PartListEntry != &CurrentDisk->PrimaryPartListHead)
+            if (PartListEntry != &CurrentDisk->PartList[PRIMARY_PARTITIONS])
             {
                 CurrentPart = CONTAINING_RECORD(PartListEntry, PARTENTRY, ListEntry);
 
-                if (CurrentPart->IsPartitioned &&
-                    IsContainerPartition(CurrentPart->PartitionType))
+                /* Check the extended partition only if the disk is MBR */
+                if ((CurrentDisk->DiskStyle == PARTITION_STYLE_MBR) &&
+                    CurrentPart->IsPartitioned &&
+                    /*IsContainerPartition(CurrentPart->PartitionType.MbrType)*/
+                    (CurrentDisk->ExtendedPartition == CurrentPart))
                 {
-                    PartListEntry = CurrentDisk->LogicalPartListHead.Blink;
+                    PartListEntry = CurrentDisk->PartList[LOGICAL_PARTITIONS].Blink;
                     CurrentPart = CONTAINING_RECORD(PartListEntry, PARTENTRY, ListEntry);
                 }
 
@@ -2452,22 +3038,19 @@ GetPrevPartition(
     {
         CurrentDisk = CONTAINING_RECORD(DiskListEntry, DISKENTRY, ListEntry);
 
-        if (CurrentDisk->DiskStyle == PARTITION_STYLE_GPT)
-        {
-            DPRINT("GPT-partitioned disk detected, not currently supported by SETUP!\n");
-            continue;
-        }
-
-        PartListEntry = CurrentDisk->PrimaryPartListHead.Blink;
-        if (PartListEntry != &CurrentDisk->PrimaryPartListHead)
+        PartListEntry = CurrentDisk->PartList[PRIMARY_PARTITIONS].Blink;
+        if (PartListEntry != &CurrentDisk->PartList[PRIMARY_PARTITIONS])
         {
             CurrentPart = CONTAINING_RECORD(PartListEntry, PARTENTRY, ListEntry);
 
-            if (CurrentPart->IsPartitioned &&
-                IsContainerPartition(CurrentPart->PartitionType))
+            /* Check the extended partition only if the disk is MBR */
+            if ((CurrentDisk->DiskStyle == PARTITION_STYLE_MBR) &&
+                CurrentPart->IsPartitioned &&
+                /*IsContainerPartition(CurrentPart->PartitionType.MbrType)*/
+                (CurrentDisk->ExtendedPartition == CurrentPart))
             {
-                PartListEntry = CurrentDisk->LogicalPartListHead.Blink;
-                if (PartListEntry != &CurrentDisk->LogicalPartListHead)
+                PartListEntry = CurrentDisk->PartList[LOGICAL_PARTITIONS].Blink;
+                if (PartListEntry != &CurrentDisk->PartList[LOGICAL_PARTITIONS])
                 {
                     CurrentPart = CONTAINING_RECORD(PartListEntry, PARTENTRY, ListEntry);
                     return CurrentPart;
@@ -2525,19 +3108,22 @@ GetPrimaryPartitionCount(
     PPARTENTRY PartEntry;
     ULONG Count = 0;
 
-    if (DiskEntry->DiskStyle == PARTITION_STYLE_GPT)
+    /* Fail if the disk is not MBR or GPT */
+    if (DiskEntry->DiskStyle != PARTITION_STYLE_MBR &&
+        DiskEntry->DiskStyle != PARTITION_STYLE_GPT)
     {
-        DPRINT("GPT-partitioned disk detected, not currently supported by SETUP!\n");
+        DPRINT1("Disk of style %d is not MBR or GPT and does not support partitions.\n",
+                DiskEntry->DiskStyle);
         return 0;
     }
 
-    for (Entry = DiskEntry->PrimaryPartListHead.Flink;
-         Entry != &DiskEntry->PrimaryPartListHead;
-         Entry = Entry->Flink)
+    for (Entry =  DiskEntry->PartList[PRIMARY_PARTITIONS].Flink;
+         Entry != &DiskEntry->PartList[PRIMARY_PARTITIONS];
+         Entry =  Entry->Flink)
     {
         PartEntry = CONTAINING_RECORD(Entry, PARTENTRY, ListEntry);
         if (PartEntry->IsPartitioned)
-            Count++;
+            ++Count;
     }
 
     return Count;
@@ -2548,23 +3134,25 @@ ULONG
 GetLogicalPartitionCount(
     IN PDISKENTRY DiskEntry)
 {
-    PLIST_ENTRY ListEntry;
+    PLIST_ENTRY Entry;
     PPARTENTRY PartEntry;
     ULONG Count = 0;
 
-    if (DiskEntry->DiskStyle == PARTITION_STYLE_GPT)
+    /* Fail if the disk is not MBR */
+    if (DiskEntry->DiskStyle != PARTITION_STYLE_MBR)
     {
-        DPRINT("GPT-partitioned disk detected, not currently supported by SETUP!\n");
+        DPRINT1("Disk of style %d is not MBR and does not support logical partitions.\n",
+                DiskEntry->DiskStyle);
         return 0;
     }
 
-    for (ListEntry = DiskEntry->LogicalPartListHead.Flink;
-         ListEntry != &DiskEntry->LogicalPartListHead;
-         ListEntry = ListEntry->Flink)
+    for (Entry =  DiskEntry->PartList[LOGICAL_PARTITIONS].Flink;
+         Entry != &DiskEntry->PartList[LOGICAL_PARTITIONS];
+         Entry =  Entry->Flink)
     {
-        PartEntry = CONTAINING_RECORD(ListEntry, PARTENTRY, ListEntry);
+        PartEntry = CONTAINING_RECORD(Entry, PARTENTRY, ListEntry);
         if (PartEntry->IsPartitioned)
-            Count++;
+            ++Count;
     }
 
     return Count;
@@ -2583,7 +3171,24 @@ ReAllocateLayoutBuffer(
 
     DPRINT1("ReAllocateLayoutBuffer()\n");
 
-    NewPartitionCount = 4 + GetLogicalPartitionCount(DiskEntry) * 4;
+    if (DiskEntry->DiskStyle == PARTITION_STYLE_MBR)
+    {
+        if (IsNEC_98)
+        {
+            /* Always 16 entries, not more, not less */
+            NewPartitionCount = 16;
+        }
+        else
+        {
+            /* Always 4 first entries, plus 4 entries for each logical partition */
+            NewPartitionCount = 4 + GetLogicalPartitionCount(DiskEntry) * 4;
+        }
+    }
+    else
+    {
+        /* For GPT disks, use the actual number of (primary) partitions */
+        NewPartitionCount = GetPrimaryPartitionCount(DiskEntry);
+    }
 
     if (DiskEntry->LayoutBuffer)
         CurrentPartitionCount = DiskEntry->LayoutBuffer->PartitionCount;
@@ -2594,8 +3199,7 @@ ReAllocateLayoutBuffer(
     if (CurrentPartitionCount == NewPartitionCount)
         return TRUE;
 
-    LayoutBufferSize = sizeof(DRIVE_LAYOUT_INFORMATION) +
-                       ((NewPartitionCount - ANYSIZE_ARRAY) * sizeof(PARTITION_INFORMATION));
+    LayoutBufferSize = DRIVE_LAYOUT_INFOEX_SIZE(NewPartitionCount);
     NewLayoutBuffer = RtlReAllocateHeap(ProcessHeap,
                                         HEAP_ZERO_MEMORY,
                                         DiskEntry->LayoutBuffer,
@@ -2611,7 +3215,7 @@ ReAllocateLayoutBuffer(
     /* If the layout buffer grows, make sure the new (empty) entries are written to the disk */
     if (NewPartitionCount > CurrentPartitionCount)
     {
-        for (i = CurrentPartitionCount; i < NewPartitionCount; i++)
+        for (i = CurrentPartitionCount; i < NewPartitionCount; ++i)
         {
             NewLayoutBuffer->PartitionEntry[i].RewritePartition = TRUE;
         }
@@ -2627,8 +3231,8 @@ VOID
 UpdateDiskLayout(
     IN PDISKENTRY DiskEntry)
 {
-    PPARTITION_INFORMATION PartitionInfo;
-    PPARTITION_INFORMATION LinkInfo = NULL;
+    PPARTITION_INFORMATION_EX PartitionInfo;
+    PPARTITION_INFORMATION_EX LinkInfo = NULL;
     PLIST_ENTRY ListEntry;
     PPARTENTRY PartEntry;
     LARGE_INTEGER HiddenSectors64;
@@ -2637,12 +3241,6 @@ UpdateDiskLayout(
 
     DPRINT1("UpdateDiskLayout()\n");
 
-    if (DiskEntry->DiskStyle == PARTITION_STYLE_GPT)
-    {
-        DPRINT1("GPT-partitioned disk detected, not currently supported by SETUP!\n");
-        return;
-    }
-
     /* Resize the layout buffer if necessary */
     if (ReAllocateLayoutBuffer(DiskEntry) == FALSE)
     {
@@ -2650,153 +3248,195 @@ UpdateDiskLayout(
         return;
     }
 
+    /*
+     * Since the partitions in our internal partition lists are sorted
+     * by their starting position, the resulting layout buffer we build
+     * lists the partitions in increasing starting position order.
+     * Therefore, the partitions on the disk are also sorted by their
+     * starting position.
+     */
+
     /* Update the primary partition table */
     Index = 0;
-    for (ListEntry = DiskEntry->PrimaryPartListHead.Flink;
-         ListEntry != &DiskEntry->PrimaryPartListHead;
-         ListEntry = ListEntry->Flink)
+    for (ListEntry =  DiskEntry->PartList[PRIMARY_PARTITIONS].Flink;
+         ListEntry != &DiskEntry->PartList[PRIMARY_PARTITIONS];
+         ListEntry =  ListEntry->Flink)
     {
         PartEntry = CONTAINING_RECORD(ListEntry, PARTENTRY, ListEntry);
 
-        if (PartEntry->IsPartitioned)
-        {
-            ASSERT(PartEntry->PartitionType != PARTITION_ENTRY_UNUSED);
+        if (!PartEntry->IsPartitioned)
+            continue;
 
-            PartitionInfo = &DiskEntry->LayoutBuffer->PartitionEntry[Index];
-            PartEntry->PartitionIndex = Index;
-
-            /* Reset the current partition number only for newly-created (unmounted) partitions */
-            if (PartEntry->New)
-                PartEntry->PartitionNumber = 0;
-
-            PartEntry->OnDiskPartitionNumber = (!IsContainerPartition(PartEntry->PartitionType) ? PartitionNumber : 0);
-
-            if (!IsSamePrimaryLayoutEntry(PartitionInfo, DiskEntry, PartEntry))
-            {
-                DPRINT1("Updating primary partition entry %lu\n", Index);
-
-                PartitionInfo->StartingOffset.QuadPart = PartEntry->StartSector.QuadPart * DiskEntry->BytesPerSector;
-                PartitionInfo->PartitionLength.QuadPart = PartEntry->SectorCount.QuadPart * DiskEntry->BytesPerSector;
-                PartitionInfo->HiddenSectors = PartEntry->StartSector.LowPart;
-                PartitionInfo->PartitionNumber = PartEntry->PartitionNumber;
-                PartitionInfo->PartitionType = PartEntry->PartitionType;
-                PartitionInfo->BootIndicator = PartEntry->BootIndicator;
-                PartitionInfo->RecognizedPartition = IsRecognizedPartition(PartEntry->PartitionType);
-                PartitionInfo->RewritePartition = TRUE;
-            }
-
-            if (!IsContainerPartition(PartEntry->PartitionType))
-                PartitionNumber++;
-
-            Index++;
-        }
-    }
-
-    ASSERT(Index <= 4);
-
-    /* Update the logical partition table */
-    Index = 4;
-    for (ListEntry = DiskEntry->LogicalPartListHead.Flink;
-         ListEntry != &DiskEntry->LogicalPartListHead;
-         ListEntry = ListEntry->Flink)
-    {
-        PartEntry = CONTAINING_RECORD(ListEntry, PARTENTRY, ListEntry);
-
-        if (PartEntry->IsPartitioned)
-        {
-            ASSERT(PartEntry->PartitionType != PARTITION_ENTRY_UNUSED);
-
-            PartitionInfo = &DiskEntry->LayoutBuffer->PartitionEntry[Index];
-            PartEntry->PartitionIndex = Index;
-
-            /* Reset the current partition number only for newly-created (unmounted) partitions */
-            if (PartEntry->New)
-                PartEntry->PartitionNumber = 0;
-
-            PartEntry->OnDiskPartitionNumber = PartitionNumber;
-
-            DPRINT1("Updating logical partition entry %lu\n", Index);
-
-            PartitionInfo->StartingOffset.QuadPart = PartEntry->StartSector.QuadPart * DiskEntry->BytesPerSector;
-            PartitionInfo->PartitionLength.QuadPart = PartEntry->SectorCount.QuadPart * DiskEntry->BytesPerSector;
-            PartitionInfo->HiddenSectors = DiskEntry->SectorAlignment;
-            PartitionInfo->PartitionNumber = PartEntry->PartitionNumber;
-            PartitionInfo->PartitionType = PartEntry->PartitionType;
-            PartitionInfo->BootIndicator = FALSE;
-            PartitionInfo->RecognizedPartition = IsRecognizedPartition(PartEntry->PartitionType);
-            PartitionInfo->RewritePartition = TRUE;
-
-            /* Fill the link entry of the previous partition entry */
-            if (LinkInfo != NULL)
-            {
-                LinkInfo->StartingOffset.QuadPart = (PartEntry->StartSector.QuadPart - DiskEntry->SectorAlignment) * DiskEntry->BytesPerSector;
-                LinkInfo->PartitionLength.QuadPart = (PartEntry->StartSector.QuadPart + DiskEntry->SectorAlignment) * DiskEntry->BytesPerSector;
-                HiddenSectors64.QuadPart = PartEntry->StartSector.QuadPart - DiskEntry->SectorAlignment - DiskEntry->ExtendedPartition->StartSector.QuadPart;
-                LinkInfo->HiddenSectors = HiddenSectors64.LowPart;
-                LinkInfo->PartitionNumber = 0;
-                LinkInfo->PartitionType = PARTITION_EXTENDED;
-                LinkInfo->BootIndicator = FALSE;
-                LinkInfo->RecognizedPartition = FALSE;
-                LinkInfo->RewritePartition = TRUE;
-            }
-
-            /* Save a pointer to the link entry of the current partition entry */
-            LinkInfo = &DiskEntry->LayoutBuffer->PartitionEntry[Index + 1];
-
-            PartitionNumber++;
-            Index += 4;
-        }
-    }
-
-    /* Wipe unused primary partition entries */
-    for (Index = GetPrimaryPartitionCount(DiskEntry); Index < 4; Index++)
-    {
-        DPRINT1("Primary partition entry %lu\n", Index);
+        ASSERT(!IS_PARTITION_UNUSED(PartEntry));
 
         PartitionInfo = &DiskEntry->LayoutBuffer->PartitionEntry[Index];
+        PartEntry->PartitionIndex = Index;
 
-        if (!IsEmptyLayoutEntry(PartitionInfo))
+        /* Reset the current partition number only for newly-created (unmounted) partitions */
+        if (PartEntry->New)
+            PartEntry->PartitionNumber = 0;
+
+        PartEntry->OnDiskPartitionNumber =
+            (!IsContainerPartition(PartEntry->PartitionType) ? PartitionNumber : 0);
+
+        if (!IsSamePrimaryLayoutEntry(PartitionInfo, DiskEntry, PartEntry))
         {
-            DPRINT1("Wiping primary partition entry %lu\n", Index);
+            DPRINT1("Updating primary partition entry %lu\n", Index);
 
-            PartitionInfo->StartingOffset.QuadPart = 0;
-            PartitionInfo->PartitionLength.QuadPart = 0;
-            PartitionInfo->HiddenSectors = 0;
-            PartitionInfo->PartitionNumber = 0;
-            PartitionInfo->PartitionType = PARTITION_ENTRY_UNUSED;
-            PartitionInfo->BootIndicator = FALSE;
-            PartitionInfo->RecognizedPartition = FALSE;
+            PartitionInfo->PartitionNumber = PartEntry->PartitionNumber;
+            PartitionInfo->StartingOffset.QuadPart = PartEntry->StartSector.QuadPart * DiskEntry->BytesPerSector;
+            PartitionInfo->PartitionLength.QuadPart = PartEntry->SectorCount.QuadPart * DiskEntry->BytesPerSector;
+
+            if (DiskEntry->DiskStyle == PARTITION_STYLE_MBR)
+            {
+                // PartitionInfo->Mbr = PartEntry->PartInfo.Mbr;
+                PartitionInfo->Mbr.HiddenSectors = PartEntry->StartSector.LowPart;
+                PartitionInfo->Mbr.PartitionType = PartEntry->PartitionType.MbrType;
+                PartitionInfo->Mbr.BootIndicator = PartEntry->IsSystemPartition;
+                PartitionInfo->Mbr.RecognizedPartition = IsRecognizedPartition(PartEntry->PartitionType.MbrType);
+            }
+            else // if (DiskEntry->DiskStyle == PARTITION_STYLE_GPT)
+            {
+                PartitionInfo->Gpt = PartEntry->PartInfo.Gpt;
+                PartitionInfo->Gpt.PartitionType = PartEntry->PartitionType.GptType;
+            }
+
             PartitionInfo->RewritePartition = TRUE;
         }
+
+        if (!IsContainerPartition(PartEntry->PartitionType))
+            ++PartitionNumber;
+
+        ++Index;
     }
 
-    /* Wipe unused logical partition entries */
-    for (Index = 4; Index < DiskEntry->LayoutBuffer->PartitionCount; Index++)
+    /*
+     * Extra handling for MBR disks only.
+     */
+    if (DiskEntry->DiskStyle == PARTITION_STYLE_MBR)
     {
-        if (Index % 4 >= 2)
+        if (!IsNEC_98)
         {
-            DPRINT1("Logical partition entry %lu\n", Index);
+            ASSERT(Index <= 4);
+
+            /* Update the logical partition table */
+            Index = 4;
+            for (ListEntry =  DiskEntry->DiskEntry->PartList[LOGICAL_PARTITIONS].Flink;
+                 ListEntry != &DiskEntry->DiskEntry->PartList[LOGICAL_PARTITIONS];
+                 ListEntry =  ListEntry->Flink)
+            {
+                PartEntry = CONTAINING_RECORD(ListEntry, PARTENTRY, ListEntry);
+
+                if (!PartEntry->IsPartitioned)
+                    continue;
+
+                ASSERT(!IS_PARTITION_UNUSED(PartEntry));
+
+                PartitionInfo = &DiskEntry->LayoutBuffer->PartitionEntry[Index];
+                PartEntry->PartitionIndex = Index;
+
+                /* Reset the current partition number only for newly-created (unmounted) partitions */
+                if (PartEntry->New)
+                    PartEntry->PartitionNumber = 0;
+
+                PartEntry->OnDiskPartitionNumber = PartitionNumber;
+
+                DPRINT1("Updating logical partition entry %lu\n", Index);
+
+                PartitionInfo->PartitionNumber = PartEntry->PartitionNumber;
+                PartitionInfo->StartingOffset.QuadPart = PartEntry->StartSector.QuadPart * DiskEntry->BytesPerSector;
+                PartitionInfo->PartitionLength.QuadPart = PartEntry->SectorCount.QuadPart * DiskEntry->BytesPerSector;
+                // PartitionInfo->Mbr = PartEntry->PartInfo.Mbr;
+                PartitionInfo->Mbr.HiddenSectors = DiskEntry->SectorAlignment;
+                PartitionInfo->Mbr.PartitionType = PartEntry->PartitionType.MbrType;
+                PartitionInfo->Mbr.BootIndicator = FALSE;
+                PartitionInfo->Mbr.RecognizedPartition = IsRecognizedPartition(PartEntry->PartitionType.MbrType);
+// #if (NTDDI_VERSION >= NTDDI_WINBLUE)
+                // PartitionInfo->Mbr.PartitionId = GUID_NULL;
+// #endif
+                PartitionInfo->RewritePartition = TRUE;
+
+                /* Fill the link entry of the previous partition entry */
+                if (LinkInfo != NULL)
+                {
+                    LinkInfo->PartitionNumber = 0;
+                    LinkInfo->StartingOffset.QuadPart = (PartEntry->StartSector.QuadPart - DiskEntry->SectorAlignment) * DiskEntry->BytesPerSector;
+                    LinkInfo->PartitionLength.QuadPart = (PartEntry->StartSector.QuadPart + DiskEntry->SectorAlignment) * DiskEntry->BytesPerSector;
+                    HiddenSectors64.QuadPart = PartEntry->StartSector.QuadPart - DiskEntry->SectorAlignment - DiskEntry->ExtendedPartition->StartSector.QuadPart;
+                    LinkInfo->Mbr.HiddenSectors = HiddenSectors64.LowPart;
+                    LinkInfo->Mbr.PartitionType = PARTITION_EXTENDED;
+                    LinkInfo->Mbr.BootIndicator = FALSE;
+                    LinkInfo->Mbr.RecognizedPartition = FALSE;
+// #if (NTDDI_VERSION >= NTDDI_WINBLUE)
+                    // LinkInfo->Mbr.PartitionId = GUID_NULL;
+// #endif
+                    LinkInfo->RewritePartition = TRUE;
+                }
+
+                /* Save a pointer to the link entry of the current partition entry */
+                LinkInfo = &DiskEntry->LayoutBuffer->PartitionEntry[Index + 1];
+
+                ++PartitionNumber;
+                Index += 4;
+            }
+        }
+        else
+        {
+            ASSERT(Index <= 16);
+        }
+
+        /*
+         * MBR disks have fixed-sized partition tables, therefore
+         * they can have empty partition table slots, that need
+         * to be reset.
+         */
+
+        /* Wipe unused primary partition entries */
+        for (Index = GetPrimaryPartitionCount(DiskEntry);
+             Index < (IsNEC_98 ? 16 : 4);
+             ++Index)
+        {
+            DPRINT1("Primary partition entry %lu\n", Index);
 
             PartitionInfo = &DiskEntry->LayoutBuffer->PartitionEntry[Index];
 
             if (!IsEmptyLayoutEntry(PartitionInfo))
             {
-                DPRINT1("Wiping partition entry %lu\n", Index);
+                DPRINT1("Wiping primary partition entry %lu\n", Index);
 
+                PartitionInfo->PartitionNumber = 0;
                 PartitionInfo->StartingOffset.QuadPart = 0;
                 PartitionInfo->PartitionLength.QuadPart = 0;
-                PartitionInfo->HiddenSectors = 0;
-                PartitionInfo->PartitionNumber = 0;
-                PartitionInfo->PartitionType = PARTITION_ENTRY_UNUSED;
-                PartitionInfo->BootIndicator = FALSE;
-                PartitionInfo->RecognizedPartition = FALSE;
+                RtlZeroMemory(&PartitionInfo->Mbr, sizeof(PartitionInfo->Mbr));
                 PartitionInfo->RewritePartition = TRUE;
             }
         }
-    }
 
-    // HACK: See the FIXMEs in WritePartitions(): (Re)set the PartitionStyle to MBR.
-    DiskEntry->DiskStyle = PARTITION_STYLE_MBR;
+        if (!IsNEC_98)
+        {
+            /* Wipe unused logical partition entries */
+            for (Index = 4; Index < DiskEntry->LayoutBuffer->PartitionCount; ++Index)
+            {
+                if (Index % 4 >= 2)
+                {
+                    DPRINT1("Logical partition entry %lu\n", Index);
+
+                    PartitionInfo = &DiskEntry->LayoutBuffer->PartitionEntry[Index];
+
+                    if (!IsEmptyLayoutEntry(PartitionInfo))
+                    {
+                        DPRINT1("Wiping partition entry %lu\n", Index);
+
+                        PartitionInfo->PartitionNumber = 0;
+                        PartitionInfo->StartingOffset.QuadPart = 0;
+                        PartitionInfo->PartitionLength.QuadPart = 0;
+                        RtlZeroMemory(&PartitionInfo->Mbr, sizeof(PartitionInfo->Mbr));
+                        PartitionInfo->RewritePartition = TRUE;
+                    }
+                }
+            }
+        }
+    }
 
     DiskEntry->Dirty = TRUE;
 
@@ -2805,6 +3445,7 @@ UpdateDiskLayout(
 #endif
 }
 
+// Limit the search to within a type (either primary or logical)
 static
 PPARTENTRY
 GetPrevUnpartitionedEntry(
@@ -2814,16 +3455,10 @@ GetPrevUnpartitionedEntry(
     PPARTENTRY PrevPartEntry;
     PLIST_ENTRY ListHead;
 
-    if (DiskEntry->DiskStyle == PARTITION_STYLE_GPT)
-    {
-        DPRINT("GPT-partitioned disk detected, not currently supported by SETUP!\n");
-        return NULL;
-    }
-
     if (PartEntry->LogicalPartition)
-        ListHead = &DiskEntry->LogicalPartListHead;
+        ListHead = &DiskEntry->PartList[LOGICAL_PARTITIONS];
     else
-        ListHead = &DiskEntry->PrimaryPartListHead;
+        ListHead = &DiskEntry->PartList[PRIMARY_PARTITIONS];
 
     if (PartEntry->ListEntry.Blink != ListHead)
     {
@@ -2832,7 +3467,7 @@ GetPrevUnpartitionedEntry(
                                           ListEntry);
         if (!PrevPartEntry->IsPartitioned)
         {
-            ASSERT(PrevPartEntry->PartitionType == PARTITION_ENTRY_UNUSED);
+            ASSERT(IS_PARTITION_UNUSED(PrevPartEntry));
             return PrevPartEntry;
         }
     }
@@ -2840,6 +3475,7 @@ GetPrevUnpartitionedEntry(
     return NULL;
 }
 
+// Limit the search to within a type (either primary or logical)
 static
 PPARTENTRY
 GetNextUnpartitionedEntry(
@@ -2849,16 +3485,10 @@ GetNextUnpartitionedEntry(
     PPARTENTRY NextPartEntry;
     PLIST_ENTRY ListHead;
 
-    if (DiskEntry->DiskStyle == PARTITION_STYLE_GPT)
-    {
-        DPRINT("GPT-partitioned disk detected, not currently supported by SETUP!\n");
-        return NULL;
-    }
-
     if (PartEntry->LogicalPartition)
-        ListHead = &DiskEntry->LogicalPartListHead;
+        ListHead = &DiskEntry->PartList[LOGICAL_PARTITIONS];
     else
-        ListHead = &DiskEntry->PrimaryPartListHead;
+        ListHead = &DiskEntry->PartList[PRIMARY_PARTITIONS];
 
     if (PartEntry->ListEntry.Flink != ListHead)
     {
@@ -2867,7 +3497,7 @@ GetNextUnpartitionedEntry(
                                           ListEntry);
         if (!NextPartEntry->IsPartitioned)
         {
-            ASSERT(NextPartEntry->PartitionType == PARTITION_ENTRY_UNUSED);
+            ASSERT(IS_PARTITION_UNUSED(NextPartEntry));
             return NextPartEntry;
         }
     }
@@ -2911,34 +3541,6 @@ CreatePrimaryPartition(
     return TRUE;
 }
 
-static
-VOID
-AddLogicalDiskSpace(
-    IN PDISKENTRY DiskEntry)
-{
-    ULONGLONG StartSector;
-    ULONGLONG SectorCount;
-    PPARTENTRY NewPartEntry;
-
-    DPRINT1("AddLogicalDiskSpace()\n");
-
-    /* Create a partition entry that represents the empty space in the container partition */
-
-    StartSector = DiskEntry->ExtendedPartition->StartSector.QuadPart + (ULONGLONG)DiskEntry->SectorAlignment;
-    SectorCount = DiskEntry->ExtendedPartition->SectorCount.QuadPart - (ULONGLONG)DiskEntry->SectorAlignment;
-
-    NewPartEntry = CreateInsertBlankRegion(DiskEntry,
-                                           &DiskEntry->LogicalPartListHead,
-                                           StartSector,
-                                           SectorCount,
-                                           TRUE);
-    if (NewPartEntry == NULL)
-    {
-        DPRINT1("Failed to create a new empty region for extended partition space!\n");
-        return;
-    }
-}
-
 BOOLEAN
 CreateExtendedPartition(
     IN PPARTLIST List,
@@ -2961,6 +3563,7 @@ CreateExtendedPartition(
         DPRINT1("ExtendedPartitionCreationChecks() failed with error %lu\n", Error);
         return FALSE;
     }
+    ASSERT(PartEntry->DiskEntry->DiskStyle == PARTITION_STYLE_MBR);
 
     /* Initialize the partition entry, inserting a new blank region if needed */
     if (!InitializePartitionEntry(PartEntry, SectorCount, FALSE))
@@ -2971,12 +3574,12 @@ CreateExtendedPartition(
     if (PartEntry->StartSector.QuadPart < 1450560)
     {
         /* Partition starts below the 8.4GB boundary ==> CHS partition */
-        PartEntry->PartitionType = PARTITION_EXTENDED;
+        PartEntry->PartitionType.MbrType = PARTITION_EXTENDED;
     }
     else
     {
         /* Partition starts above the 8.4GB boundary ==> LBA partition */
-        PartEntry->PartitionType = PARTITION_XINT13_EXTENDED;
+        PartEntry->PartitionType.MbrType = PARTITION_XINT13_EXTENDED;
     }
 
     // FIXME? Possibly to make GetNextUnformattedPartition work (i.e. skip the extended partition container)
@@ -3016,6 +3619,7 @@ CreateLogicalPartition(
         DPRINT1("LogicalPartitionCreationChecks() failed with error %lu\n", Error);
         return FALSE;
     }
+    ASSERT(PartEntry->DiskEntry->DiskStyle == PARTITION_STYLE_MBR);
 
     /* Initialize the partition entry, inserting a new blank region if needed */
     if (!InitializePartitionEntry(PartEntry, SectorCount, AutoCreate))
@@ -3035,16 +3639,14 @@ DismountVolume(
 {
     NTSTATUS Status;
     NTSTATUS LockStatus;
-    UNICODE_STRING Name;
-    OBJECT_ATTRIBUTES ObjectAttributes;
     IO_STATUS_BLOCK IoStatusBlock;
     HANDLE PartitionHandle;
-    WCHAR Buffer[MAX_PATH];
 
     /* Check whether the partition is valid and was mounted by the system */
     if (!PartEntry->IsPartitioned ||
-        IsContainerPartition(PartEntry->PartitionType)   ||
-        !IsRecognizedPartition(PartEntry->PartitionType) ||
+        IsContainerPartition(PartEntry->PartitionType) ||
+        !IS_RECOGNIZED_PARTITION(PartEntry->DiskEntry->DiskStyle,
+                                 PartEntry->PartitionType) ||
         PartEntry->FormatState == UnknownFormat ||
         // NOTE: If FormatState == Unformatted but *FileSystem != 0 this means
         // it has been usually mounted with RawFS and thus needs to be dismounted.
@@ -3055,30 +3657,17 @@ DismountVolume(
         return STATUS_SUCCESS;
     }
 
-    ASSERT(PartEntry->PartitionType != PARTITION_ENTRY_UNUSED);
+    ASSERT(!IS_PARTITION_UNUSED(PartEntry));
 
     /* Open the volume */
-    RtlStringCchPrintfW(Buffer, ARRAYSIZE(Buffer),
-                        L"\\Device\\Harddisk%lu\\Partition%lu",
-                        PartEntry->DiskEntry->DiskNumber,
-                        PartEntry->PartitionNumber);
-    RtlInitUnicodeString(&Name, Buffer);
-
-    InitializeObjectAttributes(&ObjectAttributes,
-                               &Name,
-                               OBJ_CASE_INSENSITIVE,
+    Status = OpenDiskPartition(&PartitionHandle,
                                NULL,
-                               NULL);
-
-    Status = NtOpenFile(&PartitionHandle,
-                        GENERIC_READ | GENERIC_WRITE | SYNCHRONIZE,
-                        &ObjectAttributes,
-                        &IoStatusBlock,
-                        FILE_SHARE_READ | FILE_SHARE_WRITE,
-                        FILE_SYNCHRONOUS_IO_NONALERT);
+                               PartEntry->DiskEntry->DiskNumber,
+                               PartEntry->PartitionNumber,
+                               TRUE, TRUE);
     if (!NT_SUCCESS(Status))
     {
-        DPRINT1("ERROR: Cannot open volume %wZ for dismounting! (Status 0x%lx)\n", &Name, Status);
+        DPRINT1("Cannot open volume for dismounting! (Status 0x%lx)\n", Status);
         return Status;
     }
 
@@ -3154,7 +3743,7 @@ DeletePartition(
         return FALSE;
     }
 
-    ASSERT(PartEntry->PartitionType != PARTITION_ENTRY_UNUSED);
+    ASSERT(!IS_PARTITION_UNUSED(PartEntry));
 
     /* Clear the system partition if it is being deleted */
     if (List->SystemPartition == PartEntry)
@@ -3169,9 +3758,9 @@ DeletePartition(
     if (DiskEntry->ExtendedPartition == PartEntry)
     {
         /* An extended partition is being deleted: delete all logical partition entries */
-        while (!IsListEmpty(&DiskEntry->LogicalPartListHead))
+        while (!IsListEmpty(&DiskEntry->PartList[LOGICAL_PARTITIONS]))
         {
-            Entry = RemoveHeadList(&DiskEntry->LogicalPartListHead);
+            Entry = RemoveHeadList(&DiskEntry->PartList[LOGICAL_PARTITIONS]);
             LogicalPartEntry = CONTAINING_RECORD(Entry, PARTENTRY, ListEntry);
 
             /* Dismount the logical partition */
@@ -3250,8 +3839,8 @@ DeletePartition(
         PartEntry->OnDiskPartitionNumber = 0;
         PartEntry->PartitionNumber = 0;
         // PartEntry->PartitionIndex = 0;
-        PartEntry->BootIndicator = FALSE;
-        PartEntry->PartitionType = PARTITION_ENTRY_UNUSED;
+        PartEntry->IsSystemPartition = FALSE;
+        RtlZeroMemory(&PartEntry->PartitionType, sizeof(PartEntry->PartitionType));
         PartEntry->FormatState = Unformatted;
         PartEntry->FileSystem[0] = L'\0';
         PartEntry->DriveLetter = 0;
@@ -3349,6 +3938,12 @@ IsSupportedActivePartition(
     return TRUE;
 }
 
+/*
+ * TODO:
+ * Check whether we are on a ARC or PC-AT / NEC PC-98 or (u)EFI platform.
+ * - If ARC / PC-AT / NEC PC-98, check within MBR disks only.
+ * - If (u)EFI, check within GPT disks only.
+ */
 PPARTENTRY
 FindSupportedSystemPartition(
     IN PPARTLIST List,
@@ -3425,9 +4020,9 @@ FindSupportedSystemPartition(
          * partitions in the system disk, excluding the possible current active
          * partition, to find a new candidate.
          */
-        for (ListEntry = DiskEntry->PrimaryPartListHead.Flink;
-             ListEntry != &DiskEntry->PrimaryPartListHead;
-             ListEntry = ListEntry->Flink)
+        for (ListEntry =  DiskEntry->PartList[PRIMARY_PARTITIONS].Flink;
+             ListEntry != &DiskEntry->PartList[PRIMARY_PARTITIONS];
+             ListEntry =  ListEntry->Flink)
         {
             /* Retrieve the partition */
             PartEntry = CONTAINING_RECORD(ListEntry, PARTENTRY, ListEntry);
@@ -3440,7 +4035,7 @@ FindSupportedSystemPartition(
             if (PartEntry->IsPartitioned &&
                 !IsContainerPartition(PartEntry->PartitionType))
             {
-                ASSERT(PartEntry->PartitionType != PARTITION_ENTRY_UNUSED);
+                ASSERT(!IS_PARTITION_UNUSED(PartEntry));
 
                 /* If we get a candidate active partition in the disk, validate it */
                 if (IsSupportedActivePartition(PartEntry))
@@ -3454,7 +4049,7 @@ FindSupportedSystemPartition(
             /* Check if the partition is partitioned and used */
             if (!PartEntry->IsPartitioned)
             {
-                ASSERT(PartEntry->PartitionType == PARTITION_ENTRY_UNUSED);
+                ASSERT(IS_PARTITION_UNUSED(PartEntry));
 
                 // TODO: Check for minimal size!!
                 CandidatePartition = PartEntry;
@@ -3475,9 +4070,9 @@ FindSupportedSystemPartition(
 //
         if (GetPrimaryPartitionCount(DiskEntry) < 4)
         {
-            for (ListEntry = DiskEntry->PrimaryPartListHead.Flink;
-                 ListEntry != &DiskEntry->PrimaryPartListHead;
-                 ListEntry = ListEntry->Flink)
+            for (ListEntry =  DiskEntry->PartList[PRIMARY_PARTITIONS].Flink;
+                 ListEntry != &DiskEntry->PartList[PRIMARY_PARTITIONS];
+                 ListEntry =  ListEntry->Flink)
             {
                 /* Retrieve the partition */
                 PartEntry = CONTAINING_RECORD(ListEntry, PARTENTRY, ListEntry);
@@ -3489,7 +4084,7 @@ FindSupportedSystemPartition(
                 /* Check for unpartitioned space */
                 if (!PartEntry->IsPartitioned)
                 {
-                    ASSERT(PartEntry->PartitionType == PARTITION_ENTRY_UNUSED);
+                    ASSERT(IS_PARTITION_UNUSED(PartEntry));
 
                     // TODO: Check for minimal size!!
                     CandidatePartition = PartEntry;
@@ -3539,7 +4134,7 @@ UseAlternativeDisk:
  ***/
 
     /* Retrieve the first partition of the disk */
-    PartEntry = CONTAINING_RECORD(DiskEntry->PrimaryPartListHead.Flink,
+    PartEntry = CONTAINING_RECORD(DiskEntry->PartList[PRIMARY_PARTITIONS].Flink,
                                   PARTENTRY, ListEntry);
     ASSERT(DiskEntry == PartEntry->DiskEntry);
 
@@ -3553,7 +4148,7 @@ UseAlternativeDisk:
     if (DiskEntry->NewDisk)
     {
         // !IsContainerPartition(PartEntry->PartitionType);
-        if (!CandidatePartition->IsPartitioned || !CandidatePartition->BootIndicator) /* CandidatePartition != ActivePartition */
+        if (!CandidatePartition->IsPartitioned || !CandidatePartition->IsSystemPartition) /* CandidatePartition != ActivePartition */
         {
             ASSERT(DiskEntry == CandidatePartition->DiskEntry);
 
@@ -3574,9 +4169,9 @@ UseAlternativeDisk:
      * The disk is not new, check if any partition is initialized;
      * if not, the first one becomes the system partition.
      */
-    for (ListEntry = DiskEntry->PrimaryPartListHead.Flink;
-         ListEntry != &DiskEntry->PrimaryPartListHead;
-         ListEntry = ListEntry->Flink)
+    for (ListEntry =  DiskEntry->PartList[PRIMARY_PARTITIONS].Flink;
+         ListEntry != &DiskEntry->PartList[PRIMARY_PARTITIONS];
+         ListEntry =  ListEntry->Flink)
     {
         /* Retrieve the partition */
         PartEntry = CONTAINING_RECORD(ListEntry, PARTENTRY, ListEntry);
@@ -3584,12 +4179,12 @@ UseAlternativeDisk:
         /* Check if the partition is partitioned and is used */
         // !IsContainerPartition(PartEntry->PartitionType);
         if (/* PartEntry->IsPartitioned && */
-            PartEntry->PartitionType != PARTITION_ENTRY_UNUSED || PartEntry->BootIndicator)
+            !IS_PARTITION_UNUSED(PartEntry) || PartEntry->IsSystemPartition)
         {
             break;
         }
     }
-    if (ListEntry == &DiskEntry->PrimaryPartListHead)
+    if (ListEntry == &DiskEntry->PartList[PRIMARY_PARTITIONS])
     {
         /*
          * OK we haven't encountered any used and active partition,
@@ -3650,6 +4245,8 @@ SetActivePartition(
     IN PPARTENTRY PartEntry,
     IN PPARTENTRY OldActivePart OPTIONAL)
 {
+    PPARTITION_INFORMATION_EX PartitionInfo;
+
     /* Check for empty disk list */
     if (IsListEmpty(&List->DiskListHead))
         return FALSE;
@@ -3664,7 +4261,7 @@ SetActivePartition(
      * it is already active), just return success.
      */
     if ((PartEntry == List->SystemPartition) ||
-        ((PartEntry == OldActivePart) && IsPartitionActive(OldActivePart)))
+        ((PartEntry == OldActivePart) && IsSystemPartition(OldActivePart)))
     {
         return TRUE;
     }
@@ -3680,7 +4277,7 @@ SetActivePartition(
      * belongs. Otherwise determine the current active partition on the disk
      * where the new partition belongs.
      */
-    if (!(OldActivePart && IsPartitionActive(OldActivePart) && (OldActivePart->DiskEntry == PartEntry->DiskEntry)))
+    if (!(OldActivePart && IsSystemPartition(OldActivePart) && (OldActivePart->DiskEntry == PartEntry->DiskEntry)))
     {
         /* It's not, determine the current active partition for the disk */
         OldActivePart = GetActiveDiskPartition(PartEntry->DiskEntry);
@@ -3689,9 +4286,10 @@ SetActivePartition(
     /* Unset the old active partition if it exists */
     if (OldActivePart)
     {
-        OldActivePart->BootIndicator = FALSE;
-        OldActivePart->DiskEntry->LayoutBuffer->PartitionEntry[OldActivePart->PartitionIndex].BootIndicator = FALSE;
-        OldActivePart->DiskEntry->LayoutBuffer->PartitionEntry[OldActivePart->PartitionIndex].RewritePartition = TRUE;
+        OldActivePart->IsSystemPartition = FALSE;
+        PartitionInfo = GET_PARTITION_LAYOUT_ENTRY(OldActivePart);
+        PartitionInfo->Mbr.BootIndicator = FALSE;
+        PartitionInfo->RewritePartition = TRUE;
         OldActivePart->DiskEntry->Dirty = TRUE;
     }
 
@@ -3700,29 +4298,28 @@ SetActivePartition(
         List->SystemPartition = PartEntry;
 
     /* Set the new active partition */
-    PartEntry->BootIndicator = TRUE;
-    PartEntry->DiskEntry->LayoutBuffer->PartitionEntry[PartEntry->PartitionIndex].BootIndicator = TRUE;
-    PartEntry->DiskEntry->LayoutBuffer->PartitionEntry[PartEntry->PartitionIndex].RewritePartition = TRUE;
+    PartEntry->IsSystemPartition = TRUE;
+    PartitionInfo = GET_PARTITION_LAYOUT_ENTRY(PartEntry);
+    PartitionInfo->Mbr.BootIndicator = TRUE;
+    PartitionInfo->RewritePartition = TRUE;
     PartEntry->DiskEntry->Dirty = TRUE;
 
     return TRUE;
 }
 
+// CommitChangesToDisk()
 NTSTATUS
 WritePartitions(
     IN PDISKENTRY DiskEntry)
 {
     NTSTATUS Status;
-    OBJECT_ATTRIBUTES ObjectAttributes;
-    UNICODE_STRING Name;
     HANDLE FileHandle;
     IO_STATUS_BLOCK Iosb;
     ULONG BufferSize;
-    PPARTITION_INFORMATION PartitionInfo;
     ULONG PartitionCount;
+    UINT i;
     PLIST_ENTRY ListEntry;
     PPARTENTRY PartEntry;
-    WCHAR DstPath[MAX_PATH];
 
     DPRINT("WritePartitions() Disk: %lu\n", DiskEntry->DiskNumber);
 
@@ -3730,26 +4327,13 @@ WritePartitions(
     if (!DiskEntry->Dirty)
         return STATUS_SUCCESS;
 
-    RtlStringCchPrintfW(DstPath, ARRAYSIZE(DstPath),
-                        L"\\Device\\Harddisk%lu\\Partition0",
-                        DiskEntry->DiskNumber);
-    RtlInitUnicodeString(&Name, DstPath);
-
-    InitializeObjectAttributes(&ObjectAttributes,
-                               &Name,
-                               OBJ_CASE_INSENSITIVE,
+    Status = OpenDiskPartition(&FileHandle,
                                NULL,
-                               NULL);
-
-    Status = NtOpenFile(&FileHandle,
-                        GENERIC_READ | GENERIC_WRITE | SYNCHRONIZE,
-                        &ObjectAttributes,
-                        &Iosb,
-                        0,
-                        FILE_SYNCHRONOUS_IO_NONALERT);
+                               DiskEntry->DiskNumber, 0,
+                               TRUE, FALSE); // Actually, no share flags whatsoever.
     if (!NT_SUCCESS(Status))
     {
-        DPRINT1("NtOpenFile() failed (Status %lx)\n", Status);
+        DPRINT1("OpenDiskPartition() failed (Status %lx)\n", Status);
         return Status;
     }
 
@@ -3767,14 +4351,14 @@ WritePartitions(
     PartitionCount = DiskEntry->LayoutBuffer->PartitionCount;
 
     /* Set the new disk layout and retrieve its updated version with possibly modified partition numbers */
-    BufferSize = sizeof(DRIVE_LAYOUT_INFORMATION) +
-                 ((PartitionCount - 1) * sizeof(PARTITION_INFORMATION));
+    BufferSize = sizeof(DRIVE_LAYOUT_INFORMATION_EX) +
+                 ((PartitionCount - 1) * sizeof(PARTITION_INFORMATION_EX));
     Status = NtDeviceIoControlFile(FileHandle,
                                    NULL,
                                    NULL,
                                    NULL,
                                    &Iosb,
-                                   IOCTL_DISK_SET_DRIVE_LAYOUT,
+                                   IOCTL_DISK_SET_DRIVE_LAYOUT_EX,
                                    DiskEntry->LayoutBuffer,
                                    BufferSize,
                                    DiskEntry->LayoutBuffer,
@@ -3782,7 +4366,7 @@ WritePartitions(
     NtClose(FileHandle);
 
     /*
-     * IOCTL_DISK_SET_DRIVE_LAYOUT calls IoWritePartitionTable(), which converts
+     * IOCTL_DISK_SET_DRIVE_LAYOUT(_EX) calls IoWritePartitionTable(), which converts
      * DiskEntry->LayoutBuffer->PartitionCount into a partition *table* count,
      * where such a table is expected to enumerate up to 4 partitions:
      * partition *table* count == ROUND_UP(PartitionCount, 4) / 4 .
@@ -3802,34 +4386,23 @@ WritePartitions(
 #endif
 
     /* Update the partition numbers */
-
-    /* Update the primary partition table */
-    for (ListEntry = DiskEntry->PrimaryPartListHead.Flink;
-         ListEntry != &DiskEntry->PrimaryPartListHead;
-         ListEntry = ListEntry->Flink)
+    for (i = PRIMARY_PARTITIONS;
+         i <= ((DiskEntry->DiskStyle == PARTITION_STYLE_MBR)
+                  ? LOGICAL_PARTITIONS : PRIMARY_PARTITIONS);
+         ++i)
     {
-        PartEntry = CONTAINING_RECORD(ListEntry, PARTENTRY, ListEntry);
-
-        if (PartEntry->IsPartitioned)
+        /* Update the selected partition table */
+        for (ListEntry =  DiskEntry->PartList[i].Flink;
+             ListEntry != &DiskEntry->PartList[i];
+             ListEntry =  ListEntry->Flink)
         {
-            ASSERT(PartEntry->PartitionType != PARTITION_ENTRY_UNUSED);
-            PartitionInfo = &DiskEntry->LayoutBuffer->PartitionEntry[PartEntry->PartitionIndex];
-            PartEntry->PartitionNumber = PartitionInfo->PartitionNumber;
-        }
-    }
+            PartEntry = CONTAINING_RECORD(ListEntry, PARTENTRY, ListEntry);
 
-    /* Update the logical partition table */
-    for (ListEntry = DiskEntry->LogicalPartListHead.Flink;
-         ListEntry != &DiskEntry->LogicalPartListHead;
-         ListEntry = ListEntry->Flink)
-    {
-        PartEntry = CONTAINING_RECORD(ListEntry, PARTENTRY, ListEntry);
-
-        if (PartEntry->IsPartitioned)
-        {
-            ASSERT(PartEntry->PartitionType != PARTITION_ENTRY_UNUSED);
-            PartitionInfo = &DiskEntry->LayoutBuffer->PartitionEntry[PartEntry->PartitionIndex];
-            PartEntry->PartitionNumber = PartitionInfo->PartitionNumber;
+            if (PartEntry->IsPartitioned)
+            {
+                ASSERT(!IS_PARTITION_UNUSED(PartEntry));
+                PartEntry->PartitionNumber = GET_PARTITION_LAYOUT_ENTRY(PartEntry)->PartitionNumber;
+            }
         }
     }
 
@@ -3852,6 +4425,7 @@ WritePartitions(
     return Status;
 }
 
+// CommitChanges()
 BOOLEAN
 WritePartitionsToDisk(
     IN PPARTLIST List)
@@ -3868,12 +4442,6 @@ WritePartitionsToDisk(
          Entry = Entry->Flink)
     {
         DiskEntry = CONTAINING_RECORD(Entry, DISKENTRY, ListEntry);
-
-        if (DiskEntry->DiskStyle == PARTITION_STYLE_GPT)
-        {
-            DPRINT("GPT-partitioned disk detected, not currently supported by SETUP!\n");
-            continue;
-        }
 
         if (DiskEntry->Dirty != FALSE)
         {
@@ -3957,6 +4525,7 @@ SetMountedDeviceValues(
     PLIST_ENTRY Entry1, Entry2;
     PDISKENTRY DiskEntry;
     PPARTENTRY PartEntry;
+    UINT i;
     LARGE_INTEGER StartingOffset;
 
     if (List == NULL)
@@ -3966,57 +4535,32 @@ SetMountedDeviceValues(
          Entry1 != &List->DiskListHead;
          Entry1 = Entry1->Flink)
     {
-        DiskEntry = CONTAINING_RECORD(Entry1,
-                                      DISKENTRY,
-                                      ListEntry);
+        DiskEntry = CONTAINING_RECORD(Entry1, DISKENTRY, ListEntry);
 
-        if (DiskEntry->DiskStyle == PARTITION_STYLE_GPT)
+        for (i = PRIMARY_PARTITIONS;
+             i <= ((DiskEntry->DiskStyle == PARTITION_STYLE_MBR)
+                      ? LOGICAL_PARTITIONS : PRIMARY_PARTITIONS);
+             ++i)
         {
-            DPRINT("GPT-partitioned disk detected, not currently supported by SETUP!\n");
-            continue;
-        }
-
-        for (Entry2 = DiskEntry->PrimaryPartListHead.Flink;
-             Entry2 != &DiskEntry->PrimaryPartListHead;
-             Entry2 = Entry2->Flink)
-        {
-            PartEntry = CONTAINING_RECORD(Entry2, PARTENTRY, ListEntry);
-            if (PartEntry->IsPartitioned) // && !IsContainerPartition(PartEntry->PartitionType)
+            for (Entry2 =  DiskEntry->PartList[i].Flink;
+                 Entry2 != &DiskEntry->PartList[i];
+                 Entry2 =  Entry2->Flink)
             {
-                ASSERT(PartEntry->PartitionType != PARTITION_ENTRY_UNUSED);
-
-                /* Assign a "\DosDevices\#:" mount point to this partition */
-                if (PartEntry->DriveLetter)
+                PartEntry = CONTAINING_RECORD(Entry2, PARTENTRY, ListEntry);
+                if (PartEntry->IsPartitioned) // && !IsContainerPartition(PartEntry->PartitionType)
                 {
-                    StartingOffset.QuadPart = PartEntry->StartSector.QuadPart * DiskEntry->BytesPerSector;
-                    if (!SetMountedDeviceValue(PartEntry->DriveLetter,
-                                               DiskEntry->LayoutBuffer->Signature,
-                                               StartingOffset))
-                    {
-                        return FALSE;
-                    }
-                }
-            }
-        }
+                    ASSERT(!IS_PARTITION_UNUSED(PartEntry));
 
-        for (Entry2 = DiskEntry->LogicalPartListHead.Flink;
-             Entry2 != &DiskEntry->LogicalPartListHead;
-             Entry2 = Entry2->Flink)
-        {
-            PartEntry = CONTAINING_RECORD(Entry2, PARTENTRY, ListEntry);
-            if (PartEntry->IsPartitioned) // && !IsContainerPartition(PartEntry->PartitionType)
-            {
-                ASSERT(PartEntry->PartitionType != PARTITION_ENTRY_UNUSED);
-
-                /* Assign a "\DosDevices\#:" mount point to this partition */
-                if (PartEntry->DriveLetter)
-                {
-                    StartingOffset.QuadPart = PartEntry->StartSector.QuadPart * DiskEntry->BytesPerSector;
-                    if (!SetMountedDeviceValue(PartEntry->DriveLetter,
-                                               DiskEntry->LayoutBuffer->Signature,
-                                               StartingOffset))
+                    /* Assign a "\DosDevices\#:" mount point to this partition */
+                    if (PartEntry->DriveLetter)
                     {
-                        return FALSE;
+                        StartingOffset.QuadPart = PartEntry->StartSector.QuadPart * DiskEntry->BytesPerSector;
+                        if (!SetMountedDeviceValue(PartEntry->DriveLetter,
+                                                   DiskEntry->LayoutBuffer->Signature,
+                                                   StartingOffset))
+                        {
+                            return FALSE;
+                        }
                     }
                 }
             }
@@ -4031,16 +4575,17 @@ SetMBRPartitionType(
     IN PPARTENTRY PartEntry,
     IN UCHAR PartitionType)
 {
-    PDISKENTRY DiskEntry = PartEntry->DiskEntry;
+    PPARTITION_INFORMATION_EX PartitionInfo;
 
-    ASSERT(DiskEntry->DiskStyle == PARTITION_STYLE_MBR);
+    ASSERT(PartEntry->DiskEntry->DiskStyle == PARTITION_STYLE_MBR);
 
-    PartEntry->PartitionType = PartitionType;
+    PartEntry->PartitionType.MbrType = PartitionType;
 
-    DiskEntry->Dirty = TRUE;
-    DiskEntry->LayoutBuffer->PartitionEntry[PartEntry->PartitionIndex].PartitionType = PartitionType;
-    DiskEntry->LayoutBuffer->PartitionEntry[PartEntry->PartitionIndex].RecognizedPartition = IsRecognizedPartition(PartitionType);
-    DiskEntry->LayoutBuffer->PartitionEntry[PartEntry->PartitionIndex].RewritePartition = TRUE;
+    PartEntry->DiskEntry->Dirty = TRUE;
+    PartitionInfo = GET_PARTITION_LAYOUT_ENTRY(PartEntry);
+    PartitionInfo->Mbr.PartitionType = PartitionType;
+    PartitionInfo->Mbr.RecognizedPartition = IsRecognizedPartition(PartitionType);
+    PartitionInfo->RewritePartition = TRUE;
 }
 
 ERROR_NUMBER
@@ -4049,9 +4594,12 @@ PrimaryPartitionCreationChecks(
 {
     PDISKENTRY DiskEntry = PartEntry->DiskEntry;
 
-    if (DiskEntry->DiskStyle == PARTITION_STYLE_GPT)
+    /* Fail if the disk is not MBR or GPT */
+    if (DiskEntry->DiskStyle != PARTITION_STYLE_MBR &&
+        DiskEntry->DiskStyle != PARTITION_STYLE_GPT)
     {
-        DPRINT1("GPT-partitioned disk detected, not currently supported by SETUP!\n");
+        DPRINT1("Disk of style %d is not MBR or GPT and does not support partitions.\n",
+                DiskEntry->DiskStyle);
         return ERROR_WARN_PARTITION;
     }
 
@@ -4060,12 +4608,34 @@ PrimaryPartitionCreationChecks(
         return ERROR_NEW_PARTITION;
 
     /* Only one primary partition is allowed on super-floppy */
-    if (IsSuperFloppy(DiskEntry))
+    if (DiskEntry->DiskStyle == PARTITION_STYLE_SUPERFLOPPY)
         return ERROR_PARTITION_TABLE_FULL;
 
-    /* Fail if there are already 4 primary partitions in the list */
-    if (GetPrimaryPartitionCount(DiskEntry) >= 4)
+#if 0
+    if (DiskEntry->DiskStyle == PARTITION_STYLE_MBR)
+    {
+        /* Fail if there are already 4 primary partitions in the list */
+        if (GetPrimaryPartitionCount(DiskEntry) >= 4)
+            return ERROR_PARTITION_TABLE_FULL;
+    }
+    else // if (DiskEntry->DiskStyle == PARTITION_STYLE_GPT)
+    {
+        /* Fail if there are already more than the maximum
+         * number of primary partitions in the list. */
+        ASSERT(DiskEntry->LayoutBuffer);
+        if (GetPrimaryPartitionCount(DiskEntry) >= DiskEntry->LayoutBuffer->Gpt.MaxPartitionCount)
+            return ERROR_PARTITION_TABLE_FULL;
+    }
+#else
+    /* Fail if there are already more than the maximum
+     * number of primary partitions in the list. */
+    ASSERT(DiskEntry->LayoutBuffer);
+    if (GetPrimaryPartitionCount(DiskEntry) >=
+        MAX_PARTITION_ENTRIES_LAYOUT(DiskEntry->LayoutBuffer))
+    {
         return ERROR_PARTITION_TABLE_FULL;
+    }
+#endif
 
     return ERROR_SUCCESS;
 }
@@ -4076,9 +4646,11 @@ ExtendedPartitionCreationChecks(
 {
     PDISKENTRY DiskEntry = PartEntry->DiskEntry;
 
-    if (DiskEntry->DiskStyle == PARTITION_STYLE_GPT)
+    /* Fail if the disk is not MBR */
+    if (DiskEntry->DiskStyle != PARTITION_STYLE_MBR)
     {
-        DPRINT1("GPT-partitioned disk detected, not currently supported by SETUP!\n");
+        DPRINT1("Disk of style %d is not MBR and does not support extended partitions.\n",
+                DiskEntry->DiskStyle);
         return ERROR_WARN_PARTITION;
     }
 
@@ -4087,7 +4659,7 @@ ExtendedPartitionCreationChecks(
         return ERROR_NEW_PARTITION;
 
     /* Only one primary partition is allowed on super-floppy */
-    if (IsSuperFloppy(DiskEntry))
+    if (DiskEntry->DiskStyle == PARTITION_STYLE_SUPERFLOPPY)
         return ERROR_PARTITION_TABLE_FULL;
 
     /* Fail if there are already 4 primary partitions in the list */
@@ -4107,9 +4679,11 @@ LogicalPartitionCreationChecks(
 {
     PDISKENTRY DiskEntry = PartEntry->DiskEntry;
 
-    if (DiskEntry->DiskStyle == PARTITION_STYLE_GPT)
+    /* Fail if the disk is not MBR */
+    if (DiskEntry->DiskStyle != PARTITION_STYLE_MBR)
     {
-        DPRINT1("GPT-partitioned disk detected, not currently supported by SETUP!\n");
+        DPRINT1("Disk of style %d is not MBR and does not support logical partitions.\n",
+                DiskEntry->DiskStyle);
         return ERROR_WARN_PARTITION;
     }
 
@@ -4118,7 +4692,7 @@ LogicalPartitionCreationChecks(
         return ERROR_NEW_PARTITION;
 
     /* Only one primary partition is allowed on super-floppy */
-    if (IsSuperFloppy(DiskEntry))
+    if (DiskEntry->DiskStyle == PARTITION_STYLE_SUPERFLOPPY)
         return ERROR_PARTITION_TABLE_FULL;
 
     return ERROR_SUCCESS;
@@ -4133,46 +4707,31 @@ GetNextUnformattedPartition(
     PLIST_ENTRY Entry1, Entry2;
     PDISKENTRY DiskEntry;
     PPARTENTRY PartEntry;
+    UINT i;
 
     for (Entry1 = List->DiskListHead.Flink;
          Entry1 != &List->DiskListHead;
          Entry1 = Entry1->Flink)
     {
-        DiskEntry = CONTAINING_RECORD(Entry1,
-                                      DISKENTRY,
-                                      ListEntry);
+        DiskEntry = CONTAINING_RECORD(Entry1, DISKENTRY, ListEntry);
 
-        if (DiskEntry->DiskStyle == PARTITION_STYLE_GPT)
+        for (i = PRIMARY_PARTITIONS;
+             i <= ((DiskEntry->DiskStyle == PARTITION_STYLE_MBR)
+                      ? LOGICAL_PARTITIONS : PRIMARY_PARTITIONS);
+             ++i)
         {
-            DPRINT("GPT-partitioned disk detected, not currently supported by SETUP!\n");
-            continue;
-        }
-
-        for (Entry2 = DiskEntry->PrimaryPartListHead.Flink;
-             Entry2 != &DiskEntry->PrimaryPartListHead;
-             Entry2 = Entry2->Flink)
-        {
-            PartEntry = CONTAINING_RECORD(Entry2, PARTENTRY, ListEntry);
-            if (PartEntry->IsPartitioned && PartEntry->New)
+            for (Entry2 =  DiskEntry->PartList[i].Flink;
+                 Entry2 != &DiskEntry->PartList[i];
+                 Entry2 =  Entry2->Flink)
             {
-                ASSERT(DiskEntry == PartEntry->DiskEntry);
-                if (pDiskEntry) *pDiskEntry = DiskEntry;
-                *pPartEntry = PartEntry;
-                return TRUE;
-            }
-        }
-
-        for (Entry2 = DiskEntry->LogicalPartListHead.Flink;
-             Entry2 != &DiskEntry->LogicalPartListHead;
-             Entry2 = Entry2->Flink)
-        {
-            PartEntry = CONTAINING_RECORD(Entry2, PARTENTRY, ListEntry);
-            if (PartEntry->IsPartitioned && PartEntry->New)
-            {
-                ASSERT(DiskEntry == PartEntry->DiskEntry);
-                if (pDiskEntry) *pDiskEntry = DiskEntry;
-                *pPartEntry = PartEntry;
-                return TRUE;
+                PartEntry = CONTAINING_RECORD(Entry2, PARTENTRY, ListEntry);
+                if (PartEntry->IsPartitioned && PartEntry->New)
+                {
+                    ASSERT(DiskEntry == PartEntry->DiskEntry);
+                    if (pDiskEntry) *pDiskEntry = DiskEntry;
+                    *pPartEntry = PartEntry;
+                    return TRUE;
+                }
             }
         }
     }
@@ -4192,46 +4751,31 @@ GetNextUncheckedPartition(
     PLIST_ENTRY Entry1, Entry2;
     PDISKENTRY DiskEntry;
     PPARTENTRY PartEntry;
+    UINT i;
 
     for (Entry1 = List->DiskListHead.Flink;
          Entry1 != &List->DiskListHead;
          Entry1 = Entry1->Flink)
     {
-        DiskEntry = CONTAINING_RECORD(Entry1,
-                                      DISKENTRY,
-                                      ListEntry);
+        DiskEntry = CONTAINING_RECORD(Entry1, DISKENTRY, ListEntry);
 
-        if (DiskEntry->DiskStyle == PARTITION_STYLE_GPT)
+        for (i = PRIMARY_PARTITIONS;
+             i <= ((DiskEntry->DiskStyle == PARTITION_STYLE_MBR)
+                      ? LOGICAL_PARTITIONS : PRIMARY_PARTITIONS);
+             ++i)
         {
-            DPRINT("GPT-partitioned disk detected, not currently supported by SETUP!\n");
-            continue;
-        }
-
-        for (Entry2 = DiskEntry->PrimaryPartListHead.Flink;
-             Entry2 != &DiskEntry->PrimaryPartListHead;
-             Entry2 = Entry2->Flink)
-        {
-            PartEntry = CONTAINING_RECORD(Entry2, PARTENTRY, ListEntry);
-            if (PartEntry->IsPartitioned && PartEntry->NeedsCheck)
+            for (Entry2 =  DiskEntry->PartList[i].Flink;
+                 Entry2 != &DiskEntry->PartList[i];
+                 Entry2 =  Entry2->Flink)
             {
-                ASSERT(DiskEntry == PartEntry->DiskEntry);
-                if (pDiskEntry) *pDiskEntry = DiskEntry;
-                *pPartEntry = PartEntry;
-                return TRUE;
-            }
-        }
-
-        for (Entry2 = DiskEntry->LogicalPartListHead.Flink;
-             Entry2 != &DiskEntry->LogicalPartListHead;
-             Entry2 = Entry2->Flink)
-        {
-            PartEntry = CONTAINING_RECORD(Entry2, PARTENTRY, ListEntry);
-            if (PartEntry->IsPartitioned && PartEntry->NeedsCheck)
-            {
-                ASSERT(DiskEntry == PartEntry->DiskEntry);
-                if (pDiskEntry) *pDiskEntry = DiskEntry;
-                *pPartEntry = PartEntry;
-                return TRUE;
+                PartEntry = CONTAINING_RECORD(Entry2, PARTENTRY, ListEntry);
+                if (PartEntry->IsPartitioned && PartEntry->NeedsCheck)
+                {
+                    ASSERT(DiskEntry == PartEntry->DiskEntry);
+                    if (pDiskEntry) *pDiskEntry = DiskEntry;
+                    *pPartEntry = PartEntry;
+                    return TRUE;
+                }
             }
         }
     }

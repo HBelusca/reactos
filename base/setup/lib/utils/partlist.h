@@ -26,8 +26,71 @@
       ((PartitionType) == PARTITION_DELL)        || \
       ((PartitionType) == PARTITION_IBM) )
 
+// TODO: Create a IsOEMGptPartition() macro that checks the GPT_ATTRIBUTE_PLATFORM_REQUIRED bit.
+
+// This should go into diskguid.h
+
+#ifdef __cplusplus
+#define IsEqualPartitionType         IsEqualGUID
+#else
+#define IsEqualPartitionType(_a, _b) IsEqualGUID(&(_a), &(_b))
+#endif
+
+#define IsRecognizedGptPartition(_t) \
+    ( IsEqualPartitionType((_t), PARTITION_BSP_GUID)           || \
+      IsEqualPartitionType((_t), PARTITION_DPP_GUID)           || \
+      IsEqualPartitionType((_t), PARTITION_BASIC_DATA_GUID)    || \
+      IsEqualPartitionType((_t), PARTITION_MAIN_OS_GUID)       || \
+      IsEqualPartitionType((_t), PARTITION_MSFT_RECOVERY_GUID) || \
+      IsEqualPartitionType((_t), PARTITION_OS_DATA_GUID)       || \
+      IsEqualPartitionType((_t), PARTITION_PRE_INSTALLED_GUID) || \
+      IsEqualPartitionType((_t), PARTITION_WINDOWS_SYSTEM_GUID) )
+
+
+/* PRIVATE MACROS ***********************************************************/
+
+// #define IS_CONTAINER_PARTITION()
+// Uses IsContainerPartition() if partitiontype == MBR...
+// otherwise use a list of known partition container GUIDs for GPT.
+
+#define IS_RECOGNIZED_PARTITION(PartStyle, PartType)     \
+    ( ((PartStyle) == PARTITION_STYLE_GPT) ?             \
+          IsRecognizedGptPartition((PartType).GptType) : \
+          IsRecognizedPartition((PartType).MbrType) ) // PARTITION_STYLE_MBR
+
+#if 0 // Old version
+
+C_ASSERT(PARTITION_ENTRY_UNUSED_GUID == GUID_NULL);
+
+#define IS_PARTITION_UNUSED(PartEntry)                             \
+    ( ((PartEntry)->DiskEntry->DiskStyle == PARTITION_STYLE_GPT) ? \
+          IsEqualPartitionType((PartEntry)->PartitionType.GptType, \
+                               PARTITION_ENTRY_UNUSED_GUID) :      \
+          ((PartEntry)->PartitionType.MbrType == PARTITION_ENTRY_UNUSED) ) // PARTITION_STYLE_MBR
+
+#else // Faster version
+
+/* This is possible since GptType is in union with MbrType, is
+ * larger than the latter, and PARTITION_ENTRY_UNUSED == 0 as well. */
+#define IS_PARTITION_UNUSED(PartEntry)               \
+    IsEqualPartitionType((PartEntry)->PartitionType.GptType, \
+                         PARTITION_ENTRY_UNUSED_GUID)
+
+#endif
+
+
+#define GET_PARTITION_LAYOUT_ENTRY(PartEntry)       \
+    ( ASSERT((PartEntry)->DiskEntry->LayoutBuffer), \
+      ASSERT((PartEntry)->PartitionIndex < (PartEntry)->DiskEntry->LayoutBuffer->PartitionCount), \
+      &(PartEntry)->DiskEntry->LayoutBuffer->PartitionEntry[(PartEntry)->PartitionIndex] )
+
 
 /* PARTITION UTILITY FUNCTIONS **********************************************/
+
+/* Supplemental enum values for PARTITION_STYLE */
+// #define PARTITION_STYLE_BRFR        0x80
+#define PARTITION_STYLE_NEC98       0x81
+#define PARTITION_STYLE_SUPERFLOPPY 0xFF
 
 typedef enum _FORMATSTATE
 {
@@ -49,34 +112,85 @@ typedef struct _PARTENTRY
     ULARGE_INTEGER StartSector;
     ULARGE_INTEGER SectorCount;
 
-    BOOLEAN BootIndicator;  // NOTE: See comment for the PARTLIST::SystemPartition member.
-    UCHAR PartitionType;
+    /* Partition state flags */
+    union
+    {
+        UCHAR AsByte;
+        struct
+        {
+            // NOTE: See comment for the PARTLIST::SystemPartition member.
+            // MBR: BootIndicator == TRUE / GPT: PARTITION_SYSTEM_GUID.
+            UCHAR IsSystemPartition  : 1;
+
+            BOOLEAN LogicalPartition : 1; // MBR-specific
+
+            /* Partition is partitioned disk space */
+            BOOLEAN IsPartitioned    : 1;
+
+            /* Partition is new, table does not exist on disk yet */
+            BOOLEAN New              : 1;
+
+            /* Partition was created automatically */
+            BOOLEAN AutoCreate       : 1;
+        };
+    };
+
+    /* Cached partition type. This duplicates the information stored
+     * in PartInfo.Mbr.PartitionType or PartInfo.Gpt.PartitionType. */
+    union
+    {
+        UCHAR MbrType;
+        GUID  GptType;
+    } PartitionType;
+
+    /* Cached type-specific partition information */
+    union
+    {
+        PARTITION_INFORMATION_MBR Mbr;
+        PARTITION_INFORMATION_GPT Gpt;
+    } PartInfo;
+    //
+    // NOTE: In order to get the NT partition layout corresponding to
+    // this PARTENTRY, use the 'PartitionIndex' member that indexes the
+    // LayoutBuffer->PartitionEntry[] cached array of the corresponding DiskEntry.
+    // We cannot use direct pointers to LayoutBuffer->PartitionEntry[]
+    // since the latter can be redimensioned at any time when new partitions
+    // are being created.
+    //
+
     ULONG OnDiskPartitionNumber; /* Enumerated partition number (primary partitions first, excluding the extended partition container, then the logical partitions) */
     ULONG PartitionNumber;       /* Current partition number, only valid for the currently running NTOS instance */
     ULONG PartitionIndex;        /* Index in the LayoutBuffer->PartitionEntry[] cached array of the corresponding DiskEntry */
 
+
+    /* Volume information */
     WCHAR DriveLetter;
     WCHAR VolumeLabel[20];
     WCHAR FileSystem[MAX_PATH+1];
     FORMATSTATE FormatState;
-
-    BOOLEAN LogicalPartition;
-
-    /* Partition is partitioned disk space */
-    BOOLEAN IsPartitioned;
-
-/** The following three properties may be replaced by flags **/
-
-    /* Partition is new, table does not exist on disk yet */
-    BOOLEAN New;
-
-    /* Partition was created automatically */
-    BOOLEAN AutoCreate;
-
-    /* Partition must be checked */
-    BOOLEAN NeedsCheck;
+    BOOLEAN NeedsCheck; /* Partition must be checked */
 
 } PARTENTRY, *PPARTENTRY;
+
+#if 0 // In arcname.h
+/* See also UEFI specification - Media Device (UEFI Specs v2.8: 10.3.5.1 Hard Drive) */
+typedef enum _DEVICE_SIGNATURE_TYPE
+{
+    SignatureNone = 0x00,
+    SignatureLong = 0x01,
+    SignatureGuid = 0x02
+} DEVICE_SIGNATURE_TYPE, *PDEVICE_SIGNATURE_TYPE;
+
+typedef struct _DEVICE_SIGNATURE
+{
+    DEVICE_SIGNATURE_TYPE Type;
+    union
+    {
+        ULONG Long;
+        GUID  Guid;
+    }
+} DEVICE_SIGNATURE, *PDEVICE_SIGNATURE;
+#endif
 
 typedef struct _DISKENTRY
 {
@@ -104,8 +218,6 @@ typedef struct _DISKENTRY
     ULONG HwControllerNumber;
     ULONG HwDiskNumber;         /* Disk number currently assigned on the system */
     ULONG HwFixedDiskNumber;    /* Disk number on the system when *ALL* removable disks are not connected */
-//    ULONG Signature;  // Obtained from LayoutBuffer->Signature
-//    ULONG Checksum;
 
     /* SCSI parameters */
     ULONG DiskNumber;
@@ -114,27 +226,29 @@ typedef struct _DISKENTRY
     USHORT Bus;
     USHORT Id;
 
+    UNICODE_STRING DriverName;
+
     /* Has the partition list been modified? */
     BOOLEAN Dirty;
 
     BOOLEAN NewDisk; /* If TRUE, the disk is uninitialized */
-    PARTITION_STYLE DiskStyle;  /* MBR/GPT-partitioned disk, or uninitialized disk (RAW) */
+    PARTITION_STYLE DiskStyle;  /* MBR/GPT-partitioned disk, super-floppy, or uninitialized disk (RAW) */
+    // DISK_SIGNATURE DiskSignature;
 
-    UNICODE_STRING DriverName;
+    PDRIVE_LAYOUT_INFORMATION_EX LayoutBuffer;
 
-    PDRIVE_LAYOUT_INFORMATION LayoutBuffer;
-    // TODO: When adding support for GPT disks:
-    // Use PDRIVE_LAYOUT_INFORMATION_EX which indicates whether
-    // the disk is MBR, GPT, or unknown (uninitialized).
-    // Depending on the style, either use the MBR or GPT partition info.
-
-    LIST_ENTRY PrimaryPartListHead; /* List of primary partitions */
-    LIST_ENTRY LogicalPartListHead; /* List of logical partitions (Valid only for MBR-partitioned disks) */
+#define PRIMARY_PARTITIONS  0   /* List of primary partitions */
+#define LOGICAL_PARTITIONS  1   /* List of logical partitions (Valid only for MBR-partitioned disks) */
+    LIST_ENTRY PartList[2];
 
     /* Pointer to the unique extended partition on this disk (Valid only for MBR-partitioned disks) */
     PPARTENTRY ExtendedPartition;
 
 } DISKENTRY, *PDISKENTRY;
+
+/* INFO: Stuff around LEGACY_BIOS_DATA should be not needed in the partition
+ * code, since this should be already handled by the storage stack. */
+// #define LEGACY_BIOS_DATA
 
 typedef struct _BIOSDISKENTRY
 {
@@ -142,11 +256,13 @@ typedef struct _BIOSDISKENTRY
     ULONG AdapterNumber;
     ULONG ControllerNumber;
     ULONG DiskNumber;
-    ULONG Signature;
-    ULONG Checksum;
-    PDISKENTRY DiskEntry;   /* Corresponding recognized disk; is NULL if the disk is not recognized */ // RecognizedDiskEntry;
+    ULONG Signature;        /* MBR: Disk signature; GPT: Signature stored in the GPT protective MBR */
+    ULONG Checksum;         /* MBR: Disk MBR checksum; GPT: checksum of the GPT protective MBR */
+    PDISKENTRY DiskEntry;   /* Corresponding recognized disk; is NULL if the disk is not recognized */
+#ifdef LEGACY_BIOS_DATA
     CM_DISK_GEOMETRY_DEVICE_DATA DiskGeometry;
     CM_INT13_DRIVE_PARAMETER Int13DiskData;
+#endif
 } BIOSDISKENTRY, *PBIOSDISKENTRY;
 
 typedef struct _PARTLIST
@@ -158,8 +274,8 @@ typedef struct _PARTLIST
      */
     // NOTE: It seems to appear that the specifications of ARC and (u)EFI
     // actually allow for multiple system partitions to exist on the system.
-    // If so we should instead rely on the BootIndicator bit of the PARTENTRY
-    // structure in order to find these.
+    // If so we should instead rely on the IsSystemPartition bit of the
+    // PARTENTRY structure in order to find these.
     PPARTENTRY SystemPartition;
 
     LIST_ENTRY DiskListHead;
@@ -167,7 +283,10 @@ typedef struct _PARTLIST
 
 } PARTLIST, *PPARTLIST;
 
-#define  PARTITION_TBL_SIZE 4
+//
+// For MBR only
+//
+#define PARTITION_TBL_SIZE  4
 
 #define PARTITION_MAGIC     0xAA55
 
@@ -201,15 +320,6 @@ typedef struct _PARTITION_SECTOR
 
 #include <poppack.h>
 
-typedef struct
-{
-    LIST_ENTRY ListEntry;
-    ULONG DiskNumber;
-    ULONG Identifier;
-    ULONG Signature;
-} BIOS_DISK, *PBIOS_DISK;
-
-
 
 ULONGLONG
 AlignDown(
@@ -228,11 +338,7 @@ RoundingDivide(
 
 
 BOOLEAN
-IsSuperFloppy(
-    IN PDISKENTRY DiskEntry);
-
-BOOLEAN
-IsPartitionActive(
+IsSystemPartition(
     IN PPARTENTRY PartEntry);
 
 PPARTLIST
@@ -262,7 +368,7 @@ GetDiskBySCSI(
 PDISKENTRY
 GetDiskBySignature(
     IN PPARTLIST List,
-    IN ULONG Signature);
+    IN DEVICE_SIGNATURE Signature);
 
 PPARTENTRY
 GetPartition(
