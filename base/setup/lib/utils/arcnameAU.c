@@ -40,14 +40,17 @@
 #undef RtlInitString
 #undef RtlInitEmptyString
 #undef RtlEqualString
+#undef RtlStringToInteger
 #if defined(UNICODE) || defined(_UNICODE)
 #define RtlInitString       RtlInitUnicodeString
 #define RtlInitEmptyString  RtlInitEmptyUnicodeString
 #define RtlEqualString      RtlEqualUnicodeString
+#define RtlStringToInteger  RtlAnsiStringToInteger /* Private, see below */
 #else
 #define RtlInitString       RtlInitAnsiString
 #define RtlInitEmptyString  RtlInitEmptyAnsiString
 // #define RtlEqualString      RtlEqualString
+#define RtlStringToInteger  RtlUnicodeStringToInteger
 #endif
 
 #undef RtlStringCbCopyN
@@ -56,6 +59,39 @@
 #define RtlStringCbCatN     NAME_AW(RtlStringCbCatN)
 #undef RtlStringCbCat
 #define RtlStringCbCat      NAME_AW(RtlStringCbCat)
+
+
+/* EXTRA STRING FUNCTIONS ***************************************************/
+
+NTSTATUS
+NTAPI
+RtlAnsiStringToInteger(
+    IN PCANSI_STRING str,
+    IN ULONG base, /* Number base for conversion (allowed 0, 2, 8, 10 or 16) */
+    OUT PULONG value)
+{
+    /*
+     * A ULONG value can be written with a maximum of:
+     * ° 1 + 2 + 32 characters in base 2 (optional [+/-], prefix '0b' followed by 32 bits [0-1])
+     * ° 1 + 1-2 + 11 characters in base 8 (optional [+/-], prefix '0' or '0o' followed by 11 digits [0-7])
+     * ° 1 + 10 characters in base 10 (optional [+/-] followed by 10 digits [0-9])
+     * ° 1 + 2 + 8 characters in base 16 (optional [+/-], prefix '0x' followed by 8 digits [0-9a-f])
+     * And the NULL-termination.
+     */
+    CHAR buffer[35+1];
+    PSTR ptr = str->Buffer;
+    USHORT len = str->Length;
+
+    /* Skip any leading whitespace */
+    while ((len >= sizeof(CHAR)) && isspace(*ptr))
+    {
+        ++ptr;
+        len -= sizeof(CHAR);
+    }
+
+    RtlStringCbCopyNA(buffer, sizeof(buffer), ptr, min(len, sizeof(buffer)));
+    return RtlCharToInteger(buffer, base, value);
+}
 
 
 /* ARC PATH TYPES ***********************************************************/
@@ -98,24 +134,24 @@ const PCTSTR NAME_AU(PeripheralTypes_)[] =
 
 /* FUNCTIONS ****************************************************************/
 
-// ArcGetNextTokenA/U
+// ArcGetNextTokenExA/U
 static PCTSTR
-NAME_AU(ArcGetNextToken)(
+NAME_AU(ArcGetNextTokenEx)(
     IN  PCTSTR ArcPath,
     OUT PSTRING TokenSpecifier,
-    OUT PULONG Key)
+    OUT PSTRING Key)
 {
-    NTSTATUS Status;
     PCTSTR p = ArcPath;
+    PCTSTR KeyValue, KeyValueEnd;
     SIZE_T SpecifierLength;
-    ULONG KeyValue;
+    SIZE_T KeyLength;
 
     /*
      * We must have a valid "specifier(key)" string, where 'specifier'
      * cannot be the empty string, and is followed by '('.
      */
     p = _tcschr(p, _T('('));
-    if (p == NULL)
+    if (!p)
         return NULL; /* No '(' found */
     if (p == ArcPath)
         return NULL; /* Path starts with '(' and is thus invalid */
@@ -126,40 +162,88 @@ NAME_AU(ArcGetNextToken)(
         return NULL;
     }
 
-    /* Skip closing ')' */
+    /* Skip the opening '(' */
     ++p;
 
-    /*
-     * The strtoul function skips any leading whitespace.
-     *
-     * Note that if the token is "specifier()" then strtoul won't perform
-     * any conversion and return 0, therefore effectively making the token
-     * equivalent to "specifier(0)", as it should be.
-     */
-    // KeyValue = _ttoi(p);
-    KeyValue = _tcstoul(p, (PTSTR*)&p, 10);
+    /* Skip any leading whitespace */
+    while (_istspace(*p))
+        ++p;
 
-    /* Skip any trailing whitespace */
-    while (_istspace(*p)) ++p;
+    /* Get the start of the key value */
+    KeyValue = p;
 
     /* The token must terminate with ')' */
-    if (*p != _T(')'))
-        return NULL;
-#if 0
     p = _tcschr(p, _T(')'));
-    if (p == NULL)
+    if (!p)
+        return NULL; /* No ')' found */
+
+    /* Go past the end of the key value */
+    KeyValueEnd = p;
+
+    /* Skip any trailing whitespace */
+    --KeyValueEnd;
+    while ((KeyValueEnd > KeyValue) && _istspace(*KeyValueEnd))
+        --KeyValueEnd;
+    ++KeyValueEnd;
+
+    KeyLength = (KeyValueEnd - KeyValue) * sizeof(TCHAR);
+    if (KeyLength > MAXUSHORT) // UNICODE_STRING_MAX_BYTES
+    {
         return NULL;
-#endif
+    }
 
     /* Initialize the token specifier to the buffer */
     RtlInitEmptyString(TokenSpecifier, ArcPath, (USHORT)SpecifierLength)
     TokenSpecifier->Length = (USHORT)SpecifierLength;
 
-    /* We succeeded, return the token key value */
-    *Key = KeyValue;
+    /* Initialize the key value to the buffer */
+    RtlInitEmptyString(Key, KeyValue, (USHORT)KeyLength)
+    Key->Length = (USHORT)KeyLength;
 
     /* The next token starts just after */
     return ++p;
+}
+
+#define ArcGetNextTokenEx   NAME_AU(ArcGetNextTokenEx)
+
+// ArcGetNextTokenA/U
+static PCTSTR
+NAME_AU(ArcGetNextToken)(
+    IN  PCTSTR ArcPath,
+    OUT PSTRING TokenSpecifier,
+    OUT PULONG Key)
+{
+    NTSTATUS Status;
+    STRING Token, KeyStr;
+    ULONG KeyValue;
+
+    ArcPath = ArcGetNextTokenEx(ArcPath, &Token, &KeyStr);
+    if (!ArcPath)
+        return NULL;
+
+    /*
+     * If the token is "specifier()", i.e. the key is empty, default to
+     * ULONG value 0 so as to make the token equivalent to "specifier(0)",
+     * as it should be.
+     */
+    if (KeyStr.Length / sizeof(TCHAR) == 0)
+    {
+        KeyValue = 0;
+        Status = STATUS_SUCCESS;
+    }
+    else
+    {
+        Status = RtlStringToInteger(&KeyStr, 10, &KeyValue);
+    }
+    if (!NT_SUCCESS(Status))
+        return NULL;
+
+    /* Return the token specifier and the key value */
+    *TokenSpecifier = Token;
+    *Key = KeyValue;
+
+    /* Return the next token */
+    return ArcPath;
 }
 
 #define ArcGetNextToken NAME_AU(ArcGetNextToken)
@@ -569,6 +653,7 @@ NAME_AU(ArcPathNormalize)(
 #undef RtlInitString
 #undef RtlInitEmptyString
 #undef RtlEqualString
+#undef RtlStringToInteger
 
 #undef RtlStringCbCopyN
 #undef RtlStringCbCatN
@@ -578,6 +663,7 @@ NAME_AU(ArcPathNormalize)(
 #undef ControllerTypes
 #undef PeripheralTypes
 
+#undef ArcGetNextTokenEx
 #undef ArcGetNextToken
 #undef ArcMatchToken
 #undef ArcMatchToken_Str
