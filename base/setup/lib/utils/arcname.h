@@ -7,6 +7,24 @@
 
 #pragma once
 
+/* See also UEFI specification - Media Device (UEFI Specs v2.8: 10.3.5.1 Hard Drive) */
+typedef enum _DEVICE_SIGNATURE_TYPE
+{
+    SignatureNone = 0x00,
+    SignatureLong = 0x01,
+    SignatureGuid = 0x02
+} DEVICE_SIGNATURE_TYPE, *PDEVICE_SIGNATURE_TYPE;
+
+typedef struct _DEVICE_SIGNATURE
+{
+    DEVICE_SIGNATURE_TYPE Type;
+    union
+    {
+        ULONG Long;
+        GUID  Guid;
+    }
+} DEVICE_SIGNATURE, *PDEVICE_SIGNATURE;
+
 #if 0
 BOOLEAN
 ArcPathNormalize(

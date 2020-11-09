@@ -185,7 +185,7 @@ ResolveArcNameManually(
     ADAPTER_TYPE AdapterType;
     CONTROLLER_TYPE ControllerType;
     PERIPHERAL_TYPE PeripheralType;
-    BOOLEAN UseSignature;
+    DEVICE_SIGNATURE Signature;
     SIZE_T NameLength;
 
     PDISKENTRY DiskEntry;
@@ -203,7 +203,7 @@ ResolveArcNameManually(
                            &AdapterType,
                            &ControllerType,
                            &PeripheralType,
-                           &UseSignature);
+                           &Signature);
     if (!NT_SUCCESS(Status))
         return Status;
 
@@ -243,10 +243,9 @@ ResolveArcNameManually(
     else
     if (PeripheralType == RDiskPeripheral)
     {
-        if (UseSignature)
+        if (Signature.Type != SignatureNone)
         {
-            /* The disk signature is stored in AdapterKey */
-            DiskEntry = GetDiskBySignature(PartList, AdapterKey);
+            DiskEntry = GetDiskBySignature(PartList, Signature);
         }
         else
         {
