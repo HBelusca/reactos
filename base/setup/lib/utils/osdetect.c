@@ -781,64 +781,48 @@ CreateNTOSInstallationsList(
     PLIST_ENTRY Entry, Entry2;
     PDISKENTRY DiskEntry;
     PPARTENTRY PartEntry;
+    UINT i;
 
     List = CreateGenericList();
     if (List == NULL)
         return NULL;
 
     /* Loop each available disk ... */
-    Entry = PartList->DiskListHead.Flink;
-    while (Entry != &PartList->DiskListHead)
+    for (Entry =  PartList->DiskListHead.Flink;
+         Entry != &PartList->DiskListHead;
+         Entry =  Entry->Flink)
     {
         DiskEntry = CONTAINING_RECORD(Entry, DISKENTRY, ListEntry);
-        Entry = Entry->Flink;
 
         DPRINT("Disk #%d\n", DiskEntry->DiskNumber);
 
         /* ... and for each disk, loop each available partition */
-
-        /* First, the primary partitions */
-        Entry2 = DiskEntry->PrimaryPartListHead.Flink;
-        while (Entry2 != &DiskEntry->PrimaryPartListHead)
+        for (i = PRIMARY_PARTITIONS;
+             i <= ((DiskEntry->DiskStyle == PARTITION_STYLE_MBR)
+                      ? LOGICAL_PARTITIONS : PRIMARY_PARTITIONS);
+             ++i)
         {
-            PartEntry = CONTAINING_RECORD(Entry2, PARTENTRY, ListEntry);
-            Entry2 = Entry2->Flink;
+            for (Entry2 =  DiskEntry->PartList[i].Flink;
+                 Entry2 != &DiskEntry->PartList[i];
+                 Entry2 =  Entry2->Flink)
+            {
+                PartEntry = CONTAINING_RECORD(Entry2, PARTENTRY, ListEntry);
 
-            ASSERT(PartEntry->DiskEntry == DiskEntry);
+                ASSERT(PartEntry->DiskEntry == DiskEntry);
 
-            DPRINT("   Primary Partition #%d, index %d - Type 0x%02x, IsLogical = %s, IsPartitioned = %s, IsNew = %s, AutoCreate = %s, FormatState = %lu -- Should I check it? %s\n",
-                   PartEntry->PartitionNumber, PartEntry->PartitionIndex,
-                   PartEntry->PartitionType, PartEntry->LogicalPartition ? "TRUE" : "FALSE",
-                   PartEntry->IsPartitioned ? "TRUE" : "FALSE",
-                   PartEntry->New ? "Yes" : "No",
-                   PartEntry->AutoCreate ? "Yes" : "No",
-                   PartEntry->FormatState,
-                   ShouldICheckThisPartition(PartEntry) ? "YES!" : "NO!");
+                DPRINT("   %s Partition #%d, index %d - Type 0x%02x, IsPartitioned = %s, IsNew = %s, AutoCreate = %s, FormatState = %lu -- Should I check it? %s\n",
+                       (i == PRIMARY_PARTITIONS ? "Primary" : "Logical"),
+                       PartEntry->PartitionNumber, PartEntry->PartitionIndex,
+                       PartEntry->PartitionType,
+                       PartEntry->IsPartitioned ? "TRUE" : "FALSE",
+                       PartEntry->New ? "Yes" : "No",
+                       PartEntry->AutoCreate ? "Yes" : "No",
+                       PartEntry->FormatState,
+                       ShouldICheckThisPartition(PartEntry) ? "YES!" : "NO!");
 
-            if (ShouldICheckThisPartition(PartEntry))
-                FindNTOSInstallations(List, PartList, PartEntry);
-        }
-
-        /* Then, the logical partitions (present in the extended partition) */
-        Entry2 = DiskEntry->LogicalPartListHead.Flink;
-        while (Entry2 != &DiskEntry->LogicalPartListHead)
-        {
-            PartEntry = CONTAINING_RECORD(Entry2, PARTENTRY, ListEntry);
-            Entry2 = Entry2->Flink;
-
-            ASSERT(PartEntry->DiskEntry == DiskEntry);
-
-            DPRINT("   Logical Partition #%d, index %d - Type 0x%02x, IsLogical = %s, IsPartitioned = %s, IsNew = %s, AutoCreate = %s, FormatState = %lu -- Should I check it? %s\n",
-                   PartEntry->PartitionNumber, PartEntry->PartitionIndex,
-                   PartEntry->PartitionType, PartEntry->LogicalPartition ? "TRUE" : "FALSE",
-                   PartEntry->IsPartitioned ? "TRUE" : "FALSE",
-                   PartEntry->New ? "Yes" : "No",
-                   PartEntry->AutoCreate ? "Yes" : "No",
-                   PartEntry->FormatState,
-                   ShouldICheckThisPartition(PartEntry) ? "YES!" : "NO!");
-
-            if (ShouldICheckThisPartition(PartEntry))
-                FindNTOSInstallations(List, PartList, PartEntry);
+                if (ShouldICheckThisPartition(PartEntry))
+                    FindNTOSInstallations(List, PartList, PartEntry);
+            }
         }
     }
 

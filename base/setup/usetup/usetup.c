@@ -1844,7 +1844,7 @@ DbgBreakPoint();
             }
 
             if (CurrentPartition == PartitionList->SystemPartition ||
-                IsPartitionActive(CurrentPartition))
+                IsSystemPartition(CurrentPartition))
             {
                 return CONFIRM_DELETE_SYSTEM_PARTITION_PAGE;
             }
@@ -4150,7 +4150,7 @@ BootLoaderHarddiskMbrPage(PINPUT_RECORD Ir)
     }
 
     /* Step 2: Write the MBR if the disk containing the system partition is not a super-floppy */
-    if (!IsSuperFloppy(SystemPartition->DiskEntry))
+    if (SystemPartition->DiskEntry->DiskStyle != PARTITION_STYLE_SUPERFLOPPY)
     {
         RtlStringCchPrintfW(DestinationDevicePathBuffer, ARRAYSIZE(DestinationDevicePathBuffer),
                 L"\\Device\\Harddisk%d\\Partition0",
