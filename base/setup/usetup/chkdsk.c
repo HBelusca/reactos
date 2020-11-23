@@ -53,11 +53,23 @@ ChkdskCallback(
     return TRUE;
 }
 
-NTSTATUS
-DoChkdsk(
-    IN PPARTENTRY PartEntry)
+// VOID
+// PrepareCheck(
+    // IN OUT PCHECK_PARTITION_INFO PartInfo)
+// {
+// }
+
+VOID
+StartCheck(
+    IN OUT PCHECK_PARTITION_INFO PartInfo)
 {
-    NTSTATUS Status;
+    // TODO: Think about which values could be defaulted...
+    // PartInfo->FileSystemName = PartInfo->PartEntry->FileSystem;
+    PartInfo->FixErrors = TRUE;
+    PartInfo->Verbose = FALSE;
+    PartInfo->CheckOnlyIfDirty = TRUE;
+    PartInfo->ScanDrive = FALSE;
+    PartInfo->Callback = ChkdskCallback;
 
     ChkdskProgressBar = CreateProgressBar(6,
                                           yScreen - 14,
@@ -69,21 +81,16 @@ DoChkdsk(
                                           MUIGetString(STRING_CHECKINGDISK));
 
     ProgressSetStepCount(ChkdskProgressBar, 100);
+}
 
-    // TODO: Think about which values could be defaulted...
-    Status = ChkdskPartition(PartEntry,
-                             TRUE,            /* FixErrors */
-                             FALSE,           /* Verbose */
-                             TRUE,            /* CheckOnlyIfDirty */
-                             FALSE,           /* ScanDrive */
-                             ChkdskCallback); /* Callback */
-
+VOID
+EndCheck(
+    IN NTSTATUS Status)
+{
     DestroyProgressBar(ChkdskProgressBar);
     ChkdskProgressBar = NULL;
 
     DPRINT("ChkdskPartition() finished with status 0x%08lx\n", Status);
-
-    return Status;
 }
 
 /* EOF */

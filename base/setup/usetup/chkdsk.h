@@ -26,8 +26,16 @@
 
 #pragma once
 
-NTSTATUS
-DoChkdsk(
-    IN PPARTENTRY PartEntry);
+// VOID
+// PrepareCheck(
+    // IN OUT PCHECK_PARTITION_INFO PartInfo);
+
+VOID
+StartCheck(
+    IN OUT PCHECK_PARTITION_INFO PartInfo);
+
+VOID
+EndCheck(
+    IN NTSTATUS Status);
 
 /* EOF */

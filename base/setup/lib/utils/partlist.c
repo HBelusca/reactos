@@ -2641,7 +2641,18 @@ UpdateDiskLayout(
                 HiddenSectors64.QuadPart = PartEntry->StartSector.QuadPart - DiskEntry->SectorAlignment - DiskEntry->ExtendedPartition->StartSector.QuadPart;
                 LinkInfo->HiddenSectors = HiddenSectors64.LowPart;
                 LinkInfo->PartitionNumber = 0;
-                LinkInfo->PartitionType = PARTITION_EXTENDED;
+
+                if (PartEntry->StartSector.QuadPart < 1450560)
+                {
+                    /* Partition starts below the 8.4GB boundary ==> CHS partition */
+                    LinkInfo->PartitionType = PARTITION_EXTENDED;
+                }
+                else
+                {
+                    /* Partition starts above the 8.4GB boundary ==> LBA partition */
+                    LinkInfo->PartitionType = PARTITION_XINT13_EXTENDED;
+                }
+
                 LinkInfo->BootIndicator = FALSE;
                 LinkInfo->RecognizedPartition = FALSE;
                 LinkInfo->RewritePartition = TRUE;
