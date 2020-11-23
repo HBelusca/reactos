@@ -88,14 +88,25 @@ FormatCallback(
     return TRUE;
 }
 
-NTSTATUS
-DoFormat(
-    IN PPARTENTRY PartEntry,
-    IN PCWSTR FileSystemName,
-    IN BOOLEAN QuickFormat)
+VOID
+PrepareFormat(
+    IN OUT PFORMAT_PARTITION_INFO PartInfo,
+    IN PFILE_SYSTEM_ITEM SelectedFileSystem)
 {
-    NTSTATUS Status;
+    ASSERT(SelectedFileSystem && SelectedFileSystem->FileSystem);
 
+    // TODO: Think about which values could be defaulted...
+    PartInfo->FileSystemName = SelectedFileSystem->FileSystem;
+    PartInfo->MediaFlag = FMIFS_HARDDISK;
+    PartInfo->Label = NULL;
+    PartInfo->QuickFormat = SelectedFileSystem->QuickFormat;
+    PartInfo->ClusterSize = 0;
+    PartInfo->Callback = FormatCallback;
+}
+
+VOID
+StartFormat(VOID)
+{
     FormatProgressBar = CreateProgressBar(6,
                                           yScreen - 14,
                                           xScreen - 7,
@@ -106,22 +117,16 @@ DoFormat(
                                           MUIGetString(STRING_FORMATTINGDISK));
 
     ProgressSetStepCount(FormatProgressBar, 100);
+}
 
-    // TODO: Think about which values could be defaulted...
-    Status = FormatPartition(PartEntry,
-                             FileSystemName,
-                             FMIFS_HARDDISK,  /* MediaFlag */
-                             NULL,            /* Label */
-                             QuickFormat,     /* QuickFormat */
-                             0,               /* ClusterSize */
-                             FormatCallback); /* Callback */
-
+VOID
+EndFormat(
+    IN NTSTATUS Status)
+{
     DestroyProgressBar(FormatProgressBar);
     FormatProgressBar = NULL;
 
     DPRINT("FormatPartition() finished with status 0x%08lx\n", Status);
-
-    return Status;
 }
 
 /* EOF */
