@@ -27,8 +27,7 @@
 /* INCLUDES ******************************************************************/
 
 #include <usetup.h>
-/* Blue Driver Header */
-#include <blue/ntddblue.h>
+#include <ntcondd/ntddblue.h>
 #include "keytrans.h"
 
 #define NDEBUG
@@ -74,7 +73,7 @@ WINAPI
 AllocConsole(VOID)
 {
     NTSTATUS Status;
-    UNICODE_STRING ScreenName = RTL_CONSTANT_STRING(L"\\??\\BlueScreen");
+    UNICODE_STRING ScreenName = RTL_CONSTANT_STRING(DD_NTCONDD_DEVICE_NAME_U);
     UNICODE_STRING KeyboardName = RTL_CONSTANT_STRING(L"\\Device\\KeyboardClass0");
     OBJECT_ATTRIBUTES ObjectAttributes;
     IO_STATUS_BLOCK IoStatusBlock;

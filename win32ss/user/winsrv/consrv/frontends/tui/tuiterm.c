@@ -20,7 +20,7 @@
 
 #include <ndk/iofuncs.h>
 #include <ndk/setypes.h>
-#include <drivers/blue/ntddblue.h>
+#include <drivers/ntcondd/ntddblue.h>
 
 #define NDEBUG
 #include <debug.h>
@@ -69,7 +69,7 @@ static HANDLE ConsoleDeviceHandle;
 static BOOL ConsInitialized = FALSE;
 
 /******************************************************************************\
-|** BlueScreen Driver management                                             **|
+|** NT / ReactOS Console Display Driver management                           **|
 \**/
 /* Code taken and adapted from base/system/services/driver.c */
 static DWORD
@@ -122,7 +122,7 @@ done:
     return RtlNtStatusToDosError(Status);
 }
 
-#ifdef BLUESCREEN_DRIVER_UNLOADING
+#ifdef NTCONDD_DRIVER_UNLOADING
 static DWORD
 ScmUnloadDriver(LPCWSTR lpServiceName)
 {
@@ -390,20 +390,20 @@ TuiInit(DWORD OemCP)
     /*
      * Initialize the TUI front-end:
      * - load the console driver,
-     * - open BlueScreen device and enable it,
+     * - open NtConDd device and enable it,
      * - set default screen attributes,
      * - grab the console size.
      */
-    ScmLoadDriver(L"Blue");
+    ScmLoadDriver(L"NtConDd");
 
-    ConsoleDeviceHandle = CreateFileW(L"\\\\.\\BlueScreen",
+    ConsoleDeviceHandle = CreateFileW(L"\\\\.\\NtConDd",
                                       FILE_ALL_ACCESS,
                                       0, NULL,
                                       OPEN_EXISTING,
                                       0, NULL);
     if (ConsoleDeviceHandle == INVALID_HANDLE_VALUE)
     {
-        DPRINT1("Failed to open BlueScreen.\n");
+        DPRINT1("Failed to open NtConDd.\n");
         return FALSE;
     }
 
@@ -670,7 +670,7 @@ TuiWriteStream(IN OUT PFRONTEND This,
 
     if (!WriteFile(ConsoleDeviceHandle, NewBuffer, NewLength * sizeof(CHAR), &BytesWritten, NULL))
     {
-        DPRINT1("Error writing to BlueScreen\n");
+        DPRINT1("Error writing to NtConDd\n");
     }
 
     RtlFreeHeap(RtlGetProcessHeap(), 0, NewBuffer);

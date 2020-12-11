@@ -1,6 +1,12 @@
 #ifndef _NTDDBLUE_H_INCLUDED_
 #define _NTDDBLUE_H_INCLUDED_
 
+#define DD_NTCONDD_DEVICE_NAME              "\\Device\\NtConDd"
+#define DD_NTCONDD_DEVICE_NAME_U           L"\\Device\\NtConDd"
+#define DD_NTCONDD_SYMLNK_NAME              "\\DosDevices\\Global\\NtConDd"
+#define DD_NTCONDD_SYMLNK_NAME_U           L"\\DosDevices\\Global\\NtConDd"
+
+
 #define IOCTL_CONSOLE_RESET_SCREEN              CTL_CODE(FILE_DEVICE_SCREEN, 0x800, METHOD_BUFFERED, FILE_WRITE_ACCESS)
 
 #define IOCTL_CONSOLE_GET_SCREEN_BUFFER_INFO    CTL_CODE(FILE_DEVICE_SCREEN, 0x801, METHOD_BUFFERED, FILE_READ_ACCESS)

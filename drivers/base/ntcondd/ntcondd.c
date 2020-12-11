@@ -1597,10 +1597,10 @@ DriverEntry(
 {
     NTSTATUS Status;
     PDEVICE_OBJECT DeviceObject;
-    UNICODE_STRING DeviceName = RTL_CONSTANT_STRING(L"\\Device\\BlueScreen");
-    UNICODE_STRING SymlinkName = RTL_CONSTANT_STRING(L"\\??\\BlueScreen");
+    UNICODE_STRING DeviceName = RTL_CONSTANT_STRING(DD_NTCONDD_DEVICE_NAME_U);
+    UNICODE_STRING SymlinkName = RTL_CONSTANT_STRING(DD_NTCONDD_SYMLNK_NAME_U);
 
-    DPRINT("Screen Driver 0.0.6\n");
+    DPRINT("NT / ReactOS Console Display Driver\n");
 
     DriverObject->MajorFunction[IRP_MJ_CREATE] = ScrCreateClose;
     DriverObject->MajorFunction[IRP_MJ_CLOSE]  = ScrCreateClose;

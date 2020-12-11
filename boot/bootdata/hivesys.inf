@@ -1550,13 +1550,6 @@ HKLM,"SYSTEM\CurrentControlSet\Services\BITS","Start",0x00010001,0x00000003
 HKLM,"SYSTEM\CurrentControlSet\Services\BITS","Type",0x00010001,0x00000020
 HKLM,"SYSTEM\CurrentControlSet\Services\BITS\Parameters","ServiceDll",0x00020000,"%SystemRoot%\system32\qmgr.dll"
 
-; BlueScreen device driver
-HKLM,"SYSTEM\CurrentControlSet\Services\Blue","ErrorControl",0x00010001,0x00000000
-HKLM,"SYSTEM\CurrentControlSet\Services\Blue","Group",0x00000000,"Video Init"
-HKLM,"SYSTEM\CurrentControlSet\Services\Blue","ImagePath",0x00020000,"system32\drivers\blue.sys"
-HKLM,"SYSTEM\CurrentControlSet\Services\Blue","Start",0x00010001,0x00000001
-HKLM,"SYSTEM\CurrentControlSet\Services\Blue","Type",0x00010001,0x00000001
-
 ; Browser service
 HKLM,"SYSTEM\CurrentControlSet\Services\Browser",,0x00000010
 HKLM,"SYSTEM\CurrentControlSet\Services\Browser","DisplayName",0x00000000,%BROWSER_SERVICE%
@@ -1658,6 +1651,13 @@ HKLM,"SYSTEM\CurrentControlSet\Services\Ndis","Type",0x00010001,0x00000001
 ;HKLM,"SYSTEM\CurrentControlSet\Services\Netlogon","ImagePath",0x00020000,"%SystemRoot%\system32\lsass.exe"
 ;HKLM,"SYSTEM\CurrentControlSet\Services\NetLogon","Start",0x00010001,0x00000003
 ;HKLM,"SYSTEM\CurrentControlSet\Services\Netlogon","Type",0x00010001,0x00000020
+
+; NT / ReactOS Console Display Driver
+HKLM,"SYSTEM\CurrentControlSet\Services\ntcondd","ErrorControl",0x00010001,0x00000000
+HKLM,"SYSTEM\CurrentControlSet\Services\ntcondd","Group",0x00000000,"Video Init"
+HKLM,"SYSTEM\CurrentControlSet\Services\ntcondd","ImagePath",0x00020000,"system32\drivers\ntcondd.sys"
+HKLM,"SYSTEM\CurrentControlSet\Services\ntcondd","Start",0x00010001,0x00000001
+HKLM,"SYSTEM\CurrentControlSet\Services\ntcondd","Type",0x00010001,0x00000001
 
 ; NTFS filesystem driver
 HKLM,"SYSTEM\CurrentControlSet\Services\Ntfs","ErrorControl",0x00010001,0x00000000
