@@ -1,13 +1,13 @@
 /*
- * PROJECT:     ReactOS Console Text-Mode Device Driver
+ * PROJECT:     NT / ReactOS Console Display Driver
  * LICENSE:     GPL-2.0+ (https://spdx.org/licenses/GPL-2.0+)
  * PURPOSE:     Main Header File.
  * COPYRIGHT:   Copyright 1999 Boudewijn Dekker
  *              Copyright 1999-2019 Eric Kohl
  */
 
-#ifndef _BLUE_PCH_
-#define _BLUE_PCH_
+#ifndef _NTCONDD_PCH_
+#define _NTCONDD_PCH_
 
 #include <ntifs.h>
 
@@ -53,7 +53,7 @@ typedef struct tagCONSOLE_CURSOR_INFO
 #define ENABLE_PROCESSED_OUTPUT                 0x0001
 #define ENABLE_WRAP_AT_EOL_OUTPUT               0x0002
 
-#include <blue/ntddblue.h>
+#include <ntcondd/ntddblue.h>
 
 /*
  * Color attributes for text and screen background
@@ -147,4 +147,4 @@ typedef struct _CFFILE
 VOID ScrLoadFontTable(_In_ ULONG CodePage);
 VOID ScrSetFont(_In_ PUCHAR FontBitfield);
 
-#endif /* _BLUE_PCH_ */
+#endif /* _NTCONDD_PCH_ */

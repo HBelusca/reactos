@@ -1,5 +1,5 @@
 /*
- * PROJECT:     ReactOS Console Text-Mode Device Driver
+ * PROJECT:     NT / ReactOS Console Display Driver
  * LICENSE:     GPL-2.0+ (https://spdx.org/licenses/GPL-2.0+)
  * PURPOSE:     Driver Management Functions.
  * COPYRIGHT:   Copyright 1999 Boudewijn Dekker
@@ -10,7 +10,7 @@
 
 /* INCLUDES ******************************************************************/
 
-#include "blue.h"
+#include "ntcondd.h"
 #include <ndk/inbvfuncs.h>
 
 #define NDEBUG

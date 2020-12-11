@@ -19,4 +19,6 @@ endif()
 if(NOT ARCH STREQUAL "arm")
 add_subdirectory(nmidebug)
 endif()
+
+add_subdirectory(ntcondd)
 add_subdirectory(null)

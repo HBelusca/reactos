@@ -1,5 +1,5 @@
 /*
- * PROJECT:     ReactOS Console Text-Mode Device Driver
+ * PROJECT:     NT / ReactOS Console Display Driver
  * LICENSE:     GPL-2.0+ (https://spdx.org/licenses/GPL-2.0+)
  * PURPOSE:     Loading specific fonts into VGA.
  * COPYRIGHT:   Copyright 2008-2019 Aleksey Bragin (aleksey@reactos.org)
@@ -9,7 +9,7 @@
 
 /* INCLUDES ***************************************************************/
 
-#include "blue.h"
+#include "ntcondd.h"
 #include <ndk/rtlfuncs.h>
 
 #define NDEBUG
