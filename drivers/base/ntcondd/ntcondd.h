@@ -21,13 +21,13 @@ typedef struct _SECURITY_ATTRIBUTES SECURITY_ATTRIBUTES, *PSECURITY_ATTRIBUTES;
 // Define material that normally comes from PSDK
 // This is mandatory to prevent any inclusion of
 // user-mode stuff.
-typedef struct tagCOORD
+typedef struct _COORD
 {
     SHORT X;
     SHORT Y;
 } COORD, *PCOORD;
 
-typedef struct tagSMALL_RECT
+typedef struct _SMALL_RECT
 {
     SHORT Left;
     SHORT Top;
@@ -35,7 +35,7 @@ typedef struct tagSMALL_RECT
     SHORT Bottom;
 } SMALL_RECT;
 
-typedef struct tagCONSOLE_SCREEN_BUFFER_INFO
+typedef struct _CONSOLE_SCREEN_BUFFER_INFO
 {
     COORD      dwSize;
     COORD      dwCursorPosition;
@@ -44,7 +44,7 @@ typedef struct tagCONSOLE_SCREEN_BUFFER_INFO
     COORD      dwMaximumWindowSize;
 } CONSOLE_SCREEN_BUFFER_INFO, *PCONSOLE_SCREEN_BUFFER_INFO;
 
-typedef struct tagCONSOLE_CURSOR_INFO
+typedef struct _CONSOLE_CURSOR_INFO
 {
     ULONG dwSize;
     INT   bVisible; // BOOL

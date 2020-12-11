@@ -1,12 +1,33 @@
+/*
+ * PROJECT:     NT / ReactOS Console Display Driver
+ * LICENSE:     GPL-2.0+ (https://spdx.org/licenses/GPL-2.0+)
+ * PURPOSE:     Console Display Driver IOCTL Interface.
+ * COPYRIGHT:   Copyright 2020 Hermes Belusca-Maito
+ */
+
 #ifndef _NTDDBLUE_H_INCLUDED_
 #define _NTDDBLUE_H_INCLUDED_
 
+#if _MSC_VER > 1000
+#pragma once
+#endif
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+//
+// Device Names
+//
 #define DD_NTCONDD_DEVICE_NAME              "\\Device\\NtConDd"
 #define DD_NTCONDD_DEVICE_NAME_U           L"\\Device\\NtConDd"
 #define DD_NTCONDD_SYMLNK_NAME              "\\DosDevices\\Global\\NtConDd"
 #define DD_NTCONDD_SYMLNK_NAME_U           L"\\DosDevices\\Global\\NtConDd"
 
 
+//
+// I/O Control Codes
+//
 #define IOCTL_CONSOLE_RESET_SCREEN              CTL_CODE(FILE_DEVICE_SCREEN, 0x800, METHOD_BUFFERED, FILE_WRITE_ACCESS)
 
 #define IOCTL_CONSOLE_GET_SCREEN_BUFFER_INFO    CTL_CODE(FILE_DEVICE_SCREEN, 0x801, METHOD_BUFFERED, FILE_READ_ACCESS)
@@ -30,14 +51,17 @@
 #define IOCTL_CONSOLE_LOADFONT                  CTL_CODE(FILE_DEVICE_SCREEN, 0x840, METHOD_IN_DIRECT, FILE_WRITE_ACCESS)
 #define IOCTL_CONSOLE_SETFONT                   CTL_CODE(FILE_DEVICE_SCREEN, 0x841, METHOD_IN_DIRECT, FILE_WRITE_ACCESS)
 
-/* TYPEDEFS **************************************************************/
 
-typedef struct tagCONSOLE_MODE
+//
+// Control Structures
+//
+
+typedef struct _CONSOLE_MODE
 {
     ULONG dwMode;
 } CONSOLE_MODE, *PCONSOLE_MODE;
 
-typedef struct tagOUTPUT_ATTRIBUTE
+typedef struct _OUTPUT_ATTRIBUTE
 {
     USHORT wAttribute;
     ULONG  nLength;
@@ -45,7 +69,7 @@ typedef struct tagOUTPUT_ATTRIBUTE
     ULONG  dwTransfered;
 } OUTPUT_ATTRIBUTE, *POUTPUT_ATTRIBUTE;
 
-typedef struct tagOUTPUT_CHARACTER
+typedef struct _OUTPUT_CHARACTER
 {
     CHAR  cCharacter;
     ULONG nLength;
@@ -53,7 +77,7 @@ typedef struct tagOUTPUT_CHARACTER
     ULONG dwTransfered;
 } OUTPUT_CHARACTER, *POUTPUT_CHARACTER;
 
-typedef struct tagCONSOLE_DRAW
+typedef struct _CONSOLE_DRAW
 {
     USHORT X;       /* Origin */
     USHORT Y;
@@ -63,5 +87,9 @@ typedef struct tagCONSOLE_DRAW
     USHORT CursorY;
     /* Followed by screen buffer in char/attrib format */
 } CONSOLE_DRAW, *PCONSOLE_DRAW;
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* _NTDDBLUE_H_INCLUDED_ */
