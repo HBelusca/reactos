@@ -691,8 +691,8 @@ WINAPI
 SetConsoleOutputCP(
     IN UINT wCodepage)
 {
-    WCHAR FontName[100];
-    WCHAR FontFile[] = L"\\SystemRoot\\vgafonts.cab";
+    static PCWSTR FontFile = L"\\SystemRoot\\vgafonts.cab";
+    WCHAR FontName[20];
     CONSOLE_CABINET_CONTEXT ConsoleCabinetContext;
     PCABINET_CONTEXT CabinetContext = &ConsoleCabinetContext.CabinetContext;
     CAB_SEARCH Search;
@@ -743,7 +743,7 @@ SetConsoleOutputCP(
                                    NULL,
                                    NULL,
                                    &IoStatusBlock,
-                                   IOCTL_CONSOLE_SETFONT,
+                                   IOCTL_CONSOLE_LOADFONT,
                                    ConsoleCabinetContext.Data,
                                    ConsoleCabinetContext.Size,
                                    NULL,
