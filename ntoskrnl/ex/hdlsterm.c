@@ -17,7 +17,7 @@ PHEADLESS_GLOBALS HeadlessGlobals;
 
 /* FUNCTIONS ******************************************************************/
 
-FORCEINLINE
+static inline
 KIRQL
 HdlspAcquireGlobalLock(VOID)
 {
@@ -36,7 +36,7 @@ HdlspAcquireGlobalLock(VOID)
     return OldIrql;
 }
 
-FORCEINLINE
+static inline
 VOID
 HdlspReleaseGlobalLock(IN KIRQL OldIrql)
 {
@@ -51,8 +51,7 @@ HdlspReleaseGlobalLock(IN KIRQL OldIrql)
     }
 }
 
-VOID
-NTAPI
+static VOID
 HdlspSendStringAtBaud(IN PUCHAR String)
 {
     /* Send every byte */
@@ -62,8 +61,7 @@ HdlspSendStringAtBaud(IN PUCHAR String)
     }
 }
 
-VOID
-NTAPI
+static VOID
 HdlspPutData(IN PUCHAR Data,
              IN ULONG DataSize)
 {
@@ -74,8 +72,7 @@ HdlspPutData(IN PUCHAR Data,
     }
 }
 
-VOID
-NTAPI
+static VOID
 HdlspPutString(IN PUCHAR String)
 {
     PUCHAR Dest = HeadlessGlobals->TmpBuffer;
@@ -132,7 +129,7 @@ HdlspPutString(IN PUCHAR String)
                 /* Add the modified char to the temporary buffer */
                 *Dest++ = Char;
             }
-            
+
             /* Check the next char */
             String++;
         }
@@ -143,8 +140,7 @@ HdlspPutString(IN PUCHAR String)
     HdlspSendStringAtBaud(HeadlessGlobals->TmpBuffer);
 }
 
-NTSTATUS
-NTAPI
+static NTSTATUS
 HdlspEnableTerminal(IN BOOLEAN Enable)
 {
     /* Enable if requested, as long as this isn't a PCI serial port crashing */
@@ -245,8 +241,7 @@ HeadlessInit(IN PLOADER_PARAMETER_BLOCK LoaderBlock)
     HdlspEnableTerminal(TRUE);
 }
 
-NTSTATUS
-NTAPI
+static NTSTATUS
 HdlspDispatch(IN HEADLESS_CMD Command,
               IN PVOID InputBuffer,
               IN SIZE_T InputBufferSize,
@@ -291,8 +286,7 @@ HdlspDispatch(IN HEADLESS_CMD Command,
         case HeadlessCmdEnableTerminal:
         {
             /* Make sure the caller passed valid data */
-            if (!(InputBuffer) ||
-                (InputBufferSize != sizeof(*EnableTerminal)))
+            if (!InputBuffer || (InputBufferSize != sizeof(*EnableTerminal)))
             {
                 DPRINT1("Invalid buffer\n");
                 Status = STATUS_INVALID_PARAMETER;
@@ -317,7 +311,7 @@ HdlspDispatch(IN HEADLESS_CMD Command,
                 break;
             }
 
-            /* Terminal should be on */
+            /* Terminal should be enabled */
             if (HeadlessGlobals->TerminalEnabled)
             {
                 /* Print each byte in the string making sure VT100 chars are used */
@@ -359,8 +353,7 @@ HdlspDispatch(IN HEADLESS_CMD Command,
                 else if (Command == HeadlessCmdSetColor)
                 {
                     /* Make sure the caller passed valid data */
-                    if (!InputBuffer ||
-                        (InputBufferSize != sizeof(*SetColor)))
+                    if (!InputBuffer || (InputBufferSize != sizeof(*SetColor)))
                     {
                         DPRINT1("Invalid buffer\n");
                         Status = STATUS_INVALID_PARAMETER;
@@ -368,7 +361,8 @@ HdlspDispatch(IN HEADLESS_CMD Command,
                     }
 
                     SetColor = InputBuffer;
-                    Status = RtlStringCbPrintfA((PCHAR)DataBuffer, sizeof(DataBuffer),
+                    Status = RtlStringCbPrintfA((PCHAR)DataBuffer,
+                                                sizeof(DataBuffer),
                                                 "\x1B[%d;%dm",
                                                 SetColor->BkgdColor,
                                                 SetColor->TextColor);
@@ -379,8 +373,7 @@ HdlspDispatch(IN HEADLESS_CMD Command,
                 else // if (Command == HeadlessCmdPositionCursor)
                 {
                     /* Make sure the caller passed valid data */
-                    if (!InputBuffer ||
-                        (InputBufferSize != sizeof(*CursorPos)))
+                    if (!InputBuffer || (InputBufferSize != sizeof(*CursorPos)))
                     {
                         DPRINT1("Invalid buffer\n");
                         Status = STATUS_INVALID_PARAMETER;
@@ -389,7 +382,8 @@ HdlspDispatch(IN HEADLESS_CMD Command,
 
                     CursorPos = InputBuffer;
                     /* Cursor position is 1-based */
-                    Status = RtlStringCbPrintfA((PCHAR)DataBuffer, sizeof(DataBuffer),
+                    Status = RtlStringCbPrintfA((PCHAR)DataBuffer,
+                                                sizeof(DataBuffer),
                                                 "\x1B[%d;%dH",
                                                 CursorPos->CursorRow + 1,
                                                 CursorPos->CursorCol + 1);
@@ -411,8 +405,7 @@ HdlspDispatch(IN HEADLESS_CMD Command,
         case HeadlessCmdGetByte:
         {
             /* Make sure the caller passed valid data */
-            if (!(OutputBuffer) ||
-                !(OutputBufferSize) ||
+            if (!OutputBuffer || !OutputBufferSize ||
                 (*OutputBufferSize < sizeof(*GetByte)))
             {
                 DPRINT1("Invalid buffer\n");
@@ -458,8 +451,7 @@ HdlspDispatch(IN HEADLESS_CMD Command,
         case HeadlessCmdQueryInformation:
         {
             /* Make sure the caller passed valid data */
-            if (!(OutputBuffer) ||
-                !(OutputBufferSize) ||
+            if (!OutputBuffer || !OutputBufferSize ||
                 (*OutputBufferSize < sizeof(*HeadlessInfo)))
             {
                 DPRINT1("Invalid buffer\n");
@@ -475,7 +467,7 @@ HdlspDispatch(IN HEADLESS_CMD Command,
             HeadlessInfo->Serial.TerminalBaudRate = HeadlessGlobals->TerminalBaudRate;
             HeadlessInfo->Serial.TerminalType = HeadlessGlobals->TerminalType;
 
-            /* Now check on what port/baud it's enabled on */
+            /* Now check on what port/baud it's enabled */
             if ((HeadlessGlobals->TerminalPortNumber >= 1) ||
                 (HeadlessGlobals->UsedBiosSettings))
             {
@@ -525,13 +517,13 @@ HdlspDispatch(IN HEADLESS_CMD Command,
         case HeadlessCmdPutData:
         {
             /* Validate the existence of an input buffer */
-            if (!(InputBuffer) || !(InputBufferSize))
+            if (!InputBuffer || (InputBufferSize == 0))
             {
                 Status = STATUS_INVALID_PARAMETER;
                 break;
             }
 
-            /* Terminal should be on */
+            /* Terminal should be enabled */
             if (HeadlessGlobals->TerminalEnabled)
             {
                 /* Print each byte in the string making sure VT100 chars are used */
@@ -577,7 +569,8 @@ HeadlessDispatch(IN HEADLESS_CMD Command,
     if (!HeadlessGlobals)
     {
         /* Don't allow the SAC to connect */
-        if (Command == HeadlessCmdEnableTerminal) return STATUS_UNSUCCESSFUL;
+        if (Command == HeadlessCmdEnableTerminal)
+            return STATUS_UNSUCCESSFUL;
 
         /* Send bogus reply */
         if ((Command == HeadlessCmdQueryInformation) ||
@@ -586,7 +579,7 @@ HeadlessDispatch(IN HEADLESS_CMD Command,
             (Command == HeadlessCmdCheckForReboot) ||
             (Command == HeadlessCmdTerminalPoll))
         {
-            if (!(OutputBuffer) || !(OutputBufferSize))
+            if (!OutputBuffer || !OutputBufferSize)
             {
                 return STATUS_INVALID_PARAMETER;
             }
@@ -598,7 +591,7 @@ HeadlessDispatch(IN HEADLESS_CMD Command,
     }
 
     /* Do the real work */
-    return HdlspDispatch(Command, 
+    return HdlspDispatch(Command,
                          InputBuffer,
                          InputBufferSize,
                          OutputBuffer,
