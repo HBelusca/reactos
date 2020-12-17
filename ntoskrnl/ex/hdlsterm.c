@@ -255,6 +255,7 @@ HdlspDispatch(IN HEADLESS_CMD Command,
     PHEADLESS_CMD_ENABLE_TERMINAL EnableTerminal;
     PHEADLESS_CMD_SET_COLOR SetColor;
     PHEADLESS_CMD_POSITION_CURSOR CursorPos;
+    PHEADLESS_RSP_TERMINAL_POLL TerminalPoll;
     PHEADLESS_RSP_GET_BYTE GetByte;
     UCHAR DataBuffer[80];
 
@@ -304,6 +305,11 @@ HdlspDispatch(IN HEADLESS_CMD Command,
 
         case HeadlessCmdPutString:
         {
+//
+// TODO: Improve: Since we also pass a string size in bytes, use it
+// in HdlspPutString() in order to loop until we either get the ANSI_NULL
+// or we are past the string size.
+//
             /* Validate the existence of an input buffer */
             if (!InputBuffer)
             {
@@ -400,7 +406,33 @@ HdlspDispatch(IN HEADLESS_CMD Command,
         }
 
         case HeadlessCmdTerminalPoll:
+        {
+            /* Make sure the caller passed valid data */
+            if (!OutputBuffer || !OutputBufferSize ||
+                (*OutputBufferSize < sizeof(*TerminalPoll)))
+            {
+                DPRINT1("Invalid buffer\n");
+                Status = STATUS_INVALID_PARAMETER;
+                break;
+            }
+
+            /* Make sure the terminal is enabled */
+            TerminalPoll = OutputBuffer;
+            if (HeadlessGlobals->TerminalEnabled)
+            {
+                /* Do the polling */
+                TerminalPoll->DataPresent = InbvPortPollOnly(HeadlessGlobals->TerminalPort);
+            }
+            else
+            {
+                /* Otherwise return nothing */
+                TerminalPoll->DataPresent = FALSE;
+            }
+
+            /* Return success either way */
+            Status = STATUS_SUCCESS;
             break;
+        }
 
         case HeadlessCmdGetByte:
         {
