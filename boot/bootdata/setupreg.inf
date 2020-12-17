@@ -1,6 +1,15 @@
 [Version]
 Signature = "$Windows NT$"
 
+[AddReg]
+
+; Headless Terminal device driver
+HKLM,"SYSTEM\CurrentControlSet\Services\HdlsTerm","ErrorControl",0x00010001,0x00000000
+HKLM,"SYSTEM\CurrentControlSet\Services\HdlsTerm","Group",0x00000000,"Extended Base"
+HKLM,"SYSTEM\CurrentControlSet\Services\HdlsTerm","ImagePath",0x00020000,"system32\drivers\hdlsterm.sys"
+HKLM,"SYSTEM\CurrentControlSet\Services\HdlsTerm","Start",0x00010001,0x00000001
+HKLM,"SYSTEM\CurrentControlSet\Services\HdlsTerm","Type",0x00010001,0x00000001
+
 [DelReg]
 
 ; Critical Device Database
