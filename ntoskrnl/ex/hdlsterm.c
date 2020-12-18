@@ -15,6 +15,10 @@
 
 /* GLOBALS ********************************************************************/
 
+#define TAG_HEADLESS    'sldH'
+
+#define TMP_BUFFER_SIZE 80
+
 //
 // Headless Control Structure, mostly for !SAC
 //
@@ -127,9 +131,9 @@ HdlspPutString(IN PUCHAR String)
     while (*String != ANSI_NULL)
     {
         /* Check for rotate, send existing buffer and restart from where we are */
-        if (Dest >= &HeadlessGlobals->TmpBuffer[79])
+        if (Dest >= &HeadlessGlobals->TmpBuffer[TMP_BUFFER_SIZE - 1])
         {
-            HeadlessGlobals->TmpBuffer[79] = ANSI_NULL;
+            HeadlessGlobals->TmpBuffer[TMP_BUFFER_SIZE - 1] = ANSI_NULL;
             HdlspSendStringAtBaud(HeadlessGlobals->TmpBuffer);
             Dest = HeadlessGlobals->TmpBuffer;
         }
@@ -241,7 +245,7 @@ HeadlessInit(IN PLOADER_PARAMETER_BLOCK LoaderBlock)
     /* Allocate the global headless data */
     HeadlessGlobals = ExAllocatePoolWithTag(NonPagedPool,
                                             sizeof(*HeadlessGlobals),
-                                            'sldH');
+                                            TAG_HEADLESS);
     if (!HeadlessGlobals) return;
 
     /* Zero and copy loader data */
@@ -273,7 +277,9 @@ HeadlessInit(IN PLOADER_PARAMETER_BLOCK LoaderBlock)
     DPRINT1("FIXME: No Headless logging support\n");
 
     /* Allocate temporary buffer */
-    HeadlessGlobals->TmpBuffer = ExAllocatePoolWithTag(NonPagedPool, 80, 'sldH');
+    HeadlessGlobals->TmpBuffer = ExAllocatePoolWithTag(NonPagedPool,
+                                                       TMP_BUFFER_SIZE,
+                                                       TAG_HEADLESS);
     if (!HeadlessGlobals->TmpBuffer) return;
 
     /* Windows seems to apply some special hacks for 9600 bps */
