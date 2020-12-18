@@ -16,12 +16,12 @@
 #define NDEBUG
 #include <debug.h>
 
-/* NOTES ******************************************************************/
+/* NOTES *********************************************************************/
 /*
  *  [[character][attribute]][[character][attribute]]....
  */
 
-/* TYPEDEFS ***************************************************************/
+/* TYPEDEFS ******************************************************************/
 
 typedef struct _DEVICE_EXTENSION
 {
@@ -86,7 +86,7 @@ static const UCHAR DefaultPalette[] =
     0xFF, 0xFF, 0xFF
 };
 
-/* INBV MANAGEMENT FUNCTIONS **************************************************/
+/* INBV MANAGEMENT FUNCTIONS *************************************************/
 
 static BOOLEAN
 ScrResetScreen(
@@ -301,7 +301,7 @@ ScrInbvCleanup(VOID)
     return STATUS_SUCCESS;
 }
 
-/* FUNCTIONS **************************************************************/
+/* FUNCTIONS *****************************************************************/
 
 static VOID
 FASTCALL
@@ -1498,6 +1498,10 @@ ScrIoControl(
             //
             // FIXME: For the moment we support only a fixed 256-char 8-bit font.
             //
+
+//
+// FIXME: This was using the MDL thing!!!!
+//
 
             /* Validate input buffer */
             if (stk->Parameters.DeviceIoControl.InputBufferLength < 256 * 8)

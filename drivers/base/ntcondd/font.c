@@ -7,7 +7,7 @@
  *              Copyright 2008-2019 Christoph von Wittich (christoph_vw@reactos.org)
  */
 
-/* INCLUDES ***************************************************************/
+/* INCLUDES ******************************************************************/
 
 #include "ntcondd.h"
 // #include <ndk/rtlfuncs.h>
@@ -20,7 +20,7 @@ VOID OpenBitPlane(VOID);
 VOID CloseBitPlane(VOID);
 VOID LoadFont(_In_ PUCHAR Bitplane, _In_ PUCHAR FontBitfield);
 
-/* FUNCTIONS ****************************************************************/
+/* FUNCTIONS *****************************************************************/
 
 VOID
 ScrSetFont(

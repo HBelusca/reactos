@@ -55,6 +55,16 @@ extern "C" {
 // Control Structures
 //
 
+typedef enum _CONSOLE_TYPE
+{
+    ConsoleText,        // Uses text-mode VGA video if possible.
+                        // Otherwise emulates text-mode over graphics framebuffer.
+
+    ConsoleFramebuffer, // Uses \Device\Video0 video driver.
+    ConsoleInbv,        // Uses NTOS Inbv / Bootvid driver.
+    ConsoleHeadless     // Uses NTOS Headless.
+};
+
 typedef struct _CONSOLE_MODE
 {
     ULONG dwMode;
