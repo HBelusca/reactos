@@ -9,11 +9,56 @@
 /* INCLUDES *******************************************************************/
 
 #include <ntoskrnl.h>
+
+#define NDEBUG
 #include <debug.h>
 
 /* GLOBALS ********************************************************************/
 
-PHEADLESS_GLOBALS HeadlessGlobals;
+//
+// Headless Control Structure, mostly for !SAC
+//
+typedef struct _HEADLESS_GLOBALS
+{
+    KSPIN_LOCK SpinLock;
+    HANDLE PageLockHandle;
+    PHEADLESS_LOG_ENTRY LogEntries;
+    PUCHAR TmpBuffer;
+    PUCHAR InputBuffer;
+    PHEADLESS_CMD_SET_BLUE_SCREEN_DATA BlueScreenData;
+    union
+    {
+        struct
+        {
+            ULONG TerminalEnabled:1;
+            ULONG InBugCheck:1;
+            ULONG NewLogEntryAdded:1;
+            ULONG UsedBiosSettings:1;
+            ULONG InputProcessing:1;
+            ULONG InputLineDone:1;
+            ULONG ProcessingCmd:1;
+            ULONG TerminalParity:1;
+            ULONG TerminalStopBits:1;
+            ULONG TerminalPortNumber:3;
+            ULONG IsNonLegacyDevice:1;
+        };
+        ULONG AllFlags;
+    };
+    ULONG TerminalBaudRate;
+    ULONG TerminalPort;
+    PUCHAR TerminalPortAddress;
+    LARGE_INTEGER DelayTime;
+    ULONG MicroSecondsDelayTime;
+    UCHAR TerminalType;
+    SIZE_T InputBufferIndex;
+    USHORT LogEntryLast;
+    USHORT LogEntryStart;
+    GUID SystemGUID;
+    BOOLEAN IsMMIODevice;
+    BOOLEAN IsLastCharCR;
+} HEADLESS_GLOBALS, *PHEADLESS_GLOBALS;
+
+static PHEADLESS_GLOBALS HeadlessGlobals;
 
 /* FUNCTIONS ******************************************************************/
 
