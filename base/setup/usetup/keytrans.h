@@ -26,8 +26,20 @@
 #pragma once
 
 #include <ntddkbd.h>
+#include <ndk/kbd.h>
+#include <kbdlayout.h>
 
 NTSTATUS
 IntTranslateKey(HANDLE hConsoleInput, PKEYBOARD_INPUT_DATA InputData, KEY_EVENT_RECORD *Event);
+
+NTSTATUS
+KbdLoadKbdDll(
+    IN PCWSTR pwszLayoutDllPath,
+    OUT PHANDLE pHandleDll,
+    OUT PKBDTABLES* pKbdTables);
+
+VOID // NTSTATUS
+KbdUnloadKbdDll(
+    IN HANDLE HandleDll);
 
 /* EOF */

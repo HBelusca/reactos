@@ -114,7 +114,7 @@ CreateWindowStationW(
 
     hWinSta = NtUserCreateWindowStation(&ObjectAttributes,
                                         dwDesiredAccess,
-                                        0, 0, 0, 0, 0);
+                                        NULL, 0, NULL, NULL, 0 /* FIXME!! */);
 
     if (hWindowStationsDir)
         NtClose(hWindowStationsDir);

@@ -178,7 +178,7 @@ RawInputThreadMain(VOID)
         if (!ghMouseDevice)
         {
             /* Check if mouse device already exists */
-            Status = OpenInputDevice(&ghMouseDevice, &pMouDevice, L"\\Device\\PointerClass0" );
+            Status = OpenInputDevice(&ghMouseDevice, &pMouDevice, L"\\Device\\PointerClass0");
             if (NT_SUCCESS(Status))
             {
                 ++cMaxWaitObjects;

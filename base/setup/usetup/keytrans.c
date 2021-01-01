@@ -28,293 +28,45 @@
 #include <usetup.h>
 #include "keytrans.h"
 
+#include <ndk/umfuncs.h>
+
 #define NDEBUG
 #include <debug.h>
 
-static WORD KeyTable[] = {
-/* 0x00 */
-	0x00,		VK_ESCAPE,	0x31,		0x32,
-	0x33,		0x34,		0x35,		0x36,
-	0x37,		0x38,		0x39,		0x30,
-	VK_OEM_MINUS,	VK_OEM_PLUS,	VK_BACK,	VK_TAB,
-/* 0x10 */
-	0x51,		0x57,		0x45,		0x52,
-	0x54,		0x59,		0x55,		0x49,
-	0x4f,		0x50,		VK_OEM_4,	VK_OEM_6,
-	VK_RETURN,	VK_CONTROL,	0x41,		0x53,
-/* 0x20 */
-	0x44,		0x46,		0x47,		0x48,
-	0x4a,		0x4b,		0x4c,		VK_OEM_1,
-	VK_OEM_7,	0xc0,		VK_LSHIFT,	VK_OEM_5,
-	0x5a,		0x58,		0x43,		0x56,
-/* 0x30 */
-	0x42,		0x4e,		0x4d,		VK_OEM_COMMA,
-	VK_OEM_PERIOD,	VK_OEM_2,	VK_RSHIFT,	VK_MULTIPLY,
-	VK_LMENU,	VK_SPACE,	VK_CAPITAL,	VK_F1,
-	VK_F2,		VK_F3,		VK_F4,		VK_F5,
-/* 0x40 */
-	VK_F6,		VK_F7,		VK_F8,		VK_F9,
-	VK_F10,		VK_NUMLOCK,	VK_SCROLL,	VK_HOME,
-	VK_UP,		VK_PRIOR,	VK_SUBTRACT,	VK_LEFT,
-	0,		VK_RIGHT,	VK_ADD,		VK_END,
-/* 0x50 */
-	VK_DOWN,	VK_NEXT,	VK_INSERT,	VK_DELETE,
-	0,		0,		0,		VK_F11,
-	VK_F12,		0,		0,		0,
-	0,		0,		0,		0,
-/* 0x60 */
-	0,		0,		0,		0,
-	0,		0,		0,		0,
-	0,		0,		0,		0,
-	0,		0,		0,		0,
-/* 0x70 */
-	0,		0,		0,		0,
-	0,		0,		0,		0,
-	0,		0,		0,		0,
-	0,		0,		0,		0
-};
 
-static WORD KeyTableEnhanced[] = {
-/* 0x00 */
-	0,		0,		0,		0,
-	0,		0,		0,		0,
-	0,		0,		0,		0,
-	0,		0,		0,		0,
-/* 0x10 */
-	0,		0,		0,		0,
-	0,		0,		0,		0,
-	0,		0,		0,		0,
-	VK_RETURN,	VK_RCONTROL,	0,		0,
-/* 0x20 */
-	0,		0,		0,		0,
-	0,		0,		0,		0,
-	0,		0,		0,		0,
-	0,		0,		0,		0,
-/* 0x30 */
-	0,		0,		0,		0,
-	0,		VK_DIVIDE,	0,		VK_SNAPSHOT,
-	VK_RMENU,	0,		0,		0,
-	0,		0,		0,		0,
-/* 0x40 */
-	0,		0,		0,		0,
-	0,		0,		0,		VK_HOME,
-	VK_UP,		VK_PRIOR,	0,		VK_LEFT,
-	0,		VK_RIGHT,	0,		VK_END,
-/* 0x50 */
-	VK_DOWN,	VK_NEXT,	VK_INSERT,	VK_DELETE,
-	0,		0,		0,		0,
-	0,		0,		0,		0,
-	0,		0,		0,		0,
-/* 0x60 */
-	0,		0,		0,		0,
-	0,		0,		0,		0,
-	0,		0,		0,		0,
-	0,		0,		0,		0,
-/* 0x70 */
-	0,		0,		0,		0,
-	0,		0,		0,		0,
-	0,		0,		0,		0,
-	0,		0,		0,		0
-};
+HANDLE HandleDll = NULL;
+PKBDTABLES pKbdTbl = NULL; // KbdTablesFallback;
 
-static WORD KeyTableNumlock[] = {
-/* 0x00 */
-	0,		0,		0,		0,
-	0,		0,		0,		0,
-	0,		0,		0,		0,
-	0,		0,		0,		0,
-/* 0x10 */
-	0,		0,		0,		0,
-	0,		0,		0,		0,
-	0,		0,		0,		0,
-	0,		0,		0,		0,
-/* 0x20 */
-	0,		0,		0,		0,
-	0,		0,		0,		0,
-	0,		0,		0,		0,
-	0,		0,		0,		0,
-/* 0x30 */
-	0,		0,		0,		0,
-	0,		0,		0,		0,
-	0,		0,		0,		0,
-	0,		0,		0,		0,
-/* 0x40 */
-	0,		0,		0,		0,
-	0,		0,		0,		VK_NUMPAD7,
-	VK_NUMPAD8,	VK_NUMPAD9,	0,		VK_NUMPAD4,
-	VK_NUMPAD5,	VK_NUMPAD6,	0,		VK_NUMPAD1,
-/* 0x50 */
-	VK_NUMPAD2,	VK_NUMPAD3,	VK_NUMPAD0,	0,
-	0,		0,		0,		0,
-	0,		0,		0,		0,
-	0,		0,		0,		0,
-/* 0x60 */
-	0,		0,		0,		0,
-	0,		0,		0,		0,
-	0,		0,		0,		0,
-	0,		0,		0,		0,
-/* 0x70 */
-	0,		0,		0,		0,
-	0,		0,		0,		0,
-	0,		0,		0,		0,
-	0,		0,		0,		0
-};
-
-typedef struct _SCANTOASCII {
-	USHORT ScanCode;
-	USHORT Enhanced;
-	UCHAR Normal;
-	UCHAR Shift;
-	UCHAR NumLock;
-	UCHAR bCAPS;
-} SCANTOASCII, *PSCANTOASCII;
-
-SCANTOASCII ScanToAscii[] = {
-{	0x1e,	0,	'a',	'A',	0, TRUE  },
-{	0x30,	0,	'b',	'B',	0, TRUE  },
-{	0x2e,	0,	'c',	'C',	0, TRUE  },
-{	0x20,	0,	'd',	'D',	0, TRUE  },
-{	0x12,	0,	'e',	'E',	0, TRUE  },
-{	0x21,	0,	'f',	'F',	0, TRUE  },
-{	0x22,	0,	'g',	'G',	0, TRUE  },
-{	0x23,	0,	'h',	'H',	0, TRUE  },
-{	0x17,	0,	'i',	'I',	0, TRUE  },
-{	0x24,	0,	'j',	'J',	0, TRUE  },
-{	0x25,	0,	'k',	'K',	0, TRUE  },
-{	0x26,	0,	'l',	'L',	0, TRUE  },
-{	0x32,	0,	'm',	'M',	0, TRUE  },
-{	0x31,	0,	'n',	'N',	0, TRUE  },
-{	0x18,	0,	'o',	'O',	0, TRUE  },
-{	0x19,	0,	'p',	'P',	0, TRUE  },
-{	0x10,	0,	'q',	'Q',	0, TRUE  },
-{	0x13,	0,	'r',	'R',	0, TRUE  },
-{	0x1f,	0,	's',	'S',	0, TRUE  },
-{	0x14,	0,	't',	'T',	0, TRUE  },
-{	0x16,	0,	'u',	'U',	0, TRUE  },
-{	0x2f,	0,	'v',	'V',	0, TRUE  },
-{	0x11,	0,	'w',	'W',	0, TRUE  },
-{	0x2d,	0,	'x',	'X',	0, TRUE  },
-{	0x15,	0,	'y',	'Y',	0, TRUE  },
-{	0x2c,	0,	'z',	'Z',	0, TRUE  },
-
-{	0x02,	0,	'1',	'!',	0, FALSE },
-{	0x03,	0,	'2',	'@',	0, FALSE },
-{	0x04,	0,	'3',	'#',	0, FALSE },
-{	0x05,	0,	'4',	'$',	0, FALSE },
-{	0x06,	0,	'5',	'%',	0, FALSE },
-{	0x07,	0,	'6',	'^',	0, FALSE },
-{	0x08,	0,	'7',	'&',	0, FALSE },
-{	0x09,	0,	'8',	'*',	0, FALSE },
-{	0x0a,	0,	'9',	'(',	0, FALSE },
-{	0x0b,	0,	'0',	')',	0, FALSE },
-
-{	0x29,	0,	'\'',	'~',	0, FALSE },
-{	0x0c,	0,	'-',	'_',	0, FALSE },
-{	0x0d,	0,	'=',	'+',	0, FALSE },
-{	0x1a,	0,	'[',	'{',	0, FALSE },
-{	0x1b,	0,	']',	'}',	0, FALSE },
-{	0x2b,	0,	'\\',	'|',	0, FALSE },
-{	0x27,	0,	';',	':',	0, FALSE },
-{	0x28,	0,	'\'',	'"',	0, FALSE },
-{	0x33,	0,	',',	'<',	0, FALSE },
-{	0x34,	0,	'.',	'>',	0, FALSE },
-{	0x35,	0,	'/',	'?',	0, FALSE },
-
-{	0x4f,	0,	0,	0,	'1', FALSE },
-{	0x50,	0,	0,	0,	'2', FALSE },
-{	0x51,	0,	0,	0,	'3', FALSE },
-{	0x4b,	0,	0,	0,	'4', FALSE },
-{	0x4c,	0,	0,	0,	'5', FALSE },
-{	0x4d,	0,	0,	0,	'6', FALSE },
-{	0x47,	0,	0,	0,	'7', FALSE },
-{	0x48,	0,	0,	0,	'8', FALSE },
-{	0x49,	0,	0,	0,	'9', FALSE },
-{	0x52,	0,	0,	0,	'0', FALSE },
-
-{	0x4a,	0,	'-',	'-',	0, FALSE },
-{	0x4e,	0,	'+',	'+',	0, FALSE },
-{	0x37,	0,	'*',	'*',	0, FALSE },
-{	0x35,	1,	'/',	'/',	0, FALSE },
-{	0x53,	0,	0,	0,	'.', FALSE },
-
-{	0x39,	0,	' ',	' ',	0, FALSE },
-
-{	0x1c,	0,	'\r',	'\r',	0, FALSE },
-{	0x1c,	1,	'\r',	'\r',	0, FALSE },
-{	0x0e,	0,	0x08,	0x08,	0, FALSE }, /* backspace */
-
-{	0,	0,	0,	0,	0, FALSE }
-};
+// gafRawKeyState;
+BYTE afKeyState[256 * 2 / 8]; // 2 bits per key
 
 
-static void
-IntUpdateControlKeyState(HANDLE hConsoleInput, LPDWORD State, PKEYBOARD_INPUT_DATA InputData)
+/*
+ * IntKeyboardUpdateLeds
+ *
+ * Sends the keyboard commands to turn on/off the lights
+ */
+static
+NTSTATUS
+IntKeyboardUpdateLeds(
+    HANDLE hKeyboardDevice,
+    // WORD wVk,
+    // WORD wScanCode
+    DWORD oldState,
+    DWORD newState)
 {
-	DWORD Value = 0;
-    DWORD oldState, newState;
+    NTSTATUS Status;
+    IO_STATUS_BLOCK IoStatusBlock;
+    KEYBOARD_INDICATOR_PARAMETERS kip;
 
-	if (InputData->Flags & KEY_E1) /* Only the pause key has E1 */
-		return;
-
-    oldState = newState = *State;
-
-	if (!(InputData->Flags & KEY_E0)) {
-		switch (InputData->MakeCode) {
-			case 0x2a:
-			case 0x36:
-				Value = SHIFT_PRESSED;
-				break;
-
-			case 0x1d:
-				Value = LEFT_CTRL_PRESSED;
-				break;
-
-			case 0x38:
-				Value = LEFT_ALT_PRESSED;
-				break;
-
-			case 0x3A:
-				if (!(InputData->Flags & KEY_BREAK))
-					newState ^= CAPSLOCK_ON;
-				break;
-
-			case 0x45:
-				if (!(InputData->Flags & KEY_BREAK))
-					newState ^= NUMLOCK_ON;
-				break;
-
-			case 0x46:
-				if (!(InputData->Flags & KEY_BREAK))
-					newState ^= SCROLLLOCK_ON;
-				break;
-
-			default:
-				return;
-		}
-	} else {
-		switch (InputData->MakeCode) {
-			case 0x1d:
-				Value = RIGHT_CTRL_PRESSED;
-				break;
-
-			case 0x38:
-				Value = RIGHT_ALT_PRESSED;
-				break;
-
-			default:
-				return;
-		}
-	}
-
-    /* Check if the state of the indicators has been changed */
+    /*
+     * Check if the state of the indicators has been changed.
+     * TODO: For Japan (and CJK world), handle VK_KANA.
+     */
     if ((oldState ^ newState) & (NUMLOCK_ON | CAPSLOCK_ON | SCROLLLOCK_ON))
     {
-        IO_STATUS_BLOCK               IoStatusBlock;
-        NTSTATUS                      Status;
-        KEYBOARD_INDICATOR_PARAMETERS kip;
-
-        kip.LedFlags = 0;
         kip.UnitId   = 0;
+        kip.LedFlags = 0;
 
         if ((newState & NUMLOCK_ON))
             kip.LedFlags |= KEYBOARD_NUM_LOCK_ON;
@@ -328,127 +80,348 @@ IntUpdateControlKeyState(HANDLE hConsoleInput, LPDWORD State, PKEYBOARD_INPUT_DA
         /* Update the state of the leds on primary keyboard */
         DPRINT("NtDeviceIoControlFile dwLeds=%x\n", kip.LedFlags);
 
-        Status = NtDeviceIoControlFile(
-              hConsoleInput,
-              NULL,
-              NULL,
-              NULL,
-              &IoStatusBlock,
-              IOCTL_KEYBOARD_SET_INDICATORS,
-		      &kip,
-              sizeof(kip),
-		      NULL,
-              0);
-
+        Status = NtDeviceIoControlFile(hKeyboardDevice,
+                                       NULL,
+                                       NULL,
+                                       NULL,
+                                       &IoStatusBlock,
+                                       IOCTL_KEYBOARD_SET_INDICATORS,
+                                       &kip,
+                                       sizeof(kip),
+                                       NULL,
+                                       0);
         if (!NT_SUCCESS(Status))
         {
             DPRINT1("NtDeviceIoControlFile(IOCTL_KEYBOARD_SET_INDICATORS) failed (Status %lx)\n", Status);
         }
-    } else
-    /* Normal press/release state handling */
-	if (InputData->Flags & KEY_BREAK)
-		newState &= ~Value;
-	else
-		newState |= Value;
+    }
+
+    return Status;
+}
+
+static VOID
+IntUpdateControlKeyState(
+    IN OUT LPDWORD State, // LedState
+    IN PBYTE afKeyState,
+    IN BOOLEAN bIsDown)
+{
+    DWORD Value = 0;
+    DWORD oldState, newState;
+
+    oldState = newState = *State;
+
+    /* Get the current state for the console KeyEvent */
+    if (IS_KEY_LOCKED(afKeyState, VK_CAPITAL))
+    {
+        Value |= CAPSLOCK_ON;
+        if (bIsDown)
+            newState ^= CAPSLOCK_ON;
+    }
+
+    if (IS_KEY_LOCKED(afKeyState, VK_NUMLOCK))
+    {
+        Value |= NUMLOCK_ON;
+        if (bIsDown)
+            newState ^= NUMLOCK_ON;
+    }
+
+    if (IS_KEY_LOCKED(afKeyState, VK_SCROLL))
+    {
+        Value |= SCROLLLOCK_ON;
+        if (bIsDown)
+            newState ^= SCROLLLOCK_ON;
+    }
+
+    if (IS_KEY_DOWN(afKeyState, VK_SHIFT))
+    // || (IS_KEY_DOWN(afKeyState, VK_LSHIFT)) || (IS_KEY_DOWN(afKeyState, VK_RSHIFT))
+        Value |= SHIFT_PRESSED;
+
+    if (IS_KEY_DOWN(afKeyState, VK_LCONTROL))
+        Value |= LEFT_CTRL_PRESSED;
+    if (IS_KEY_DOWN(afKeyState, VK_RCONTROL))
+        Value |= RIGHT_CTRL_PRESSED;
+    // if (IS_KEY_DOWN(afKeyState, VK_CONTROL)) { ... }
+
+    if (IS_KEY_DOWN(afKeyState, VK_LMENU))
+        Value |= LEFT_ALT_PRESSED;
+    if (IS_KEY_DOWN(afKeyState, VK_RMENU))
+        Value |= RIGHT_ALT_PRESSED;
+    // if (IS_KEY_DOWN(afKeyState, VK_MENU)) { ... }
+
+    // newState |= Value; or newState &= ~Value; depending on DOWN or UP.
+    newState = Value;
 
     *State = newState;
 }
 
-static DWORD
-IntVKFromKbdInput(PKEYBOARD_INPUT_DATA InputData, DWORD KeyState)
-{
-	if (!(KeyState & ENHANCED_KEY)) {
-		if ((KeyState & NUMLOCK_ON) &&
-		    KeyTableNumlock[InputData->MakeCode & 0x7f]) {
-			DPRINT("Numlock, using %x\n",
-			       InputData->MakeCode & 0x7f);
-			return KeyTableNumlock[InputData->MakeCode & 0x7f];
-		}
-		DPRINT("Not enhanced, using %x\n", InputData->MakeCode & 0x7f);
-		return KeyTable[InputData->MakeCode & 0x7f];
-	}
+#if 1
 
-	DPRINT("Enhanced, using %x\n", InputData->MakeCode & 0x7f);
-	return KeyTableEnhanced[InputData->MakeCode & 0x7f];
+/*static*/ DWORD
+IntVKFromKbdInput(
+    IN USHORT wScanCode,
+    IN PBYTE afKeyState,
+    IN PKBDTABLES pKbdTbl)
+{
+    WORD wVk;
+
+    /* Convert scan code to virtual key */
+    // wVk = IntMapVirtualKeyEx(wScanCode, MAPVK_VSC_TO_VK_EX, pKbdTbl);
+    wVk = IntVscToVk(wScanCode, pKbdTbl);
+
+    /* Do nothing more if == 0 */
+    if (wVk == 0)
+        return wVk;
+
+    /* Support numlock */
+    if ((wVk & KBDNUMPAD) && IS_KEY_LOCKED(afKeyState, VK_NUMLOCK))
+    {
+        wVk = IntTranslateNumpadKey(wVk & 0xFF);
+    }
+
+    return wVk;
 }
 
-static UCHAR
-IntAsciiFromInput(PKEYBOARD_INPUT_DATA InputData, DWORD KeyState)
-{
-	UINT Counter = 0;
-	USHORT Enhanced = 0;
+#endif
 
-	if (KeyState & ENHANCED_KEY) Enhanced = 1;
-
-	while (ScanToAscii[Counter].ScanCode != 0) {
-		if ((ScanToAscii[Counter].ScanCode == InputData->MakeCode)  &&
-		    (ScanToAscii[Counter].Enhanced == Enhanced)) {
-			if (ScanToAscii[Counter].NumLock) {
-				if ((KeyState & NUMLOCK_ON) &&
-				    !(KeyState & SHIFT_PRESSED)) {
-					return ScanToAscii[Counter].NumLock;
-				} else {
-					return ScanToAscii[Counter].Normal;
-				}
-			}
-
-			if ((KeyState & CAPSLOCK_ON) && ScanToAscii[Counter].bCAPS)
-				KeyState ^= SHIFT_PRESSED;
-
-			if (KeyState & SHIFT_PRESSED)
-				return ScanToAscii[Counter].Shift;
-
-			return ScanToAscii[Counter].Normal;
-		}
-		Counter++;
-	}
-
-	return 0;
-}
-
-/* This is going to be quick and messy. The usetup app runs in native mode
- * so it cannot use the translation routines in win32k which means it'll have
- * to be done here too.
- *
- * Only the bKeyDown, AsciiChar and wVirtualKeyCode members are used
- * in the app so I'll just fill the others with somewhat sane values
- */
 NTSTATUS
 IntTranslateKey(HANDLE hConsoleInput, PKEYBOARD_INPUT_DATA InputData, KEY_EVENT_RECORD *Event)
 {
-	static DWORD dwControlKeyState;
+    static DWORD dwControlKeyState = 0;
+    DWORD dwOldCtlState;
+    WORD wScanCode, wVk, wSimpleVk, wVk2;
+    BOOLEAN bKeyDown;
 
-	RtlZeroMemory(Event, sizeof(KEY_EVENT_RECORD));
+    RtlZeroMemory(Event, sizeof(KEY_EVENT_RECORD));
 
-	if (!(InputData->Flags & KEY_BREAK))
-		Event->bKeyDown = TRUE;
-	else
-		Event->bKeyDown = FALSE;
+    DPRINT("Translating: %x\n", InputData->MakeCode);
 
-	Event->wRepeatCount = 1;
-	Event->wVirtualScanCode = InputData->MakeCode;
+    /*
+     * Low-level (hardware) translation.
+     */
 
-	DPRINT("Translating: %x\n", InputData->MakeCode);
+    /* Calculate scan code with prefix */
+    wScanCode = InputData->MakeCode & 0x7F;
+    if (InputData->Flags & KEY_E0)
+        wScanCode |= 0xE000;
+    if (InputData->Flags & KEY_E1)
+        wScanCode |= 0xE100;
 
-	IntUpdateControlKeyState(hConsoleInput, &dwControlKeyState, InputData);
-	Event->dwControlKeyState = dwControlKeyState;
+/*
+ *  wVk = IntVKFromKbdInput(wScanCode, afKeyState, pKbdTbl);
+ */
+    /* Convert scan code to virtual key */
+    // wVk = IntMapVirtualKeyEx(wScanCode, MAPVK_VSC_TO_VK_EX, pKbdTbl);
+    wVk = IntVscToVk(wScanCode, pKbdTbl);
 
-	if (InputData->Flags & KEY_E0)
-		Event->dwControlKeyState |= ENHANCED_KEY;
+    /* Do nothing more if == 0 */
+    if (wVk == 0)
+        return STATUS_NO_MORE_ENTRIES; // Some "meaningful" status code...
 
-	Event->wVirtualKeyCode = IntVKFromKbdInput(InputData,
-	                                           Event->dwControlKeyState);
+//
+// TODO: Proper handling of VK_PAUSE
+//
 
-	DPRINT("Result: %x\n", Event->wVirtualKeyCode);
+//
+// TODO: Proper handling of KBDMULTIVK, doing equivalent of IntGetModBits()
+// but for low-level translation.
+// Dependent on the underlying keyboard type: IBM PC/XT (83-key),
+// Olivetti "ICO" (102-key), IBM PC/AT (84-key), IBM enhanced (101/102-key),
+// etc...
+//
 
-	if (Event->bKeyDown) {
-		Event->uChar.AsciiChar =
-		                   IntAsciiFromInput(InputData,
-		                                     Event->dwControlKeyState);
-		DPRINT("Char: %x\n", Event->uChar.AsciiChar);
-	} else {
-		Event->uChar.AsciiChar = 0;
-	}
 
-	return STATUS_SUCCESS;
+    /*
+     * High-level translation.
+     */
+
+//
+// TODO: Update the raw key state now.
+//
+
+    bKeyDown = (!(InputData->Flags & KEY_BREAK));
+
+    /***/
+    wVk2 = wVk & 0xFF;
+    wSimpleVk = IntSimplifyVk(wVk2);
+    IntUpdateKeyState(afKeyState, wVk2, bKeyDown);
+    if ((wSimpleVk == VK_SHIFT)   ||
+        (wSimpleVk == VK_CONTROL) ||
+        (wSimpleVk == VK_MENU))
+    {
+        IntUpdateKeyState(afKeyState, wSimpleVk, bKeyDown);
+    }
+    /***/
+
+
+//
+// TODO:
+// On Windows it seems the numlock translation is done later:
+// in the equivalent of IntTranslateChar() proper.
+//
+    /* Support numlock */
+    if ((wVk & KBDNUMPAD) && IS_KEY_LOCKED(afKeyState, VK_NUMLOCK))
+    {
+        wVk = IntTranslateNumpadKey(wVk & 0xFF);
+    }
+
+    // TODO: AltGr handling if KLLF_ALTGR !
+    // TODO: Shift-Lock handling if KLLF_SHIFTLOCK !
+    // TODO: Extra handling for OEM (e.g. '00'...), FarEast NLS...
+
+    wVk2 = wVk & 0xFF;
+    wSimpleVk = IntSimplifyVk(wVk);
+
+    /* Display the key event info */
+    DbgPrint("WINDOWS: LLK: %s scancode=0x%04X virtual=0x%04X isExt=%s WM_MSG=0x%lX\n",
+           bKeyDown ? "down" : "up  ",
+           wScanCode & 0xFFF, // The "Exxx" part is definitively removed.
+           (wVk & 0xFF),
+           (wVk & KBDEXT /* or VK_RSHIFT */) ? "yes" : "no ",
+           0);
+
+
+    Event->wVirtualKeyCode  = wSimpleVk & 0xFF;
+    Event->wVirtualScanCode = wScanCode & 0x7F;
+
+    Event->bKeyDown = bKeyDown;
+
+// TODO: FIXME: Correctly handle VK_PAUSE -- in Win32k as well!!
+    dwOldCtlState = dwControlKeyState;
+    if (!(InputData->Flags & KEY_E1)) /* Only the pause key has E1 */
+        IntUpdateControlKeyState(&dwControlKeyState, afKeyState, bKeyDown);
+    Event->dwControlKeyState = dwControlKeyState;
+
+    /* Now clear up the extended bit for Right-Shift, that is not really
+     * extended, but was just used to indicate its right-handedness. */
+    if (wSimpleVk == VK_SHIFT)
+        wVk &= ~KBDEXT;
+
+    if (wVk & KBDEXT)
+        Event->dwControlKeyState |= ENHANCED_KEY;
+
+    /* Update the keyboard indicators if needed */
+    if ((dwOldCtlState ^ dwControlKeyState) & (NUMLOCK_ON | CAPSLOCK_ON | SCROLLLOCK_ON))
+        IntKeyboardUpdateLeds(hConsoleInput, dwOldCtlState, dwControlKeyState);
+
+    Event->wRepeatCount = 1;
+
+    {
+#if 0
+        WCHAR UniChars[2];
+        INT RetChars = 0;
+#else
+        BOOL bDead, bLigature;
+#endif
+
+#if 0
+        RetChars = IntToUnicodeEx(Event->wVirtualKeyCode,
+                                  wScanCode, // Event->wVirtualScanCode,
+                                  afKeyState,
+                                  UniChars,
+                                  RTL_NUMBER_OF(UniChars),
+                                  0,
+                                  pKbdTbl);
+#else
+        IntTranslateChar(Event->wVirtualKeyCode,
+                         afKeyState,
+                         &bDead, &bLigature,
+                         &Event->uChar.UnicodeChar,
+                         pKbdTbl);
+#endif
+    }
+
+    /* Display the key event info */
+    DbgPrint("CONSOLE: key: %s scancode=0x%04X virtual=0x%04X rptCnt=%d ctlState=0x%08lX ascii='%c' (0x%02X) unicode='%lc' (0x%04X)\n",
+           Event->bKeyDown ? "down" : "up  ",
+           Event->wVirtualScanCode,
+           Event->wVirtualKeyCode,
+           Event->wRepeatCount,
+           Event->dwControlKeyState,
+           (Event->uChar.AsciiChar >= ' ') ? Event->uChar.AsciiChar : '.',
+                (unsigned char)Event->uChar.AsciiChar,
+           (Event->uChar.UnicodeChar >= L' ') ? Event->uChar.UnicodeChar : L'.',
+                Event->uChar.UnicodeChar);
+
+    return STATUS_SUCCESS;
+}
+
+
+
+/*
+ * KbdLoadKbdDll
+ *
+ * Loads keyboard layout DLL and gets address to KbdTables.
+ */
+NTSTATUS
+KbdLoadKbdDll(
+    IN PCWSTR pwszLayoutDllPath,
+    OUT PHANDLE pHandleDll,
+    OUT PKBDTABLES* pKbdTables)
+{
+    NTSTATUS Status;
+    PFN_KBD_LAYER_DESCRIPTOR pfnKbdLayerDescriptor;
+    UNICODE_STRING LayoutDllPath;
+    HANDLE HandleDll;
+
+    /* Load the keyboard layout DLL */
+    DPRINT1("Loading Keyboard DLL %ws\n", pwszLayoutDllPath);
+
+    RtlInitUnicodeString(&LayoutDllPath, pwszLayoutDllPath);
+    Status = LdrLoadDll(NULL, /* Default search path */
+                        NULL, /* No specific Dll characteristics */
+                        &LayoutDllPath,
+                        &HandleDll);
+    if (!NT_SUCCESS(Status))
+    {
+        DPRINT1("Failed to load dll %ws (Status 0x%08lx)\n", pwszLayoutDllPath, Status);
+        return Status;
+    }
+    ASSERT(HandleDll);
+
+    /* Find KbdLayerDescriptor function and get layout tables */
+    DPRINT1("Loaded %ws\n", pwszLayoutDllPath);
+    Status = LdrGetProcedureAddress(HandleDll,
+                                    NULL, /* ANSI export name; we will use ordinal instead */
+                                    ORDINAL_KbdLayerDescriptor, // "KbdLayerDescriptor" export
+                                    (PVOID*)&pfnKbdLayerDescriptor);
+    if (!NT_SUCCESS(Status))
+    {
+        DPRINT1("Failed to retrieve \"%s\" export (ordinal %d) (Status 0x%08lx)\n",
+                "KbdLayerDescriptor", ORDINAL_KbdLayerDescriptor, Status);
+        goto Quit;
+    }
+    ASSERT(pfnKbdLayerDescriptor);
+    // DPRINT1("Error: %ws has no KbdLayerDescriptor()\n", pwszLayoutDllPath);
+
+    /* Load the keyboard layout descriptor */
+    _SEH2_TRY
+    {
+        *pKbdTables = pfnKbdLayerDescriptor();
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        *pKbdTables = NULL;
+        Status = _SEH2_GetExceptionCode();
+        DPRINT1("Exception 0x%lx while calling \"%s\" export (ordinal %d)\n",
+                Status, "KbdLayerDescriptor", ORDINAL_KbdLayerDescriptor);
+    }
+    _SEH2_END;
+
+Quit:
+    if (!NT_SUCCESS(Status) || !pfnKbdLayerDescriptor || !*pKbdTables)
+    {
+        DPRINT1("Failed to load the keyboard layout.\n");
+        if (HandleDll) LdrUnloadDll(HandleDll);
+        return Status;
+    }
+
+    *pHandleDll = HandleDll;
+    return STATUS_SUCCESS;
+}
+
+VOID // NTSTATUS
+KbdUnloadKbdDll(
+    IN HANDLE HandleDll)
+{
+    LdrUnloadDll(HandleDll);
 }

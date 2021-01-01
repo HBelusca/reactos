@@ -328,6 +328,18 @@ PeekConsoleInput(
     if (!NT_SUCCESS(Status))
         return FALSE;
 
+    if (lpBuffer->Event.KeyEvent.uChar.AsciiChar)
+    {
+        WCHAR UniChar = lpBuffer->Event.KeyEvent.uChar.UnicodeChar;
+
+        // RtlUnicodeToOemN
+        RtlUnicodeToMultiByteN(&lpBuffer->Event.KeyEvent.uChar.AsciiChar,
+                               sizeof(lpBuffer->Event.KeyEvent.uChar.AsciiChar),
+                               NULL,
+                               &UniChar,
+                               sizeof(UniChar));
+    }
+
     *lpNumberOfEventsRead = 1;
     return TRUE;
 }
@@ -393,6 +405,18 @@ ReadConsoleInput(
     Status = IntTranslateKey(hConsoleInput, &InputData, &lpBuffer->Event.KeyEvent);
     if (!NT_SUCCESS(Status))
         return FALSE;
+
+    if (lpBuffer->Event.KeyEvent.uChar.AsciiChar)
+    {
+        WCHAR UniChar = lpBuffer->Event.KeyEvent.uChar.UnicodeChar;
+
+        // RtlUnicodeToOemN
+        RtlUnicodeToMultiByteN(&lpBuffer->Event.KeyEvent.uChar.AsciiChar,
+                               sizeof(lpBuffer->Event.KeyEvent.uChar.AsciiChar),
+                               NULL,
+                               &UniChar,
+                               sizeof(UniChar));
+    }
 
     *lpNumberOfEventsRead = 1;
     return TRUE;

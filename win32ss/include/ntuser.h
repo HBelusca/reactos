@@ -1867,13 +1867,13 @@ NtUserCreateWindowEx(
 HWINSTA
 NTAPI
 NtUserCreateWindowStation(
-    POBJECT_ATTRIBUTES ObjectAttributes,
-    ACCESS_MASK dwDesiredAccess,
-    DWORD Unknown2,
-    DWORD Unknown3,
-    DWORD Unknown4,
-    DWORD Unknown5,
-    DWORD Unknown6);
+    IN POBJECT_ATTRIBUTES ObjectAttributes,
+    IN ACCESS_MASK dwDesiredAccess,
+    IN HANDLE KbdLayoutFileHandle,
+    IN ULONG_PTR KbdOffsetDescriptors,
+    IN PVOID /* PKBDTABLE_MULTI */ KbdLayerMultiDescriptor,
+    IN PUNICODE_STRING pustrKLID,
+    IN HKL hKl);
 
 BOOL
 NTAPI
@@ -2610,10 +2610,10 @@ NtUserLockWorkStation(VOID);
 UINT
 NTAPI
 NtUserMapVirtualKeyEx(
-    UINT keyCode,
-    UINT transType,
-    DWORD keyboardId,
-    HKL dwhkl);
+    IN UINT uCode,
+    IN UINT uType,
+    IN HKL dwhkl,
+    IN BOOL bUsehKL);
 
 typedef struct tagDOSENDMESSAGE
 {
@@ -3499,9 +3499,9 @@ NtUserValidateTimerCallback(
 DWORD
 NTAPI
 NtUserVkKeyScanEx(
-    WCHAR wChar,
-    HKL KeyboardLayout,
-    BOOL bUsehHK);
+    IN WCHAR wch,
+    IN HKL dwhkl,
+    IN BOOL bUsehKL);
 
 DWORD
 NTAPI

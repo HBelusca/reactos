@@ -230,9 +230,9 @@ UserGetKeyState(DWORD dwKey)
    if (dwKey < 0x100)
    {
        if (IS_KEY_DOWN(MessageQueue->afKeyState, dwKey))
-           dwRet |= 0xFF80; // If down, windows returns 0xFF80.
+           dwRet |= (0xFF00 | KS_DOWN_BIT); // If down, windows returns 0xFF80.
        if (IS_KEY_LOCKED(MessageQueue->afKeyState, dwKey))
-           dwRet |= 0x1;
+           dwRet |= KS_LOCK_BIT;
    }
    else
    {
@@ -242,22 +242,13 @@ UserGetKeyState(DWORD dwKey)
 }
 
 /* change the input key state for a given key */
-static VOID
+static inline
+VOID
 UpdateKeyState(PUSER_MESSAGE_QUEUE MessageQueue, WORD wVk, BOOL bIsDown)
 {
-    TRACE("UpdateKeyState wVk: %u, bIsDown: %d\n", wVk, bIsDown);
-
+    IntUpdateKeyState(MessageQueue->afKeyState, wVk, bIsDown);
     if (bIsDown)
-    {
-        /* If it's first key down event, xor lock bit */
-        if (!IS_KEY_DOWN(MessageQueue->afKeyState, wVk))
-            SET_KEY_LOCKED(MessageQueue->afKeyState, wVk, !IS_KEY_LOCKED(MessageQueue->afKeyState, wVk));
-
-        SET_KEY_DOWN(MessageQueue->afKeyState, wVk, TRUE);
-        MessageQueue->afKeyRecentDown[wVk / 8] |= (1 << (wVk % 8));
-    }
-    else
-        SET_KEY_DOWN(MessageQueue->afKeyState, wVk, FALSE);
+        MessageQueue->afKeyRecentDown[((BYTE)wVk) / 8] |= (1 << (((BYTE)wVk) % 8));
 }
 
 /* update the input key state for a keyboard message */
@@ -1780,6 +1771,7 @@ BOOL co_IntProcessKeyboardMessage(MSG* Msg, BOOL* RemoveMessages)
     if (Msg->message == WM_KEYDOWN || Msg->message == WM_SYSKEYDOWN ||
         Msg->message == WM_KEYUP || Msg->message == WM_SYSKEYUP)
     {
+        // Msg->wParam = IntSimplifyVk(Msg->wParam);
         switch (Msg->wParam)
         {
             case VK_LSHIFT: case VK_RSHIFT:

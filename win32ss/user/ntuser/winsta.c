@@ -414,11 +414,11 @@ IntCreateWindowStation(
     IN KPROCESSOR_MODE AccessMode,
     IN KPROCESSOR_MODE OwnerMode,
     IN ACCESS_MASK dwDesiredAccess,
-    DWORD Unknown2,
-    DWORD Unknown3,
-    DWORD Unknown4,
-    DWORD Unknown5,
-    DWORD Unknown6)
+    IN HANDLE KbdLayoutFileHandle,
+    IN ULONG_PTR KbdOffsetDescriptors,
+    IN PVOID /* PKBDTABLE_MULTI */ KbdLayerMultiDescriptor,
+    IN PUNICODE_STRING pustrKLID,
+    IN HKL hKl)
 {
     NTSTATUS Status;
     HWINSTA hWinSta;
@@ -695,11 +695,11 @@ APIENTRY
 NtUserCreateWindowStation(
     IN POBJECT_ATTRIBUTES ObjectAttributes,
     IN ACCESS_MASK dwDesiredAccess,
-    DWORD Unknown2,
-    DWORD Unknown3,
-    DWORD Unknown4,
-    DWORD Unknown5,
-    DWORD Unknown6)
+    IN HANDLE KbdLayoutFileHandle,
+    IN ULONG_PTR KbdOffsetDescriptors,
+    IN PVOID /* PKBDTABLE_MULTI */ KbdLayerMultiDescriptor,
+    IN PUNICODE_STRING pustrKLID,
+    IN HKL hKl)
 {
     NTSTATUS Status = STATUS_SUCCESS;
     HWINSTA hWinSta = NULL;
@@ -773,11 +773,11 @@ NtUserCreateWindowStation(
                                     UserMode,
                                     OwnerMode,
                                     dwDesiredAccess,
-                                    Unknown2,
-                                    Unknown3,
-                                    Unknown4,
-                                    Unknown5,
-                                    Unknown6);
+                                    KbdLayoutFileHandle,
+                                    KbdOffsetDescriptors,
+                                    KbdLayerMultiDescriptor,
+                                    pustrKLID,
+                                    hKl);
     UserLeave();
 
     if (NT_SUCCESS(Status))

@@ -92,17 +92,7 @@ extern HANDLE ghKeyboardDevice;
 extern PTHREADINFO ptiRawInput;
 extern BYTE gafAsyncKeyState[256 * 2 / 8]; // 2 bits per key
 
-#define GET_KS_BYTE(vk) ((vk) * 2 / 8)
-#define GET_KS_DOWN_BIT(vk) (1 << (((vk) % 4)*2))
-#define GET_KS_LOCK_BIT(vk) (1 << (((vk) % 4)*2 + 1))
-#define IS_KEY_DOWN(ks, vk) (((ks)[GET_KS_BYTE(vk)] & GET_KS_DOWN_BIT(vk)) ? TRUE : FALSE)
-#define IS_KEY_LOCKED(ks, vk) (((ks)[GET_KS_BYTE(vk)] & GET_KS_LOCK_BIT(vk)) ? TRUE : FALSE)
-#define SET_KEY_DOWN(ks, vk, down) (ks)[GET_KS_BYTE(vk)] = ((down) ? \
-                                                            ((ks)[GET_KS_BYTE(vk)] | GET_KS_DOWN_BIT(vk)) : \
-                                                            ((ks)[GET_KS_BYTE(vk)] & ~GET_KS_DOWN_BIT(vk)))
-#define SET_KEY_LOCKED(ks, vk, down) (ks)[GET_KS_BYTE(vk)] = ((down) ? \
-                                                              ((ks)[GET_KS_BYTE(vk)] | GET_KS_LOCK_BIT(vk)) : \
-                                                              ((ks)[GET_KS_BYTE(vk)] & ~GET_KS_LOCK_BIT(vk)))
+#include <kbdlayout.h>
 
 extern PKL gspklBaseLayout;
 extern KEYBOARD_ATTRIBUTES gKeyboardInfo;

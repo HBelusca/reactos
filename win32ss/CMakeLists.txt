@@ -23,6 +23,7 @@ include_directories(
     include
     ${REACTOS_SOURCE_DIR}/ntoskrnl/include
     ${REACTOS_SOURCE_DIR}/sdk/lib/3rdparty/freetype/include
+    ${REACTOS_SOURCE_DIR}/sdk/lib/ntkbd
     ${REACTOS_SOURCE_DIR}/sdk/include/reactos/subsys
     ${REACTOS_SOURCE_DIR}/sdk/include/reactos/drivers)
 
@@ -228,7 +229,7 @@ add_library(win32k MODULE
     ${CMAKE_CURRENT_BINARY_DIR}/win32k.def)
 
 set_module_type(win32k kernelmodedriver)
-target_link_libraries(win32k ${PSEH_LIB} dxguid libcntpr)
+target_link_libraries(win32k ${PSEH_LIB} dxguid libcntpr ntkbd)
 
 if(USE_DIBLIB)
     target_link_libraries(win32k diblib)

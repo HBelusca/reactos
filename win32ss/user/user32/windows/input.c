@@ -337,7 +337,29 @@ UINT WINAPI
 MapVirtualKeyA(UINT uCode,
                UINT uMapType)
 {
-    return MapVirtualKeyExA(uCode, uMapType, GetKeyboardLayout(0));
+    UINT uRes;
+
+    // return MapVirtualKeyExA(uCode, uMapType, GetKeyboardLayout(0));
+    uRes = NtUserMapVirtualKeyEx(uCode, uMapType, 0, FALSE);
+
+    /* In case of MAPVK_VK_TO_CHAR, convert the returned character to ANSI */
+    if ((uMapType & MAPVK_VK_TO_CHAR) && (uRes != 0))
+    {
+        C_ASSERT(sizeof(UINT) >= sizeof(WCHAR));
+
+        /* Re-use uCode for storing the converted result.
+         * Also, Conserve the high word set in uRes. */
+        uCode = HIWORD(uRes);
+
+        RtlUnicodeToMultiByteN((PCHAR)&uCode,
+                               sizeof(CHAR),
+                               NULL,
+                               (PWCHAR)&uRes,
+                               sizeof(WCHAR));
+        uRes = uCode;
+    }
+
+    return uRes;
 }
 
 /*
@@ -348,7 +370,28 @@ MapVirtualKeyExA(UINT uCode,
                  UINT uMapType,
                  HKL dwhkl)
 {
-    return MapVirtualKeyExW(uCode, uMapType, dwhkl);
+    UINT uRes;
+
+    uRes = NtUserMapVirtualKeyEx(uCode, uMapType, dwhkl, TRUE);
+
+    /* In case of MAPVK_VK_TO_CHAR, convert the returned character to ANSI */
+    if ((uMapType & MAPVK_VK_TO_CHAR) && (uRes != 0))
+    {
+        C_ASSERT(sizeof(UINT) >= sizeof(WCHAR));
+
+        /* Re-use uCode for storing the converted result.
+         * Also, Conserve the high word set in uRes. */
+        uCode = HIWORD(uRes);
+
+        RtlUnicodeToMultiByteN((PCHAR)&uCode,
+                               sizeof(CHAR),
+                               NULL,
+                               (PWCHAR)&uRes,
+                               sizeof(WCHAR));
+        uRes = uCode;
+    }
+
+    return uRes;
 }
 
 
@@ -360,7 +403,7 @@ MapVirtualKeyExW(UINT uCode,
                  UINT uMapType,
                  HKL dwhkl)
 {
-    return NtUserMapVirtualKeyEx(uCode, uMapType, 0, dwhkl);
+    return NtUserMapVirtualKeyEx(uCode, uMapType, dwhkl, TRUE);
 }
 
 
@@ -371,7 +414,8 @@ UINT WINAPI
 MapVirtualKeyW(UINT uCode,
                UINT uMapType)
 {
-    return MapVirtualKeyExW(uCode, uMapType, GetKeyboardLayout(0));
+    // return MapVirtualKeyExW(uCode, uMapType, GetKeyboardLayout(0));
+    return NtUserMapVirtualKeyEx(uCode, uMapType, 0, FALSE);
 }
 
 

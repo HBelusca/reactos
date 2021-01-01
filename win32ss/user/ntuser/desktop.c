@@ -1018,7 +1018,7 @@ IntResolveDesktop(
                                             UserMode,
                                             KernelMode,
                                             MAXIMUM_ALLOWED,
-                                            0, 0, 0, 0, 0);
+                                            NULL, 0, NULL, NULL, 0);
             if (!NT_SUCCESS(Status))
             {
                 ASSERT(hWinSta == NULL);

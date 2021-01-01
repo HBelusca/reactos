@@ -45,8 +45,8 @@ InitKeyboardImpl(VOID)
  * Asks the keyboard driver to send a small table that shows which
  * lights should connect with which scancodes
  */
-//static
-NTSTATUS APIENTRY
+static
+NTSTATUS
 IntKeyboardGetIndicatorTrans(HANDLE hKeyboardDevice,
                              PKEYBOARD_INDICATOR_TRANSLATION *ppIndicatorTrans)
 {
@@ -103,7 +103,7 @@ IntKeyboardGetIndicatorTrans(HANDLE hKeyboardDevice,
  * Sends the keyboard commands to turn on/off the lights
  */
 static
-NTSTATUS APIENTRY
+NTSTATUS
 IntKeyboardUpdateLeds(HANDLE hKeyboardDevice,
                       WORD wVk,
                       WORD wScanCode)
@@ -118,9 +118,9 @@ IntKeyboardUpdateLeds(HANDLE hKeyboardDevice,
 
     switch (wVk)
     {
-        case VK_CAPITAL: LedFlag = KEYBOARD_CAPS_LOCK_ON; break;
-        case VK_NUMLOCK: LedFlag = KEYBOARD_NUM_LOCK_ON; break;
-        case VK_SCROLL: LedFlag = KEYBOARD_SCROLL_LOCK_ON; break;
+        case VK_CAPITAL: LedFlag = KEYBOARD_CAPS_LOCK_ON;   break;
+        case VK_NUMLOCK: LedFlag = KEYBOARD_NUM_LOCK_ON;    break;
+        case VK_SCROLL:  LedFlag = KEYBOARD_SCROLL_LOCK_ON; break;
         default:
             for (i = 0; i < gpKeyboardIndicatorTrans->NumberOfIndicatorKeys; i++)
             {
@@ -210,419 +210,6 @@ UserInitKeyboard(HANDLE hKeyboardDevice)
 }
 
 /*
- * IntSimplifyVk
- *
- * Changes virtual keys which distinguish between left and right hand, to keys which don't distinguish
- */
-static
-WORD
-IntSimplifyVk(WORD wVk)
-{
-    switch (wVk)
-    {
-        case VK_LSHIFT:
-        case VK_RSHIFT:
-            return VK_SHIFT;
-
-        case VK_LCONTROL:
-        case VK_RCONTROL:
-            return VK_CONTROL;
-
-        case VK_LMENU:
-        case VK_RMENU:
-            return VK_MENU;
-
-        default:
-            return wVk;
-    }
-}
-
-/*
- * IntFixVk
- *
- * Changes virtual keys which don't not distinguish between left and right hand to proper keys
- */
-static
-WORD
-IntFixVk(WORD wVk, BOOL bExt)
-{
-    switch (wVk)
-    {
-        case VK_SHIFT:
-            return bExt ? VK_RSHIFT : VK_LSHIFT;
-
-        case VK_CONTROL:
-            return bExt ? VK_RCONTROL : VK_LCONTROL;
-
-        case VK_MENU:
-            return bExt ? VK_RMENU : VK_LMENU;
-
-        default:
-            return wVk;
-    }
-}
-
-/*
- * IntTranslateNumpadKey
- *
- * Translates numpad keys when numlock is enabled
- */
-static
-WORD
-IntTranslateNumpadKey(WORD wVk)
-{
-    switch (wVk)
-    {
-        case VK_INSERT: return VK_NUMPAD0;
-        case VK_END: return VK_NUMPAD1;
-        case VK_DOWN: return VK_NUMPAD2;
-        case VK_NEXT: return VK_NUMPAD3;
-        case VK_LEFT: return VK_NUMPAD4;
-        case VK_CLEAR: return VK_NUMPAD5;
-        case VK_RIGHT: return VK_NUMPAD6;
-        case VK_HOME: return VK_NUMPAD7;
-        case VK_UP: return VK_NUMPAD8;
-        case VK_PRIOR: return VK_NUMPAD9;
-        case VK_DELETE: return VK_DECIMAL;
-        default: return wVk;
-    }
-}
-
-/*
- * IntGetModBits
- *
- * Gets layout specific modification bits, for example KBDSHIFT, KBDCTRL, KBDALT
- */
-static
-DWORD
-IntGetModBits(PKBDTABLES pKbdTbl, PBYTE pKeyState)
-{
-    DWORD i, dwModBits = 0;
-
-    /* DumpKeyState( KeyState ); */
-
-    for (i = 0; pKbdTbl->pCharModifiers->pVkToBit[i].Vk; i++)
-        if (IS_KEY_DOWN(pKeyState, pKbdTbl->pCharModifiers->pVkToBit[i].Vk))
-            dwModBits |= pKbdTbl->pCharModifiers->pVkToBit[i].ModBits;
-
-    TRACE("Current Mod Bits: %lx\n", dwModBits);
-
-    return dwModBits;
-}
-
-/*
- * IntTranslateChar
- *
- * Translates virtual key to character
- */
-static
-BOOL
-IntTranslateChar(WORD wVirtKey,
-                 PBYTE pKeyState,
-                 PBOOL pbDead,
-                 PBOOL pbLigature,
-                 PWCHAR pwcTranslatedChar,
-                 PKBDTABLES pKbdTbl)
-{
-    PVK_TO_WCHAR_TABLE pVkToVchTbl;
-    PVK_TO_WCHARS10 pVkToVch;
-    DWORD i, dwModBits, dwVkModBits, dwModNumber = 0;
-    WCHAR wch;
-    BOOL bAltGr;
-    WORD wCaplokAttr;
-
-    dwModBits = pKeyState ? IntGetModBits(pKbdTbl, pKeyState) : 0;
-    bAltGr = pKeyState && (pKbdTbl->fLocaleFlags & KLLF_ALTGR) && IS_KEY_DOWN(pKeyState, VK_RMENU);
-    wCaplokAttr = bAltGr ? CAPLOKALTGR : CAPLOK;
-
-    TRACE("TryToTranslate: %04x %x\n", wVirtKey, dwModBits);
-
-    /* If ALT without CTRL has ben used, remove ALT flag */
-    if ((dwModBits & (KBDALT|KBDCTRL)) == KBDALT)
-        dwModBits &= ~KBDALT;
-
-    if (dwModBits > pKbdTbl->pCharModifiers->wMaxModBits)
-    {
-        TRACE("dwModBits %x > wMaxModBits %x\n", dwModBits, pKbdTbl->pCharModifiers->wMaxModBits);
-        return FALSE;
-    }
-
-    for (i = 0; pKbdTbl->pVkToWcharTable[i].pVkToWchars; i++)
-    {
-        pVkToVchTbl = &pKbdTbl->pVkToWcharTable[i];
-        pVkToVch = (PVK_TO_WCHARS10)(pVkToVchTbl->pVkToWchars);
-        while (pVkToVch->VirtualKey)
-        {
-            if (wVirtKey == (pVkToVch->VirtualKey & 0xFF))
-            {
-                dwVkModBits = dwModBits;
-
-                /* If CapsLock is enabled for this key and locked, add SHIFT bit */
-                if ((pVkToVch->Attributes & wCaplokAttr) &&
-                    pKeyState &&
-                    IS_KEY_LOCKED(pKeyState, VK_CAPITAL))
-                {
-                    /* Note: we use special value here instead of getting VK_SHIFT mod bit - it's verified */
-                    dwVkModBits ^= KBDSHIFT;
-                }
-
-                if (dwVkModBits > pKbdTbl->pCharModifiers->wMaxModBits)
-                    break;
-
-                /* Get modification number */
-                dwModNumber = pKbdTbl->pCharModifiers->ModNumber[dwVkModBits];
-                if (dwModNumber >= pVkToVchTbl->nModifications)
-                {
-                    TRACE("dwModNumber %u >= nModifications %u\n", dwModNumber, pVkToVchTbl->nModifications);
-                    break;
-                }
-
-                /* Read character */
-                wch = pVkToVch->wch[dwModNumber];
-                if (wch == WCH_NONE)
-                    break;
-
-                *pbDead = (wch == WCH_DEAD);
-                *pbLigature = (wch == WCH_LGTR);
-                *pwcTranslatedChar = wch;
-
-                TRACE("%lu %04x: dwModNumber %08x Char %04x\n",
-                      i, wVirtKey, dwModNumber, wch);
-
-                if (*pbDead)
-                {
-                    /* After WCH_DEAD, real character is located */
-                    pVkToVch = (PVK_TO_WCHARS10)(((BYTE *)pVkToVch) + pVkToVchTbl->cbSize);
-                    if (pVkToVch->VirtualKey != 0xFF)
-                    {
-                        WARN("Found dead key with no trailer in the table.\n");
-                        WARN("VK: %04x, ADDR: %p\n", wVirtKey, pVkToVch);
-                        break;
-                    }
-                    *pwcTranslatedChar = pVkToVch->wch[dwModNumber];
-                }
-                return TRUE;
-            }
-            pVkToVch = (PVK_TO_WCHARS10)(((BYTE *)pVkToVch) + pVkToVchTbl->cbSize);
-        }
-    }
-
-    /* If nothing has been found in layout, check if this is ASCII control character.
-       Note: we could add it to layout table, but windows does not have it there */
-    if (wVirtKey >= 'A' && wVirtKey <= 'Z' &&
-        pKeyState && IS_KEY_DOWN(pKeyState, VK_CONTROL) &&
-        !IS_KEY_DOWN(pKeyState, VK_MENU))
-    {
-        *pwcTranslatedChar = (wVirtKey - 'A') + 1; /* ASCII control character */
-        *pbDead = FALSE;
-        *pbLigature = FALSE;
-        return TRUE;
-    }
-
-    return FALSE;
-}
-
-/*
- * IntToUnicodeEx
- *
- * Translates virtual key to characters
- */
-static
-int APIENTRY
-IntToUnicodeEx(UINT wVirtKey,
-               UINT wScanCode,
-               PBYTE pKeyState,
-               LPWSTR pwszBuff,
-               int cchBuff,
-               UINT wFlags,
-               PKBDTABLES pKbdTbl)
-{
-    WCHAR wchTranslatedChar;
-    BOOL bDead, bLigature;
-    static WCHAR wchDead = 0;
-    int iRet = 0;
-
-    ASSERT(pKbdTbl);
-
-    if (!IntTranslateChar(wVirtKey,
-                          pKeyState,
-                          &bDead,
-                          &bLigature,
-                          &wchTranslatedChar,
-                          pKbdTbl))
-    {
-        return 0;
-    }
-
-    if (bLigature)
-    {
-        WARN("Not handling ligature (yet)\n" );
-        return 0;
-    }
-
-    /* If we got dead char in previous call check dead keys in keyboard layout */
-    if (wchDead)
-    {
-        UINT i;
-        WCHAR wchFirst, wchSecond;
-        TRACE("Previous dead char: %lc (%x)\n", wchDead, wchDead);
-
-        if (pKbdTbl->pDeadKey)
-        {
-            for (i = 0; pKbdTbl->pDeadKey[i].dwBoth; i++)
-            {
-                wchFirst = pKbdTbl->pDeadKey[i].dwBoth >> 16;
-                wchSecond = pKbdTbl->pDeadKey[i].dwBoth & 0xFFFF;
-                if (wchFirst == wchDead && wchSecond == wchTranslatedChar)
-                {
-                    wchTranslatedChar = pKbdTbl->pDeadKey[i].wchComposed;
-                    wchDead = 0;
-                    bDead = FALSE;
-                    break;
-                }
-            }
-        }
-        else
-        {
-#if defined(__GNUC__)
-            if (wchDead == 0x8000)
-            {
-                ERR("GCC is inventing bits, ignoring fake dead key\n");
-                wchDead = 0;
-            }
-#endif
-        }
-
-        TRACE("Final char: %lc (%x)\n", wchTranslatedChar, wchTranslatedChar);
-    }
-
-    /* Dead char has not been not found */
-    if (wchDead)
-    {
-        /* Treat both characters normally */
-        if (cchBuff > iRet)
-            pwszBuff[iRet++] = wchDead;
-        bDead = FALSE;
-    }
-
-    /* Add character to the buffer */
-    if (cchBuff > iRet)
-        pwszBuff[iRet++] = wchTranslatedChar;
-
-    /* Save dead character */
-    wchDead = bDead ? wchTranslatedChar : 0;
-
-    return bDead ? -iRet : iRet;
-}
-
-/*
- * IntVkToVsc
- *
- * Translates virtual key to scan code
- */
-static
-WORD FASTCALL
-IntVkToVsc(WORD wVk, PKBDTABLES pKbdTbl)
-{
-    unsigned i;
-
-    ASSERT(pKbdTbl);
-
-    /* Check standard keys first */
-    for (i = 0; i < pKbdTbl->bMaxVSCtoVK; i++)
-    {
-        if ((pKbdTbl->pusVSCtoVK[i] & 0xFF) == wVk)
-            return i;
-    }
-
-    /* Check extended keys now */
-    for (i = 0; pKbdTbl->pVSCtoVK_E0[i].Vsc; i++)
-    {
-        if ((pKbdTbl->pVSCtoVK_E0[i].Vk & 0xFF) == wVk)
-            return 0xE000 | pKbdTbl->pVSCtoVK_E0[i].Vsc;
-    }
-
-    for (i = 0; pKbdTbl->pVSCtoVK_E1[i].Vsc; i++)
-    {
-        if ((pKbdTbl->pVSCtoVK_E1[i].Vk & 0xFF) == wVk)
-            return 0xE100 | pKbdTbl->pVSCtoVK_E1[i].Vsc;
-    }
-
-    /* Virtual key has not been found */
-    return 0;
-}
-
-/*
- * IntVscToVk
- *
- * Translates prefixed scancode to virtual key
- */
-static
-WORD FASTCALL
-IntVscToVk(WORD wScanCode, PKBDTABLES pKbdTbl)
-{
-    unsigned i;
-    WORD wVk = 0;
-
-    ASSERT(pKbdTbl);
-
-    if ((wScanCode & 0xFF00) == 0xE000)
-    {
-        for (i = 0; pKbdTbl->pVSCtoVK_E0[i].Vsc; i++)
-        {
-            if (pKbdTbl->pVSCtoVK_E0[i].Vsc == (wScanCode & 0xFF))
-            {
-                wVk = pKbdTbl->pVSCtoVK_E0[i].Vk;
-            }
-        }
-    }
-    else if ((wScanCode & 0xFF00) == 0xE100)
-    {
-        for (i = 0; pKbdTbl->pVSCtoVK_E1[i].Vsc; i++)
-        {
-            if (pKbdTbl->pVSCtoVK_E1[i].Vsc == (wScanCode & 0xFF))
-            {
-                wVk = pKbdTbl->pVSCtoVK_E1[i].Vk;
-            }
-        }
-    }
-    else if (wScanCode < pKbdTbl->bMaxVSCtoVK)
-    {
-        wVk = pKbdTbl->pusVSCtoVK[wScanCode];
-    }
-
-    /* 0xFF nad 0x00 are invalid VKs */
-    return wVk != 0xFF ? wVk : 0;
-}
-
-/*
- * IntVkToChar
- *
- * Translates virtual key to character, ignoring shift state
- */
-static
-WCHAR FASTCALL
-IntVkToChar(WORD wVk, PKBDTABLES pKbdTbl)
-{
-    WCHAR wch;
-    BOOL bDead, bLigature;
-
-    ASSERT(pKbdTbl);
-
-    if (IntTranslateChar(wVk,
-                         NULL,
-                         &bDead,
-                         &bLigature,
-                         &wch,
-                         pKbdTbl))
-    {
-        return wch;
-    }
-
-    return 0;
-}
-
-/*
  * NtUserGetAsyncKeyState
  *
  * Gets key state from global bitmap
@@ -661,21 +248,13 @@ NtUserGetAsyncKeyState(INT Key)
  *
  * Updates gafAsyncKeyState array
  */
-static
-VOID NTAPI
+static inline
+VOID
 UpdateAsyncKeyState(WORD wVk, BOOL bIsDown)
 {
+    IntUpdateKeyState(gafAsyncKeyState, wVk, bIsDown);
     if (bIsDown)
-    {
-        /* If it's first key down event, xor lock bit */
-        if (!IS_KEY_DOWN(gafAsyncKeyState, wVk))
-            SET_KEY_LOCKED(gafAsyncKeyState, wVk, !IS_KEY_LOCKED(gafAsyncKeyState, wVk));
-
-        SET_KEY_DOWN(gafAsyncKeyState, wVk, TRUE);
-        gafAsyncKeyStateRecentDown[wVk / 8] |= (1 << (wVk % 8));
-    }
-    else
-        SET_KEY_DOWN(gafAsyncKeyState, wVk, FALSE);
+        gafAsyncKeyStateRecentDown[((BYTE)wVk) / 8] |= (1 << (((BYTE)wVk) % 8));
 }
 
 /*
@@ -797,9 +376,9 @@ cleanup:
  * Process keyboard input from input devices and SendInput API
  */
 BOOL NTAPI
-ProcessKeyEvent(WORD wVk, WORD wScanCode, DWORD dwFlags, BOOL bInjected, DWORD dwTime, DWORD dwExtraInfo)
+ProcessKeyEvent(PKBDTABLES pKbdTbl, WORD wVk, WORD wScanCode, DWORD dwFlags, BOOL bInjected, DWORD dwTime, DWORD dwExtraInfo)
 {
-    WORD wSimpleVk = 0, wFixedVk, wVk2;
+    WORD wSimpleVk, wFixedVk, wVk2;
     PUSER_MESSAGE_QUEUE pFocusQueue;
     PTHREADINFO pti;
     BOOL bExt = (dwFlags & KEYEVENTF_EXTENDEDKEY) ? TRUE : FALSE;
@@ -809,14 +388,58 @@ ProcessKeyEvent(WORD wVk, WORD wScanCode, DWORD dwFlags, BOOL bInjected, DWORD d
     MSG Msg;
     static BOOL bMenuDownRecently = FALSE;
 
+//
+// TODO: We should actually update a global "RAW" keyboard state somewhere here.
+//
+
+    /* Support Numpad */
+    // TODO: Improve!
+    if ((wVk & KBDNUMPAD) && IS_KEY_LOCKED(gafAsyncKeyState, VK_NUMLOCK))
+    {
+        wVk = IntTranslateNumpadKey(wVk & 0xFF);
+    }
+    wVk &= 0xFF;
+
+    /* AltGr handling */
+    // TODO: Improve!
+    if (wVk == VK_RMENU && (pKbdTbl->fLocaleFlags & KLLF_ALTGR))
+    {
+        /* For AltGr keyboards, RALT generates CTRL events */
+        ProcessKeyEvent(pKbdTbl, VK_LCONTROL, SCANCODE_CTRL, dwFlags & KEYEVENTF_KEYUP, bInjected, dwTime, 0);
+    }
+
+    // TODO: Shift-Lock handling if KLLF_SHIFTLOCK !
+    // TODO: Extra handling for OEM (e.g. '00'...), FarEast NLS...
+
     /* Get virtual key without shifts (VK_(L|R)* -> VK_*) */
     wSimpleVk = IntSimplifyVk(wVk);
     bWasSimpleDown = IS_KEY_DOWN(gafAsyncKeyState, wSimpleVk);
 
+//
+// FIXME: Actually the "async" keyboard state should be per-queue.
+//
     /* Update key without shifts */
     wVk2 = IntFixVk(wSimpleVk, !bExt);
     bIsSimpleDown = bIsDown || IS_KEY_DOWN(gafAsyncKeyState, wVk2);
     UpdateAsyncKeyState(wSimpleVk, bIsSimpleDown);
+
+//
+// TODO: Verify SAS keys.
+//
+
+    /* Call WH_KEYBOARD_LL hook */
+    if (co_CallLowLevelKeyboardHook(wVk, wScanCode, dwFlags, bInjected, dwTime, dwExtraInfo))
+    {
+        /* The key has been dropped, we are done */
+        // FIXME: Clearly SAS keys must not be discarded.
+        ERR("Kbd msg dropped by WH_KEYBOARD_LL hook\n");
+        // bPostMsg = FALSE;
+        return TRUE;
+    }
+
+//
+// TODO: Support ALT+#### from numpad.
+//
 
     if (bIsDown)
     {
@@ -826,23 +449,21 @@ ProcessKeyEvent(WORD wVk, WORD wScanCode, DWORD dwFlags, BOOL bInjected, DWORD d
                               wScanCode);
     }
 
-    /* Call WH_KEYBOARD_LL hook */
-    if (co_CallLowLevelKeyboardHook(wVk, wScanCode, dwFlags, bInjected, dwTime, dwExtraInfo))
-    {
-        ERR("Kbd msg dropped by WH_KEYBOARD_LL hook\n");
-        bPostMsg = FALSE;
-    }
+    // THINK: Why not just setting wFixedVk = wVk?
+    wFixedVk = IntFixVk(wSimpleVk, bExt); /* LSHIFT + EXT = RSHIFT */
+    /* Now clear up the extended bit for Right-Shift, that is not really
+     * extended, but was just used to indicate its right-handedness. */
+    if (wSimpleVk == VK_SHIFT)
+        bExt = FALSE;
 
     /* Check if this is a hotkey */
     if (co_UserProcessHotKeys(wSimpleVk, bIsDown)) //// Check if this is correct, refer to hotkey sequence message tests.
     {
+        /* It has been processed, we are done */
         TRACE("HotKey Processed\n");
-        bPostMsg = FALSE;
+        // bPostMsg = FALSE;
+        return TRUE;
     }
-
-    wFixedVk = IntFixVk(wSimpleVk, bExt); /* LSHIFT + EXT = RSHIFT */
-    if (wSimpleVk == VK_SHIFT) /* shift can't be extended */
-        bExt = FALSE;
 
     /* If we have a focus queue, post a keyboard message */
     pFocusQueue = IntGetFocusMessageQueue();
@@ -890,7 +511,7 @@ ProcessKeyEvent(WORD wVk, WORD wScanCode, DWORD dwFlags, BOOL bInjected, DWORD d
         !IS_KEY_DOWN(gafAsyncKeyState, VK_CONTROL) &&
         (wVk == VK_ESCAPE || wVk == VK_TAB))
     {
-       TRACE("Alt-Tab/Esc Pressed wParam %x\n",wVk);
+        TRACE("Alt-Tab/Esc Pressed wParam %x\n", wVk);
     }
 
     if (bIsDown && wVk == VK_SNAPSHOT)
@@ -903,7 +524,10 @@ ProcessKeyEvent(WORD wVk, WORD wScanCode, DWORD dwFlags, BOOL bInjected, DWORD d
             SnapWindow(pFocusQueue->spwndActive ? UserHMGetHandle(pFocusQueue->spwndActive) : 0);
         }
         else
-            SnapWindow(NULL); // Snap Desktop.
+        {
+            // Snap Desktop.
+            SnapWindow(NULL);
+        }
     }
     else if (pFocusQueue && bPostMsg)
     {
@@ -913,8 +537,8 @@ ProcessKeyEvent(WORD wVk, WORD wScanCode, DWORD dwFlags, BOOL bInjected, DWORD d
 
         if (!Wnd && pFocusQueue->spwndActive) // SysInit.....
         {
-           // Going with Active. WM_SYSKEYXXX last wine Win test_keyboard_input.
-           Wnd = pFocusQueue->spwndActive;
+            // Going with Active. WM_SYSKEYXXX last wine Win test_keyboard_input.
+            Wnd = pFocusQueue->spwndActive;
         }
         if (Wnd) pti = Wnd->head.pti;
 
@@ -927,14 +551,14 @@ ProcessKeyEvent(WORD wVk, WORD wScanCode, DWORD dwFlags, BOOL bInjected, DWORD d
 
         if ( Msg.message == WM_KEYDOWN || Msg.message == WM_SYSKEYDOWN )
         {
-           if ( (Msg.wParam == VK_SHIFT ||
-                 Msg.wParam == VK_CONTROL ||
-                 Msg.wParam == VK_MENU ) &&
-               !IS_KEY_DOWN(gafAsyncKeyState, Msg.wParam))
-           {
-              ERR("Set last input\n");
-              //ptiLastInput = pti;
-           }
+            if ( (Msg.wParam == VK_SHIFT ||
+                  Msg.wParam == VK_CONTROL ||
+                  Msg.wParam == VK_MENU ) &&
+                !IS_KEY_DOWN(gafAsyncKeyState, Msg.wParam))
+            {
+                ERR("Set last input\n");
+                //ptiLastInput = pti;
+            }
         }
 
         /* If it is VK_PACKET, high word of wParam is used for wchar */
@@ -955,10 +579,10 @@ ProcessKeyEvent(WORD wVk, WORD wScanCode, DWORD dwFlags, BOOL bInjected, DWORD d
                 Msg.lParam |= KF_MENUMODE << 16;
         }
 
-        // Post mouse move before posting key buttons, to keep it syned.
+        // Post mouse move before posting key buttons, to keep it synced.
         if (pFocusQueue->QF_flags & QF_MOUSEMOVED)
         {
-           IntCoalesceMouseMove(pti);
+            IntCoalesceMouseMove(pti);
         }
 
         /* Post a keyboard message */
@@ -977,7 +601,6 @@ UserSendKeyboardInput(KEYBDINPUT *pKbdInput, BOOL bInjected)
     PKBDTABLES pKbdTbl;
     PUSER_MESSAGE_QUEUE pFocusQueue;
     DWORD dwTime;
-    BOOL bExt = (pKbdInput->dwFlags & KEYEVENTF_EXTENDEDKEY) ? TRUE : FALSE;
 
     gppiInputProvider = ((PTHREADINFO)PsGetCurrentThreadWin32Thread())->ppi;
 
@@ -999,6 +622,8 @@ UserSendKeyboardInput(KEYBDINPUT *pKbdInput, BOOL bInjected)
 
     pKbdTbl = pKl->spkf->pKbdTbl;
 
+    ASSERT(pKbdTbl);
+
     /* Note: wScan field is always used */
     wScanCode = pKbdInput->wScan;
 
@@ -1013,10 +638,23 @@ UserSendKeyboardInput(KEYBDINPUT *pKbdInput, BOOL bInjected)
         wScanCode &= 0x7F;
         if (pKbdInput->dwFlags & KEYEVENTF_SCANCODE)
         {
+            BOOL bExt = (pKbdInput->dwFlags & KEYEVENTF_EXTENDEDKEY) ? TRUE : FALSE;
+
             /* Don't ignore invalid scan codes */
             wVk = IntVscToVk(wScanCode | (bExt ? 0xE000 : 0), pKbdTbl);
             if (!wVk) /* use 0xFF if vsc is invalid */
                 wVk = 0xFF;
+//
+// TODO: Proper handling of VK_PAUSE
+//
+
+//
+// TODO: Proper handling of KBDMULTIVK, doing equivalent of IntGetModBits()
+// but for low-level translation.
+// Dependent on the underlying keyboard type: IBM PC/XT (83-key),
+// Olivetti "ICO" (102-key), IBM PC/AT (84-key), IBM enhanced (101/102-key),
+// etc...
+//
         }
         else
         {
@@ -1028,18 +666,11 @@ UserSendKeyboardInput(KEYBDINPUT *pKbdInput, BOOL bInjected)
     if (pKbdInput->time)
         dwTime = pKbdInput->time;
     else
-    {
         dwTime = EngGetTickCount32();
-    }
-
-    if (wVk == VK_RMENU && (pKbdTbl->fLocaleFlags & KLLF_ALTGR))
-    {
-        /* For AltGr keyboards RALT generates CTRL events */
-        ProcessKeyEvent(VK_LCONTROL, 0, pKbdInput->dwFlags & KEYEVENTF_KEYUP, bInjected, dwTime, 0);
-    }
 
     /* Finally process this key */
-    return ProcessKeyEvent(wVk, wScanCode, pKbdInput->dwFlags, bInjected, dwTime, pKbdInput->dwExtraInfo);
+    return ProcessKeyEvent(pKbdTbl, wVk, wScanCode, pKbdInput->dwFlags, bInjected,
+                           dwTime, pKbdInput->dwExtraInfo);
 }
 
 /*
@@ -1055,13 +686,7 @@ UserProcessKeyboardInput(
     PKL pKl = NULL;
     PKBDTABLES pKbdTbl;
     PUSER_MESSAGE_QUEUE pFocusQueue;
-
-    /* Calculate scan code with prefix */
-    wScanCode = pKbdInputData->MakeCode & 0x7F;
-    if (pKbdInputData->Flags & KEY_E0)
-        wScanCode |= 0xE000;
-    if (pKbdInputData->Flags & KEY_E1)
-        wScanCode |= 0xE100;
+    KEYBDINPUT KbdInput;
 
     /* Find the target thread whose locale is in effect */
     pFocusQueue = IntGetFocusMessageQueue();
@@ -1074,9 +699,21 @@ UserProcessKeyboardInput(
     if (!pKl)
         pKl = W32kGetDefaultKeyLayout();
     if (!pKl)
+    {
+        ERR("No keyboard layout!\n");
         return;
+    }
 
     pKbdTbl = pKl->spkf->pKbdTbl;
+
+    ASSERT(pKbdTbl);
+
+    /* Calculate scan code with prefix */
+    wScanCode = pKbdInputData->MakeCode & 0x7F;
+    if (pKbdInputData->Flags & KEY_E0)
+        wScanCode |= 0xE000;
+    if (pKbdInputData->Flags & KEY_E1)
+        wScanCode |= 0xE100;
 
     /* Convert scan code to virtual key.
        Note: We could call UserSendKeyboardInput using scan code,
@@ -1085,51 +722,67 @@ UserProcessKeyboardInput(
     TRACE("UserProcessKeyboardInput: %x (break: %u) -> %x\n",
           wScanCode, (pKbdInputData->Flags & KEY_BREAK) ? 1u : 0, wVk);
 
-    if (wVk)
+    /* Do nothing more if == 0 */
+    if (wVk == 0)
+        return;
+
+//
+// TODO: Proper handling of VK_PAUSE
+//
+
+//
+// TODO: Proper handling of KBDMULTIVK, doing equivalent of IntGetModBits()
+// but for low-level translation.
+// Dependent on the underlying keyboard type: IBM PC/XT (83-key),
+// Olivetti "ICO" (102-key), IBM PC/AT (84-key), IBM enhanced (101/102-key),
+// etc...
+//
+
+
+    /* Send keyboard input */
+    KbdInput.wVk = wVk /*& 0xFF*/;
+    KbdInput.wScan = wScanCode & 0x7F;
+    KbdInput.dwFlags = 0;
+    if (pKbdInputData->Flags & KEY_BREAK)
+        KbdInput.dwFlags |= KEYEVENTF_KEYUP;
+
+    if (wVk & KBDEXT)
+        KbdInput.dwFlags |= KEYEVENTF_EXTENDEDKEY;
+#if 1
+/** HACK needed because our keyboard layouts are buggy... **/
+    //
+    // Based on wine input:test_Input_blackbox this is okay. It seems the
+    // bit did not get set and more research is needed. Now the right
+    // shift works.
+    //
+    if (wVk == VK_RSHIFT)
+        KbdInput.dwFlags |= KEYEVENTF_EXTENDEDKEY;
+#endif
+
+    KbdInput.time = EngGetTickCount32();
+    KbdInput.dwExtraInfo = pKbdInputData->ExtraInformation;
+
+    /* Finally process this key */
+    ProcessKeyEvent(pKbdTbl, KbdInput.wVk, KbdInput.wScan,
+                    KbdInput.dwFlags, FALSE,
+                    KbdInput.time, KbdInput.dwExtraInfo);
+
+    /* E1 keys don't have break code */
+    if (pKbdInputData->Flags & KEY_E1)
     {
-        KEYBDINPUT KbdInput;
-
-        /* Support numlock */
-        if ((wVk & KBDNUMPAD) && IS_KEY_LOCKED(gafAsyncKeyState, VK_NUMLOCK))
-        {
-            wVk = IntTranslateNumpadKey(wVk & 0xFF);
-        }
-
-        /* Send keyboard input */
-        KbdInput.wVk = wVk & 0xFF;
-        KbdInput.wScan = wScanCode & 0x7F;
-        KbdInput.dwFlags = 0;
-        if (pKbdInputData->Flags & KEY_BREAK)
-            KbdInput.dwFlags |= KEYEVENTF_KEYUP;
-
-        if (wVk & KBDEXT)
-            KbdInput.dwFlags |= KEYEVENTF_EXTENDEDKEY;
-        //
-        // Based on wine input:test_Input_blackbox this is okay. It seems the 
-        // bit did not get set and more research is needed. Now the right
-        // shift works.
-        //
-        if (wVk == VK_RSHIFT)
-            KbdInput.dwFlags |= KEYEVENTF_EXTENDEDKEY;
-
-        KbdInput.time = 0;
-        KbdInput.dwExtraInfo = pKbdInputData->ExtraInformation;
-        UserSendKeyboardInput(&KbdInput, FALSE);
-
-        /* E1 keys don't have break code */
-        if (pKbdInputData->Flags & KEY_E1)
-        {
-            /* Send key up event */
-            KbdInput.dwFlags |= KEYEVENTF_KEYUP;
-            UserSendKeyboardInput(&KbdInput, FALSE);
-        }
+        /* Send key up event */
+        KbdInput.dwFlags |= KEYEVENTF_KEYUP;
+        // KbdInput.time = EngGetTickCount32();
+        ProcessKeyEvent(pKbdTbl, KbdInput.wVk, KbdInput.wScan,
+                        KbdInput.dwFlags, FALSE,
+                        KbdInput.time, KbdInput.dwExtraInfo);
     }
 }
 
 /*
  * IntTranslateKbdMessage
  *
- * Addes WM_(SYS)CHAR messages to message queue if message
+ * Adds WM_(SYS)CHAR messages to message queue if message
  * describes key which produce character.
  */
 BOOL FASTCALL
@@ -1163,7 +816,9 @@ IntTranslateKbdMessage(LPMSG lpMsg,
        pKbdTbl = pti->KeyboardLayout ? pti->KeyboardLayout->spkf->pKbdTbl : NULL;
     }
     else
+    {
        pKbdTbl = pti->KeyboardLayout->spkf->pKbdTbl;
+    }
     if (!pKbdTbl)
         return FALSE;
 
@@ -1194,11 +849,12 @@ IntTranslateKbdMessage(LPMSG lpMsg,
                          sizeof(wch) / sizeof(wch[0]),
                          0,
                          pKbdTbl);
-
     if (cch)
     {
         if (cch > 0) /* Normal characters */
+        {
             NewMsg.message = (lpMsg->message == WM_KEYDOWN) ? WM_CHAR : WM_SYSCHAR;
+        }
         else /* Dead character */
         {
             cch = -cch;
@@ -1223,63 +879,6 @@ IntTranslateKbdMessage(LPMSG lpMsg,
 }
 
 /*
- * Map a virtual key code, or virtual scan code, to a scan code, key code,
- * or unshifted unicode character.
- *
- * Code: See Below
- * Type:
- * 0 -- Code is a virtual key code that is converted into a virtual scan code
- *      that does not distinguish between left and right shift keys.
- * 1 -- Code is a virtual scan code that is converted into a virtual key code
- *      that does not distinguish between left and right shift keys.
- * 2 -- Code is a virtual key code that is converted into an unshifted unicode
- *      character.
- * 3 -- Code is a virtual scan code that is converted into a virtual key code
- *      that distinguishes left and right shift keys.
- * KeyLayout: Keyboard layout handle
- *
- * @implemented
- */
-static UINT
-IntMapVirtualKeyEx(UINT uCode, UINT Type, PKBDTABLES pKbdTbl)
-{
-    UINT uRet = 0;
-
-    switch (Type)
-    {
-        case MAPVK_VK_TO_VSC:
-            uCode = IntFixVk(uCode, FALSE);
-            uRet = IntVkToVsc(uCode, pKbdTbl);
-            if (uRet > 0xFF) // Fail for scancodes with prefix (e0, e1)
-                uRet = 0;
-            break;
-
-        case MAPVK_VSC_TO_VK:
-            uRet = IntVscToVk(uCode, pKbdTbl) & 0xFF;
-            uRet = IntSimplifyVk(uRet);
-            break;
-
-        case MAPVK_VK_TO_CHAR:
-            uRet = (UINT)IntVkToChar(uCode, pKbdTbl);
-        break;
-
-        case MAPVK_VSC_TO_VK_EX:
-            uRet = IntVscToVk(uCode, pKbdTbl) & 0xFF;
-            break;
-
-        case MAPVK_VK_TO_VSC_EX:
-            uRet = IntVkToVsc(uCode, pKbdTbl);
-            break;
-
-        default:
-            EngSetLastError(ERROR_INVALID_PARAMETER);
-            ERR("Wrong type value: %u\n", Type);
-    }
-
-    return uRet;
-}
-
-/*
  * NtUserMapVirtualKeyEx
  *
  * Map a virtual key code, or virtual scan code, to a scan code, key code,
@@ -1287,33 +886,48 @@ IntMapVirtualKeyEx(UINT uCode, UINT Type, PKBDTABLES pKbdTbl)
  */
 UINT
 APIENTRY
-NtUserMapVirtualKeyEx(UINT uCode, UINT uType, DWORD keyboardId, HKL dwhkl)
+NtUserMapVirtualKeyEx(
+    IN UINT uCode,
+    IN UINT uType,
+    IN HKL dwhkl,
+    IN BOOL bUsehKL)
 {
-    PKBDTABLES pKbdTbl = NULL;
+    PKBDTABLES pKbdTbl;
+    PKL pKl = NULL;
     UINT ret = 0;
 
     TRACE("Enter NtUserMapVirtualKeyEx\n");
     UserEnterShared();
 
-    if (!dwhkl)
+    if (bUsehKL)
     {
-        PTHREADINFO pti;
-
-        pti = PsGetCurrentThreadWin32Thread();
-        if (pti && pti->KeyboardLayout)
-            pKbdTbl = pti->KeyboardLayout->spkf->pKbdTbl;
+        /* Use given keyboard layout */
+        pKl = UserHklToKbl(dwhkl);
     }
     else
     {
-        PKL pKl;
-
-        pKl = UserHklToKbl(dwhkl);
-        if (pKl)
-            pKbdTbl = pKl->spkf->pKbdTbl;
+        /* Use thread keyboard layout */
+        pKl = ((PTHREADINFO)PsGetCurrentThreadWin32Thread())->KeyboardLayout;
     }
 
-    if (pKbdTbl)
-        ret = IntMapVirtualKeyEx(uCode, uType, pKbdTbl);
+    if (pKl)
+    {
+        pKbdTbl = pKl->spkf->pKbdTbl;
+        if (pKbdTbl)
+        {
+            /* Valid types are between 0 and 4 (MAPVK_VK_TO_VSC_EX) */
+            if (uType <= MAPVK_VK_TO_VSC_EX)
+            {
+                ret = IntMapVirtualKeyEx(uCode, uType, pKbdTbl);
+            }
+            else
+            {
+                EngSetLastError(ERROR_INVALID_PARAMETER);
+                ERR("Wrong type value: %u\n", uType);
+                ret = 0;
+            }
+        }
+    }
 
     UserLeave();
     TRACE("Leave NtUserMapVirtualKeyEx, ret=%u\n", ret);
@@ -1390,13 +1004,15 @@ NtUserToUnicodeEx(
         pKl = pti->KeyboardLayout;
     }
 
+    ASSERT(pKl && pKl->spkf->pKbdTbl);
+
     iRet = IntToUnicodeEx(wVirtKey,
                           wScanCode,
                           afKeyState,
                           pwszBuff,
                           cchBuff,
                           wFlags,
-                          pKl ? pKl->spkf->pKbdTbl : NULL);
+                          pKl->spkf->pKbdTbl);
 
     MmCopyToCaller(pwszBuffUnsafe, pwszBuff, cchBuff * sizeof(WCHAR));
     ExFreePoolWithTag(pwszBuff, TAG_STRING);
@@ -1416,13 +1032,12 @@ APIENTRY
 NtUserGetKeyNameText(LONG lParam, LPWSTR lpString, int cchSize)
 {
     PTHREADINFO pti;
-    DWORD i, dwRet = 0;
+    DWORD dwRet = 0;
     SIZE_T cchKeyName;
-    WORD wScanCode = (lParam >> 16) & 0xFF;
+    WORD wScanCode = HIWORD(lParam) & 0xFF;
     BOOL bExtKey = (HIWORD(lParam) & KF_EXTENDED) ? TRUE : FALSE;
     PKBDTABLES pKbdTbl;
-    VSC_LPWSTR *pKeyNames = NULL;
-    CONST WCHAR *pKeyName = NULL;
+    PCWSTR pKeyName;
     WCHAR KeyNameBuf[2];
 
     TRACE("Enter NtUserGetKeyNameText\n");
@@ -1431,16 +1046,17 @@ NtUserGetKeyNameText(LONG lParam, LPWSTR lpString, int cchSize)
 
     /* Get current keyboard layout */
     pti = PsGetCurrentThreadWin32Thread();
-    pKbdTbl = pti ? pti->KeyboardLayout->spkf->pKbdTbl : 0;
+    pKbdTbl = pti ? pti->KeyboardLayout->spkf->pKbdTbl : NULL;
 
     if (!pKbdTbl || cchSize < 1)
     {
         ERR("Invalid parameter\n");
+        EngSetLastError(ERROR_INVALID_PARAMETER);
         goto cleanup;
     }
 
     /* "Do not care" flag */
-    if(lParam & LP_DO_NOT_CARE_BIT)
+    if (lParam & LP_DO_NOT_CARE_BIT)
     {
         /* Note: We could do vsc -> vk -> vsc conversion, instead of using
                  hardcoded scan codes, but it's not what Windows does */
@@ -1450,41 +1066,50 @@ NtUserGetKeyNameText(LONG lParam, LPWSTR lpString, int cchSize)
             bExtKey = FALSE;
     }
 
-    if (bExtKey)
-        pKeyNames = pKbdTbl->pKeyNamesExt;
-    else
-        pKeyNames = pKbdTbl->pKeyNames;
-
-    for (i = 0; pKeyNames[i].pwsz; i++)
-    {
-        if (pKeyNames[i].vsc == wScanCode)
-        {
-            pKeyName = pKeyNames[i].pwsz;
-            break;
-        }
-    }
-
+    pKeyName = IntGetKeyName(wScanCode, bExtKey, pKbdTbl);
     if (!pKeyName)
     {
-        WORD wVk = IntVscToVk(wScanCode, pKbdTbl);
-
-        if (wVk)
+        UINT uRet = IntMapVirtualKeyEx(wScanCode, MAPVK_VSC_TO_VK_EX, pKbdTbl);
+        if (uRet)
         {
-            KeyNameBuf[0] = IntVkToChar(wVk, pKbdTbl);
-            KeyNameBuf[1] = 0;
-            if (KeyNameBuf[0])
-                pKeyName = KeyNameBuf;
+            uRet = IntMapVirtualKeyEx(uRet, MAPVK_VK_TO_CHAR, pKbdTbl);
+
+            /* Check for the dead char flag set by IntVkToChar(). If we
+             * have got one, try to find its name in the dead keys list. */
+            if (uRet & 0x80000000)
+            {
+                UINT i;
+
+                if (pKbdTbl->pKeyNamesDead)
+                {
+                    for (i = 0; pKbdTbl->pKeyNamesDead[i]; ++i)
+                    {
+                        /* If the dead char string is prefixed with it, we
+                         * have found it, and return the name that follows. */
+                        if (pKbdTbl->pKeyNamesDead[i][0] == LOWORD(uRet))
+                            pKeyName = &pKbdTbl->pKeyNamesDead[i][1];
+                    }
+                }
+            }
+            else
+            {
+                /* Single character name */
+                KeyNameBuf[0] = uRet;
+                KeyNameBuf[1] = 0;
+                if (KeyNameBuf[0])
+                    pKeyName = KeyNameBuf;
+            }
         }
     }
 
     if (pKeyName)
     {
-        cchKeyName = wcslen(pKeyName);
-        if (cchKeyName > (cchSize - 1UL))
-            cchKeyName = cchSize - 1UL; // Don't count '\0'
-
         _SEH2_TRY
         {
+            cchKeyName = wcslen(pKeyName);
+            if (cchKeyName > (cchSize - 1UL))
+                cchKeyName = cchSize - 1UL; // Don't count '\0'
+
             ProbeForWrite(lpString, (cchKeyName + 1) * sizeof(WCHAR), 1);
             RtlCopyMemory(lpString, pKeyName, cchKeyName * sizeof(WCHAR));
             lpString[cchKeyName] = UNICODE_NULL;
@@ -1539,60 +1164,36 @@ UserGetKeyboardType(
 DWORD
 APIENTRY
 NtUserVkKeyScanEx(
-    WCHAR wch,
-    HKL dwhkl,
-    BOOL bUsehKL)
+    IN WCHAR wch,
+    IN HKL dwhkl,
+    IN BOOL bUsehKL)
 {
     PKBDTABLES pKbdTbl;
-    PVK_TO_WCHAR_TABLE pVkToWchTbl;
-    PVK_TO_WCHARS10 pVkToWch;
     PKL pKl = NULL;
-    DWORD i, dwModBits = 0, dwModNumber = 0, Ret = (DWORD)-1;
+    DWORD Ret = (DWORD)-1;
 
     TRACE("NtUserVkKeyScanEx() wch %u, KbdLayout 0x%p\n", wch, dwhkl);
     UserEnterShared();
 
     if (bUsehKL)
     {
-        // Use given keyboard layout
+        /* Use given keyboard layout */
         if (dwhkl)
             pKl = UserHklToKbl(dwhkl);
     }
     else
     {
-        // Use thread keyboard layout
+        /* Use thread keyboard layout */
         pKl = ((PTHREADINFO)PsGetCurrentThreadWin32Thread())->KeyboardLayout;
     }
 
-    if (!pKl)
-        goto Exit;
-
-    pKbdTbl = pKl->spkf->pKbdTbl;
-
-    // Interate through all VkToWchar tables while pVkToWchars is not NULL
-    for (i = 0; pKbdTbl->pVkToWcharTable[i].pVkToWchars; i++)
+    if (pKl)
     {
-        pVkToWchTbl = &pKbdTbl->pVkToWcharTable[i];
-        pVkToWch = (PVK_TO_WCHARS10)(pVkToWchTbl->pVkToWchars);
-
-        // Interate through all virtual keys
-        while (pVkToWch->VirtualKey)
-        {
-            for (dwModNumber = 0; dwModNumber < pVkToWchTbl->nModifications; dwModNumber++)
-            {
-                if (pVkToWch->wch[dwModNumber] == wch)
-                {
-                    dwModBits = pKbdTbl->pCharModifiers->ModNumber[dwModNumber];
-                    TRACE("i %lu wC %04x: dwModBits %08x dwModNumber %08x MaxModBits %08x\n",
-                          i, wch, dwModBits, dwModNumber, pKbdTbl->pCharModifiers->wMaxModBits);
-                    Ret = (dwModBits << 8) | (pVkToWch->VirtualKey & 0xFF);
-                    goto Exit;
-                }
-            }
-            pVkToWch = (PVK_TO_WCHARS10)(((BYTE *)pVkToWch) + pVkToWchTbl->cbSize);
-        }
+        pKbdTbl = pKl->spkf->pKbdTbl;
+        if (pKbdTbl)
+            Ret = IntVkKeyScanEx(wch, pKbdTbl);
     }
-Exit:
+
     UserLeave();
     return Ret;
 }

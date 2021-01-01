@@ -27,6 +27,7 @@
 /* INCLUDES ******************************************************************/
 
 #include <usetup.h>
+#include "keytrans.h"
 
 #define NDEBUG
 #include <debug.h>
@@ -41,10 +42,16 @@ SHORT yScreen = 0;
 
 /* FUNCTIONS *****************************************************************/
 
+extern HANDLE HandleDll;
+extern PKBDTABLES pKbdTbl;
+
 BOOLEAN
 CONSOLE_Init(VOID)
 {
+    NTSTATUS Status;
     CONSOLE_SCREEN_BUFFER_INFO csbi;
+    PKBDTABLES pKeyboardTable;
+
     if (!AllocConsole())
         return FALSE;
 
@@ -54,6 +61,28 @@ CONSOLE_Init(VOID)
         return FALSE;
     xScreen = csbi.dwSize.X;
     yScreen = csbi.dwSize.Y;
+
+    /* Load a default keyboard layout */
+    Status = KbdLoadKbdDll(L"kbdfr.dll", // L"kbdus.dll",
+                           &HandleDll, &pKeyboardTable);
+    if (!NT_SUCCESS(Status))
+    {
+        DPRINT1("Could not load default keyboard layout dll (Status x%lx)\n", Status);
+        if (pKbdTbl != NULL)
+        {
+            DPRINT1("Falling back to hardcoded one\n");
+        }
+        else
+        {
+            FreeConsole();
+            return FALSE;
+        }
+    }
+    else
+    {
+        pKbdTbl = pKeyboardTable;
+    }
+
     return TRUE;
 }
 

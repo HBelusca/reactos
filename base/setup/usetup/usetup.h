@@ -52,6 +52,9 @@
 
 #include <ntstrsafe.h>
 
+/* PSEH for SEH Support */
+#include <pseh/pseh2.h>
+
 
 /* Setup library headers */
 #include <reactos/rosioctl.h>
