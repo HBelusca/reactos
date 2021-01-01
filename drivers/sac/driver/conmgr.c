@@ -48,7 +48,7 @@ SacPutString(IN PWCHAR String)
                            wcslen(String) * sizeof(WCHAR));
     if (!NT_SUCCESS(Status))
     {
-        SAC_DBG(SAC_DBG_INIT, "SAC XmlMgrSacPutString: OWrite failed\n");
+        SAC_DBG(SAC_DBG_INIT, "SAC XmlMgrSacPutString: OWrite failed.\n");
     }
 }
 
@@ -211,7 +211,7 @@ ConMgrInitialize(VOID)
             Status = HeadlessDispatch(HeadlessCmdClearDisplay, NULL, 0, NULL, NULL);
             if (!NT_SUCCESS(Status))
             {
-                SAC_DBG(SAC_DBG_INIT, "SAC ConMgrInitialize: Failed dispatch\n");
+                SAC_DBG(SAC_DBG_INIT, "Failed dispatch.\n");
             }
 
             /* Display the initial prompt */
@@ -380,7 +380,7 @@ ConMgrShutdown(VOID)
         Status = ChannelClose(SacChannel);
         if (!NT_SUCCESS(Status))
         {
-            SAC_DBG(SAC_DBG_INIT, "SAC ConMgrShutdown: failed closing SAC channel.\n");
+            SAC_DBG(SAC_DBG_INIT, "Failed closing SAC channel.\n");
         }
 
         /* No longer have one */
@@ -394,7 +394,7 @@ ConMgrShutdown(VOID)
         Status = ChanMgrReleaseChannel(CurrentChannel);
         if (!NT_SUCCESS(Status))
         {
-            SAC_DBG(SAC_DBG_INIT, "SAC ConMgrShutdown: failed releasing current channel\n");
+            SAC_DBG(SAC_DBG_INIT, "Failed releasing current channel.\n");
         }
 
         /* No longer have one */
@@ -508,7 +508,8 @@ ConMgrProcessInputLine(VOID)
                                   sizeof(EnablePaging),
                                   NULL,
                                   NULL);
-        if (!NT_SUCCESS(Status)) SAC_DBG(SAC_DBG_INIT, "SAC Display Log failed.\n");
+        if (!NT_SUCCESS(Status))
+            SAC_DBG(SAC_DBG_INIT, "SAC Display Log failed.\n");
     }
     else if (!strncmp(InputBuffer, "cmd", 3))
     {
@@ -579,7 +580,8 @@ ConMgrSerialPortConsumer(VOID)
     CHAR ReadBuffer[2];
     ULONG ReadBufferSize, i;
     WCHAR StringBuffer[2];
-    SAC_DBG(SAC_DBG_MACHINE, "SAC TimerDpcRoutine: Entering.\n"); //bug
+
+    SAC_DBG(SAC_DBG_MACHINE, "Entering.\n");
 
     /* Acquire the manager lock and make sure a channel is selected */
     SacAcquireMutexLock();
@@ -827,14 +829,14 @@ DoLineParsing:
 
     /* We're done, release the lock */
     SacReleaseMutexLock();
-    SAC_DBG(SAC_DBG_MACHINE, "SAC TimerDpcRoutine: Exiting.\n"); //bug
+    SAC_DBG(SAC_DBG_MACHINE, "Exiting.\n");
 }
 
 VOID
 NTAPI
 ConMgrWorkerProcessEvents(IN PSAC_DEVICE_EXTENSION DeviceExtension)
 {
-    SAC_DBG(SAC_DBG_ENTRY_EXIT, "SAC WorkerProcessEvents: Entering.\n");
+    SAC_DBG(SAC_DBG_ENTRY_EXIT, "Entering.\n");
 
     /* Enter the main loop */
     while (TRUE)

@@ -112,7 +112,8 @@ NTAPI
 UnloadHandler(IN PDRIVER_OBJECT DriverObject)
 {
     PDEVICE_OBJECT DeviceObject, NextDevice;
-    SAC_DBG(SAC_DBG_ENTRY_EXIT, "SAC UnloadHandler: Entering.\n");
+
+    SAC_DBG(SAC_DBG_ENTRY_EXIT, "Entering.\n");
 
     /* Go over every device part of the driver */
     DeviceObject = DriverObject->DeviceObject;
@@ -129,5 +130,5 @@ UnloadHandler(IN PDRIVER_OBJECT DriverObject)
 
     /* Free the driver data and exit */
     FreeGlobalData();
-    SAC_DBG(SAC_DBG_ENTRY_EXIT, "SAC UnloadHandler: Exiting.\n");
+    SAC_DBG(SAC_DBG_ENTRY_EXIT, "Exiting.\n");
 }

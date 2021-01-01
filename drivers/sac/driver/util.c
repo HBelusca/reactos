@@ -63,17 +63,16 @@ SacTranslateUtf8ToUnicode(IN CHAR Utf8Char,
     }
 
     /* Print to debugger */
-    SAC_DBG(SAC_DBG_ENTRY_EXIT, "SacTranslateUtf8ToUnicode - About to decode the UTF8 buffer.\n");
-    SAC_DBG(SAC_DBG_ENTRY_EXIT, "                                  UTF8[0]: 0x%02lx UTF8[1]: 0x%02lx UTF8[2]: 0x%02lx\n",
-            Utf8Buffer[0],
-            Utf8Buffer[1],
-            Utf8Buffer[2]);
+    SAC_DBG(SAC_DBG_ENTRY_EXIT,
+            "About to decode the UTF8 buffer.\n"
+            "    UTF8[0]: 0x%02lx UTF8[1]: 0x%02lx UTF8[2]: 0x%02lx\n",
+            Utf8Buffer[0], Utf8Buffer[1], Utf8Buffer[2]);
 
     /* Is this a simple ANSI character? */
     if (!(Utf8Char & 0x80))
     {
         /* Return it as Unicode, nothing left to do */
-        SAC_DBG(SAC_DBG_ENTRY_EXIT, "SACDRV: SacTranslateUTf8ToUnicode - Case1\n");
+        SAC_DBG(SAC_DBG_ENTRY_EXIT, "Case1\n");
         *Utf8Value = (WCHAR)Utf8Char;
         Utf8Buffer[0] = Utf8Buffer[1];
         Utf8Buffer[1] = Utf8Buffer[2];
@@ -203,12 +202,12 @@ SacFormatMessage(IN PWCHAR FormattedString,
                  IN PWCHAR MessageString,
                  IN ULONG MessageSize)
 {
-    SAC_DBG(SAC_DBG_ENTRY_EXIT, "SAC SacFormatMessage: Entering.\n");
+    SAC_DBG(SAC_DBG_ENTRY_EXIT, "Entering.\n");
 
     /* Check if any of the parameters are NULL or zero */
     if (!(MessageString) || !(FormattedString) || !(MessageSize))
     {
-        SAC_DBG(SAC_DBG_ENTRY_EXIT, "SAC SacFormatMessage: Exiting with invalid parameters.\n");
+        SAC_DBG(SAC_DBG_ENTRY_EXIT, "Exiting with invalid parameters.\n");
         return;
     }
 
@@ -272,7 +271,7 @@ SacFormatMessage(IN PWCHAR FormattedString,
 
     /* All done */
     *FormattedString = UNICODE_NULL;
-    SAC_DBG(SAC_DBG_ENTRY_EXIT, "SAC SacFormatMessage: Exiting.\n");
+    SAC_DBG(SAC_DBG_ENTRY_EXIT, "Exiting.\n");
 }
 
 NTSTATUS
@@ -283,8 +282,10 @@ PreloadGlobalMessageTable(IN PVOID ImageBase)
     ULONG MessageId, TotalLength, TextSize, i;
     PWCHAR StringBuffer;
     PMESSAGE_RESOURCE_ENTRY MessageEntry;
+
     PAGED_CODE();
-    SAC_DBG(SAC_DBG_ENTRY_EXIT, "SAC PreloadGlobalMessageTable: Entering.\n");
+
+    SAC_DBG(SAC_DBG_ENTRY_EXIT, "Entering.\n");
 
     /* Nothing to do if we already have a table */
     Status = STATUS_SUCCESS;
@@ -319,7 +320,7 @@ PreloadGlobalMessageTable(IN PVOID ImageBase)
     if (!TotalLength)
     {
         /* Bail out otherwise */
-        SAC_DBG(SAC_DBG_INIT, "SAC PreloadGlobalMessageTable: No Messages.\n");
+        SAC_DBG(SAC_DBG_INIT, "No Messages.\n");
         Status = STATUS_INVALID_PARAMETER;
         goto Exit;
     }
@@ -370,7 +371,7 @@ PreloadGlobalMessageTable(IN PVOID ImageBase)
 
 Exit:
     /* All done, return the status code */
-    SAC_DBG(SAC_DBG_ENTRY_EXIT, "SAC TearDownGlobalMessageTable: Exiting with status 0x%0x\n", Status);
+    SAC_DBG(SAC_DBG_ENTRY_EXIT, "Exiting with status 0x%lx\n", Status);
     return Status;
 }
 
@@ -378,12 +379,12 @@ NTSTATUS
 NTAPI
 TearDownGlobalMessageTable(VOID)
 {
-    SAC_DBG(SAC_DBG_ENTRY_EXIT, "SAC TearDownGlobalMessageTable: Entering.\n");
+    SAC_DBG(SAC_DBG_ENTRY_EXIT, "Entering.\n");
 
     /* Free the table if one existed */
     if (GlobalMessageTable) SacFreePool(GlobalMessageTable);
 
-    SAC_DBG(SAC_DBG_ENTRY_EXIT, "SAC TearDownGlobalMessageTable: Exiting\n");
+    SAC_DBG(SAC_DBG_ENTRY_EXIT, "Exiting.\n");
     return STATUS_SUCCESS;
 }
 
@@ -398,7 +399,8 @@ GetRegistryValueBuffer(IN PCWSTR KeyName,
     UNICODE_STRING DestinationString;
     HANDLE Handle;
     ULONG ResultLength = 0;
-    SAC_DBG(SAC_DBG_ENTRY_EXIT, "SAC GetRegistryValueBuffer: Entering.\n");
+
+    SAC_DBG(SAC_DBG_ENTRY_EXIT, "Entering.\n");
     CHECK_PARAMETER1(KeyName);
     CHECK_PARAMETER2(ValueName);
 
@@ -415,7 +417,7 @@ GetRegistryValueBuffer(IN PCWSTR KeyName,
     if (!NT_SUCCESS(Status))
     {
         /* Bail out on failure */
-        SAC_DBG(SAC_DBG_ENTRY_EXIT, "SAC GetRegistryValueBuffer: failed ZwOpenKey: %X.\n", Status);
+        SAC_DBG(SAC_DBG_ENTRY_EXIT, "Failed ZwOpenKey: 0x%lx\n", Status);
         return Status;
     }
 
@@ -434,7 +436,7 @@ GetRegistryValueBuffer(IN PCWSTR KeyName,
     *Buffer = SacAllocatePool(ResultLength, GLOBAL_BLOCK_TAG);
     if (!*Buffer)
     {
-        SAC_DBG(SAC_DBG_ENTRY_EXIT, "SAC GetRegistryValueBuffer: failed allocation\n");
+        SAC_DBG(SAC_DBG_ENTRY_EXIT, "Failed allocation.\n");
         return Status;
     }
 
@@ -448,12 +450,12 @@ GetRegistryValueBuffer(IN PCWSTR KeyName,
     if (!NT_SUCCESS(Status))
     {
         /* Free the buffer if we couldn't read the data */
-        SAC_DBG(SAC_DBG_ENTRY_EXIT, "SAC GetRegistryValueBuffer: failed ZwQueryValueKey: %X.\n", Status);
+        SAC_DBG(SAC_DBG_ENTRY_EXIT, "Failed ZwQueryValueKey: 0x%lx\n", Status);
         SacFreePool(*Buffer);
     }
 
     /* Return the result */
-    SAC_DBG(SAC_DBG_ENTRY_EXIT, "SAC SetRegistryValue: Exiting.\n");
+    SAC_DBG(SAC_DBG_ENTRY_EXIT, "Exiting.\n");
     return Status;
 }
 
@@ -469,7 +471,8 @@ SetRegistryValue(IN PCWSTR KeyName,
     OBJECT_ATTRIBUTES ObjectAttributes;
     UNICODE_STRING DestinationString;
     HANDLE Handle;
-    SAC_DBG(SAC_DBG_ENTRY_EXIT, "SAC SetRegistryValue: Entering.\n");
+
+    SAC_DBG(SAC_DBG_ENTRY_EXIT, "Entering.\n");
     CHECK_PARAMETER1(KeyName);
     CHECK_PARAMETER2(ValueName);
     CHECK_PARAMETER4(Data);
@@ -487,7 +490,7 @@ SetRegistryValue(IN PCWSTR KeyName,
     if (!NT_SUCCESS(Status))
     {
         /* Bail out on failure */
-        SAC_DBG(SAC_DBG_ENTRY_EXIT, "SAC SetRegistryValue: failed ZwOpenKey: %X.\n", Status);
+        SAC_DBG(SAC_DBG_ENTRY_EXIT, "Failed ZwOpenKey: 0x%lx\n", Status);
         return Status;
     }
 
@@ -497,12 +500,12 @@ SetRegistryValue(IN PCWSTR KeyName,
     if (!NT_SUCCESS(Status))
     {
         /* Print error on failure */
-        SAC_DBG(SAC_DBG_ENTRY_EXIT, "SAC SetRegistryValue: failed ZwSetValueKey: %X.\n", Status);
+        SAC_DBG(SAC_DBG_ENTRY_EXIT, "Failed ZwSetValueKey: 0x%lx\n", Status);
     }
 
     /* Close the handle and exit */
     NtClose(Handle);
-    SAC_DBG(SAC_DBG_ENTRY_EXIT, "SAC SetRegistryValue: Exiting.\n");
+    SAC_DBG(SAC_DBG_ENTRY_EXIT, "Exiting.\n");
     return Status;
 }
 
@@ -525,7 +528,7 @@ CopyRegistryValueData(IN PVOID* Buffer,
     else
     {
         /* Set the correct error code */
-        SAC_DBG(SAC_DBG_UTIL, "SAC CopyRegistryValueBuffer: Failed ALLOCATE.\n");
+        SAC_DBG(SAC_DBG_UTIL, "Failed ALLOCATE.\n");
         Status = STATUS_NO_MEMORY;
     }
 
@@ -697,12 +700,13 @@ InitializeMachineInformation(VOID)
     SIZE_T RealSize, Size, OutputSize;
     PKEY_VALUE_PARTIAL_INFORMATION PartialInfo;
     RTL_OSVERSIONINFOEXW VersionInformation;
-    SAC_DBG(SAC_DBG_ENTRY_EXIT, "SAC Initialize Machine Information : Entering.\n");
+
+    SAC_DBG(SAC_DBG_ENTRY_EXIT, "Entering.\n");
 
     /* Don't do anything if we already queried this */
     if (MachineInformation)
     {
-        SAC_DBG(SAC_DBG_MACHINE, "SAC Initialize Machine Information:: MachineInformationBuffer already initialized.\n");
+        SAC_DBG(SAC_DBG_MACHINE, "MachineInformationBuffer already initialized.\n");
         return;
     }
 
@@ -723,7 +727,7 @@ InitializeMachineInformation(VOID)
     Status = RtlGetVersion((PRTL_OSVERSIONINFOW)&VersionInformation);
     if (!NT_SUCCESS(Status))
     {
-        SAC_DBG(SAC_DBG_ENTRY_EXIT, "SAC InitializeMachineInformation: Exiting (2).\n");
+        SAC_DBG(SAC_DBG_ENTRY_EXIT, "Exiting (2).\n");
         goto Fail;
     }
 
@@ -766,7 +770,7 @@ InitializeMachineInformation(VOID)
         if (!NT_SUCCESS(Status))
         {
             /* It's not critical, but we won't have it */
-            SAC_DBG(SAC_DBG_ENTRY_EXIT, "SAC InitializeMachineInformation: Failed to get machine name.\n");
+            SAC_DBG(SAC_DBG_ENTRY_EXIT, "Failed to get machine name.\n");
         }
         else
         {
@@ -777,7 +781,7 @@ InitializeMachineInformation(VOID)
             SacFreePool(PartialInfo);
             if (!NT_SUCCESS(Status))
             {
-                SAC_DBG(SAC_DBG_ENTRY_EXIT, "SAC InitializeMachineInformation: Exiting (20).\n");
+                SAC_DBG(SAC_DBG_ENTRY_EXIT, "Exiting (20).\n");
                 goto Fail;
             }
         }
@@ -793,7 +797,7 @@ InitializeMachineInformation(VOID)
                               &OutputSize);
     if (!NT_SUCCESS(Status))
     {
-        SAC_DBG(SAC_DBG_ENTRY_EXIT, "SAC InitializeMachineInformation: Failed to get Machine GUID.\n");
+        SAC_DBG(SAC_DBG_ENTRY_EXIT, "Failed to get Machine GUID.\n");
     }
     else
     {
@@ -801,7 +805,7 @@ InitializeMachineInformation(VOID)
         GuidString = SacAllocatePool(0x50, GLOBAL_BLOCK_TAG);
         if (!GuidString)
         {
-            SAC_DBG(SAC_DBG_ENTRY_EXIT, "SAC InitializeMachineInformation: Exiting (31).\n");
+            SAC_DBG(SAC_DBG_ENTRY_EXIT, "Exiting (31).\n");
             goto Fail;
         }
 
@@ -831,7 +835,7 @@ InitializeMachineInformation(VOID)
     if (!NT_SUCCESS(Status))
     {
         /* It's not critical, but we won't have it */
-        SAC_DBG(SAC_DBG_ENTRY_EXIT, "SAC InitializeMachineInformation: Exiting (30).\n");
+        SAC_DBG(SAC_DBG_ENTRY_EXIT, "Exiting (30).\n");
     }
     else
     {
@@ -842,7 +846,7 @@ InitializeMachineInformation(VOID)
         SacFreePool(PartialInfo);
         if (!NT_SUCCESS(Status))
         {
-            SAC_DBG(SAC_DBG_ENTRY_EXIT, "SAC InitializeMachineInformation: Exiting (30).\n");
+            SAC_DBG(SAC_DBG_ENTRY_EXIT, "Exiting (30).\n");
             goto Fail;
         }
     }
@@ -851,7 +855,7 @@ InitializeMachineInformation(VOID)
     MajorVersion = SacAllocatePool(0x18, GLOBAL_BLOCK_TAG);
     if (!MajorVersion)
     {
-        SAC_DBG(SAC_DBG_ENTRY_EXIT, "SAC InitializeMachineInformation: Exiting (50).\n");
+        SAC_DBG(SAC_DBG_ENTRY_EXIT, "Exiting (50).\n");
         goto Fail;
     }
 
@@ -866,7 +870,7 @@ InitializeMachineInformation(VOID)
     BuildNumber = SacAllocatePool(0xC, GLOBAL_BLOCK_TAG);
     if (!BuildNumber)
     {
-        SAC_DBG(SAC_DBG_ENTRY_EXIT, "SAC InitializeMachineInformation: Exiting (60).\n");
+        SAC_DBG(SAC_DBG_ENTRY_EXIT, "Exiting (60).\n");
         goto Fail;
     }
 
@@ -898,7 +902,7 @@ InitializeMachineInformation(VOID)
     if (!MessageBuffer)
     {
         /* We won't have it, but this isn't critical */
-        SAC_DBG(SAC_DBG_INIT, "SAC InitializeMachineInformation: Failed to get product type.\n");
+        SAC_DBG(SAC_DBG_INIT, "Failed to get product type.\n");
     }
     else
     {
@@ -911,7 +915,7 @@ InitializeMachineInformation(VOID)
         ProductType = SacAllocatePool(RealSize, GLOBAL_BLOCK_TAG);
         if (!ProductType)
         {
-            SAC_DBG(SAC_DBG_INIT, "SAC InitializeMachineInformation: Failed product type memory allocation.\n");
+            SAC_DBG(SAC_DBG_INIT, "Failed product type memory allocation.\n");
             goto Fail;
         }
 
@@ -939,7 +943,7 @@ InitializeMachineInformation(VOID)
         }
 
         /* This is the failure path */
-        SAC_DBG(SAC_DBG_INIT, "SAC InitializeMachineInformation: Failed service pack memory allocation.\n");
+        SAC_DBG(SAC_DBG_INIT, "Failed service pack memory allocation.\n");
     }
     else
     {
@@ -961,7 +965,7 @@ InitializeMachineInformation(VOID)
             return;
         }
 
-        SAC_DBG(SAC_DBG_INIT, "SAC InitializeMachineInformation: Failed service pack memory allocation.\n");
+        SAC_DBG(SAC_DBG_INIT, "Failed service pack memory allocation.\n");
     }
 
 Fail:
@@ -970,7 +974,7 @@ Fail:
     {
         SacFreePool(MachineInformation);
     }
-    SAC_DBG(SAC_DBG_ENTRY_EXIT, "SAC Initialize Machine Information : Exiting with error.\n");
+    SAC_DBG(SAC_DBG_ENTRY_EXIT, "Exiting with error.\n");
 }
 
 NTSTATUS
@@ -1043,7 +1047,7 @@ ImposeSacCmdServiceStartTypePolicy(VOID)
                                       sizeof(ULONG));
             if (!NT_SUCCESS(Status))
             {
-                SAC_DBG(SAC_DBG_INIT, "SAC ImposeSacCmdServiceStartTypePolicy: Failed SetRegistryValue: %X\n", Status);
+                SAC_DBG(SAC_DBG_INIT, "Failed SetRegistryValue: 0x%lx\n", Status);
             }
             break;
 
@@ -1144,7 +1148,7 @@ RegisterBlueScreenMachineInformation(VOID)
     SacFreePool(XmlBuffer);
 
     /* Return the result */
-    SAC_DBG(SAC_DBG_ENTRY_EXIT, "SAC Initialize Machine Information: Exiting.\n");
+    SAC_DBG(SAC_DBG_ENTRY_EXIT, "Exiting.\n");
     return Status;
 }
 
@@ -1184,7 +1188,7 @@ VerifyEventWaitable(IN HANDLE Handle,
     *WaitObject = Object;
     if (!NT_SUCCESS(Status))
     {
-        SAC_DBG(SAC_DBG_INIT, "SAC VerifyEventWaitable: Unable to reference event object (%lx)\n", Status);
+        SAC_DBG(SAC_DBG_INIT, "Unable to reference event object (0x%lx)\n", Status);
         return FALSE;
     }
 
@@ -1199,7 +1203,7 @@ VerifyEventWaitable(IN HANDLE Handle,
     }
 
     /* Drop the reference we took */
-    SAC_DBG(SAC_DBG_INIT, "SAC VerifyEventWaitable: event object not waitable!\n");
+    SAC_DBG(SAC_DBG_INIT, "Event object not waitable!\n");
     ObDereferenceObject(*WaitObject);
     return FALSE;
 }

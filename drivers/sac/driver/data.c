@@ -56,15 +56,16 @@ CreateDeviceSecurityDescriptor(IN PDEVICE_OBJECT *DeviceObject)
     BOOLEAN MemoryAllocated = FALSE;
     PACL Dacl = NULL;
     PVOID ObjectSecurityDescriptor = NULL;
-    SAC_DBG(SAC_DBG_ENTRY_EXIT, "SAC CreateDeviceSecurityDescriptor: Entering.\n");
+
+    SAC_DBG(SAC_DBG_ENTRY_EXIT, "Entering.\n");
 
     /* Get the current SD of the device object */
     Status = ObGetObjectSecurity(*DeviceObject, &SecurityDescriptor, &MemoryAllocated);
     if (!NT_SUCCESS(Status))
     {
-        SAC_DBG(SAC_DBG_INIT, "SAC: Unable to get security descriptor, error: %x\n", Status);
+        SAC_DBG(SAC_DBG_INIT, "Unable to get security descriptor, error: 0x%lx\n", Status);
         NT_ASSERT(MemoryAllocated == FALSE);
-        SAC_DBG(SAC_DBG_ENTRY_EXIT, "SAC CreateDeviceSecurityDescriptor: Exiting with status 0x%x\n", Status);
+        SAC_DBG(SAC_DBG_ENTRY_EXIT, "Exiting with status 0x%lx\n", Status);
         return Status;
     }
 
@@ -76,7 +77,7 @@ CreateDeviceSecurityDescriptor(IN PDEVICE_OBJECT *DeviceObject)
     }
     else
     {
-        SAC_DBG(SAC_DBG_INIT, "SAC CreateDeviceSecurityDescriptor : Unable to create Raw ACL, error : %x\n", Status);
+        SAC_DBG(SAC_DBG_INIT, "Unable to create Raw ACL, error: 0x%lx\n", Status);
         /* FIXME: Temporary hack */
         Status = STATUS_SUCCESS;
         goto CleanupPath;
@@ -91,7 +92,7 @@ CleanupPath:
     if (Dacl) SacFreePool(Dacl);
 
     /* All done */
-    SAC_DBG(SAC_DBG_ENTRY_EXIT, "SAC CreateDeviceSecurityDescriptor: Exiting with status 0x%x\n", Status);
+    SAC_DBG(SAC_DBG_ENTRY_EXIT, "Exiting with status 0x%lx\n", Status);
     return Status;
 }
 
@@ -100,7 +101,8 @@ NTAPI
 FreeGlobalData(VOID)
 {
     UNICODE_STRING SymbolicLink;
-    SAC_DBG(SAC_DBG_ENTRY_EXIT, "SAC FreeGlobalData: Entering.\n");
+
+    SAC_DBG(SAC_DBG_ENTRY_EXIT, "Entering.\n");
 
     /* Only free if we allocated */
     if (GlobalDataInitialized)
@@ -139,7 +141,7 @@ FreeGlobalData(VOID)
     }
 
     /* All done */
-    SAC_DBG(SAC_DBG_ENTRY_EXIT, "SAC FreeGlobalData: Exiting.\n");
+    SAC_DBG(SAC_DBG_ENTRY_EXIT, "Exiting.\n");
 }
 
 VOID
@@ -149,7 +151,8 @@ FreeDeviceData(IN PDEVICE_OBJECT DeviceObject)
     PSAC_DEVICE_EXTENSION DeviceExtension;
     NTSTATUS Status;
     KIRQL OldIrql;
-    SAC_DBG(SAC_DBG_ENTRY_EXIT, "SAC FreeDeviceData: Entering.\n");
+
+    SAC_DBG(SAC_DBG_ENTRY_EXIT, "Entering.\n");
 
     /* Get the device extension and see how far we had gotten */
     DeviceExtension = (PSAC_DEVICE_EXTENSION)DeviceObject->DeviceExtension;
@@ -159,7 +162,7 @@ FreeDeviceData(IN PDEVICE_OBJECT DeviceObject)
         KeAcquireSpinLock(&DeviceExtension->Lock, &OldIrql);
         while (DeviceExtension->RundownInProgress)
         {
-            SAC_DBG(SAC_DBG_ENTRY_EXIT, "SAC FreeDeviceData: Waiting....\n");
+            SAC_DBG(SAC_DBG_ENTRY_EXIT, "Waiting...\n");
 
             /* Initiate and wait for rundown */
             KeInitializeEvent(&DeviceExtension->RundownEvent, SynchronizationEvent, 0);
@@ -205,7 +208,7 @@ FreeDeviceData(IN PDEVICE_OBJECT DeviceObject)
     KeAcquireSpinLock(&DeviceExtension->Lock, &OldIrql);
     DeviceExtension->Initialized = FALSE;
     KeReleaseSpinLock(&DeviceExtension->Lock, OldIrql);
-    SAC_DBG(SAC_DBG_ENTRY_EXIT, "SAC FreeDeviceData: Exiting.\n");
+    SAC_DBG(SAC_DBG_ENTRY_EXIT, "Exiting.\n");
 }
 
 BOOLEAN
@@ -218,7 +221,9 @@ InitializeDeviceData(IN PDEVICE_OBJECT DeviceObject)
     NTSTATUS Status;
     LARGE_INTEGER DueTime;
     PWCHAR Message;
+
     PAGED_CODE();
+
     SAC_DBG(SAC_DBG_ENTRY_EXIT, "Entering.\n");
 
     /* If we already did this, bail out */
@@ -251,7 +256,7 @@ InitializeDeviceData(IN PDEVICE_OBJECT DeviceObject)
     if (!NT_SUCCESS(Status))
     {
         /* Bail out if we couldn't even get this far */
-        SAC_DBG(SAC_DBG_ENTRY_EXIT, "Exiting (1) with status FALSE\n");
+        SAC_DBG(SAC_DBG_ENTRY_EXIT, "Exiting (1) with status FALSE.\n");
         return FALSE;
     }
 
@@ -263,7 +268,7 @@ InitializeDeviceData(IN PDEVICE_OBJECT DeviceObject)
     if (!NT_SUCCESS(Status))
     {
         /* Write down why we failed */
-        SAC_DBG(SAC_DBG_ENTRY_EXIT, "Exiting (2) with status FALSE\n");
+        SAC_DBG(SAC_DBG_ENTRY_EXIT, "Exiting (2) with status FALSE.\n");
 
         /* Disable the HDL terminal on failure */
         EnableData = FALSE;
@@ -272,7 +277,8 @@ InitializeDeviceData(IN PDEVICE_OBJECT DeviceObject)
                                   sizeof(EnableData),
                                   NULL,
                                   NULL);
-        if (!NT_SUCCESS(Status)) SAC_DBG(SAC_DBG_INIT, "Failed dispatch\n");
+        if (!NT_SUCCESS(Status))
+            SAC_DBG(SAC_DBG_INIT, "Failed dispatch.\n");
 
         /* Bail out */
         return FALSE;
@@ -289,7 +295,7 @@ InitializeDeviceData(IN PDEVICE_OBJECT DeviceObject)
     if (!NT_SUCCESS(Status))
     {
         /* Write down why we failed */
-        SAC_DBG(SAC_DBG_ENTRY_EXIT, "Exiting (3) with status FALSE\n");
+        SAC_DBG(SAC_DBG_ENTRY_EXIT, "Exiting (3) with status FALSE.\n");
 
         /* Disable the HDL terminal on failure */
         EnableData = FALSE;
@@ -298,7 +304,8 @@ InitializeDeviceData(IN PDEVICE_OBJECT DeviceObject)
                                   sizeof(EnableData),
                                   NULL,
                                   NULL);
-        if (!NT_SUCCESS(Status)) SAC_DBG(SAC_DBG_INIT, "Failed dispatch\n");
+        if (!NT_SUCCESS(Status))
+            SAC_DBG(SAC_DBG_INIT, "Failed dispatch.\n");
 
         /* Bail out */
         return FALSE;
@@ -313,10 +320,10 @@ InitializeDeviceData(IN PDEVICE_OBJECT DeviceObject)
     if (!NT_SUCCESS(Status))
     {
         /* For debugging, write down why we failed */
-        SAC_DBG(SAC_DBG_ENTRY_EXIT, "Exiting (6) with status FALSE\n");
-        DeviceExtension->PriorityFail = TRUE;
+        SAC_DBG(SAC_DBG_ENTRY_EXIT, "Exiting (6) with status FALSE.\n");
 
         /* Initialize rundown and wait for the thread to do it */
+        DeviceExtension->PriorityFail = TRUE;
         KeInitializeEvent(&DeviceExtension->RundownEvent, SynchronizationEvent, FALSE);
         KeSetEvent(&DeviceExtension->Event, DeviceExtension->PriorityBoost, FALSE);
         Status = KeWaitForSingleObject(&DeviceExtension->RundownEvent,
@@ -333,7 +340,8 @@ InitializeDeviceData(IN PDEVICE_OBJECT DeviceObject)
                                   sizeof(EnableData),
                                   NULL,
                                   NULL);
-        if (!NT_SUCCESS(Status)) SAC_DBG(SAC_DBG_INIT, "Failed dispatch\n");
+        if (!NT_SUCCESS(Status))
+            SAC_DBG(SAC_DBG_INIT, "Failed dispatch.\n");
 
         /* Bail out */
         return FALSE;
@@ -362,7 +370,7 @@ InitializeDeviceData(IN PDEVICE_OBJECT DeviceObject)
 
 SuccessExit:
     /* Success path -- everything worked */
-    SAC_DBG(SAC_DBG_ENTRY_EXIT, "Exiting with status TRUE\n");
+    SAC_DBG(SAC_DBG_ENTRY_EXIT, "Exiting with status TRUE.\n");
     return TRUE;
 }
 
@@ -375,7 +383,9 @@ InitializeGlobalData(IN PUNICODE_STRING RegistryPath,
     UNICODE_STRING LinkName;
     UNICODE_STRING DeviceName;
     UNICODE_STRING EventName;
+
     PAGED_CODE();
+
     SAC_DBG(SAC_DBG_ENTRY_EXIT, "Entering.\n");
 
     /* If we already did this, bail out */
@@ -391,7 +401,7 @@ InitializeGlobalData(IN PUNICODE_STRING RegistryPath,
     if (!InitializeMemoryManagement())
     {
         IoDeleteSymbolicLink(&LinkName);
-        SAC_DBG(SAC_DBG_ENTRY_EXIT, "Exiting with status FALSE\n");
+        SAC_DBG(SAC_DBG_ENTRY_EXIT, "Exiting with status FALSE.\n");
         return FALSE;
     }
 
@@ -400,7 +410,7 @@ InitializeGlobalData(IN PUNICODE_STRING RegistryPath,
     if (!NT_SUCCESS(Status))
     {
         IoDeleteSymbolicLink(&LinkName);
-        SAC_DBG(SAC_DBG_INIT, "unable to pre-load message table: %X\n", Status);
+        SAC_DBG(SAC_DBG_INIT, "Unable to pre-load message table: 0x%lx\n", Status);
         return FALSE;
     }
 
@@ -415,12 +425,12 @@ InitializeGlobalData(IN PUNICODE_STRING RegistryPath,
             Status = ImposeSacCmdServiceStartTypePolicy();
             if (!NT_SUCCESS(Status))
             {
-                SAC_DBG(SAC_DBG_INIT, "failed ImposeSacCmdServiceStartTypePolicy: %X\n", Status);
+                SAC_DBG(SAC_DBG_INIT, "Failed ImposeSacCmdServiceStartTypePolicy: 0x%lx\n", Status);
             }
         }
 
         /* We're going to keep going with the default */
-        SAC_DBG(SAC_DBG_INIT, "failed GetCommandConsoleLaunchingPermission: %X\n", Status);
+        SAC_DBG(SAC_DBG_INIT, "Failed GetCommandConsoleLaunchingPermission: 0x%lx\n", Status);
     }
 
     /* Allocate the UTF-8 Conversion Buffer */
@@ -430,7 +440,7 @@ InitializeGlobalData(IN PUNICODE_STRING RegistryPath,
         /* Handle failure case */
         TearDownGlobalMessageTable();
         IoDeleteSymbolicLink(&LinkName);
-        SAC_DBG(SAC_DBG_INIT, "unable to allocate memory for UTF8 translation\n");
+        SAC_DBG(SAC_DBG_INIT, "Unable to allocate memory for UTF8 translation.\n");
         return FALSE;
     }
 
@@ -442,7 +452,7 @@ InitializeGlobalData(IN PUNICODE_STRING RegistryPath,
         SacFreePool(Utf8ConversionBuffer);
         TearDownGlobalMessageTable();
         IoDeleteSymbolicLink(&LinkName);
-        SAC_DBG(SAC_DBG_INIT, "Failed to create SAC Channel\n");
+        SAC_DBG(SAC_DBG_INIT, "Failed to create SAC Channel.\n");
         return FALSE;
     }
 
@@ -454,7 +464,7 @@ InitializeGlobalData(IN PUNICODE_STRING RegistryPath,
         SacFreePool(Utf8ConversionBuffer);
         TearDownGlobalMessageTable();
         IoDeleteSymbolicLink(&LinkName);
-        SAC_DBG(SAC_DBG_INIT, "Failed to allocate Serial Port Buffer\n");
+        SAC_DBG(SAC_DBG_INIT, "Failed to allocate Serial Port Buffer.\n");
         return FALSE;
     }
 
@@ -477,7 +487,7 @@ InitializeGlobalData(IN PUNICODE_STRING RegistryPath,
         SacFreePool(Utf8ConversionBuffer);
         TearDownGlobalMessageTable();
         IoDeleteSymbolicLink(&LinkName);
-        SAC_DBG(SAC_DBG_ENTRY_EXIT, "Exiting with event NULL\n");
+        SAC_DBG(SAC_DBG_ENTRY_EXIT, "Exiting with event NULL.\n");
         return FALSE;
     }
 
@@ -492,12 +502,12 @@ InitializeGlobalData(IN PUNICODE_STRING RegistryPath,
         SacFreePool(Utf8ConversionBuffer);
         TearDownGlobalMessageTable();
         IoDeleteSymbolicLink(&LinkName);
-        SAC_DBG(SAC_DBG_INIT, "Failed to register blue screen machine info\n");
+        SAC_DBG(SAC_DBG_INIT, "Failed to register blue screen machine info.\n");
         return FALSE;
     }
 
 SuccessExit:
     /* Success path -- everything worked */
-    SAC_DBG(SAC_DBG_ENTRY_EXIT, "Exiting with status TRUE\n");
+    SAC_DBG(SAC_DBG_ENTRY_EXIT, "Exiting with status TRUE.\n");
     return TRUE;
 }

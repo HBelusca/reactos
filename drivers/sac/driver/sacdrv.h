@@ -34,12 +34,20 @@
 #define SAC_DBG_INIT                        0x04
 #define SAC_DBG_MM                          0x1000
 #define SAC_DBG_MACHINE                     0x2000
-#define SAC_DBG(x, ...)                     \
-    if (SACDebug & x)                       \
-    {                                       \
-        DbgPrint("SAC %s: ", __FUNCTION__); \
-        DbgPrint(__VA_ARGS__);              \
-    }
+
+#if DBG
+    #define SAC_DBG(ch, fmt, ...)    \
+    do { \
+        if (SACDebug & ch)           \
+            DbgPrint("SAC %s: " fmt, __FUNCTION__, ##__VA_ARGS__); \
+    } while (0)
+#else
+    #if defined (_MSC_VER)
+        #define SAC_DBG         __noop
+    #else
+        #define SAC_DBG(...)    do { if(0) { DbgPrint(__VA_ARGS__); } } while(0)
+    #endif
+#endif
 
 //
 // SAC Parameter Checking Macros

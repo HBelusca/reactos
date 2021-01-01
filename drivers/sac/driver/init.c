@@ -23,7 +23,9 @@ DriverEntry(IN PDRIVER_OBJECT DriverObject,
     UNICODE_STRING DriverName;
     PDEVICE_OBJECT DeviceObject;
     PSAC_DEVICE_EXTENSION DeviceExtension;
+
     PAGED_CODE();
+
     SAC_DBG(SAC_DBG_ENTRY_EXIT, "Entering.\n");
 
     /* Check if EMS is enabled in the kernel */
@@ -78,12 +80,12 @@ DriverEntry(IN PDRIVER_OBJECT DriverObject,
         else
         {
             /* Print a debug statement if enabled */
-            SAC_DBG(SAC_DBG_INIT, "unable to create device object: %X\n", Status);
+            SAC_DBG(SAC_DBG_INIT, "Unable to create device object: 0x%lx\n", Status);
         }
 
         /* Free any data we may have allocated and exit with failure */
         FreeGlobalData();
-        SAC_DBG(SAC_DBG_ENTRY_EXIT, "Exiting with status 0x%x\n", Status);
+        SAC_DBG(SAC_DBG_ENTRY_EXIT, "Exiting with status 0x%lx\n", Status);
         return Status;
     }
 

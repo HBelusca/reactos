@@ -82,6 +82,7 @@ GetTListInfo(IN PSAC_SYSTEM_INFORMATION SacInfo,
     PSYSTEM_PAGEFILE_INFORMATION PageFileInfo;
     PSYSTEM_PROCESS_INFORMATION ProcessInfo;
     ULONG_PTR P;
+
     SAC_DBG(SAC_DBG_ENTRY_EXIT, "Entering.\n");
 
     /* Assume failure */
@@ -357,14 +358,15 @@ DoRebootCommand(IN BOOLEAN Reboot)
     LARGE_INTEGER Timeout, TickCount;
     NTSTATUS Status;
     KEVENT Event;
-    SAC_DBG(SAC_DBG_ENTRY_EXIT, "SAC DoRebootCommand: Entering.\n");
+
+    SAC_DBG(SAC_DBG_ENTRY_EXIT, "Entering.\n");
 
     /* Get the current time now, and setup a timeout in 1 second */
     KeQueryTickCount(&TickCount);
     Timeout.QuadPart = TickCount.QuadPart / (10000000 / KeQueryTimeIncrement());
 
     /* Check if the timeout is small enough */
-    if (Timeout.QuadPart < 60 )
+    if (Timeout.QuadPart < 60)
     {
         /* Show the prompt */
         ConMgrSimpleEventMessage(Reboot ?
@@ -389,7 +391,7 @@ DoRebootCommand(IN BOOLEAN Reboot)
         {
             /* We need the global buffer, bail out without it*/
             SacPutSimpleMessage(SAC_OUT_OF_MEMORY_PROMPT);
-            SAC_DBG(SAC_DBG_ENTRY_EXIT, "SAC DoRebootCommand: Exiting (1).\n");
+            SAC_DBG(SAC_DBG_ENTRY_EXIT, "Exiting (1).\n");
             return;
         }
 
@@ -401,7 +403,7 @@ DoRebootCommand(IN BOOLEAN Reboot)
     SacPutSimpleMessage(Reboot ? SAC_RESTART_FAIL_PROMPT : SAC_SHUTDOWN_FAIL_PROMPT);
     swprintf(GlobalBuffer, GetMessage(SAC_FAIL_PROMPT), Status);
     SacPutString(GlobalBuffer);
-    SAC_DBG(SAC_DBG_ENTRY_EXIT, "SAC DoRebootCommand: Exiting.\n");
+    SAC_DBG(SAC_DBG_ENTRY_EXIT, "Exiting.\n");
 }
 
 VOID
@@ -465,7 +467,7 @@ VOID
 NTAPI
 DoCrashCommand(VOID)
 {
-    SAC_DBG(SAC_DBG_ENTRY_EXIT, "SAC DoCrashCommand: Entering.\n");
+    SAC_DBG(SAC_DBG_ENTRY_EXIT, "Entering.\n");
 
     /* Crash the machine */
     KeBugCheckEx(MANUALLY_INITIATED_CRASH, 0, 0, 0, 0);
@@ -573,7 +575,8 @@ DoTlistCommand(VOID)
     NTSTATUS Status;
     PVOID NewGlobalBuffer;
     ULONG Size;
-    SAC_DBG(SAC_DBG_ENTRY_EXIT, "SAC DoTlistCommand: Entering.\n");
+
+    SAC_DBG(SAC_DBG_ENTRY_EXIT, "Entering.\n");
 
     /* Check if a global buffer already exists */
     if (!GlobalBuffer)
@@ -589,7 +592,7 @@ DoTlistCommand(VOID)
         {
             /* Out of memory, bail out */
             SacPutSimpleMessage(11);
-            SAC_DBG(SAC_DBG_ENTRY_EXIT, "SAC DoTlistCommand: Exiting.\n");
+            SAC_DBG(SAC_DBG_ENTRY_EXIT, "Exiting.\n");
             return;
         }
     }
@@ -613,7 +616,7 @@ DoTlistCommand(VOID)
         {
             /* Out of memory, bail out */
             SacPutSimpleMessage(11);
-            SAC_DBG(SAC_DBG_ENTRY_EXIT, "SAC DoTlistCommand: Exiting.\n");
+            SAC_DBG(SAC_DBG_ENTRY_EXIT, "Exiting.\n");
             return;
         }
 
@@ -637,5 +640,5 @@ DoTlistCommand(VOID)
         PrintTListInfo(GlobalBuffer);
     }
 
-    SAC_DBG(SAC_DBG_ENTRY_EXIT, "SAC DoTlistCommand: Exiting.\n");
+    SAC_DBG(SAC_DBG_ENTRY_EXIT, "Exiting.\n");
 }

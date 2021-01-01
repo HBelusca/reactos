@@ -411,7 +411,7 @@ ChanMgrCreateChannel(OUT PSAC_CHANNEL *Channel,
     if (!NT_SUCCESS(Status))
     {
         /* Bail out if we couldn't */
-        SAC_DBG(SAC_DBG_INIT, "SAC Create Channel :: Failed to get GUID\n");
+        SAC_DBG(SAC_DBG_INIT, "Failed to get GUID.\n");
         goto ReturnStatus;
     }
 
