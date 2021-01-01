@@ -24,7 +24,7 @@
 #define SacAllocatePool(Length, Tag)    \
     MyAllocatePool(Length, Tag, __FILE__, __LINE__)
 #define SacFreePool(Pointer)            \
-    MyFreePool((PVOID*)(&Pointer))
+    MyFreePool((PVOID*)&(Pointer))
 
 //
 // SAC Debugging Macro and Constants
@@ -53,30 +53,28 @@
 // SAC Parameter Checking Macros
 //
 #define CHECK_PARAMETER_WITH_STATUS(Condition, Status)  \
-{                                                       \
+do {                                                    \
     if (!NT_VERIFY(Condition))                          \
-    {                                                   \
         return Status;                                  \
-    }                                                   \
-}
-#define CHECK_PARAMETER(x)      \
+} while (0)
+#define CHECK_PARAMETER(x)  \
     CHECK_PARAMETER_WITH_STATUS(x, STATUS_INVALID_PARAMETER)
-#define CHECK_PARAMETER1(x)     \
+#define CHECK_PARAMETER1(x) \
     CHECK_PARAMETER_WITH_STATUS(x, STATUS_INVALID_PARAMETER_1)
-#define CHECK_PARAMETER2(x)     \
+#define CHECK_PARAMETER2(x) \
     CHECK_PARAMETER_WITH_STATUS(x, STATUS_INVALID_PARAMETER_2)
-#define CHECK_PARAMETER3(x)     \
+#define CHECK_PARAMETER3(x) \
     CHECK_PARAMETER_WITH_STATUS(x, STATUS_INVALID_PARAMETER_3)
-#define CHECK_PARAMETER4(x)     \
+#define CHECK_PARAMETER4(x) \
     CHECK_PARAMETER_WITH_STATUS(x, STATUS_INVALID_PARAMETER_4)
-#define CHECK_ALLOCATION(x)     \
+#define CHECK_ALLOCATION(x) \
     CHECK_PARAMETER_WITH_STATUS(x, STATUS_NO_MEMORY)
 
 //
 // SAC Channel Event Macros
 //
 #define ChannelInitializeEvent(Channel, Attributes, x)                  \
-{                                                                       \
+do {                                                                    \
     PVOID Object, WaitObject;                                           \
     if (Attributes->x)                                                  \
     {                                                                   \
@@ -88,9 +86,9 @@
         Channel->x##ObjectBody = Object;                                \
         Channel->x##WaitObjectBody = WaitObject;                        \
     }                                                                   \
-}
+} while (0)
 #define ChannelUninitializeEvent(Channel, x, f)         \
-{                                                       \
+do {                                                    \
     ASSERT(ChannelGetFlags(Channel) & (f));             \
     ASSERT(Channel->x##ObjectBody);                     \
     ASSERT(Channel->x##WaitObjectBody);                 \
@@ -102,9 +100,9 @@
         Channel->x##ObjectBody = NULL;                  \
         Channel->x##WaitObjectBody = NULL;              \
     }                                                   \
-}
+} while (0)
 #define ChannelSetEvent(Channel, x)                                     \
-{                                                                       \
+do {                                                                    \
     ASSERT(Channel->x);                                                 \
     ASSERT(Channel->x##ObjectBody);                                     \
     ASSERT(Channel->x##WaitObjectBody);                                 \
@@ -117,9 +115,9 @@
     {                                                                   \
         Status = STATUS_UNSUCCESSFUL;                                   \
     }                                                                   \
-}
+} while (0)
 #define ChannelClearEvent(Channel, x)               \
-{                                                   \
+do {                                                \
     ASSERT(Channel->x);                             \
     ASSERT(Channel->x##ObjectBody);                 \
     ASSERT(Channel->x##WaitObjectBody);             \
@@ -132,7 +130,7 @@
     {                                               \
         Status = STATUS_UNSUCCESSFUL;               \
     }                                               \
-}
+} while (0)
 
 //
 // SAC Pool Tags, taken from pooltag.txt:
@@ -1334,16 +1332,16 @@ SacReleaseMutexLock(VOID)
 //
 // Locking Macros
 //
-#define ChannelLockCreates()            SacAcquireLock(&ChannelCreateLock);
-#define ChannelUnlockCreates()          SacReleaseLock(&ChannelCreateLock);
-#define ChannelLockOBuffer(x)           SacAcquireLock(&x->ChannelOBufferLock);
-#define ChannelUnlockOBuffer(x)         SacReleaseLock(&x->ChannelOBufferLock);
-#define ChannelLockIBuffer(x)           SacAcquireLock(&x->ChannelIBufferLock);
-#define ChannelUnlockIBuffer(x)         SacReleaseLock(&x->ChannelIBufferLock);
-#define ChannelLockAttributes(x)        SacAcquireLock(&x->ChannelAttributeLock);
-#define ChannelUnlockAttributes(x)      SacReleaseLock(&x->ChannelAttributeLock);
-#define ChannelSlotLock(x)              SacAcquireLock(&ChannelSlotLock[x]);
-#define ChannelSlotUnlock(x)            SacReleaseLock(&ChannelSlotLock[x]);
+#define ChannelLockCreates()            SacAcquireLock(&ChannelCreateLock)
+#define ChannelUnlockCreates()          SacReleaseLock(&ChannelCreateLock)
+#define ChannelLockOBuffer(x)           SacAcquireLock(&x->ChannelOBufferLock)
+#define ChannelUnlockOBuffer(x)         SacReleaseLock(&x->ChannelOBufferLock)
+#define ChannelLockIBuffer(x)           SacAcquireLock(&x->ChannelIBufferLock)
+#define ChannelUnlockIBuffer(x)         SacReleaseLock(&x->ChannelIBufferLock)
+#define ChannelLockAttributes(x)        SacAcquireLock(&x->ChannelAttributeLock)
+#define ChannelUnlockAttributes(x)      SacReleaseLock(&x->ChannelAttributeLock)
+#define ChannelSlotLock(x)              SacAcquireLock(&ChannelSlotLock[x])
+#define ChannelSlotUnlock(x)            SacReleaseLock(&ChannelSlotLock[x])
 
 //
 // Channel Accessors

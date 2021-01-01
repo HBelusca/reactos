@@ -132,7 +132,7 @@ ChanMgrInitialize(VOID)
 
         /* Clear their statuses and reference counts */
         _InterlockedExchange(&ChannelRefCount[i], 0);
-        _InterlockedExchange(&ChannelReaped[i], 1);
+        _InterlockedExchange(&ChannelReaped[i], TRUE);
     }
 
     /* All good */
@@ -323,8 +323,8 @@ ChanMgrReapChannels(VOID)
             if (ChannelGetReferenceCount(i) <= 0)
             {
                 /* The channel has no more references, so clear the buffer flags */
-                _InterlockedExchange(&ChannelArray[i]->ChannelHasNewIBufferData, 0);
-                _InterlockedExchange(&ChannelArray[i]->ChannelHasNewOBufferData, 0);
+                _InterlockedExchange(&ChannelArray[i]->ChannelHasNewIBufferData, FALSE);
+                _InterlockedExchange(&ChannelArray[i]->ChannelHasNewOBufferData, FALSE);
 
                 /* And reap it */
                 Status = ChanMgrReapChannel(i);
@@ -429,8 +429,8 @@ ChanMgrCreateChannel(OUT PSAC_CHANNEL *Channel,
         *Channel = NewChannel;
 
         /* This slot is now occupied */
-        ASSERT(ChannelReaped[i] == 1);
-        _InterlockedExchange(&ChannelReaped[i], 0);
+        ASSERT(ChannelReaped[i] == TRUE);
+        _InterlockedExchange(&ChannelReaped[i], FALSE);
     }
     else
     {

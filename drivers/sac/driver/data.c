@@ -165,7 +165,7 @@ FreeDeviceData(IN PDEVICE_OBJECT DeviceObject)
             SAC_DBG(SAC_DBG_ENTRY_EXIT, "Waiting...\n");
 
             /* Initiate and wait for rundown */
-            KeInitializeEvent(&DeviceExtension->RundownEvent, SynchronizationEvent, 0);
+            KeInitializeEvent(&DeviceExtension->RundownEvent, SynchronizationEvent, FALSE);
             KeReleaseSpinLock(&DeviceExtension->Lock, OldIrql);
             Status = KeWaitForSingleObject(&DeviceExtension->RundownEvent,
                                            Executive,
@@ -191,9 +191,9 @@ FreeDeviceData(IN PDEVICE_OBJECT DeviceObject)
     DeviceExtension->RundownInProgress = FALSE;
 
     /* Now do the last rundown attempt, we should be the only ones here */
-    KeInitializeEvent(&DeviceExtension->RundownEvent, SynchronizationEvent, 0);
+    KeInitializeEvent(&DeviceExtension->RundownEvent, SynchronizationEvent, FALSE);
     KeReleaseSpinLock(&DeviceExtension->Lock, OldIrql);
-    KeSetEvent(&DeviceExtension->Event, DeviceExtension->PriorityBoost, 0);
+    KeSetEvent(&DeviceExtension->Event, DeviceExtension->PriorityBoost, FALSE);
     Status = KeWaitForSingleObject(&DeviceExtension->RundownEvent,
                                    Executive,
                                    KernelMode,
@@ -236,8 +236,8 @@ InitializeDeviceData(IN PDEVICE_OBJECT DeviceObject)
     /* Setup the device extension */
     DeviceExtension->DeviceObject = DeviceObject;
     DeviceExtension->PriorityBoost = IO_SERIAL_INCREMENT;
-    DeviceExtension->PriorityFail = 0;
-    DeviceExtension->RundownInProgress = 0;
+    DeviceExtension->PriorityFail = FALSE;
+    DeviceExtension->RundownInProgress = FALSE;
 
     /* Initialize locks, events, timers, DPCs, etc... */
     KeInitializeTimer(&DeviceExtension->Timer);
@@ -363,8 +363,9 @@ InitializeDeviceData(IN PDEVICE_OBJECT DeviceObject)
     Status = ConMgrInitialize();
     if (!NT_SUCCESS(Status)) return FALSE;
 
-    /* Set the timer. Once this is done, the device is initialized */
-    DueTime.QuadPart = -4000;
+    /* Set the timer to a 0.4 millisecond delay.
+     * Once this is done, the device is initialized. */
+    DueTime.QuadPart = 4 * -1000LL;
     KeSetTimerEx(&DeviceExtension->Timer, DueTime, 4, &DeviceExtension->Dpc);
     DeviceExtension->Initialized = TRUE;
 

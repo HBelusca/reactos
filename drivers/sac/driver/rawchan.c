@@ -83,7 +83,7 @@ RawChannelORead(IN PSAC_CHANNEL Channel,
 
             if (NextIndex == Channel->OBufferIndex)
             {
-                _InterlockedExchange(&Channel->ChannelHasNewOBufferData, 0);
+                _InterlockedExchange(&Channel->ChannelHasNewOBufferData, FALSE);
                 break;
             }
 
@@ -162,7 +162,7 @@ RawChannelOWrite2(IN PSAC_CHANNEL Channel,
         if (Overflow) Channel->OBufferFirstGoodIndex = NextIndex;
     }
 
-    _InterlockedExchange(&Channel->ChannelHasNewOBufferData, 1);
+    _InterlockedExchange(&Channel->ChannelHasNewOBufferData, TRUE);
 
     return STATUS_SUCCESS;
 }

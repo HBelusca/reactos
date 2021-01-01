@@ -91,7 +91,7 @@ ConMgrDisplayCurrentChannel(VOID)
     if (NT_SUCCESS(Status))
     {
         /* Enable writes */
-        _InterlockedExchange(&CurrentChannel->WriteEnabled, 1);
+        _InterlockedExchange(&CurrentChannel->WriteEnabled, TRUE);
         if (HasRedraw)
         {
             /* If we can redraw, set the event */
@@ -123,13 +123,12 @@ ConMgrWriteData(IN PSAC_CHANNEL Channel,
         Status = HeadlessDispatch(HeadlessCmdPutData, Buffer, BufferLength, NULL, NULL);
         if (Status != STATUS_UNSUCCESSFUL) break;
 
-        /* Sending the data on the port failed, wait a second... */
-        Interval.HighPart = -1;
-        Interval.LowPart = -100000;
+        /* Sending the data on the port failed, wait 10 milliseconds... */
+        Interval.QuadPart = -100000LL;
         KeDelayExecutionThread(KernelMode, FALSE, &Interval);
     }
 
-    /* After 32 attempts it should really have worked... */
+    /* After 32 attempts it should really have worked */
     ASSERT(NT_SUCCESS(Status));
     return Status;
 }
@@ -300,7 +299,7 @@ ConMgrSetCurrentChannel(IN PSAC_CHANNEL Channel)
     if (HasRedrawEvent) ChannelClearRedrawEvent(CurrentChannel);
 
     /* Disable writes on the current channel */
-    _InterlockedExchange(&CurrentChannel->WriteEnabled, 0);
+    _InterlockedExchange(&CurrentChannel->WriteEnabled, FALSE);
 
     /* Release the current channel */
     Status = ChanMgrReleaseChannel(CurrentChannel);
@@ -308,7 +307,7 @@ ConMgrSetCurrentChannel(IN PSAC_CHANNEL Channel)
 
     /* Set the new channel and also disable writes on it */
     CurrentChannel = Channel;
-    _InterlockedExchange(&Channel->WriteEnabled, 0);
+    _InterlockedExchange(&Channel->WriteEnabled, FALSE);
     return STATUS_SUCCESS;
 }
 

@@ -374,8 +374,8 @@ DoRebootCommand(IN BOOLEAN Reboot)
                                  TRUE);
 
         /* Do the wait */
-        KeInitializeEvent(&Event, SynchronizationEvent, 0);
-        Timeout.QuadPart = -10000000 * (60 - Timeout.LowPart);
+        KeInitializeEvent(&Event, SynchronizationEvent, FALSE);
+        Timeout.QuadPart = -10000000LL * (60 - Timeout.LowPart);
         KeWaitForSingleObject(&Event, Executive, KernelMode, FALSE, &Timeout);
     }
 

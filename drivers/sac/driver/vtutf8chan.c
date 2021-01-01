@@ -282,11 +282,11 @@ VTUTF8ChannelConsumeEscapeSequence(IN PSAC_CHANNEL Channel,
             goto ProcessString;
 
         case VT_ANSI_CURSOR_RIGHT_CHAR:
-            Action = SacCursorLeft; //bug
+            Action = SacCursorLeft; // bug
             goto ProcessString;
 
         case VT_ANSI_CURSOR_LEFT_CHAR:
-            Action = SacCursorRight; //bug
+            Action = SacCursorRight; // bug
             goto ProcessString;
 
         case VT_ANSI_ERASE_LINE_CHAR:
@@ -692,8 +692,8 @@ VTUTF8ChannelCreate(IN PSAC_CHANNEL Channel)
     if (NT_SUCCESS(Status)) return Status;
 
     /* Reset all flags and return success */
-    _InterlockedExchange(&Channel->ChannelHasNewOBufferData, 0);
-    _InterlockedExchange(&Channel->ChannelHasNewIBufferData, 0);
+    _InterlockedExchange(&Channel->ChannelHasNewOBufferData, FALSE);
+    _InterlockedExchange(&Channel->ChannelHasNewIBufferData, FALSE);
     return STATUS_SUCCESS;
 }
 
@@ -919,7 +919,7 @@ Quickie:
     /* Indicate that all new data has been flushed now */
     if (NT_SUCCESS(Status))
     {
-        _InterlockedExchange(&Channel->ChannelHasNewOBufferData, 0);
+        _InterlockedExchange(&Channel->ChannelHasNewOBufferData, FALSE);
     }
 
     /* Return the result */
@@ -1185,7 +1185,7 @@ VTUTF8ChannelOWrite(IN PSAC_CHANNEL Channel,
         else
         {
             /* Otherwise, just remember that we have new data */
-            _InterlockedExchange(&Channel->ChannelHasNewOBufferData, 1);
+            _InterlockedExchange(&Channel->ChannelHasNewOBufferData, TRUE);
         }
     }
 

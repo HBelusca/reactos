@@ -10,6 +10,8 @@
 
 #include "sacdrv.h"
 
+#define UNIMPLEMENTED   SAC_DBG(SAC_DBG_ENTRY_EXIT, "UNIMPLEMENTED.\n")
+
 /* GLOBALS ********************************************************************/
 
 LONG TimerDpcCount;
@@ -21,6 +23,10 @@ NTAPI
 DispatchDeviceControl(IN PDEVICE_OBJECT DeviceObject,
                       IN PIRP Irp)
 {
+    UNIMPLEMENTED;
+
+    Irp->IoStatus.Status = STATUS_NOT_IMPLEMENTED;
+    IoCompleteRequest(Irp, IO_NO_INCREMENT);
     return STATUS_NOT_IMPLEMENTED;
 }
 
@@ -29,6 +35,10 @@ NTAPI
 DispatchShutdownControl(IN PDEVICE_OBJECT DeviceObject,
                         IN PIRP Irp)
 {
+    UNIMPLEMENTED;
+
+    Irp->IoStatus.Status = STATUS_NOT_IMPLEMENTED;
+    IoCompleteRequest(Irp, IO_NO_INCREMENT);
     return STATUS_NOT_IMPLEMENTED;
 }
 
@@ -37,6 +47,10 @@ NTAPI
 DispatchCreate(IN PSAC_DEVICE_EXTENSION DeviceExtension,
                IN PIRP Irp)
 {
+    UNIMPLEMENTED;
+
+    Irp->IoStatus.Status = STATUS_NOT_IMPLEMENTED;
+    IoCompleteRequest(Irp, IO_NO_INCREMENT);
     return STATUS_NOT_IMPLEMENTED;
 }
 
@@ -45,6 +59,10 @@ NTAPI
 DispatchClose(IN PSAC_DEVICE_EXTENSION DeviceExtension,
               IN PIRP Irp)
 {
+    UNIMPLEMENTED;
+
+    Irp->IoStatus.Status = STATUS_NOT_IMPLEMENTED;
+    IoCompleteRequest(Irp, IO_NO_INCREMENT);
     return STATUS_NOT_IMPLEMENTED;
 }
 
@@ -53,6 +71,10 @@ NTAPI
 Dispatch(IN PDEVICE_OBJECT DeviceObject,
          IN PIRP Irp)
 {
+    UNIMPLEMENTED;
+
+    Irp->IoStatus.Status = STATUS_NOT_IMPLEMENTED;
+    IoCompleteRequest(Irp, IO_NO_INCREMENT);
     return STATUS_NOT_IMPLEMENTED;
 }
 

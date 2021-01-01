@@ -17,12 +17,13 @@ NTAPI
 DriverEntry(IN PDRIVER_OBJECT DriverObject,
             IN PUNICODE_STRING RegistryPath)
 {
+    NTSTATUS Status;
     HEADLESS_RSP_QUERY_INFO HeadlessInformation;
     SIZE_T InfoSize = sizeof(HeadlessInformation);
-    NTSTATUS Status;
-    UNICODE_STRING DriverName;
+    UNICODE_STRING DeviceName;
     PDEVICE_OBJECT DeviceObject;
     PSAC_DEVICE_EXTENSION DeviceExtension;
+    ULONG i;
 
     PAGED_CODE();
 
@@ -39,10 +40,10 @@ DriverEntry(IN PDRIVER_OBJECT DriverObject,
          (HeadlessInformation.Serial.TerminalAttached)))
     {
         /* It is, so create the device */
-        RtlInitUnicodeString(&DriverName, L"\\Device\\SAC");
+        RtlInitUnicodeString(&DeviceName, L"\\Device\\SAC");
         Status = IoCreateDevice(DriverObject,
                                 sizeof(SAC_DEVICE_EXTENSION),
-                                &DriverName,
+                                &DeviceName,
                                 FILE_DEVICE_UNKNOWN,
                                 FILE_DEVICE_SECURE_OPEN,
                                 FALSE,
@@ -54,9 +55,10 @@ DriverEntry(IN PDRIVER_OBJECT DriverObject,
             DeviceExtension->Initialized = FALSE;
 
             /* Initialize the driver object */
-            RtlFillMemoryUlong(DriverObject->MajorFunction,
-                               RTL_NUMBER_OF(DriverObject->MajorFunction),
-                               (ULONG_PTR)Dispatch);
+            for (i = 0; i < RTL_NUMBER_OF(DriverObject->MajorFunction); ++i)
+            {
+                DriverObject->MajorFunction[i] = Dispatch;
+            }
             DriverObject->MajorFunction[IRP_MJ_DEVICE_CONTROL] = DispatchDeviceControl;
             DriverObject->MajorFunction[IRP_MJ_SHUTDOWN] = DispatchShutdownControl;
             DriverObject->FastIoDispatch = NULL;
