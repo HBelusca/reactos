@@ -512,10 +512,9 @@ typedef struct _SAC_DEVICE_EXTENSION
 {
     PDEVICE_OBJECT DeviceObject;
     BOOLEAN Initialized;
-    BOOLEAN Rundown;
-    BOOLEAN PriorityFail;
     BOOLEAN RundownInProgress;
-    KPRIORITY PriorityBoost;
+    BOOLEAN PriorityFail;
+    /*KPRIORITY*/ CCHAR PriorityBoost;
     PEPROCESS Process;
     KSPIN_LOCK Lock;
     KEVENT RundownEvent;

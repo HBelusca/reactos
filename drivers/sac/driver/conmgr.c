@@ -313,7 +313,7 @@ ConMgrSetCurrentChannel(IN PSAC_CHANNEL Channel)
 
 NTSTATUS
 NTAPI
-ConMgrResetCurrentChannel(IN BOOLEAN KeepChannel)
+ConMgrResetCurrentChannel(IN BOOLEAN DisplayChannel)
 {
     NTSTATUS Status;
     PSAC_CHANNEL Channel;
@@ -330,15 +330,15 @@ ConMgrResetCurrentChannel(IN BOOLEAN KeepChannel)
         Status = ConMgrSetCurrentChannel(Channel);
         if (NT_SUCCESS(Status))
         {
-            /* Check if the caller wants to switch or not */
-            if (KeepChannel)
+            /* Check if the caller wants to display it directly or not */
+            if (DisplayChannel)
             {
-                /* Nope, keep the same channel */
+                /* Yes, display the new current channel */
                 Status = ConMgrDisplayCurrentChannel();
             }
             else
             {
-                /* Yep, show the switching interface */
+                /* No, show the switching interface */
                 Status = ConMgrDisplayFastChannelSwitchingInterface(CurrentChannel);
             }
         }
@@ -846,6 +846,18 @@ ConMgrWorkerProcessEvents(IN PSAC_DEVICE_EXTENSION DeviceExtension)
                               KernelMode,
                               FALSE,
                               NULL);
+
+#if 1
+        if (DeviceExtension->PriorityFail)
+        {
+            ConMgrResetCurrentChannel(TRUE);
+            SacPutSimpleMessage(SAC_UNLOADED);
+            KeSetEvent(&DeviceExtension->WorkerThreadEvent, DeviceExtension->PriorityBoost, FALSE);
+            SAC_DBG(SAC_DBG_ENTRY_EXIT, "SAC WorkerProcessEvents: Exiting.\n");
+            KeSetEvent(&DeviceExtension->RundownEvent, DeviceExtension->PriorityBoost, FALSE);
+            PsTerminateSystemThread(STATUS_SUCCESS);
+        }
+#endif
 
         /* Consume data off the serial port */
         ConMgrSerialPortConsumer();

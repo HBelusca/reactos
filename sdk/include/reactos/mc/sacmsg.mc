@@ -22,7 +22,7 @@ SAC>%0
 .
 
 MessageId=4
-SymbolicName=SACDRV_4
+SymbolicName=SAC_UNLOADED
 Language=English
 The SAC is unavailable, it was directly unloaded.
 .

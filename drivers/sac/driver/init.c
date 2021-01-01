@@ -39,6 +39,7 @@ DriverEntry(IN PDRIVER_OBJECT DriverObject,
         ((HeadlessInformation.PortType != HeadlessSerialPort) ||
          (HeadlessInformation.Serial.TerminalAttached)))
     {
+DbgBreakPoint();
         /* It is, so create the device */
         RtlInitUnicodeString(&DeviceName, L"\\Device\\SAC");
         Status = IoCreateDevice(DriverObject,

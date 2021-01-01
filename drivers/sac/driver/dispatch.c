@@ -89,7 +89,8 @@ TimerDpcRoutine(IN PKDPC Dpc,
     SIZE_T ValueSize;
     BOOLEAN GotChar;
     NTSTATUS Status;
-    PSAC_DEVICE_EXTENSION SacExtension;
+    PSAC_DEVICE_EXTENSION SacExtension = DeferredContext;
+    LARGE_INTEGER Timeout = {0};
 
     /* Update our counter */
     _InterlockedExchangeAdd(&TimerDpcCount, 1);
@@ -99,6 +100,19 @@ TimerDpcRoutine(IN PKDPC Dpc,
     ValueSize = sizeof(ByteValue);
     do
     {
+        /* Check whether we are in rundown */
+        Status = KeWaitForSingleObject(&SacExtension->RundownEvent,
+                                       Executive,
+                                       KernelMode,
+                                       FALSE,
+                                       &Timeout);
+        if (Status == STATUS_SUCCESS)
+        {
+            /* Rundown is active */
+            GotChar = FALSE;
+            break;
+        }
+
         /* Ask the kernel for a byte */
         Status = HeadlessDispatch(HeadlessCmdGetByte,
                                   NULL,
@@ -124,7 +138,6 @@ TimerDpcRoutine(IN PKDPC Dpc,
     if (GotChar)
     {
         /* Signal the worker thread that there is work to do */
-        SacExtension = DeferredContext;
         KeSetEvent(&SacExtension->Event, SacExtension->PriorityBoost, FALSE);
     }
 }

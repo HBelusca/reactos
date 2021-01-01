@@ -190,6 +190,22 @@ FreeDeviceData(IN PDEVICE_OBJECT DeviceObject)
     KeAcquireSpinLock(&DeviceExtension->Lock, &OldIrql);
     DeviceExtension->RundownInProgress = FALSE;
 
+#if 1
+    /* Initialize rundown and wait for the thread to do it */
+    DeviceExtension->PriorityFail = TRUE;
+    KeInitializeEvent(&DeviceExtension->WorkerThreadEvent, SynchronizationEvent, FALSE);
+    KeReleaseSpinLock(&DeviceExtension->Lock, OldIrql);
+    KeSetEvent(&DeviceExtension->Event, DeviceExtension->PriorityBoost, FALSE);
+    Status = KeWaitForSingleObject(&DeviceExtension->WorkerThreadEvent,
+                                   Executive,
+                                   KernelMode,
+                                   FALSE,
+                                   NULL);
+    ASSERT(Status == STATUS_SUCCESS);
+
+    KeAcquireSpinLock(&DeviceExtension->Lock, &OldIrql);
+#endif
+
     /* Now do the last rundown attempt, we should be the only ones here */
     KeInitializeEvent(&DeviceExtension->RundownEvent, SynchronizationEvent, FALSE);
     KeReleaseSpinLock(&DeviceExtension->Lock, OldIrql);
@@ -324,9 +340,9 @@ InitializeDeviceData(IN PDEVICE_OBJECT DeviceObject)
 
         /* Initialize rundown and wait for the thread to do it */
         DeviceExtension->PriorityFail = TRUE;
-        KeInitializeEvent(&DeviceExtension->RundownEvent, SynchronizationEvent, FALSE);
+        KeInitializeEvent(&DeviceExtension->WorkerThreadEvent, SynchronizationEvent, FALSE);
         KeSetEvent(&DeviceExtension->Event, DeviceExtension->PriorityBoost, FALSE);
-        Status = KeWaitForSingleObject(&DeviceExtension->RundownEvent,
+        Status = KeWaitForSingleObject(&DeviceExtension->WorkerThreadEvent,
                                        Executive,
                                        KernelMode,
                                        FALSE,
