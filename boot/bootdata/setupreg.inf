@@ -10,6 +10,9 @@ HKLM,"SYSTEM\CurrentControlSet\Services\HdlsTerm","ImagePath",0x00020000,"system
 HKLM,"SYSTEM\CurrentControlSet\Services\HdlsTerm","Start",0x00010001,0x00000001
 HKLM,"SYSTEM\CurrentControlSet\Services\HdlsTerm","Type",0x00010001,0x00000001
 
+; EMS Serial Administration Console Driver
+HKLM,"SYSTEM\CurrentControlSet\Services\sacdrv","Start",0x00010001,0x00000003
+
 [DelReg]
 
 ; Critical Device Database

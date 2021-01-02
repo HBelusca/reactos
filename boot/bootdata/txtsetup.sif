@@ -89,7 +89,7 @@ FreeSysPartDiskSpace=450
 [SourceDisksFiles]
 acpi.sys     = 1,,,,,,,4,1,,,1,4
 nmidebug.sys = 1,,,,,,x,4,,,,1,4
-sacdrv.sys   = 1,,,,,,x,4,,,,1,4
+;;sacdrv.sys   = 1,,,,,,x,4,,,,1,4
 uniata.sys   = 1,,,,,,x,4,,,,1,4
 buslogic.sys = 1,,,,,,x,4,,,,1,4
 storahci.sys = 1,,,,,,x,4,,,,1,4
@@ -212,10 +212,10 @@ Cabinet=reactos.cab
 
 [SetupData]
 DefaultPath = \ReactOS
-SetupDebugOptions = "/DEBUG /KDSERIAL /DEBUGPORT=COM1 /FIRSTCHANCE"
+SetupDebugOptions = "/DEBUG /DEBUGPORT=VBOX /FIRSTCHANCE"
 ;SetupDebugOptions = "/DEBUG /SOS /DEBUGPORT=SCREEN"
 ;SetupDebugOptions = "/DEBUG /DEBUGPORT=BOCHS"
-OsLoadOptions = "/NOGUIBOOT /NODEBUG"
+OsLoadOptions = "/NOGUIBOOT /NODEBUG /REDIRECT=COM2 /REDIRECTBAUDRATE=115200"
 
 [NLS]
 AnsiCodepage     = c_1252.nls
