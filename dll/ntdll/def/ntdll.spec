@@ -1216,6 +1216,7 @@
 @ stdcall RtlUnicodeToMultiByteN(ptr long ptr ptr long)
 @ stdcall RtlUnicodeToMultiByteSize(ptr ptr long)
 @ stdcall RtlUnicodeToOemN(ptr long ptr ptr long)
+@ stdcall -stub -version=0x601+ RtlUnicodeToUTF8N(ptr long ptr ptr long)
 @ stdcall RtlUniform(ptr)
 @ stdcall RtlUnlockBootStatusData(ptr)
 @ stub -version=0x600+ RtlUnlockCurrentThread
@@ -1241,6 +1242,7 @@
 @ stdcall RtlUpperString(ptr ptr)
 @ stdcall -version=0x502 RtlUsageHeap(ptr long ptr)
 @ stub -version=0x600+ RtlUserThreadStart
+@ stdcall -stub -version=0x601+ RtlUTF8ToUnicodeN(ptr long ptr ptr long)
 @ stdcall RtlValidAcl(ptr)
 @ stdcall RtlValidRelativeSecurityDescriptor(ptr long long)
 @ stdcall RtlValidSecurityDescriptor(ptr)

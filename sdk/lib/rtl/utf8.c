@@ -1,19 +1,20 @@
 /*
- * PROJECT:         ReactOS Kernel - Vista+ APIs
- * LICENSE:         GPL v2 - See COPYING in the top level directory
- * FILE:            lib/drivers/ntoskrnl_vista/rtl.c
- * PURPOSE:         Rtl functions of Vista+
- * PROGRAMMERS:     Thomas Faber <thomas.faber@reactos.org>
+ * COPYRIGHT:         GPL v2 - See COPYING in the top level directory
+ * PROJECT:           ReactOS system libraries
+ * FILE:              lib/rtl/nls.c
+ * PURPOSE:           UTF-8 Support functions
+ * PROGRAMMERS:       Thomas Faber <thomas.faber@reactos.org>
  */
 
-#include <ntdef.h>
-#include <ntifs.h>
+/* INCLUDES ******************************************************************/
 
-typedef UCHAR BYTE;
+#include "rtl_vista.h"
 
-/******************************************************************************
- * RtlUnicodeToUTF8N [NTDLL.@]
- */
+#define NDEBUG
+#include <debug.h>
+
+/* FUNCTIONS *****************************************************************/
+
 NTSTATUS NTAPI RtlUnicodeToUTF8N(CHAR *utf8_dest, ULONG utf8_bytes_max,
                                  ULONG *utf8_bytes_written,
                                  const WCHAR *uni_src, ULONG uni_bytes)
@@ -123,9 +124,6 @@ NTSTATUS NTAPI RtlUnicodeToUTF8N(CHAR *utf8_dest, ULONG utf8_bytes_max,
 }
 
 
-/******************************************************************************
- * RtlUTF8ToUnicodeN [NTDLL.@]
- */
 NTSTATUS NTAPI RtlUTF8ToUnicodeN(WCHAR *uni_dest, ULONG uni_bytes_max,
                                  ULONG *uni_bytes_written,
                                  const CHAR *utf8_src, ULONG utf8_bytes)

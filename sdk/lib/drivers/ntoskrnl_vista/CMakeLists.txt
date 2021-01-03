@@ -4,12 +4,13 @@ add_definitions(-D_WIN32_WINNT=0x600)
 add_definitions(-DUNICODE -D_UNICODE -D__NTOSKRNL__ -D_NTOSKRNL_ -D_NTSYSTEM_)
 
 list(APPEND SOURCE
-	etw.c
+    etw.c
     fsrtl.c
     io.c
     po.c
     ke.c
-    rtl.c)
+    ${REACTOS_SOURCE_DIR}/sdk/lib/rtl/utf8.c
+)
 
 add_library(ntoskrnl_vista ${SOURCE})
 add_dependencies(ntoskrnl_vista bugcodes xdk)
