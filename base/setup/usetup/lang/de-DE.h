@@ -1883,13 +1883,6 @@ MUI_ERROR deDEErrorEntries[] =
         NULL
     },
     {
-        // ERROR_DELETE_SPACE,
-        "Sie k\224nnen unpartitionierten Speicher nicht l\224schen!\n"
-        "\n"
-        "  * Eine beliebige Taste zum Fortsetzen dr\201cken.",
-        NULL
-    },
-    {
         // ERROR_INSTALL_BOOTCODE,
         "Der %S-Bootcode konnte nicht auf der Partition installiert werden.",
         "EINGABETASTE = Computer neu starten"

@@ -1355,8 +1355,8 @@ AddPartitionToDisk(
         if (LogicalPartition == FALSE && DiskEntry->ExtendedPartition == NULL)
             DiskEntry->ExtendedPartition = PartEntry;
     }
-    else if (IS_RECOGNIZED_PARTITION(DiskEntry->DiskStyle,
-                                     PartEntry->PartitionType))
+    else if (IS_RECOGNIZED_PARTITION_EX(DiskEntry->DiskStyle,
+                                        PartEntry->PartitionType))
     {
         ASSERT(PartitionInfo->RecognizedPartition);
         ASSERT(PartEntry->IsPartitioned && PartEntry->PartitionNumber != 0);
@@ -3645,8 +3645,7 @@ DismountVolume(
     /* Check whether the partition is valid and was mounted by the system */
     if (!PartEntry->IsPartitioned ||
         IsContainerPartition(PartEntry->PartitionType) ||
-        !IS_RECOGNIZED_PARTITION(PartEntry->DiskEntry->DiskStyle,
-                                 PartEntry->PartitionType) ||
+        !IS_RECOGNIZED_PARTITION(PartEntry) ||
         PartEntry->FormatState == UnknownFormat ||
         // NOTE: If FormatState == Unformatted but *FileSystem != 0 this means
         // it has been usually mounted with RawFS and thus needs to be dismounted.
