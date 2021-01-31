@@ -926,7 +926,6 @@ UpgradeRepairPage(PINPUT_RECORD Ir)
         PartitionList = CreatePartitionList();
         if (PartitionList == NULL)
         {
-            /* FIXME: show an error dialog */
             MUIDisplayError(ERROR_DRIVE_INFORMATION, Ir, POPUP_WAIT_ENTER);
             return QUIT_PAGE;
         }
@@ -1577,7 +1576,7 @@ DbgBreakPoint();
             DPRINT1("RepairUpdateFlag == TRUE, SelectPartition() returned FALSE, assert!\n");
             ASSERT(FALSE);
         }
-        ASSERT(!IsContainerPartition(InstallPartition->PartitionType));
+        ASSERT(IS_RECOGNIZED_PARTITION(InstallPartition));
 
         return SELECT_FILE_SYSTEM_PAGE;
     }
@@ -1604,7 +1603,8 @@ DbgBreakPoint();
             if (USetupData.AutoPartition)
             {
                 ASSERT(CurrentPartition != NULL);
-                ASSERT(!IsContainerPartition(CurrentPartition->PartitionType));
+                ASSERT(!((CurrentPartition->DiskEntry->DiskStyle == PARTITION_STYLE_MBR) &&
+                         IsContainerPartition(CurrentPartition->PartitionType.MbrType)));
 
                 if (CurrentPartition->LogicalPartition)
                 {
@@ -1635,7 +1635,7 @@ DbgBreakPoint();
         }
         else
         {
-            ASSERT(!IsContainerPartition(InstallPartition->PartitionType));
+            ASSERT(IS_RECOGNIZED_PARTITION(InstallPartition));
 
             DrawPartitionList(&ListUi); // FIXME: Doesn't make much sense...
 
@@ -1662,6 +1662,7 @@ DbgBreakPoint();
         }
         else if (CurrentPartition->LogicalPartition)
         {
+// TODO: No delete if OEM/reserved partition.
             if (CurrentPartition->IsPartitioned)
             {
                 CONSOLE_SetStatusText(MUIGetString(STRING_DELETEPARTITION));
@@ -1673,9 +1674,11 @@ DbgBreakPoint();
         }
         else
         {
+// TODO: No delete if OEM/reserved partition.
             if (CurrentPartition->IsPartitioned)
             {
-                if (IsContainerPartition(CurrentPartition->PartitionType))
+                if ((CurrentPartition->DiskEntry->DiskStyle == PARTITION_STYLE_MBR) &&
+                    IsContainerPartition(CurrentPartition->PartitionType.MbrType))
                 {
                     CONSOLE_SetStatusText(MUIGetString(STRING_DELETEPARTITION));
                 }
@@ -1718,8 +1721,15 @@ DbgBreakPoint();
         {
             ASSERT(CurrentPartition != NULL);
 
-            if (IsContainerPartition(CurrentPartition->PartitionType))
-                continue; // return SELECT_PARTITION_PAGE;
+            /* Ignore installation in case this is a reserved (OEM) partition,
+             * or is a container partition (MBR disks only). */
+            if ( IS_OEM_RESERVED_PARTITION(CurrentPartition) ||
+            /**  !IS_RECOGNIZED_PARTITION(CurrentPartition)  || **/
+                 ((CurrentPartition->DiskEntry->DiskStyle == PARTITION_STYLE_MBR) &&
+                  IsContainerPartition(CurrentPartition->PartitionType.MbrType)) )
+            {
+                continue;
+            }
 
             /*
              * Check whether the user wants to install ReactOS on a disk that
@@ -1835,16 +1845,19 @@ DbgBreakPoint();
 
             ASSERT(CurrentPartition != NULL);
 
-            if (CurrentPartition->IsPartitioned == FALSE)
+            /* Ignore deletion in case this is not a partitioned
+             * entry, or the partition is reserved (OEM). */
+            if ((CurrentPartition->IsPartitioned == FALSE) ||
+                IS_OEM_RESERVED_PARTITION(CurrentPartition))
             {
-                MUIDisplayError(ERROR_DELETE_SPACE, Ir, POPUP_WAIT_ANY_KEY);
-                return SELECT_PARTITION_PAGE;
+                continue;
             }
 
 // TODO: Do something similar before trying to format the partition?
             if (!CurrentPartition->New &&
-                !IsContainerPartition(CurrentPartition->PartitionType) &&
-                CurrentPartition->FormatState != Unformatted)
+                !((CurrentPartition->DiskEntry->DiskStyle == PARTITION_STYLE_MBR) &&
+                  IsContainerPartition(CurrentPartition->PartitionType.MbrType))  &&
+                (CurrentPartition->FormatState != Unformatted))
             {
                 ASSERT(CurrentPartition->PartitionNumber != 0);
 
@@ -3186,8 +3199,8 @@ DbgBreakPoint();
 
     ASSERT(PartEntry->IsPartitioned && PartEntry->PartitionNumber != 0);
 
-    DPRINT1("CheckFileSystemPage -- PartitionType: 0x%02X ; FileSystem: %S\n",
-            PartEntry->PartitionType, (*PartEntry->FileSystem ? PartEntry->FileSystem : L"n/a"));
+    // DPRINT1("CheckFileSystemPage -- PartitionType: 0x%02X ; FileSystem: %S\n",
+            // PartEntry->PartitionType, (*PartEntry->FileSystem ? PartEntry->FileSystem : L"n/a"));
 
     /* Check the partition */
     Status = DoChkdsk(PartEntry);
@@ -3911,8 +3924,7 @@ BootLoaderSelectPage(PINPUT_RECORD Ir)
      * we need to actually install the VBR on removable disk if the
      * system partition is not recognized.
      */
-    if ((SystemPartition->DiskEntry->DiskStyle != PARTITION_STYLE_MBR) ||
-        !IsRecognizedPartition(SystemPartition->PartitionType))
+    if (!IS_RECOGNIZED_PARTITION(SystemPartition))
     {
         USetupData.MBRInstallType = 1;
         goto Quit;

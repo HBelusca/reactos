@@ -850,7 +850,7 @@ FormatPartition(
     /* Reset the MBR partition type, unless this is an OEM partition */
     if (DiskEntry->DiskStyle == PARTITION_STYLE_MBR)
     {
-        if (!IsOEMPartition(PartEntry->PartitionType))
+        if (!IsOEMPartition(PartEntry->PartitionType.MbrType))
             SetMBRPartitionType(PartEntry, PartitionType);
     }
 

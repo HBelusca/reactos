@@ -26,8 +26,6 @@
       ((PartitionType) == PARTITION_DELL)        || \
       ((PartitionType) == PARTITION_IBM) )
 
-// TODO: Create a IsOEMGptPartition() macro that checks the GPT_ATTRIBUTE_PLATFORM_REQUIRED bit.
-
 // This should go into diskguid.h
 
 #ifdef __cplusplus
@@ -50,13 +48,32 @@
 /* PRIVATE MACROS ***********************************************************/
 
 // #define IS_CONTAINER_PARTITION()
-// Uses IsContainerPartition() if partitiontype == MBR...
+// Uses IsContainerPartition() if DiskStyle == MBR...
 // otherwise use a list of known partition container GUIDs for GPT.
 
-#define IS_RECOGNIZED_PARTITION(PartStyle, PartType)     \
+
+#define IS_OEM_RESERVED_PARTITION(PartEntry) \
+    ( ((PartEntry)->DiskEntry->DiskStyle == PARTITION_STYLE_MBR) ? \
+          IsOEMPartition((PartEntry)->PartitionType.MbrType) :      \
+          FALSE ) // PARTITION_STYLE_GPT // TODO: Check the GPT_ATTRIBUTE_PLATFORM_REQUIRED bit.
+
+
+/*
+ * IMPORTANT NOTE!
+ * A container partition (for MBR: the partition is an extended container,
+ * i.e. IsContainerPartition() returns TRUE, or for MBR/GPT, this could be
+ * an LDM ... container) can _NEVER_ be also a recognized partition, i.e.
+ * a partition that can hold a filesystem on which we can write files.
+ */
+
+#define IS_RECOGNIZED_PARTITION_EX(PartStyle, PartType)  \
     ( ((PartStyle) == PARTITION_STYLE_GPT) ?             \
           IsRecognizedGptPartition((PartType).GptType) : \
           IsRecognizedPartition((PartType).MbrType) ) // PARTITION_STYLE_MBR
+
+#define IS_RECOGNIZED_PARTITION(PartEntry)                        \
+    IS_RECOGNIZED_PARTITION_EX((PartEntry)->DiskEntry->DiskStyle, \
+                               (PartEntry)->PartitionType)
 
 #if 0 // Old version
 

@@ -239,12 +239,13 @@ GetPartitionTypeString(
     OUT PSTR strBuffer,
     IN ULONG cchBuffer)
 {
-    if (PartEntry->PartitionType == PARTITION_ENTRY_UNUSED)
+    if (IS_PARTITION_UNUSED(PartEntry))
     {
         StringCchCopyA(strBuffer, cchBuffer,
                        "Unused" /* MUIGetString(STRING_FORMATUNUSED) */);
     }
-    else if (IsContainerPartition(PartEntry->PartitionType))
+    else if ((PartEntry->DiskEntry->DiskStyle == PARTITION_STYLE_MBR) &&
+             IsContainerPartition(PartEntry->PartitionType.MbrType))
     {
         StringCchCopyA(strBuffer, cchBuffer,
                        "Extended Partition" /* MUIGetString(STRING_EXTENDED_PARTITION) */);
@@ -258,7 +259,7 @@ GetPartitionTypeString(
         {
             for (i = 0; i < ARRAYSIZE(MbrPartitionTypes); ++i)
             {
-                if (PartEntry->PartitionType == MbrPartitionTypes[i].Type)
+                if (PartEntry->PartitionType.MbrType == MbrPartitionTypes[i].Type)
                 {
                     StringCchCopyA(strBuffer, cchBuffer,
                                    MbrPartitionTypes[i].Description);
@@ -266,12 +267,11 @@ GetPartitionTypeString(
                 }
             }
         }
-#if 0 // TODO: GPT support!
         else if (PartEntry->DiskEntry->DiskStyle == PARTITION_STYLE_GPT)
         {
             for (i = 0; i < ARRAYSIZE(GptPartitionTypes); ++i)
             {
-                if (IsEqualPartitionType(PartEntry->PartitionType,
+                if (IsEqualPartitionType(PartEntry->PartitionType.GptType,
                                          GptPartitionTypes[i].Guid))
                 {
                     StringCchCopyA(strBuffer, cchBuffer,
@@ -280,18 +280,18 @@ GetPartitionTypeString(
                 }
             }
         }
-#endif
 
         /* We are here because the partition type is unknown */
         if (cchBuffer > 0) *strBuffer = '\0';
     }
 
-    if ((cchBuffer > 0) && (*strBuffer == '\0'))
+    if ((cchBuffer > 0) && (*strBuffer == '\0') &&
+        (PartEntry->DiskEntry->DiskStyle == PARTITION_STYLE_MBR))
     {
         StringCchPrintfA(strBuffer, cchBuffer,
                          // MUIGetString(STRING_PARTTYPE),
                          "Type 0x%02x",
-                         PartEntry->PartitionType);
+                         PartEntry->PartitionType.MbrType);
     }
 }
 
@@ -566,8 +566,8 @@ PrintDiskData(
         htiPart = PrintPartitionData(hWndList, List, htiDisk,
                                      DiskEntry, PrimaryPartEntry);
 
-        if (IsContainerPartition(PrimaryPartEntry->PartitionType) &&
-            (DiskEntry->DiskStyle == PARTITION_STYLE_MBR))
+        if ((DiskEntry->DiskStyle == PARTITION_STYLE_MBR) &&
+            IsContainerPartition(PrimaryPartEntry->PartitionType.MbrType))
         {
             for (LogicalEntry =  DiskEntry->PartList[LOGICAL_PARTITIONS].Flink;
                  LogicalEntry != &DiskEntry->PartList[LOGICAL_PARTITIONS];
