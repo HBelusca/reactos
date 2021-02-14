@@ -269,11 +269,20 @@ AssignDriveLetters(
                 PartEntry->IsSystemPartition)
             {
                 /* Yes it is */
+#ifdef TEST_NEW_PARTTYPE_WAY
+                ASSERT(PartEntry->PartInfo.Mbr.PartitionType != PARTITION_ENTRY_UNUSED);
+                ASSERT(!IsContainerPartition(PartEntry->PartInfo.Mbr.PartitionType));
+#else
                 ASSERT(PartEntry->PartitionType.MbrType != PARTITION_ENTRY_UNUSED);
                 ASSERT(!IsContainerPartition(PartEntry->PartitionType.MbrType));
+#endif
 
                 // NOTE: Windows installer does not check for a recognized partition.
+#ifdef TEST_NEW_PARTTYPE_WAY
+                if (IsRecognizedPartition(PartEntry->PartInfo.Mbr.PartitionType) ||
+#else
                 if (IsRecognizedPartition(PartEntry->PartitionType.MbrType) ||
+#endif
                     PartEntry->SectorCount.QuadPart != 0LL)
                 {
                     if (Letter <= L'Z')
@@ -305,10 +314,18 @@ AssignDriveLetters(
 
             if (PartEntry->IsPartitioned /**/ && PartEntry->DriveLetter == 0/**/)
             {
+#ifdef TEST_NEW_PARTTYPE_WAY
+                ASSERT(PartEntry->PartInfo.Mbr.PartitionType != PARTITION_ENTRY_UNUSED);
+#else
                 ASSERT(PartEntry->PartitionType.MbrType != PARTITION_ENTRY_UNUSED);
+#endif
 
                 // NOTE: Windows installer does not check for a recognized partition.
+#ifdef TEST_NEW_PARTTYPE_WAY
+                if (IsRecognizedPartition(PartEntry->PartInfo.Mbr.PartitionType) ||
+#else
                 if (IsRecognizedPartition(PartEntry->PartitionType.MbrType) ||
+#endif
                     PartEntry->SectorCount.QuadPart != 0LL)
                 {
                     if (Letter <= L'Z')
@@ -1258,15 +1275,27 @@ InitializePartitionEntry(
     RtlZeroMemory(&PartEntry->PartInfo, sizeof(PartEntry->PartInfo));
     if (DiskEntry->DiskStyle == PARTITION_STYLE_MBR)
     {
+#ifdef TEST_NEW_PARTTYPE_WAY
+        PartEntry->PartInfo.Mbr.PartitionType =
+#else
         PartEntry->PartitionType.MbrType =
+#endif
             FileSystemToMBRPartitionType(L"RAW",
                                          PartEntry->StartSector.QuadPart,
                                          PartEntry->SectorCount.QuadPart);
+#ifdef TEST_NEW_PARTTYPE_WAY
+        ASSERT(PartEntry->PartInfo.Mbr.PartitionType != PARTITION_ENTRY_UNUSED);
+#else
         ASSERT(PartEntry->PartitionType.MbrType != PARTITION_ENTRY_UNUSED);
+#endif
     }
     else if (DiskEntry->DiskStyle == PARTITION_STYLE_GPT)
     {
+#ifdef TEST_NEW_PARTTYPE_WAY
+        PartEntry->PartInfo.Gpt.PartitionType = PARTITION_BASIC_DATA_GUID;
+#else
         PartEntry->PartitionType.GptType = PARTITION_BASIC_DATA_GUID;
+#endif
     }
 
     PartEntry->FormatState = Unformatted;
@@ -1330,7 +1359,9 @@ AddPartitionToDisk(
     }
     else if (DiskEntry->DiskStyle == PARTITION_STYLE_GPT)
     {
+#ifndef TEST_NEW_PARTTYPE_WAY
         PartEntry->PartitionType.GptType = PartitionInfo->Gpt.PartitionType;
+#endif
         PartEntry->PartInfo.Gpt = PartitionInfo->Gpt;
     }
 
@@ -1416,7 +1447,11 @@ AddPartitionToDisk(
                        PartEntry->PartitionType.MbrType == PARTITION_FAT32_XINT13)
                       ) ||
                      ((DiskEntry->DiskStyle == PARTITION_STYLE_GPT) &&
+#ifdef TEST_NEW_PARTTYPE_WAY
+                      IsEqualPartitionType(PartEntry->PartInfo.Gpt.PartitionType,
+#else
                       IsEqualPartitionType(PartEntry->PartitionType.GptType,
+#endif
                                            PARTITION_BASIC_DATA_GUID)) )
                 {
                     PartEntry->FormatState = Unformatted;
@@ -3291,14 +3326,21 @@ UpdateDiskLayout(
             {
                 // PartitionInfo->Mbr = PartEntry->PartInfo.Mbr;
                 PartitionInfo->Mbr.HiddenSectors = PartEntry->StartSector.LowPart;
+#ifdef TEST_NEW_PARTTYPE_WAY
+                PartitionInfo->Mbr.PartitionType = PartEntry->PartInfo.Mbr.PartitionType;
+                PartitionInfo->Mbr.RecognizedPartition = IsRecognizedPartition(PartEntry->PartInfo.Mbr.PartitionType);
+#else
                 PartitionInfo->Mbr.PartitionType = PartEntry->PartitionType.MbrType;
-                PartitionInfo->Mbr.BootIndicator = PartEntry->IsSystemPartition;
                 PartitionInfo->Mbr.RecognizedPartition = IsRecognizedPartition(PartEntry->PartitionType.MbrType);
+#endif
+                PartitionInfo->Mbr.BootIndicator = PartEntry->IsSystemPartition;
             }
             else // if (DiskEntry->DiskStyle == PARTITION_STYLE_GPT)
             {
                 PartitionInfo->Gpt = PartEntry->PartInfo.Gpt;
+#ifndef TEST_NEW_PARTTYPE_WAY
                 PartitionInfo->Gpt.PartitionType = PartEntry->PartitionType.GptType;
+#endif
             }
 
             PartitionInfo->RewritePartition = TRUE;
