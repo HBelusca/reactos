@@ -47,15 +47,54 @@
 
 /* PRIVATE MACROS ***********************************************************/
 
+/*
+ * WORK IN PROGRESS !!
+ * Evaluate the best way how to store the per-partition type
+ */
+
+// #define TEST_NEW_PARTTYPE_WAY
+
+#ifdef TEST_NEW_PARTTYPE_WAY
+
+#define GET_PARTITION_TYPE(PartEntry)   \
+    ( ((PartEntry)->DiskEntry->DiskStyle == PARTITION_STYLE_MBR) ?  \
+          (PartEntry)->PartInfo.Mbr.PartitionType :                 \
+      ((PartEntry)->DiskEntry->DiskStyle == PARTITION_STYLE_GPT) ?  \
+          (PartEntry)->PartInfo.Gpt.PartitionType :                 \
+      0 )
+
+#else
+
+#define GET_PARTITION_TYPE(PartEntry)   \
+    ( ((PartEntry)->DiskEntry->DiskStyle == PARTITION_STYLE_MBR) ?  \
+          (PartEntry)->PartitionType.MbrType :                      \
+      ((PartEntry)->DiskEntry->DiskStyle == PARTITION_STYLE_GPT) ?  \
+          (PartEntry)->PartitionType.GptType :                      \
+      0 )
+
+#endif
+
+
 // #define IS_CONTAINER_PARTITION()
 // Uses IsContainerPartition() if DiskStyle == MBR...
 // otherwise use a list of known partition container GUIDs for GPT.
 
 
+#ifdef TEST_NEW_PARTTYPE_WAY
+
+#define IS_OEM_RESERVED_PARTITION(PartEntry) \
+    ( ((PartEntry)->DiskEntry->DiskStyle == PARTITION_STYLE_MBR) ?  \
+          IsOEMPartition((PartEntry)->PartInfo.Mbr.PartitionType) : \
+          !!((PartEntry)->PartInfo.Gpt.Attributes & GPT_ATTRIBUTE_PLATFORM_REQUIRED) ) // PARTITION_STYLE_GPT
+
+#else
+
 #define IS_OEM_RESERVED_PARTITION(PartEntry) \
     ( ((PartEntry)->DiskEntry->DiskStyle == PARTITION_STYLE_MBR) ? \
           IsOEMPartition((PartEntry)->PartitionType.MbrType) :      \
-          FALSE ) // PARTITION_STYLE_GPT // TODO: Check the GPT_ATTRIBUTE_PLATFORM_REQUIRED bit.
+          !!((PartEntry)->PartInfo.Gpt.Attributes & GPT_ATTRIBUTE_PLATFORM_REQUIRED) ) // PARTITION_STYLE_GPT
+
+#endif
 
 
 /*
@@ -66,6 +105,19 @@
  * a partition that can hold a filesystem on which we can write files.
  */
 
+#ifdef TEST_NEW_PARTTYPE_WAY
+
+#define IS_RECOGNIZED_PARTITION_EX(PartStyle, PartType)  \
+    ( ((PartStyle) == PARTITION_STYLE_GPT) ?             \
+          IsRecognizedGptPartition((PartType).Gpt.PartitionType) : \
+          IsRecognizedPartition((PartType).Mbr.PartitionType) ) // PARTITION_STYLE_MBR
+
+#define IS_RECOGNIZED_PARTITION(PartEntry)                        \
+    IS_RECOGNIZED_PARTITION_EX((PartEntry)->DiskEntry->DiskStyle, \
+                               (PartEntry)->PartInfo)
+
+#else
+
 #define IS_RECOGNIZED_PARTITION_EX(PartStyle, PartType)  \
     ( ((PartStyle) == PARTITION_STYLE_GPT) ?             \
           IsRecognizedGptPartition((PartType).GptType) : \
@@ -74,6 +126,19 @@
 #define IS_RECOGNIZED_PARTITION(PartEntry)                        \
     IS_RECOGNIZED_PARTITION_EX((PartEntry)->DiskEntry->DiskStyle, \
                                (PartEntry)->PartitionType)
+
+#endif
+
+
+#ifdef TEST_NEW_PARTTYPE_WAY
+
+#define IS_PARTITION_UNUSED(PartEntry)                             \
+    ( ((PartEntry)->DiskEntry->DiskStyle == PARTITION_STYLE_GPT) ? \
+          IsEqualPartitionType((PartEntry)->PartInfo.Gpt.PartitionType, \
+                               PARTITION_ENTRY_UNUSED_GUID) :      \
+          ((PartEntry)->PartInfo.Mbr.PartitionType == PARTITION_ENTRY_UNUSED) ) // PARTITION_STYLE_MBR
+
+#else
 
 #if 0 // Old version
 
@@ -92,6 +157,8 @@ C_ASSERT(PARTITION_ENTRY_UNUSED_GUID == GUID_NULL);
 #define IS_PARTITION_UNUSED(PartEntry)               \
     IsEqualPartitionType((PartEntry)->PartitionType.GptType, \
                          PARTITION_ENTRY_UNUSED_GUID)
+
+#endif
 
 #endif
 
@@ -137,35 +204,57 @@ typedef struct _PARTENTRY
         {
             // NOTE: See comment for the PARTLIST::SystemPartition member.
             // MBR: BootIndicator == TRUE / GPT: PARTITION_SYSTEM_GUID.
-            UCHAR IsSystemPartition  : 1;
+            BOOLEAN IsSystemPartition : 1;
 
-            BOOLEAN LogicalPartition : 1; // MBR-specific
+            BOOLEAN LogicalPartition  : 1; // MBR-specific
 
             /* Partition is partitioned disk space */
-            BOOLEAN IsPartitioned    : 1;
+            BOOLEAN IsPartitioned     : 1;
 
             /* Partition is new, table does not exist on disk yet */
-            BOOLEAN New              : 1;
+            BOOLEAN New               : 1;
 
             /* Partition was created automatically */
-            BOOLEAN AutoCreate       : 1;
+            BOOLEAN AutoCreate        : 1;
         };
     };
 
-    /* Cached partition type. This duplicates the information stored
-     * in PartInfo.Mbr.PartitionType or PartInfo.Gpt.PartitionType. */
-    union
-    {
-        UCHAR MbrType;
-        GUID  GptType;
-    } PartitionType;
+#ifdef TEST_NEW_PARTTYPE_WAY
 
-    /* Cached type-specific partition information */
     union
     {
-        PARTITION_INFORMATION_MBR Mbr;
-        PARTITION_INFORMATION_GPT Gpt;
-    } PartInfo;
+        union
+        {
+            UCHAR PartType;
+            PARTITION_INFORMATION_MBR PartInfo;
+        } Mbr;
+        union
+        {
+            GUID PartType;
+            PARTITION_INFORMATION_GPT PartInfo;
+        } Gpt;
+    };
+
+#else
+
+    union
+    {
+        /* Cached partition type. This duplicates the information stored
+         * in PartInfo.Mbr.PartitionType or PartInfo.Gpt.PartitionType. */
+        union
+        {
+            UCHAR MbrType; // Mbr;
+            GUID  GptType; // Gpt;
+        } PartitionType;   // PartType;
+
+        /* Cached type-specific partition information */
+        union
+        {
+            PARTITION_INFORMATION_MBR Mbr;
+            PARTITION_INFORMATION_GPT Gpt;
+        } PartInfo;
+    };
+#endif
     //
     // NOTE: In order to get the NT partition layout corresponding to
     // this PARTENTRY, use the 'PartitionIndex' member that indexes the
