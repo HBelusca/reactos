@@ -23,6 +23,12 @@ together with printf-like functionality.
 CONTENTS
 ~-~-~-~-
 
+-- Command-Line Options Parser Library --
+
+parser.h: A library for parsing command-line options, in a consistent manner
+thorough the ReactOS console utilities.
+
+
 -- Main ConUtils Library --
 
 0. "BASE" (utils.c and utils.h): Base set of functions for loading
