@@ -748,13 +748,13 @@ int wmain(int argc, WCHAR* argv[])
                    sizeof(szEventType), &szEventType),
 
         /* Event category (ReactOS additional option) */
-        NEW_OPT(L"C", TYPE_U32,
+        NEW_OPT(L"C", TYPE_ULong,
                 0,
                 1,
                 sizeof(ulEventCategory), &ulEventCategory),
 
         /* Event ID */
-        NEW_OPT(L"ID", TYPE_U32,
+        NEW_OPT(L"ID", TYPE_ULong,
                 OPTION_MANDATORY,
                 1,
                 sizeof(ulEventIdentifier), &ulEventIdentifier),
