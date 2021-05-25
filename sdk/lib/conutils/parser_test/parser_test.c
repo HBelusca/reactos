@@ -3,8 +3,13 @@
 #include <stdio.h>
 #include <windows.h>
 
-// #define INT_TYPES
-#define ALT_NAMES
+
+// #define PARSER_LONG_OPTION_NAMES
+#define PARSER_INT_FLAGS
+#define PARSER_INT_TYPES
+
+// #define PARSER_INT_TYPES
+#define PARSER_ALT_NAMES
 #include "../parser.h"
 
 
@@ -126,6 +131,9 @@ PrintParserError(PARSER_ERROR Error, ...)
 int wmain(int argc, WCHAR* argv[])
 {
     BOOL bSuccess;
+
+#if 0 // TEST
+
     LPCWSTR lpCmdLine;
 
     /* Default option values */
@@ -142,50 +150,50 @@ int wmain(int argc, WCHAR* argv[])
     OPTION Options[] =
     {
         /* Help */
-        NEW_OPT(L"?|h", TYPE_None, // ~= TYPE_Bool,
+        NEW_OPT(L"?|h", L"help", TYPE_None, // ~= TYPE_Bool,
                 OPTION_EXCLUSIVE,
                 1,
                 sizeof(bDisplayHelp), &bDisplayHelp),
 
         /* System */
-        NEW_OPT(L"S", TYPE_Str,
+        NEW_OPT(L"S", L"system", TYPE_Str,
                 OPTION_NOT_EMPTY | OPTION_TRIM_SPACE,
                 1,
                 sizeof(szSystem), &szSystem),
 
         /* Password */
-        NEW_OPT(L"P", TYPE_Str,
+        NEW_OPT(L"P", L"pwd", TYPE_Str,
                 0,
                 1,
                 sizeof(szPassword), &szPassword),
 
         /* Event type */
-        NEW_OPT_EX(L"T", TYPE_Str,
+        NEW_OPT_EX(L"T", L"type", TYPE_Str,
                    OPTION_MANDATORY | OPTION_NOT_EMPTY | OPTION_TRIM_SPACE | OPTION_ALLOWED_LIST,
                    L"SUCCESS|ERROR|WARNING|INFORMATION",
                    1,
                    sizeof(szEventType), &szEventType),
 
         /* Event description */
-        NEW_OPT(L"D", TYPE_Str,
+        NEW_OPT(L"D", L"desc", TYPE_Str,
                 OPTION_MANDATORY,
                 1,
                 sizeof(szDescription), &szDescription),
 
         /* Event category (ReactOS additional option) */
-        NEW_OPT(L"C", TYPE_ULong,
+        NEW_OPT(L"C", L"cat", TYPE_ULong,
                 0,
                 1,
                 sizeof(ulEventCategory), &ulEventCategory),
 
         /* Event ID */
-        NEW_OPT(L"ID", TYPE_ULong,
+        NEW_OPT(L"ID", L"id", TYPE_ULong,
                 OPTION_MANDATORY,
                 1,
                 sizeof(ulEventIdentifier), &ulEventIdentifier),
 
         /* Some flag */
-        NEW_OPT_EX(L"F", TYPE_Flag,
+        NEW_OPT_EX(L"F", L"a_flag", TYPE_Flag,
                    0,
                    123,
                    1,
@@ -197,20 +205,22 @@ int wmain(int argc, WCHAR* argv[])
     wprintf(L"Original command-line:\n    '%s'\n", lpCmdLine);
 
     printf("Calling DoParseArgv()\n");
-    bSuccess = DoParseArgv(argc, argv, Options, ARRAYSIZE(Options), PrintParserError);
+    bSuccess = DoParseArgv(argc, argv, NULL,
+                           Options, ARRAYSIZE(Options),
+                           PrintParserError);
     if (!bSuccess)
         printf("DoParseArgv() failed\n");
 
     if (bDisplayHelp)
         printf("Help(1)!\n");
 
-    bDisplayHelp = FALSE;
-    szSystem = NULL;
-    szPassword = NULL;
-    szEventType = NULL;
+    bDisplayHelp  = FALSE;
+    szSystem      = NULL;
+    szPassword    = NULL;
+    szEventType   = NULL;
     szDescription = NULL;
-    ulEventType = EVENTLOG_INFORMATION_TYPE;
-    ulEventCategory = 0;
+    ulEventType   = EVENTLOG_INFORMATION_TYPE;
+    ulEventCategory   = 0;
     ulEventIdentifier = 0;
     ulFlag = 0;
     for (size_t i = 0; i < ARRAYSIZE(Options); ++i)
@@ -224,8 +234,9 @@ int wmain(int argc, WCHAR* argv[])
     /* Zap the first argument (program name) */
     ParseTokenStr(&Context);
     /* Do the parsing */
-    bSuccess = DoParseWorker(&Context, ParseTokenStr,
-                             Options, ARRAYSIZE(Options), PrintParserError);
+    bSuccess = DoParseWorker(&Context, ParseTokenStr, NULL,
+                             Options, ARRAYSIZE(Options),
+                             PrintParserError);
     if (Context.TokBuf)
         free((void*)Context.TokBuf);
     }
@@ -234,6 +245,54 @@ int wmain(int argc, WCHAR* argv[])
 
     if (bDisplayHelp)
         printf("Help(2)!\n");
+
+#endif // TEST
+
+
+
+    /* Default option values */
+    BOOL bDisplayHelp = FALSE;
+    LONG timerValue = -1;
+    BOOL bDisableInput = FALSE; // , fTimerFlags = 0;
+
+    OPTION Options[] =
+    {
+        /* Help */
+        NEW_OPT(L"?", TYPE_None, // ~= TYPE_Bool,
+                OPTION_EXCLUSIVE,
+                1,
+                sizeof(bDisplayHelp), &bDisplayHelp),
+
+        /* Timeout (Default) */
+        NEW_OPT(L"T", TYPE_Long,
+                OPTION_DEFAULT | OPTION_MANDATORY,
+                1,
+                sizeof(timerValue), &timerValue),
+
+        /* This flag is used to ignore any keyboard keys but Ctrl-C */
+        NEW_OPT(L"NOBREAK", TYPE_None, // ~= TYPE_Bool,
+                0,
+                1,
+                sizeof(bDisableInput), &bDisableInput),
+    };
+
+    /* Parse command line for options */
+    // lpCmdLine = GetCommandLineW();
+    // wprintf(L"Original command-line:\n    '%s'\n", lpCmdLine);
+
+    printf("Calling DoParseArgv()\n");
+    bSuccess = DoParseArgv(argc, argv, NULL,
+                           Options, ARRAYSIZE(Options),
+                           PrintParserError);
+    if (!bSuccess)
+        printf("DoParseArgv() failed\n");
+
+    if (bDisplayHelp)
+        printf("Help(1)!\n");
+    if (bDisableInput)
+        printf("Disable keyboard input\n");
+
+    printf("Timer value: %d\n", timerValue);
 
     return 0;
 }
