@@ -773,11 +773,15 @@ int wmain(int argc, WCHAR* argv[])
     /* Initialize the Console Standard Streams */
     ConInitStdStreams();
 
-    /* Parse command line for options */
-    if (!DoParseArgv(argc, argv, Options, ARRAYSIZE(Options), PrintParserError))
+    /* Parse the command line for options */
+    if (!DoParseArgv(argc, argv, NULL,
+                     Options, ARRAYSIZE(Options),
+                     PrintParserError))
+    {
         return EXIT_FAILURE;
+    }
 
-    /* Finalize options validity checks */
+    /* Finalize the options validity checks */
 
     if (bDisplayHelp)
     {
