@@ -16,6 +16,8 @@
 #include <winuser.h>
 
 #include <conutils.h>
+#include <parser.h>
+
 #include <strsafe.h>
 
 #include "resource.h"

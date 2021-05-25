@@ -16,6 +16,7 @@
 #include <winuser.h>
 
 #include <conutils.h>
+#include <parser.h>
 
 #include "resource.h"
 
@@ -44,7 +45,7 @@ CtrlCIntercept(DWORD dwCtrlType)
     return FALSE;
 }
 
-INT InputWait(BOOL bNoBreak, INT timerValue)
+INT InputWait(BOOL bNoBreak, LONG timerValue)
 {
     INT Status = EXIT_SUCCESS;
     HANDLE hInput;
@@ -271,7 +272,7 @@ Quit:
 
 int wmain(int argc, WCHAR* argv[])
 {
-    INT timerValue = -1;
+    LONG timerValue = -1;
     PWCHAR pszNext;
     BOOL bDisableInput = FALSE, fTimerFlags = 0;
     int index = 0;
@@ -279,9 +280,59 @@ int wmain(int argc, WCHAR* argv[])
     /* Initialize the Console Standard Streams */
     ConInitStdStreams();
 
+#if 0
+
+    OPTION Options[] =
+    {
+        /* Help */
+        NEW_OPT(L"?", TYPE_None, // ~= TYPE_Bool,
+                OPTION_EXCLUSIVE,
+                1,
+                sizeof(bDisplayHelp), &bDisplayHelp),
+
+        /* Timeout */
+        NEW_OPT(L"T", TYPE_Long,
+                0,
+                1,
+                sizeof(timerValue), &timerValue),
+
+        /* Event ID */
+        NEW_OPT(L"NOBREAK", TYPE_None, // ~= TYPE_Bool,
+                0,
+                1,
+                sizeof(bDisableInput), &bDisableInput),
+    };
+
+    /* Parse the command line for options */
+    if (!DoParseArgv(argc, argv, NULL,
+                     Options, ARRAYSIZE(Options),
+                     PrintParserError))
+    {
+        return EXIT_FAILURE;
+    }
+
+    /* Finalize the options validity checks */
+
+#if 0
+    if (bDisplayHelp)
+    {
+        if (argc > 2)
+        {
+            /* Invalid syntax */
+            PrintParserError(InvalidSyntax);
+            return EXIT_FAILURE;
+        }
+
+        ConResPuts(StdOut, IDS_USAGE); // IDS_HELP
+        return EXIT_SUCCESS;
+    }
+#endif
+
+#endif
+
     if (argc == 1)
     {
-        ConResPrintf(StdOut, IDS_USAGE);
+        ConResPuts(StdOut, IDS_USAGE);
         return EXIT_SUCCESS;
     }
 
@@ -294,7 +345,7 @@ int wmain(int argc, WCHAR* argv[])
             {
                 case L'?': /* Help */
                 {
-                    ConResPrintf(StdOut, IDS_USAGE);
+                    ConResPuts(StdOut, IDS_USAGE);
                     return EXIT_SUCCESS;
                 }
 
@@ -303,7 +354,7 @@ int wmain(int argc, WCHAR* argv[])
                     /* Consecutive /T switches are invalid */
                     if (fTimerFlags & 2)
                     {
-                        ConResPrintf(StdErr, IDS_ERROR_ONE_TIME);
+                        ConResPuts(StdErr, IDS_ERROR_ONE_TIME);
                         return EXIT_FAILURE;
                     }
 
@@ -330,14 +381,14 @@ int wmain(int argc, WCHAR* argv[])
         /* Only one timer value is supported */
         if (fTimerFlags & 1)
         {
-            ConResPrintf(StdErr, IDS_ERROR_ONE_TIME);
+            ConResPuts(StdErr, IDS_ERROR_ONE_TIME);
             return EXIT_FAILURE;
         }
 
         timerValue = wcstol(argv[index], &pszNext, 10);
         if (*pszNext)
         {
-            ConResPrintf(StdErr, IDS_ERROR_OUT_OF_RANGE);
+            ConResPuts(StdErr, IDS_ERROR_OUT_OF_RANGE);
             return EXIT_FAILURE;
         }
 
@@ -348,14 +399,14 @@ int wmain(int argc, WCHAR* argv[])
     /* A timer value is mandatory in order to continue */
     if (!(fTimerFlags & 1))
     {
-        ConResPrintf(StdErr, IDS_ERROR_NO_TIMER_VALUE);
+        ConResPuts(StdErr, IDS_ERROR_NO_TIMER_VALUE);
         return EXIT_FAILURE;
     }
 
     /* Make sure the timer value is within range */
     if ((timerValue < -1) || (timerValue > 99999))
     {
-        ConResPrintf(StdErr, IDS_ERROR_OUT_OF_RANGE);
+        ConResPuts(StdErr, IDS_ERROR_OUT_OF_RANGE);
         return EXIT_FAILURE;
     }
 
