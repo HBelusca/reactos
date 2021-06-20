@@ -281,11 +281,11 @@ CreateCommonFreeLdrSections(
 
     /* MenuColor=Blue */
     IniCacheInsertKey(IniSection, NULL, INSERT_LAST,
-                      L"MenuColor", L"Black");
+                      L"MenuColor", L"Blue");
 
     /* TextColor=Yellow */
     IniCacheInsertKey(IniSection, NULL, INSERT_LAST,
-                      L"TextColor", L"Default");
+                      L"TextColor", L"Yellow");
 
     /* SelectedTextColor=Black */
     IniCacheInsertKey(IniSection, NULL, INSERT_LAST,
@@ -295,6 +295,7 @@ CreateCommonFreeLdrSections(
     IniCacheInsertKey(IniSection, NULL, INSERT_LAST,
                       L"SelectedColor", L"Default");
 
+#if 0
     /* ShowTime=Yes */
     IniCacheInsertKey(IniSection, NULL, INSERT_LAST,
                       L"ShowTime", L"No");
@@ -310,6 +311,10 @@ CreateCommonFreeLdrSections(
     /* MinimalUI=No */
     IniCacheInsertKey(IniSection, NULL, INSERT_LAST,
                       L"MinimalUI", L"Yes");
+#else
+    IniCacheInsertKey(IniSection, NULL, INSERT_LAST,
+                      L"SpecialEffects", L"Yes");
+#endif
 
     /* TimeText=Your text goes here... */
     IniCacheInsertKey(IniSection, NULL, INSERT_LAST,
