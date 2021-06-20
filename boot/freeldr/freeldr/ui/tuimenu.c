@@ -242,7 +242,7 @@ TuiDrawMenu(PUI_MENU_INFO MenuInfo)
     //
     // Update the status bar
     //
-    UiVtbl.DrawStatusText("Use \x18 and \x19 to select, then press ENTER.");
+    UiVtbl.DrawStatusText("Use \x18 and \x19 to select, then press ENTER. F10 for editing boot items.");
 
     //
     // Draw the menu box
