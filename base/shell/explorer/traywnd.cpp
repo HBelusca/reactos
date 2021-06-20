@@ -141,12 +141,16 @@ class CStartButton
 {
     HIMAGELIST m_ImageList;
     SIZE       m_Size;
+#if 0
     HFONT      m_Font;
+#endif
 
 public:
     CStartButton()
-        : m_ImageList(NULL),
+        : m_ImageList(NULL) //,
+#if 0
           m_Font(NULL)
+#endif
     {
         m_Size.cx = 0;
         m_Size.cy = 0;
@@ -156,9 +160,10 @@ public:
     {
         if (m_ImageList != NULL)
             ImageList_Destroy(m_ImageList);
-
+#if 0
         if (m_Font != NULL)
             DeleteObject(m_Font);
+#endif
     }
 
     SIZE GetSize()
@@ -182,6 +187,7 @@ public:
         m_Size = Size;
     }
 
+#if 0
     VOID UpdateFont()
     {
         /* Get the system fonts, we use the caption font, always bold, though. */
@@ -197,6 +203,7 @@ public:
 
         SetFont(m_Font, FALSE);
     }
+#endif
 
     VOID Initialize()
     {
@@ -211,7 +218,13 @@ public:
                                            IMAGE_BITMAP,
                                            LR_LOADTRANSPARENT | LR_CREATEDIBSECTION);
 
-        BUTTON_IMAGELIST bil = {m_ImageList, {1,1,1,1}, BUTTON_IMAGELIST_ALIGN_LEFT};
+        BUTTON_IMAGELIST bil = {m_ImageList, {1,1,1,1},
+#if 0
+            BUTTON_IMAGELIST_ALIGN_LEFT
+#else
+            BUTTON_IMAGELIST_ALIGN_CENTER
+#endif
+            };
         SendMessageW(BCM_SETIMAGELIST, 0, (LPARAM) &bil);
         UpdateSize();
     }
@@ -220,6 +233,7 @@ public:
     // Use DECLARE_WND_SUPERCLASS instead!
     HWND Create(HWND hwndParent)
     {
+#if 0
         WCHAR szStartCaption[32];
         if (!LoadStringW(hExplorerInstance,
                          IDS_START,
@@ -228,13 +242,24 @@ public:
         {
             wcscpy(szStartCaption, L"Start");
         }
+#endif
 
-        DWORD dwStyle = WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | BS_PUSHBUTTON | BS_LEFT | BS_VCENTER;
+        DWORD dwStyle = WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | BS_PUSHBUTTON |
+#if 0
+                        BS_LEFT
+#else
+                        BS_CENTER
+#endif
+                        | BS_VCENTER;
 
         m_hWnd = CreateWindowEx(
             0,
             WC_BUTTON,
+#if 0
             szStartCaption,
+#else
+            NULL,
+#endif
             dwStyle,
             0, 0, 0, 0,
             hwndParent,
@@ -938,7 +963,9 @@ public:
         if (m_Theme)
             return;
 
+#if 0
         m_StartButton.UpdateFont();
+#endif
 
         NONCLIENTMETRICS ncm = {sizeof(ncm)};
         if (!SystemParametersInfoW(SPI_GETNONCLIENTMETRICS, sizeof(ncm), &ncm, FALSE))
