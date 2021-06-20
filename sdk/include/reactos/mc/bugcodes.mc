@@ -14,14 +14,14 @@ FacilityNames=(System=0x0:FACILITY_SYSTEM
 
 LanguageNames=(English=0x409:MSG00409)
 
+;// Reporting NT %s (Build %u%s)
 MessageId=0x7E
 Severity=Informational
 Facility=System
 SymbolicName=WINDOWS_NT_BANNER
 Language=English
-ReactOS Version %s
+ReactOS %s
 Build %s
-Reporting NT %s (Build %u%s)
 .
 
 MessageId=0x87

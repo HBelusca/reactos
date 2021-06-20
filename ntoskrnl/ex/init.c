@@ -1345,7 +1345,7 @@ Phase1InitializationDiscard(IN PVOID Context)
     PLDR_DATA_TABLE_ENTRY NtosEntry;
     PMESSAGE_RESOURCE_ENTRY MsgEntry;
     PCHAR CommandLine, Y2KHackRequired, SafeBoot, Environment;
-    PCHAR StringBuffer, EndBuffer, BeginBuffer, MpString = "";
+    PCHAR StringBuffer, EndBuffer, /* BeginBuffer,*/ MpString = "";
     PINIT_BUFFER InitBuffer;
     ANSI_STRING TempString;
     ULONG LastTzBias, Length, YearHack = 0, Disposition, MessageCode = 0;
@@ -1428,7 +1428,7 @@ Phase1InitializationDiscard(IN PVOID Context)
 
     /* Setup defaults and check if we have a version string */
     StringBuffer = InitBuffer->VersionBuffer;
-    BeginBuffer = StringBuffer;
+    // BeginBuffer = StringBuffer;
     EndBuffer = StringBuffer;
     Remaining = sizeof(InitBuffer->VersionBuffer);
     if (CmCSDVersionString.Length)
@@ -1457,6 +1457,7 @@ Phase1InitializationDiscard(IN PVOID Context)
     ++EndBuffer;
     --Remaining;
 
+#if 0
     /* Build the version number */
     StringBuffer = InitBuffer->VersionNumber;
     Status = RtlStringCbPrintfA(StringBuffer,
@@ -1469,6 +1470,7 @@ Phase1InitializationDiscard(IN PVOID Context)
         /* Bugcheck */
         KeBugCheckEx(PHASE1_INITIALIZATION_FAILED, Status, 7, 0, 0);
     }
+#endif
 
     /* Check if we had found a banner message */
     if (NT_SUCCESS(MsgStatus))
@@ -1479,10 +1481,11 @@ Phase1InitializationDiscard(IN PVOID Context)
                                     Remaining,
                                     (PCHAR)MsgEntry->Text,
                                     KERNEL_VERSION_STR,
-                                    NtBuildLab,
-                                    StringBuffer,
-                                    NtBuildNumber & 0xFFFF,
-                                    BeginBuffer);
+                                    NtBuildLab // ,
+                                    // StringBuffer,
+                                    // NtBuildNumber & 0xFFFF,
+                                    // BeginBuffer
+                                    );
         if (!NT_SUCCESS(Status))
         {
             /* Bugcheck */
