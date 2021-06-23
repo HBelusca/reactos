@@ -103,9 +103,9 @@ ConGetScreenInfo(
         // Screen->csbi.srWindow;
         Screen->csbi.dwMaximumWindowSize = Screen->csbi.dwSize;
 #else
-        hOutput = CreateFileW(L"CONOUT$", GENERIC_READ|GENERIC_WRITE,
-                             FILE_SHARE_READ|FILE_SHARE_WRITE, NULL,
-                             OPEN_EXISTING, 0, NULL);
+        hOutput = CreateFileW(L"CONOUT$", GENERIC_READ | GENERIC_WRITE,
+                              FILE_SHARE_READ | FILE_SHARE_WRITE, NULL,
+                              OPEN_EXISTING, 0, NULL);
 
         Success = IsConsoleHandle(hOutput) &&
                   GetConsoleScreenBufferInfo(hOutput, &Screen->csbi);
@@ -118,6 +118,171 @@ ConGetScreenInfo(
     {
         /* Return it to the caller */
         *pcsbi = Screen->csbi;
+    }
+
+    return Success;
+}
+
+BOOL
+ConGetCursorInfo(
+    IN PCON_SCREEN Screen,
+    OUT PCONSOLE_CURSOR_INFO pcci)
+{
+    BOOL Success;
+    HANDLE hOutput;
+
+    /* Parameters validation */
+    if (!Screen || !pcci)
+        return FALSE;
+
+    hOutput = ConStreamGetOSHandle(Screen->Stream);
+
+    /* Screen handle must be of TTY type (console or TTY) */
+    if (!IsTTYHandle(hOutput))
+        return FALSE;
+
+    /* Update cached screen information */
+    if (IsConsoleHandle(hOutput))
+    {
+        Success = GetConsoleCursorInfo(hOutput, &Screen->cci);
+    }
+    else
+    {
+#if 0
+        /* TODO: Do something adequate for TTYs */
+        // FIXME: At the moment we return hardcoded info.
+        Screen->cci.dwSize = 25;
+        Screen->cci.bVisible = TRUE;
+#else
+        hOutput = CreateFileW(L"CONOUT$", GENERIC_READ | GENERIC_WRITE,
+                              FILE_SHARE_READ | FILE_SHARE_WRITE, NULL,
+                              OPEN_EXISTING, 0, NULL);
+
+        Success = IsConsoleHandle(hOutput) &&
+                  GetConsoleCursorInfo(hOutput, &Screen->cci);
+
+        CloseHandle(hOutput);
+#endif
+    }
+
+    if (Success)
+    {
+        /* Return it to the caller */
+        *pcci = Screen->cci;
+    }
+
+    return Success;
+}
+
+BOOL
+ConSetCursorInfo(
+    IN PCON_SCREEN Screen,
+    IN PCONSOLE_CURSOR_INFO pcci)
+{
+    BOOL Success;
+    HANDLE hOutput;
+
+    /* Parameters validation */
+    if (!Screen || !pcci)
+        return FALSE;
+
+    hOutput = ConStreamGetOSHandle(Screen->Stream);
+
+    /* Screen handle must be of TTY type (console or TTY) */
+    if (!IsTTYHandle(hOutput))
+        return FALSE;
+
+    /* Set the cursor information */
+    if (IsConsoleHandle(hOutput))
+    {
+        Success = SetConsoleCursorInfo(hOutput, pcci);
+    }
+    else // if (IsTTYHandle(hOutput))
+    {
+        ConPrintf(Screen->Stream,
+                  L"\x1B[%hu q"  // Mode style
+                  L"\x1B[?25%c", // Visible (h) or hidden (l)
+                  (pcci->dwSize <= 15) ? 3 : 1, // Blinking underline (3) or blinking block (1)
+                  pcci->bVisible ? 'h' : 'l');
+        /*
+         * Might as well support the following SCO Terminal command:
+         * ESC[= s ; e C
+         *   Sets cursor parameters (where s is the starting and e is
+         *   the ending scanlines of the cursor).
+         */
+        Success = TRUE;
+    }
+#if 0
+    else
+    {
+        hOutput = CreateFileW(L"CONOUT$", GENERIC_READ | GENERIC_WRITE,
+                              FILE_SHARE_READ | FILE_SHARE_WRITE, NULL,
+                              OPEN_EXISTING, 0, NULL);
+
+        Success = IsConsoleHandle(hOutput) &&
+                  SetConsoleCursorInfo(hOutput, pcci);
+
+        CloseHandle(hOutput);
+    }
+#endif
+
+    if (Success)
+    {
+        /* Update cached screen information */
+        Screen->cci = *pcci;
+    }
+
+    return Success;
+}
+
+BOOL
+ConSetCursorPos(
+    IN PCON_SCREEN Screen,
+    IN COORD dwCursorPosition)
+{
+    BOOL Success;
+    HANDLE hOutput;
+
+    /* Parameters validation */
+    if (!Screen)
+        return FALSE;
+
+    hOutput = ConStreamGetOSHandle(Screen->Stream);
+
+    /* Screen handle must be of TTY type (console or TTY) */
+    if (!IsTTYHandle(hOutput))
+        return FALSE;
+
+    /* Set the cursor position */
+    if (IsConsoleHandle(hOutput))
+    {
+        Success = SetConsoleCursorPosition(hOutput, dwCursorPosition);
+    }
+    else // if (IsTTYHandle(hOutput))
+    {
+        ConPrintf(Screen->Stream, L"\x1B[%d;%dH",
+                  1 + dwCursorPosition.Y,
+                  1 + dwCursorPosition.X);
+        Success = TRUE;
+    }
+#if 0
+    else
+    {
+        hOutput = CreateFileW(L"CONOUT$", GENERIC_READ | GENERIC_WRITE,
+                              FILE_SHARE_READ | FILE_SHARE_WRITE, NULL,
+                              OPEN_EXISTING, 0, NULL);
+
+        Success = IsConsoleHandle(hOutput) &&
+                  SetConsoleCursorPosition(hOutput, dwCursorPosition);
+
+        CloseHandle(hOutput);
+    }
+#endif
+
+    if (Success)
+    {
+        /* Update cached screen information */
+        Screen->csbi.dwCursorPosition = dwCursorPosition;
     }
 
     return Success;

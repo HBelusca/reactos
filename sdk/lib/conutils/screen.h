@@ -40,10 +40,9 @@ ConClearLine(IN PCON_STREAM Stream);
 
 typedef struct _CON_SCREEN
 {
-    PCON_STREAM Stream; // Out
-    // PCON_STREAM In;
-    CONSOLE_SCREEN_BUFFER_INFO csbi;
-    CONSOLE_CURSOR_INFO cci;
+    PCON_STREAM Stream;                 ///< Underlying output stream.
+    CONSOLE_SCREEN_BUFFER_INFO csbi;    ///< Cached screen buffer info.
+    CONSOLE_CURSOR_INFO cci;            ///< Cached screen cursor info.
 } CON_SCREEN, *PCON_SCREEN;
 
 #define INIT_CON_SCREEN(pStream)    {(pStream)} /* {(pStream), {{}}, {{}}} */
@@ -59,6 +58,21 @@ BOOL
 ConGetScreenInfo(
     IN PCON_SCREEN Screen,
     OUT PCONSOLE_SCREEN_BUFFER_INFO pcsbi);
+
+BOOL
+ConGetCursorInfo(
+    IN PCON_SCREEN Screen,
+    OUT PCONSOLE_CURSOR_INFO pcci);
+
+BOOL
+ConSetCursorInfo(
+    IN PCON_SCREEN Screen,
+    IN PCONSOLE_CURSOR_INFO pcci);
+
+BOOL
+ConSetCursorPos(
+    IN PCON_SCREEN Screen,
+    IN COORD dwCursorPosition);
 
 VOID
 ConClearScreen(IN PCON_SCREEN Screen);
