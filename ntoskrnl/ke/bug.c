@@ -604,6 +604,26 @@ KiDumpParameterImages(IN PCHAR Message,
     }
 }
 
+#include "beep.h"
+
+#define BUG_SOUND() \
+do { \
+    STOP(); \
+    BEEP(F, 5, 670); \
+    BEEP(E, 5, 670); \
+    BEEP(Em, 5, 750); \
+    BEEP_STOP(D, 5, 170); \
+    BEEP_STOP(D, 5, 170); \
+    BEEP_STOP(D, 5, 170); \
+    BEEP_STOP(D, 5, 170); \
+    BEEP_STOP(D, 5, 170); \
+    BEEP_STOP(D, 5, 170); \
+    BEEP_STOP(D, 5, 170); \
+    BEEP_STOP(D, 5, 170); \
+    BEEP_STOP(D, 5, 170); \
+    BEEP_STOP(D, 5, 200); \
+} while (0)
+
 VOID
 NTAPI
 KiDisplayBlueScreen(IN ULONG MessageId,
@@ -700,6 +720,8 @@ KiDisplayBlueScreen(IN ULONG MessageId,
                               4,
                               KeBugCheckUnicodeToAnsi);
     }
+
+    BUG_SOUND();
 }
 
 DECLSPEC_NORETURN
