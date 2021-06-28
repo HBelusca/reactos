@@ -29,6 +29,9 @@
 #include "screen.h"
 #include "pager.h"
 
+/** WIP: Debugging FORM-FEED expansion **/
+// #define DEBUG_FORMFEED_EXPANSION
+
 // Temporary HACK
 #define CON_STREAM_WRITE    ConStreamWrite
 
@@ -231,7 +234,7 @@ ConPagerWorker(
     SIZE_T ich;
     SIZE_T ichStart;
     SIZE_T iEndLine;
-    DWORD iColumn = Pager->iColumn;
+    DWORD iColumn;
 
     UINT nCodePage = GetConsoleOutputCP();
     BOOL IsCJK = IsCJKCodePage(nCodePage);
@@ -242,17 +245,36 @@ ConPagerWorker(
      * cap it to the number of columns. */
     if (PageColumns > 0) // if (bFinitePaging)
     {
-        if (nTabWidth < 0)
-            nTabWidth = PageColumns - 1;
+        /* Output to console-type device */
+
+        if (Pager->dwFlags & CON_PAGER_EXPAND_TABS)
+        {
+            if (nTabWidth < 0)
+                nTabWidth = PageColumns - 1;
+            else
+                nTabWidth = min(nTabWidth, PageColumns - 1);
+        }
         else
-            nTabWidth = min(nTabWidth, PageColumns - 1);
+        {
+            /* The console expands the TAB to 8 spaces; emulate this */
+            nTabWidth = 8;
+        }
     }
     else
     {
-        /* If no column width is known, default to 8 spaces if the
-         * original value is negative; otherwise keep the current one. */
-        if (nTabWidth < 0)
-            nTabWidth = 8;
+        /* Output to file-type device */
+
+        if (Pager->dwFlags & CON_PAGER_EXPAND_TABS)
+        {
+            /* If no column width is known, default to 8 spaces if the
+             * original value is negative; otherwise keep the current one. */
+            if (nTabWidth < 0)
+                nTabWidth = 8;
+        }
+        else
+        {
+            /* Keep the TAB character */
+        }
     }
 
 
@@ -270,6 +292,7 @@ ProcessLine:
     if (!Line || (ichStart >= iEndLine))
     {
         /* Start a new line */
+        // Pager->nSpacePending = 0;
         if (!GetNextLine(Pager, TextBuff, cch))
             goto End;
 
@@ -285,32 +308,45 @@ ProcessLine:
     // ASSERT(Line && ((ichStart < iEndLine) || (ichStart == iEndLine && iEndLine == 0)));
 
     /* Determine whether this line segment (from the current position till the end) should be displayed */
-    Pager->iColumn = iColumn;
-    if (Pager->PagerLine && Pager->PagerLine(Pager, &Line[ichStart], iEndLine - ichStart))
+    if (Pager->PagerLine)
     {
-        iColumn = Pager->iColumn;
-
-        /* Done with this line; start a new one */
-        Pager->nSpacePending = 0; // And reset any pending space.
-        ichStart = iEndLine;
-        goto ProcessLine;
+        CON_PAGER_LINE_STATUS Status = Pager->PagerLine(Pager, &Line[ichStart], iEndLine - ichStart);
+        if (Status == PagerLineRescan)
+        {
+            /* Recheck the conditions above */
+            goto ProcessLine;
+        }
+        else if (Status == PagerLineIgnore)
+        {
+            /* Done with this line; start a new one */
+            Pager->nSpacePending = 0; // And reset any pending space.
+            ichStart = iEndLine;
+            goto ProcessLine;
+        }
     }
-    // else: Continue displaying the line.
+    // else Status == PagerLineDoLine: Continue displaying the line.
 
+    iColumn = Pager->iColumnInd;
 
     /* Print out any pending TAB expansion */
-    if (Pager->nSpacePending > 0)
+    if (/* (Line[ichStart] == TEXT('\t')) && */ (Pager->nSpacePending > 0))
     {
 ExpandTab:
         while (Pager->nSpacePending > 0)
         {
-            /* Print filling spaces */
-            CON_STREAM_WRITE(Pager->Screen->Stream, TEXT(" "), 1);
-            --(Pager->nSpacePending);
-            ++iColumn;
-
             /* Check whether we are going across the column */
-            if ((PageColumns > 0) && (iColumn % PageColumns == 0))
+            if ((PageColumns > 0) && (iColumn >= PageColumns))
+                break;
+
+            /* We are not, print filling spaces */
+            CON_STREAM_WRITE(Pager->Screen->Stream, TEXT(" "), 1);
+            ++iColumn;
+            --(Pager->nSpacePending);
+        }
+        if ((PageColumns > 0) /* && (Pager->dwFlags & CON_PAGER_WRAP_LINES) */)
+        {
+            /* Check whether we are going across the column */
+            if (iColumn >= PageColumns)
             {
                 // Pager->nSpacePending = 0; // <-- This is the mode of most text editors...
 
@@ -319,12 +355,22 @@ ExpandTab:
                     CON_STREAM_WRITE(Pager->Screen->Stream, TEXT("\n"), 1);
 
                 Pager->iLine++;
+                Pager->iTabOffset = (Pager->iTabOffset + iColumn) % Pager->nTabWidth;
+                Pager->iColumnInd = 0;
 
                 /* Restart at the character */
                 // ASSERT(ichStart == ich);
                 goto ProcessLine;
             }
         }
+        else
+        {
+            /* Don't wrap and just absorb the pending spaces */
+            iColumn += Pager->nSpacePending;
+            Pager->nSpacePending = 0;
+        }
+    //    /* Advance after the tab */
+    //    ++ichStart;
     }
 
 
@@ -332,28 +378,50 @@ ExpandTab:
      * beginning), until where we can print to the page. */
     for (ich = ichStart; ich < iEndLine; ++ich)
     {
+        /* Check whether we are going across the column */
+        if ((PageColumns > 0) && (iColumn >= PageColumns))
+            break;
+
         /* NEWLINE character */
         if (Line[ich] == TEXT('\n'))
         {
-            /* We should stop now */
             // ASSERT(ich == iEndLine - 1);
+#if 1
+            if ((ich > 0) && Line[ich - 1] == TEXT('\r'))
+                --ich; // Remove CR
+#endif
+            /* We should stop now */
             break;
         }
 
         /* TAB character */
-        if (Line[ich] == TEXT('\t') &&
-            (Pager->dwFlags & CON_PAGER_EXPAND_TABS))
+        if (Line[ich] == TEXT('\t'))
         {
-            /* We should stop now */
-            break;
+            if ((PageColumns > 0) /** bFinitePaging **/ ||
+                (Pager->dwFlags & CON_PAGER_EXPAND_TABS))
+            {
+                /* We should stop now */
+                break;
+            }
+
+            /* Output to file-type device without TAB expansion:
+             * Treat it as a regular character. */
+            ++iColumn;
+            continue;
         }
 
         /* FORM-FEED character */
-        if (Line[ich] == TEXT('\f') &&
-            (Pager->dwFlags & CON_PAGER_EXPAND_FF))
+        if (Line[ich] == TEXT('\f'))
         {
-            /* We should stop now */
-            break;
+            if (Pager->dwFlags & CON_PAGER_EXPAND_FF)
+            {
+                /* We should stop now */
+                break;
+            }
+
+            /* Treat it as a regular character */
+            ++iColumn;
+            continue;
         }
 
         /* Other character - Handle double-width for CJK */
@@ -377,14 +445,9 @@ ExpandTab:
         }
 
         iColumn += nWidthOfChar;
-
-        /* Check whether we are going across the column */
-        if ((PageColumns > 0) && (iColumn % PageColumns == 0))
-        {
-            ++ich;
-            break;
-        }
     }
+
+    Pager->iColumnInd = iColumn;
 
     /* Output the pending line segment */
     if (ich - ichStart > 0)
@@ -398,6 +461,26 @@ ExpandTab:
         goto ProcessLine;
     }
 
+    /* Are we wrapping the line? */
+    if ((PageColumns > 0) /* && (Pager->dwFlags & CON_PAGER_WRAP_LINES) */)
+    {
+        /* Check whether we are going across the column */
+        if (iColumn >= PageColumns)
+        {
+            /* Reposition the cursor to the next line, first column */
+            if (!bFinitePaging || (PageColumns < Pager->Screen->csbi.dwSize.X))
+                CON_STREAM_WRITE(Pager->Screen->Stream, TEXT("\n"), 1);
+
+            Pager->iLine++;
+            Pager->iTabOffset = (Pager->iTabOffset + iColumn) % Pager->nTabWidth;
+            Pager->iColumnInd = 0;
+
+            /* Restart at the character */
+            ichStart = ich;
+            goto ProcessLine;
+        }
+    }
+
     /* Handle special characters */
 
     /* NEWLINE character */
@@ -409,7 +492,7 @@ ExpandTab:
         CON_STREAM_WRITE(Pager->Screen->Stream, TEXT("\n"), 1);
 
         Pager->iLine++;
-        iColumn = 0;
+        Pager->iColumn = 0;
 
         /* Done with this line; start a new one */
         Pager->nSpacePending = 0; // And reset any pending space.
@@ -418,19 +501,32 @@ ExpandTab:
     }
 
     /* TAB character */
-    if (Line[ich] == TEXT('\t') &&
-        (Pager->dwFlags & CON_PAGER_EXPAND_TABS))
+    if (Line[ich] == TEXT('\t'))
     {
-        /* Perform TAB expansion, unless the tab width is zero */
-        if (nTabWidth == 0)
+#if 0
+        if ((PageColumns > 0) /** bFinitePaging **/ ||
+            (Pager->dwFlags & CON_PAGER_EXPAND_TABS))
         {
-            ichStart = ++ich;
-            goto ProcessLine;
+            // Do the stuff done below...
+        }
+#endif
+        if (Pager->dwFlags & CON_PAGER_EXPAND_TABS)
+        {
+            /* Perform TAB expansion, unless the tab width is zero */
+            if (nTabWidth == 0)
+            {
+                ichStart = ++ich;
+                goto ProcessLine;
+            }
         }
 
+        /* Keep the TAB pending until it has been developed */
+        // INVESTIGATE: Or keep it as it is... and only advance it
+        // after having done all the expansion??
+        // ichStart = ich;
         ichStart = ++ich;
         /* Reset the number of spaces needed to develop this TAB character */
-        Pager->nSpacePending = nTabWidth - (iColumn % nTabWidth);
+        Pager->nSpacePending = nTabWidth - ((Pager->iTabOffset + iColumn) % nTabWidth);
         goto ExpandTab;
     }
 
@@ -438,59 +534,70 @@ ExpandTab:
     if (Line[ich] == TEXT('\f') &&
         (Pager->dwFlags & CON_PAGER_EXPAND_FF))
     {
-        if (bFinitePaging)
+        if (ich != ichStart)
         {
-            /* Clear until the end of the page */
-            while (Pager->iLine < ScrollRows)
+            /* We terminate with a FORM-FEED: Go to the next line */
+
+#ifdef DEBUG_FORMFEED_EXPANSION
+            ConPuts(Pager->Screen->Stream, TEXT("-->"));
+#endif
+
+            /* Reposition the cursor to the next line, first column */
+            CON_STREAM_WRITE(Pager->Screen->Stream, TEXT("\n"), 1);
+
+            Pager->iLine++;
+            Pager->iColumn = 0;
+
+            /* Restart at the character */
+            ichStart = ich;
+        }
+        else // if (ich == ichStart)
+        {
+            /* We begin with a FORM-FEED: Clear the screen */
+
+#ifdef DEBUG_FORMFEED_EXPANSION
+            ConPuts(Pager->Screen->Stream, TEXT("\f<--"));
+#endif
+
+            if (bFinitePaging)
             {
+                /* Clear until the end of the page */
+
+                /* If we don't shrink blank lines, continue
+                 * flushing the page unconditionally. */
+
                 /* Call the user paging function in order to know
                  * whether we need to output the blank lines. */
-                Pager->iColumn = iColumn;
-                if (Pager->PagerLine && Pager->PagerLine(Pager, TEXT("\n"), 1))
+                // FIXME: We're not displaying an actual file line,
+                // and therefore we shouldn't call the user paging function...
+                if (Pager->PagerLine && Pager->PagerLine(Pager, TEXT("\n"), 1) == PagerLineIgnore)
                 {
                     /* Only one blank line displayed, that counts in the line count */
                     Pager->iLine++;
-                    break;
                 }
                 else
                 {
-                    CON_STREAM_WRITE(Pager->Screen->Stream, TEXT("\n"), 1);
-                    Pager->iLine++;
+                    while (Pager->iLine < ScrollRows)
+                    {
+                        CON_STREAM_WRITE(Pager->Screen->Stream, TEXT("\n"), 1);
+                        Pager->iLine++;
+                    }
                 }
             }
-        }
-        else
-        {
-            /* Just output a FORM-FEED and a NEWLINE */
-            CON_STREAM_WRITE(Pager->Screen->Stream, TEXT("\f\n"), 2);
-            Pager->iLine++;
+            else
+            {
+                /* Just output a FORM-FEED character and a NEWLINE */
+                CON_STREAM_WRITE(Pager->Screen->Stream, TEXT("\f\n"), 2);
+                Pager->iLine++;
+            }
+
+            /* Skip and restart past the character */
+            ichStart = ++ich;
         }
 
-        iColumn = 0;
+        Pager->iColumn = 0;
         Pager->nSpacePending = 0; // And reset any pending space.
-
-        /* Skip and restart past the character */
-        ichStart = ++ich;
         goto ProcessLine;
-    }
-
-    /* If we output a double-width character that goes across the column,
-     * fill with blank and display the character on the next line. */
-    if (IsDoubleWidthCharTrailing)
-    {
-        IsDoubleWidthCharTrailing = FALSE; // Reset the flag.
-        CON_STREAM_WRITE(Pager->Screen->Stream, TEXT(" "), 1);
-        /* Fall back below */
-    }
-
-    /* Are we wrapping the line? */
-    if ((PageColumns > 0) && (iColumn % PageColumns == 0))
-    {
-        /* Reposition the cursor to the next line, first column */
-        if (!bFinitePaging || (PageColumns < Pager->Screen->csbi.dwSize.X))
-            CON_STREAM_WRITE(Pager->Screen->Stream, TEXT("\n"), 1);
-
-        Pager->iLine++;
     }
 
     /* Restart at the character */
@@ -505,7 +612,6 @@ End:
      */
 
     Pager->ichCurr = ichStart;
-    Pager->iColumn = iColumn;
     // INVESTIGATE: Can we get rid of CurrentLine here? // if (ichStart >= iEndLine) ...
 
     /* Return TRUE if we displayed all the required lines; FALSE otherwise */

@@ -30,7 +30,14 @@ extern "C" {
 
 struct _CON_PAGER;
 
-typedef BOOL
+typedef enum _CON_PAGER_LINE_STATUS
+{
+    PagerLineDoLine,
+    PagerLineRescan,
+    PagerLineIgnore
+} CON_PAGER_LINE_STATUS;
+
+typedef CON_PAGER_LINE_STATUS
 (__stdcall *CON_PAGER_LINE_FN)(
     IN OUT struct _CON_PAGER *Pager,
     IN PCTCH line,
@@ -41,6 +48,7 @@ typedef BOOL
 #define CON_PAGER_EXPAND_FF     (1 << 1)
 // Whether or not the pager will cache the line if it's incomplete (not NEWLINE-terminated).
 #define CON_PAGER_CACHE_INCOMPLETE_LINE (1 << 2)
+// #define CON_PAGER_WRAP_LINES    (1 << 3)
 
 typedef struct _CON_PAGER
 {
@@ -65,7 +73,17 @@ typedef struct _CON_PAGER
     SIZE_T ichCurr;       /* The current index of character in CurrentLine */
     SIZE_T iEndLine;      /* End (length) of CurrentLine */
     DWORD  nSpacePending; /* Pending spaces for TAB expansion */
-    DWORD iColumn;  /* The current index of column */
+
+    union
+    {
+        struct
+        {
+            DWORD iColumnInd; /* The current index of column (< PageColumns) */
+            DWORD iTabOffset; /* TAB offset (< nTabWidth) */
+        };
+        ULONGLONG iColumn;
+    };
+
     DWORD iLine;    /* The physical output line count of screen */
     DWORD lineno;   /* The logical line number */
 } CON_PAGER, *PCON_PAGER;

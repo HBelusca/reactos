@@ -101,7 +101,7 @@ static BOOL IsBlankLine(IN PCWCH line, IN DWORD cch)
     return TRUE;
 }
 
-static BOOL
+static CON_PAGER_LINE_STATUS
 __stdcall
 MorePagerLine(
     IN OUT PCON_PAGER Pager,
@@ -113,7 +113,7 @@ MorePagerLine(
         if (Pager->lineno < s_nNextLineNo)
         {
             s_bPrevLineIsBlank = FALSE;
-            return TRUE; /* Handled */
+            return PagerLineIgnore;
         }
         s_dwFlags &= ~FLAG_PLUSn;
     }
@@ -123,7 +123,7 @@ MorePagerLine(
         if (IsBlankLine(line, cch))
         {
             if (s_bPrevLineIsBlank)
-                return TRUE; /* Handled */
+                return PagerLineIgnore;
 
             /*
              * Display a single blank line, independently of the actual size
@@ -136,23 +136,50 @@ MorePagerLine(
             if (Pager->PageColumns > 0)
                 ConStreamWrite(Pager->Screen->Stream, TEXT(" "), 1);
             ConStreamWrite(Pager->Screen->Stream, TEXT("\n"), 1);
-            Pager->iLine++;
+
+            // Commented out to give a change to the pager to discard
+            // other empty lines. See below...
+            // Pager->iLine++;
             Pager->iColumn = 0;
 
             s_bPrevLineIsBlank = TRUE;
             s_nNextLineNo = 0;
 
-            return TRUE; /* Handled */
+            return PagerLineIgnore;
         }
+#if 0
         else
         {
             s_bPrevLineIsBlank = FALSE;
         }
+#else
+        else if (s_bPrevLineIsBlank)
+        {
+            /*
+             * NOTE: We should not defer blank line display to here:
+             * in the scenario of a file with trailing blank lines, we want
+             * to always have one blank line displayed. If we were to defer
+             * the display, we could end up with all blank lines discarded
+             * and the pager terminating, without having displayed one blank
+             * line ever.
+             */
+
+            // Enabled to finally count all possible discarded blank lines
+            // as just one. But note that if paging terminates in between,
+            // or the prompt got called, this could not have been reset!
+            Pager->iLine++;
+            // Pager->iColumn = 0;
+
+            s_bPrevLineIsBlank = FALSE;
+
+            return PagerLineRescan;
+        }
+#endif
     }
 
     s_nNextLineNo = 0;
     /* Not handled, let the pager do the default action */
-    return FALSE;
+    return PagerLineDoLine;
 }
 
 static BOOL
@@ -189,6 +216,12 @@ PagePrompt(PCON_PAGER Pager, DWORD Done, DWORD Total)
         K32LoadStringW(NULL, IDS_CONTINUE_OPTIONS, StrOptions, ARRAYSIZE(StrOptions));
     if (!*StrLines)
         K32LoadStringW(NULL, IDS_CONTINUE_LINES, StrLines, ARRAYSIZE(StrLines));
+
+    /*
+     * MS MORE.COM compatibility: reset the skip & shrink lines global state.
+     */
+    s_nNextLineNo = 0;
+    s_bPrevLineIsBlank = FALSE;
 
     /*
      * Check whether the pager is prompting, but we have actually finished
@@ -250,6 +283,7 @@ Restart:
     SetConsoleMode(hInput, dwMode);
 
     // FIXME: Does not support TTY yet!
+    // FIXME2: TODO: Use instead a ReadLine implementation...
     ConGetScreenInfo(Pager->Screen, &csbi);
     orgCursorPosition = csbi.dwCursorPosition;
     for (;;)
