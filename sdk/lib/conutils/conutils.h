@@ -33,7 +33,9 @@
 #endif
 
 #include "utils.h"
+
 #include "stream.h"
+#include "conprint.h"
 // #include "instream.h"
 #include "outstream.h"
 #include "screen.h"

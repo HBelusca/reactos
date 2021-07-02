@@ -1,5 +1,6 @@
 
 list(APPEND SOURCE
+    conprint.c
     # instream.c
     outstream.c
     pager.c
