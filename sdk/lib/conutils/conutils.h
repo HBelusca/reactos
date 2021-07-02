@@ -28,11 +28,25 @@
 
 #pragma once
 
+/*
+ * Enable this define if you want to only use CRT functions to output
+ * UNICODE stream to the console, as in the way explained by
+ * http://archives.miloush.net/michkap/archive/2008/03/18/8306597.html
+ */
+/** NOTE: Experimental! Don't use USE_CRT yet because output to console is a bit broken **/
+// #define USE_CRT
+
 #ifndef _UNICODE
 #error The ConUtils library only supports compilation with _UNICODE defined, at the moment!
 #endif
 
 #include "utils.h"
+
+#ifdef USE_CRT
+#define USE_CRT_READWRITE
+#endif
+#define USE_WIN32_READWRITE
+#include "conrw.h"
 
 #include "stream.h"
 #include "conprint.h"
