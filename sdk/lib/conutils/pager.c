@@ -19,10 +19,8 @@
 
 #include <windef.h>
 #include <winbase.h>
-// #include <winnls.h>
-#include <wincon.h>  // Console APIs (only if kernel32 support included)
-#include <winnls.h> // for WideCharToMultiByte
-#include <strsafe.h>
+#include <winnls.h> // For WideCharToMultiByte()
+#include <wincon.h> // Console APIs (only if kernel32 support included)
 
 #include "conutils.h"
 #include "stream.h"

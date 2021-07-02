@@ -34,10 +34,8 @@
 
 #include <windef.h>
 #include <winbase.h>
-#include <winnls.h>
-// #include <winuser.h> // MAKEINTRESOURCEW, RT_STRING
-#include <wincon.h>  // Console APIs (only if kernel32 support included)
-#include <strsafe.h>
+#include <winnls.h> // For CP_xxx
+#include <wincon.h> // Console APIs (only if kernel32 support included)
 
 #include "conutils.h"
 #include "stream.h"

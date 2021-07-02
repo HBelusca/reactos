@@ -23,8 +23,7 @@
 #include <winbase.h>
 #include <winnls.h>
 #include <winuser.h> // MAKEINTRESOURCEW, RT_STRING
-#include <wincon.h>  // Console APIs (only if kernel32 support included)
-#include <strsafe.h>
+#include <wincon.h> // Console APIs (only if kernel32 support included)
 
 /* PSEH for SEH Support */
 #include <pseh/pseh2.h>

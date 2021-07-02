@@ -19,9 +19,7 @@
 
 #include <windef.h>
 #include <winbase.h>
-// #include <winnls.h>
-#include <wincon.h>  // Console APIs (only if kernel32 support included)
-#include <strsafe.h>
+#include <wincon.h> // Console APIs (only if kernel32 support included)
 
 #include "conutils.h"
 #include "stream.h"
