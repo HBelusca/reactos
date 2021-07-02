@@ -26,6 +26,7 @@
 /* PSEH for SEH Support */
 #include <pseh/pseh2.h>
 
+#define __CON_STREAM_IMPL
 #include "conutils.h"
 
 // Also known as: RC_STRING_MAX_SIZE, MAX_BUFFER_SIZE (some programs:
@@ -34,33 +35,42 @@
 // MAX_MESSAGE_SIZE (set to 512 in shutdown).
 #define CON_RC_STRING_MAX_SIZE  4096
 
-/******************************************************************************/
 
-#include "stream_private.h"
-
-#define CON_STREAM_WRITE_CALL(Stream, Str, Len) \
-    (Stream)->WriteFunc((Stream), (Str), (Len))
-
-/* Lock the stream only in non-USE_CRT mode (otherwise use the CRT stream lock) */
-#ifndef USE_CRT
-
-#define CON_STREAM_WRITE2(Stream, Str, Len, RetLen) \
-do { \
-    EnterCriticalSection(&(Stream)->Lock); \
-    (RetLen) = CON_STREAM_WRITE_CALL((Stream), (Str), (Len)); \
-    LeaveCriticalSection(&(Stream)->Lock); \
-} while(0)
-
-#else
-
-#define CON_STREAM_WRITE2(Stream, Str, Len, RetLen) \
-do { \
-    (RetLen) = CON_STREAM_WRITE_CALL((Stream), (Str), (Len)); \
-} while(0)
-
-#endif
-
-/******************************************************************************/
+/**
+ * @name ConWrite
+ *     Writes a counted string to a stream.
+ *
+ * @param[in]   Stream
+ *     Stream to which the write operation is issued.
+ *
+ * @param[in]   szStr
+ *     Pointer to the counted string to write.
+ *
+ * @param[in]   len
+ *     Length of the string pointed by @p szStr, specified
+ *     in number of characters.
+ *
+ * @return
+ *     Numbers of characters successfully written to @p Stream.
+ *
+ * @note
+ *     This function is used as an internal function.
+ *     Use the ConStreamWrite() function instead.
+ *
+ * @remark
+ *     Should be called with the stream locked.
+ **/
+DWORD
+ConWrite(
+    IN PCON_WRITER32 Writer,
+    IN PCTCH szStr,
+    IN DWORD Len)
+{
+    Len *= sizeof(TCHAR);
+    if (!CALL_W32(Writer)(szStr, Len, &Len))
+        Len = 0; /* Fixup returned length in case of errors */
+    return (Len / sizeof(TCHAR));
+}
 
 /**
  * @name ConPuts
@@ -80,21 +90,17 @@ do { \
  *     a terminating new-line character. In this way it behaves more like
  *     the CRT fputs() function.
  **/
-INT
+DWORD
 ConPuts(
-    IN PCON_STREAM Stream,
+    IN PCON_WRITER32 Writer,
     IN PCWSTR szStr)
 {
-    INT Len;
+    DWORD Len;
 
-    Len = wcslen(szStr);
-    CON_STREAM_WRITE2(Stream, szStr, Len, Len);
-
-    /* Fixup returned length in case of errors */
-    if (Len < 0)
-        Len = 0;
-
-    return Len;
+    Len = (DWORD)wcslen(szStr) * sizeof(WCHAR);
+    if (!CALL_W32(Writer)(szStr, Len, &Len))
+        Len = 0; /* Fixup returned length in case of errors */
+    return (Len / sizeof(WCHAR));
 }
 
 /**
@@ -119,33 +125,27 @@ ConPuts(
  *
  * @see ConPrintf(), printf(), vprintf()
  **/
-INT
+DWORD
 ConPrintfV(
-    IN PCON_STREAM Stream,
+    IN PCON_WRITER32 Writer,
     IN PCWSTR  szStr,
     IN va_list args)
 {
-    INT Len;
+    DWORD Len;
     WCHAR bufSrc[CON_RC_STRING_MAX_SIZE];
 
-    // Len = vfwprintf(Stream->fStream, szStr, args); // vfprintf for direct ANSI
+    // Len = (DWORD)vfwprintf(Writer->fStream, szStr, args); // vfprintf for direct ANSI
 
     /*
      * Re-use szStr as the pointer to end-of-string, so as
      * to compute the string length instead of calling wcslen().
      */
-    // StringCchVPrintfW(bufSrc, ARRAYSIZE(bufSrc), szStr, args);
-    // Len = wcslen(bufSrc);
     StringCchVPrintfExW(bufSrc, ARRAYSIZE(bufSrc), (PWSTR*)&szStr, NULL, 0, szStr, args);
-    Len = szStr - bufSrc;
+    Len = (szStr - bufSrc) * sizeof(WCHAR);
 
-    CON_STREAM_WRITE2(Stream, bufSrc, Len, Len);
-
-    /* Fixup returned length in case of errors */
-    if (Len < 0)
-        Len = 0;
-
-    return Len;
+    if (!CALL_W32(Writer)(bufSrc, Len, &Len))
+        Len = 0; /* Fixup returned length in case of errors */
+    return (Len / sizeof(WCHAR));
 }
 
 /**
@@ -172,21 +172,20 @@ ConPrintfV(
  *
  * @see ConPrintfV(), printf(), vprintf()
  **/
-INT
+DWORD
 __cdecl
 ConPrintf(
-    IN PCON_STREAM Stream,
+    IN PCON_WRITER32 Writer,
     IN PCWSTR szStr,
     ...)
 {
-    INT Len;
+    DWORD Len;
     va_list args;
 
-    // Len = vfwprintf(Stream->fStream, szMsgBuf, args); // vfprintf for direct ANSI
+    // Len = vfwprintf(Writer->fStream, szMsgBuf, args); // vfprintf for direct ANSI
 
-    // StringCchPrintfW
     va_start(args, szStr);
-    Len = ConPrintfV(Stream, szStr, args);
+    Len = ConPrintfV(Writer, szStr, args);
     va_end(args);
 
     return Len;
@@ -222,26 +221,21 @@ ConPrintf(
  *
  * @see ConPuts(), ConResPuts()
  **/
-INT
+DWORD
 ConResPutsEx(
-    IN PCON_STREAM Stream,
+    IN PCON_WRITER32 Writer,
     IN HINSTANCE hInstance OPTIONAL,
     IN UINT   uID,
     IN LANGID LanguageId)
 {
-    INT Len;
     PWCHAR szStr = NULL;
+    DWORD Len;
 
-    Len = K32LoadStringExW(hInstance, uID, LanguageId, (PWSTR)&szStr, 0);
-    if (szStr && Len)
-        // Len = ConPuts(Stream, szStr);
-        CON_STREAM_WRITE2(Stream, szStr, Len, Len);
-
-    /* Fixup returned length in case of errors */
-    if (Len < 0)
-        Len = 0;
-
-    return Len;
+    Len = (DWORD)K32LoadStringExW(hInstance, uID, LanguageId, (PWSTR)&szStr, 0);
+    Len *= sizeof(WCHAR);
+    if (!(szStr && Len && CALL_W32(Writer)(szStr, Len, &Len)))
+        Len = 0; /* Fixup returned length in case of errors */
+    return (Len / sizeof(WCHAR));
 }
 
 /**
@@ -263,12 +257,12 @@ ConResPutsEx(
  *
  * @see ConPuts(), ConResPutsEx()
  **/
-INT
+DWORD
 ConResPuts(
-    IN PCON_STREAM Stream,
+    IN PCON_WRITER32 Writer,
     IN UINT uID)
 {
-    return ConResPutsEx(Stream, NULL /*GetModuleHandleW(NULL)*/,
+    return ConResPutsEx(Writer, NULL /*GetModuleHandleW(NULL)*/,
                         uID, MAKELANGID(LANG_NEUTRAL, SUBLANG_NEUTRAL));
 }
 
@@ -306,21 +300,21 @@ ConResPuts(
  *
  * @see ConPrintf(), ConResPrintfEx(), ConResPrintfV(), ConResPrintf()
  **/
-INT
+DWORD
 ConResPrintfExV(
-    IN PCON_STREAM Stream,
+    IN PCON_WRITER32 Writer,
     IN HINSTANCE hInstance OPTIONAL,
     IN UINT    uID,
     IN LANGID  LanguageId,
     IN va_list args)
 {
-    INT Len;
+    DWORD Len;
     WCHAR bufSrc[CON_RC_STRING_MAX_SIZE];
 
     // NOTE: We may use the special behaviour where nBufMaxSize == 0
     Len = K32LoadStringExW(hInstance, uID, LanguageId, bufSrc, ARRAYSIZE(bufSrc));
     if (Len)
-        Len = ConPrintfV(Stream, bufSrc, args);
+        Len = ConPrintfV(Writer, bufSrc, args);
 
     return Len;
 }
@@ -348,13 +342,13 @@ ConResPrintfExV(
  *
  * @see ConPrintf(), ConResPrintfExV(), ConResPrintfEx(), ConResPrintf()
  **/
-INT
+DWORD
 ConResPrintfV(
-    IN PCON_STREAM Stream,
+    IN PCON_WRITER32 Writer,
     IN UINT    uID,
     IN va_list args)
 {
-    return ConResPrintfExV(Stream, NULL /*GetModuleHandleW(NULL)*/,
+    return ConResPrintfExV(Writer, NULL /*GetModuleHandleW(NULL)*/,
                            uID, MAKELANGID(LANG_NEUTRAL, SUBLANG_NEUTRAL),
                            args);
 }
@@ -392,20 +386,20 @@ ConResPrintfV(
  *
  * @see ConPrintf(), ConResPrintfExV(), ConResPrintfV(), ConResPrintf()
  **/
-INT
+DWORD
 __cdecl
 ConResPrintfEx(
-    IN PCON_STREAM Stream,
+    IN PCON_WRITER32 Writer,
     IN HINSTANCE hInstance OPTIONAL,
     IN UINT   uID,
     IN LANGID LanguageId,
     ...)
 {
-    INT Len;
+    DWORD Len;
     va_list args;
 
     va_start(args, LanguageId);
-    Len = ConResPrintfExV(Stream, hInstance, uID, LanguageId, args);
+    Len = ConResPrintfExV(Writer, hInstance, uID, LanguageId, args);
     va_end(args);
 
     return Len;
@@ -433,18 +427,18 @@ ConResPrintfEx(
  *
  * @see ConPrintf(), ConResPrintfExV(), ConResPrintfEx(), ConResPrintfV()
  **/
-INT
+DWORD
 __cdecl
 ConResPrintf(
-    IN PCON_STREAM Stream,
+    IN PCON_WRITER32 Writer,
     IN UINT uID,
     ...)
 {
-    INT Len;
+    DWORD Len;
     va_list args;
 
     va_start(args, uID);
-    Len = ConResPrintfV(Stream, uID, args);
+    Len = ConResPrintfV(Writer, uID, args);
     va_end(args);
 
     return Len;
@@ -490,17 +484,16 @@ ConResPrintf(
  * @see ConPuts(), ConResPuts() and associated functions,
  *      <a href="https://docs.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-formatmessage">FormatMessage() (on MSDN)</a>
  **/
-INT
+DWORD
 ConMsgPuts(
-    IN PCON_STREAM Stream,
+    IN PCON_WRITER32 Writer,
     IN DWORD   dwFlags,
     IN LPCVOID lpSource OPTIONAL,
     IN DWORD   dwMessageId,
     IN DWORD   dwLanguageId)
 {
-    INT Len;
-    DWORD dwLength  = 0;
     PWSTR lpMsgBuf = NULL;
+    DWORD Len = 0;
 
     /*
      * Sanitize dwFlags. This version always ignores explicitly the inserts
@@ -516,36 +509,33 @@ ConMsgPuts(
      */
     _SEH2_TRY
     {
-        dwLength = FormatMessageW(dwFlags,
-                                  lpSource,
-                                  dwMessageId,
-                                  dwLanguageId,
-                                  (PWSTR)&lpMsgBuf,
-                                  0,
-                                  NULL);
+        Len = FormatMessageW(dwFlags,
+                             lpSource,
+                             dwMessageId,
+                             dwLanguageId,
+                             (PWSTR)&lpMsgBuf,
+                             0,
+                             NULL);
     }
     _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
     {
     }
     _SEH2_END;
 
-    Len = (INT)dwLength;
-
     if (!lpMsgBuf)
     {
-        // ASSERT(dwLength == 0);
+        // ASSERT(Len == 0);
     }
     else
     {
-        // ASSERT(dwLength != 0);
+        // ASSERT(Len != 0);
 
         /* lpMsgBuf is NULL-terminated by FormatMessage */
-        // Len = ConPuts(Stream, lpMsgBuf);
-        CON_STREAM_WRITE2(Stream, lpMsgBuf, dwLength, Len);
-
-        /* Fixup returned length in case of errors */
-        if (Len < 0)
-            Len = 0;
+        // Len = ConPuts(Writer, lpMsgBuf);
+        Len *= sizeof(WCHAR);
+        if (!CALL_W32(Writer)(lpMsgBuf, Len, &Len))
+            Len = 0; /* Fixup returned length in case of errors */
+        Len /= sizeof(WCHAR);
 
         /* Free the buffer allocated by FormatMessage */
         LocalFree(lpMsgBuf);
@@ -562,18 +552,17 @@ ConMsgPuts(
  *
  * @see ConMsgPrintfV()
  **/
-INT
+DWORD
 ConMsgPrintf2V(
-    IN PCON_STREAM Stream,
+    IN PCON_WRITER32 Writer,
     IN DWORD   dwFlags,
     IN LPCVOID lpSource OPTIONAL,
     IN DWORD   dwMessageId,
     IN DWORD   dwLanguageId,
     IN va_list args)
 {
-    INT Len;
-    DWORD dwLength  = 0;
     PWSTR lpMsgBuf = NULL;
+    DWORD Len = 0;
 
     /*
      * Sanitize dwFlags. This version always ignores explicitly the inserts.
@@ -589,36 +578,33 @@ ConMsgPrintf2V(
      */
     _SEH2_TRY
     {
-        dwLength = FormatMessageW(dwFlags,
-                                  lpSource,
-                                  dwMessageId,
-                                  dwLanguageId,
-                                  (PWSTR)&lpMsgBuf,
-                                  0,
-                                  NULL);
+        Len = FormatMessageW(dwFlags,
+                             lpSource,
+                             dwMessageId,
+                             dwLanguageId,
+                             (PWSTR)&lpMsgBuf,
+                             0,
+                             NULL);
     }
     _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
     {
     }
     _SEH2_END;
 
-    Len = (INT)dwLength;
-
     if (!lpMsgBuf)
     {
-        // ASSERT(dwLength == 0);
+        // ASSERT(Len == 0);
     }
     else
     {
-        // ASSERT(dwLength != 0);
+        // ASSERT(Len != 0);
 
         /* lpMsgBuf is NULL-terminated by FormatMessage */
-        Len = ConPrintfV(Stream, lpMsgBuf, args);
-        // CON_STREAM_WRITE2(Stream, lpMsgBuf, dwLength, Len);
-
-        /* Fixup returned length in case of errors */
-        if (Len < 0)
-            Len = 0;
+        Len = ConPrintfV(Writer, lpMsgBuf, args);
+        // Len *= sizeof(WCHAR);
+        // if (!CALL_W32(Writer)(lpMsgBuf, Len, &Len))
+        //     Len = 0; /* Fixup returned length in case of errors */
+        // Len /= sizeof(WCHAR);
 
         /* Free the buffer allocated by FormatMessage */
         LocalFree(lpMsgBuf);
@@ -683,18 +669,17 @@ ConMsgPrintf2V(
  * @see ConPrintf(), ConResPrintf() and associated functions, ConMsgPrintf(),
  *      <a href="https://docs.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-formatmessage">FormatMessage() (on MSDN)</a>
  **/
-INT
+DWORD
 ConMsgPrintfV(
-    IN PCON_STREAM Stream,
+    IN PCON_WRITER32 Writer,
     IN DWORD   dwFlags,
     IN LPCVOID lpSource OPTIONAL,
     IN DWORD   dwMessageId,
     IN DWORD   dwLanguageId,
     IN va_list *Arguments OPTIONAL)
 {
-    INT Len;
-    DWORD dwLength  = 0;
     PWSTR lpMsgBuf = NULL;
+    DWORD Len;
 
     /* Sanitize dwFlags */
     dwFlags |= FORMAT_MESSAGE_ALLOCATE_BUFFER; // Always allocate an internal buffer.
@@ -704,29 +689,26 @@ ConMsgPrintfV(
      * Use the "safe" FormatMessage version (SEH-protected) to protect
      * from invalid string parameters.
      */
-    dwLength = FormatMessageSafeW(dwFlags,
-                                  lpSource,
-                                  dwMessageId,
-                                  dwLanguageId,
-                                  (PWSTR)&lpMsgBuf,
-                                  0,
-                                  Arguments);
-
-    Len = (INT)dwLength;
+    Len = FormatMessageSafeW(dwFlags,
+                             lpSource,
+                             dwMessageId,
+                             dwLanguageId,
+                             (PWSTR)&lpMsgBuf,
+                             0,
+                             Arguments);
 
     if (!lpMsgBuf)
     {
-        // ASSERT(dwLength == 0);
+        // ASSERT(Len == 0);
     }
     else
     {
-        // ASSERT(dwLength != 0);
+        // ASSERT(Len != 0);
 
-        CON_STREAM_WRITE2(Stream, lpMsgBuf, dwLength, Len);
-
-        /* Fixup returned length in case of errors */
-        if (Len < 0)
-            Len = 0;
+        Len *= sizeof(WCHAR);
+        if (!CALL_W32(Writer)(lpMsgBuf, Len, &Len))
+            Len = 0; /* Fixup returned length in case of errors */
+        Len /= sizeof(WCHAR);
 
         /* Free the buffer allocated by FormatMessage */
         LocalFree(lpMsgBuf);
@@ -782,24 +764,24 @@ ConMsgPrintfV(
  * @see ConPrintf(), ConResPrintf() and associated functions, ConMsgPrintfV(),
  *      <a href="https://docs.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-formatmessage">FormatMessage() (on MSDN)</a>
  **/
-INT
+DWORD
 __cdecl
 ConMsgPrintf(
-    IN PCON_STREAM Stream,
+    IN PCON_WRITER32 Writer,
     IN DWORD   dwFlags,
     IN LPCVOID lpSource OPTIONAL,
     IN DWORD   dwMessageId,
     IN DWORD   dwLanguageId,
     ...)
 {
-    INT Len;
+    DWORD Len;
     va_list args;
 
     /* Sanitize dwFlags */
     dwFlags &= ~FORMAT_MESSAGE_ARGUMENT_ARRAY;
 
     va_start(args, dwLanguageId);
-    Len = ConMsgPrintfV(Stream,
+    Len = ConMsgPrintfV(Writer,
                         dwFlags,
                         lpSource,
                         dwMessageId,
@@ -871,18 +853,17 @@ ConMsgPrintf(
  * @see ConPrintf(), ConResPrintf() and associated functions, ConMsgPrintf(),
  *      <a href="https://docs.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-formatmessage">FormatMessage() (on MSDN)</a>
  **/
-INT
+DWORD
 ConResMsgPrintfExV(
-    IN PCON_STREAM Stream,
+    IN PCON_WRITER32 Writer,
     IN HINSTANCE hInstance OPTIONAL,
     IN DWORD   dwFlags,
     IN UINT    uID,
     IN LANGID  LanguageId,
     IN va_list *Arguments OPTIONAL)
 {
-    INT Len;
-    DWORD dwLength  = 0;
     PWSTR lpMsgBuf = NULL;
+    DWORD Len;
     WCHAR bufSrc[CON_RC_STRING_MAX_SIZE];
 
     /* Retrieve the string from the resource string table */
@@ -903,28 +884,25 @@ ConResMsgPrintfExV(
      * Use the "safe" FormatMessage version (SEH-protected) to protect
      * from invalid string parameters.
      */
-    dwLength = FormatMessageSafeW(dwFlags,
-                                  bufSrc,
-                                  0, 0,
-                                  (PWSTR)&lpMsgBuf,
-                                  0,
-                                  Arguments);
-
-    Len = (INT)dwLength;
+    Len = FormatMessageSafeW(dwFlags,
+                             bufSrc,
+                             0, 0,
+                             (PWSTR)&lpMsgBuf,
+                             0,
+                             Arguments);
 
     if (!lpMsgBuf)
     {
-        // ASSERT(dwLength == 0);
+        // ASSERT(Len == 0);
     }
     else
     {
-        // ASSERT(dwLength != 0);
+        // ASSERT(Len != 0);
 
-        CON_STREAM_WRITE2(Stream, lpMsgBuf, dwLength, Len);
-
-        /* Fixup returned length in case of errors */
-        if (Len < 0)
-            Len = 0;
+        Len *= sizeof(WCHAR);
+        if (!CALL_W32(Writer)(lpMsgBuf, Len, &Len))
+            Len = 0; /* Fixup returned length in case of errors */
+        Len /= sizeof(WCHAR);
 
         /* Free the buffer allocated by FormatMessage */
         LocalFree(lpMsgBuf);
@@ -982,14 +960,14 @@ ConResMsgPrintfExV(
  * @see ConPrintf(), ConResPrintf() and associated functions, ConMsgPrintf(),
  *      <a href="https://docs.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-formatmessage">FormatMessage() (on MSDN)</a>
  **/
-INT
+DWORD
 ConResMsgPrintfV(
-    IN PCON_STREAM Stream,
+    IN PCON_WRITER32 Writer,
     IN DWORD   dwFlags,
     IN UINT    uID,
     IN va_list *Arguments OPTIONAL)
 {
-    return ConResMsgPrintfExV(Stream, NULL /*GetModuleHandleW(NULL)*/,
+    return ConResMsgPrintfExV(Writer, NULL /*GetModuleHandleW(NULL)*/,
                               dwFlags, uID,
                               MAKELANGID(LANG_NEUTRAL, SUBLANG_NEUTRAL),
                               Arguments);
@@ -1046,24 +1024,24 @@ ConResMsgPrintfV(
  * @see ConPrintf(), ConResPrintf() and associated functions, ConMsgPrintf(),
  *      <a href="https://docs.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-formatmessage">FormatMessage() (on MSDN)</a>
  **/
-INT
+DWORD
 __cdecl
 ConResMsgPrintfEx(
-    IN PCON_STREAM Stream,
+    IN PCON_WRITER32 Writer,
     IN HINSTANCE hInstance OPTIONAL,
     IN DWORD  dwFlags,
     IN UINT   uID,
     IN LANGID LanguageId,
     ...)
 {
-    INT Len;
+    DWORD Len;
     va_list args;
 
     /* Sanitize dwFlags */
     dwFlags &= ~FORMAT_MESSAGE_ARGUMENT_ARRAY;
 
     va_start(args, LanguageId);
-    Len = ConResMsgPrintfExV(Stream,
+    Len = ConResMsgPrintfExV(Writer,
                              hInstance,
                              dwFlags,
                              uID,
@@ -1113,22 +1091,22 @@ ConResMsgPrintfEx(
  * @see ConPrintf(), ConResPrintf() and associated functions, ConMsgPrintf(),
  *      <a href="https://docs.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-formatmessage">FormatMessage() (on MSDN)</a>
  **/
-INT
+DWORD
 __cdecl
 ConResMsgPrintf(
-    IN PCON_STREAM Stream,
+    IN PCON_WRITER32 Writer,
     IN DWORD dwFlags,
     IN UINT  uID,
     ...)
 {
-    INT Len;
+    DWORD Len;
     va_list args;
 
     /* Sanitize dwFlags */
     dwFlags &= ~FORMAT_MESSAGE_ARGUMENT_ARRAY;
 
     va_start(args, uID);
-    Len = ConResMsgPrintfV(Stream, dwFlags, uID, &args);
+    Len = ConResMsgPrintfV(Writer, dwFlags, uID, &args);
     va_end(args);
 
     return Len;

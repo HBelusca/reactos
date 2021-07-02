@@ -29,7 +29,7 @@ extern "C" {
 #endif
 
 // Shadow type, implementation-specific
-typedef struct _CON_STREAM CON_STREAM, *PCON_STREAM;
+// typedef struct _CON_STREAM CON_STREAM, *PCON_STREAM;
 
 
 #ifdef __cplusplus

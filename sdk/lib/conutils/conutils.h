@@ -48,8 +48,13 @@
 #define USE_WIN32_READWRITE
 #include "conrw.h"
 
-#include "stream.h"
 #include "conprint.h"
+
+#ifndef __CON_STREAM_IMPL
+#define __CONUTILS_OUTSTREAM_FUNCS_COMPAT
+#endif
+
+#include "stream.h"
 // #include "instream.h"
 #include "outstream.h"
 #include "screen.h"

@@ -22,6 +22,7 @@
 #include <winnls.h> // For WideCharToMultiByte()
 #include <wincon.h> // Console APIs (only if kernel32 support included)
 
+#define __CON_STREAM_IMPL
 #include "conutils.h"
 #include "stream.h"
 #include "screen.h"

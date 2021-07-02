@@ -55,15 +55,23 @@ typedef enum _CON_STREAM_MODE
 // Shadow type, implementation-specific
 typedef struct _CON_STREAM CON_STREAM, *PCON_STREAM;
 
-// typedef INT (__stdcall *CON_READ_FUNC)(
-    // IN PCON_STREAM Stream,
-    // OUT PTCHAR szStr,
-    // IN OUT PDWORD len);
+#ifndef __CON_STREAM_IMPL
 
-typedef INT (__stdcall *CON_WRITE_FUNC)(
-    IN PCON_STREAM Stream,
-    IN PCTCH szStr,
-    IN DWORD len);
+typedef struct _CON_STREAM
+{
+#if defined(USE_WIN32_READWRITE)
+    WIN32_WRITER32 Writer;
+    // WIN32_READER32 Reader;
+#elif defined(USE_CRT_READWRITE)
+    CRT_WRITER Writer;
+    // CRT_READER Reader;
+#endif
+
+    // UCHAR Reserved[ANYSIZE_ARRAY];
+
+} CON_STREAM, *PCON_STREAM;
+
+#endif
 
 /*
  * Standard console streams, initialized by
@@ -82,16 +90,6 @@ extern CON_STREAM csStdErr;
 #define StdOut  (&csStdOut)
 #define StdErr  (&csStdErr)
 #endif
-
-BOOL
-ConStreamInitEx(
-    OUT PCON_STREAM Stream,
-    IN  PVOID Handle,
-    IN  CON_STREAM_MODE Mode,
-    IN  UINT CacheCodePage OPTIONAL,
-    // IN ReadWriteMode ????
-    // IN  CON_READ_FUNC ReadFunc OPTIONAL,
-    IN  CON_WRITE_FUNC WriteFunc OPTIONAL);
 
 BOOL
 ConStreamInit(

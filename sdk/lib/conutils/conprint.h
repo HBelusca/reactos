@@ -2,7 +2,8 @@
  * PROJECT:     ReactOS Console Utilities Library
  * LICENSE:     GPL-2.0+ (https://spdx.org/licenses/GPL-2.0+)
  * PURPOSE:     Print helper functions.
- * COPYRIGHT:   Copyright 2017-2021 Hermes Belusca-Maito
+ * COPYRIGHT:   Copyright 2017-2018 ReactOS Team
+ *              Copyright 2017-2021 Hermes Belusca-Maito
  */
 
 /**
@@ -29,21 +30,27 @@ extern "C" {
  * Strings
  */
 
-INT
+DWORD
+ConWrite(
+    IN PCON_WRITER32 Writer,
+    IN PCTCH szStr,
+    IN DWORD Len);
+
+DWORD
 ConPuts(
-    IN PCON_STREAM Stream,
+    IN PCON_WRITER32 Writer,
     IN PCWSTR szStr);
 
-INT
+DWORD
 ConPrintfV(
-    IN PCON_STREAM Stream,
+    IN PCON_WRITER32 Writer,
     IN PCWSTR  szStr,
     IN va_list args);
 
-INT
+DWORD
 __cdecl
 ConPrintf(
-    IN PCON_STREAM Stream,
+    IN PCON_WRITER32 Writer,
     IN PCWSTR szStr,
     ...);
 
@@ -52,45 +59,45 @@ ConPrintf(
  * String resources
  */
 
-INT
+DWORD
 ConResPutsEx(
-    IN PCON_STREAM Stream,
+    IN PCON_WRITER32 Writer,
     IN HINSTANCE hInstance OPTIONAL,
     IN UINT   uID,
     IN LANGID LanguageId);
 
-INT
+DWORD
 ConResPuts(
-    IN PCON_STREAM Stream,
+    IN PCON_WRITER32 Writer,
     IN UINT uID);
 
-INT
+DWORD
 ConResPrintfExV(
-    IN PCON_STREAM Stream,
+    IN PCON_WRITER32 Writer,
     IN HINSTANCE hInstance OPTIONAL,
     IN UINT    uID,
     IN LANGID  LanguageId,
     IN va_list args);
 
-INT
+DWORD
 ConResPrintfV(
-    IN PCON_STREAM Stream,
+    IN PCON_WRITER32 Writer,
     IN UINT    uID,
     IN va_list args);
 
-INT
+DWORD
 __cdecl
 ConResPrintfEx(
-    IN PCON_STREAM Stream,
+    IN PCON_WRITER32 Writer,
     IN HINSTANCE hInstance OPTIONAL,
     IN UINT   uID,
     IN LANGID LanguageId,
     ...);
 
-INT
+DWORD
 __cdecl
 ConResPrintf(
-    IN PCON_STREAM Stream,
+    IN PCON_WRITER32 Writer,
     IN UINT uID,
     ...);
 
@@ -99,36 +106,36 @@ ConResPrintf(
  * Message resources
  */
 
-INT
+DWORD
 ConMsgPuts(
-    IN PCON_STREAM Stream,
+    IN PCON_WRITER32 Writer,
     IN DWORD   dwFlags,
     IN LPCVOID lpSource OPTIONAL,
     IN DWORD   dwMessageId,
     IN DWORD   dwLanguageId);
 
-INT
+DWORD
 ConMsgPrintf2V(
-    IN PCON_STREAM Stream,
+    IN PCON_WRITER32 Writer,
     IN DWORD   dwFlags,
     IN LPCVOID lpSource OPTIONAL,
     IN DWORD   dwMessageId,
     IN DWORD   dwLanguageId,
     IN va_list args);
 
-INT
+DWORD
 ConMsgPrintfV(
-    IN PCON_STREAM Stream,
+    IN PCON_WRITER32 Writer,
     IN DWORD   dwFlags,
     IN LPCVOID lpSource OPTIONAL,
     IN DWORD   dwMessageId,
     IN DWORD   dwLanguageId,
-    IN va_list *Arguments OPTIONAL);
+    IN va_list* Arguments OPTIONAL);
 
-INT
+DWORD
 __cdecl
 ConMsgPrintf(
-    IN PCON_STREAM Stream,
+    IN PCON_WRITER32 Writer,
     IN DWORD   dwFlags,
     IN LPCVOID lpSource OPTIONAL,
     IN DWORD   dwMessageId,
@@ -140,36 +147,36 @@ ConMsgPrintf(
  * Message resources as string resources
  */
 
-INT
+DWORD
 ConResMsgPrintfExV(
-    IN PCON_STREAM Stream,
+    IN PCON_WRITER32 Writer,
     IN HINSTANCE hInstance OPTIONAL,
     IN DWORD   dwFlags,
     IN UINT    uID,
     IN LANGID  LanguageId,
-    IN va_list *Arguments OPTIONAL);
+    IN va_list* Arguments OPTIONAL);
 
-INT
+DWORD
 ConResMsgPrintfV(
-    IN PCON_STREAM Stream,
+    IN PCON_WRITER32 Writer,
     IN DWORD   dwFlags,
     IN UINT    uID,
-    IN va_list *Arguments OPTIONAL);
+    IN va_list* Arguments OPTIONAL);
 
-INT
+DWORD
 __cdecl
 ConResMsgPrintfEx(
-    IN PCON_STREAM Stream,
+    IN PCON_WRITER32 Writer,
     IN HINSTANCE hInstance OPTIONAL,
     IN DWORD  dwFlags,
     IN UINT   uID,
     IN LANGID LanguageId,
     ...);
 
-INT
+DWORD
 __cdecl
 ConResMsgPrintf(
-    IN PCON_STREAM Stream,
+    IN PCON_WRITER32 Writer,
     IN DWORD dwFlags,
     IN UINT  uID,
     ...);

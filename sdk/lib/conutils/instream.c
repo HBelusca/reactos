@@ -41,6 +41,7 @@
 /* PSEH for SEH Support */
 #include <pseh/pseh2.h>
 
+#define __CON_STREAM_IMPL
 #include "conutils.h"
 #include "stream.h"
 #include "stream_private.h"

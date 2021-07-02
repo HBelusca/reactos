@@ -21,8 +21,10 @@
 #include <winbase.h>
 #include <wincon.h> // Console APIs (only if kernel32 support included)
 
+#define __CON_STREAM_IMPL
 #include "conutils.h"
 #include "stream.h"
+/**/#include "stream_private.h"/**/
 #include "screen.h"
 
 /****/
@@ -246,7 +248,8 @@ ConClearScreen(IN PCON_SCREEN Screen)
     else if (IsTTYHandle(hOutput))
     {
         /* Clear the full screen and move the cursor to (0,0) */
-        ConPuts(Screen->Stream, L"\x1B[2J\x1B[1;1H");
+        ConPuts(GET_W32(&Screen->Stream->Writer),
+                L"\x1B[2J\x1B[1;1H");
     }
     else
     {

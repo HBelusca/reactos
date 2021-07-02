@@ -39,83 +39,153 @@
 #include <winnls.h> // For WideCharToMultiByte()
 #include <wincon.h> // Console APIs (only if kernel32 support included)
 
+#define __CON_STREAM_IMPL
 #include "conutils.h"
 #include "stream.h"
 #include "stream_private.h"
 
 
-/**
- * @name ConWrite
- *     Writes a counted string to a stream.
- *
- * @param[in]   Stream
- *     Stream to which the write operation is issued.
- *
- * @param[in]   szStr
- *     Pointer to the counted string to write.
- *
- * @param[in]   len
- *     Length of the string pointed by @p szStr, specified
- *     in number of characters.
- *
- * @return
- *     Numbers of characters successfully written to @p Stream.
- *
- * @note
- *     This function is used as an internal function.
- *     Use the ConStreamWrite() function instead.
- *
- * @remark
- *     Should be called with the stream locked.
- **/
-INT
-__stdcall
-ConWrite(
-    IN PCON_STREAM Stream,
-    IN PCTCH szStr,
-    IN DWORD len)
+#ifdef USE_CRT
+
+/*
+ * Default writer callback for CRT streams.
+ * Uses the CRT stream lock.
+ */
+BOOL __stdcall
+CrtStreamWriter(
+    IN PCON_WRITER Writer,
+    IN PCVOID Buffer,
+    IN SIZE_T BufferLength,
+    OUT PSIZE_T pWrittenLength OPTIONAL)
 {
-#ifndef USE_CRT
+    PCON_STREAM Stream = (PCON_STREAM)CONTAINING_RECORD(Writer, CON_STREAM, Writer);
+    SIZE_T written = 0;
+    SIZE_T WrittenLength = 0;
+
+    /* Convert into number of characters (WCHAR) */
+    BufferLength /= sizeof(WCHAR);
+
+    if (pWrittenLength) *pWrittenLength = 0;
+
+    /* If we do not write anything, just return */
+    if (!Buffer || BufferLength == 0)
+        return TRUE;
+
+#if 1
+    /*
+     * There is no "counted" printf-to-stream or puts-like function, therefore
+     * we use this trick to output the counted string to the stream.
+     */
+    while (BufferLength > 0)
+    {
+        written = fwprintf(Stream->Writer.fStream, L"%.*s", BufferLength, (PCTCH)Buffer);
+        if (written == 0)
+        {
+            /* Some embedded NULL or special character
+             * was encountered, print it apart. */
+            fputwc(*(PCTCH)Buffer, Stream->Writer.fStream);
+            ++written;
+        }
+        WrittenLength += written;
+        if (written >= BufferLength)
+            break;
+        Buffer = (PCVOID)((ULONG_PTR)Buffer + written * sizeof(WCHAR));
+        BufferLength -= written;
+    }
+#else
+    /* ANSI text or Binary output only */
+    _setmode(_fileno(Stream->Writer.fStream), _O_TEXT); // _O_BINARY
+    WrittenLength = fwrite(Buffer, 1, BufferLength, Stream->Writer.fStream);
+#endif
+
+    if (pWrittenLength) *pWrittenLength = WrittenLength * sizeof(WCHAR);
+    return ferror(Stream->Writer.fStream);
+}
+
+#else /* defined(USE_CRT) */
+
+/*
+ * Helper for Win32 console.
+ */
+static inline
+BOOL
+ConWriter(
+    IN PCON_STREAM Stream,
+    IN PCVOID Buffer,
+    IN ULONG BufferLength,
+    OUT PULONG pWrittenLength OPTIONAL)
+{
+    BOOL bSuccess = TRUE; /* Assume success */
+    /****/
+    PCTCH szStr = (PCTCH)Buffer;
+    /****/
+    DWORD TotalLen = 0, dwNumChars;
+    DWORD cchWrite;
+
+    /* Convert into number of characters (TCHAR) */
+    BufferLength /= sizeof(TCHAR);
+
+    if (pWrittenLength) *pWrittenLength = 0;
+
+    /* If we do not write anything, just return */
+    if (!Buffer || BufferLength == 0)
+        return TRUE;
+
+    // TODO: Check if (Stream->Mode == WideText or UTF16Text) ??
+
+    /*
+     * This code is inspired from _cputws, in particular from the fact that,
+     * according to MSDN: https://msdn.microsoft.com/en-us/library/ms687401(v=vs.85).aspx
+     * the buffer size must be less than 64 KB.
+     *
+     * A similar code can be used for implementing _cputs too.
+     */
+    while (BufferLength > 0)
+    {
+        cchWrite = min(BufferLength, 65535 / sizeof(TCHAR));
+        dwNumChars = 0;
+        bSuccess = WriteConsole(Stream->Writer.hHandle, szStr, cchWrite, &dwNumChars, NULL);
+        TotalLen += dwNumChars;
+        if (!bSuccess)
+            break;
+        szStr += cchWrite;
+        BufferLength -= cchWrite;
+    }
+
+    if (pWrittenLength) *pWrittenLength = TotalLen * sizeof(TCHAR);
+    return bSuccess;
+}
+
+/*
+ * Helper for text files.
+ */
+static inline
+BOOL
+FileWriter(
+    IN PCON_STREAM Stream,
+    IN PCVOID Buffer,
+    IN ULONG BufferLength,
+    OUT PULONG pWrittenLength OPTIONAL)
+{
+    BOOL bSuccess = TRUE; /* Assume success */
+    /****/
+    PCTCH szStr = (PCTCH)Buffer;
+    DWORD len = BufferLength / sizeof(TCHAR);
+    /****/
     DWORD TotalLen = len, dwNumBytes = 0;
     LPCVOID p;
 
+    // /* Convert into number of characters (TCHAR) */
+    // BufferLength /= sizeof(TCHAR);
+
+    if (pWrittenLength) *pWrittenLength = 0;
+
     /* If we do not write anything, just return */
-    if (!szStr || len == 0)
-        return 0;
-
-    /* Check whether we are writing to a console */
-    // if (IsConsoleHandle(Stream->hHandle))
-    if (Stream->IsConsole)
-    {
-        // TODO: Check if (Stream->Mode == WideText or UTF16Text) ??
-
-        /*
-         * This code is inspired from _cputws, in particular from the fact that,
-         * according to MSDN: https://msdn.microsoft.com/en-us/library/ms687401(v=vs.85).aspx
-         * the buffer size must be less than 64 KB.
-         *
-         * A similar code can be used for implementing _cputs too.
-         */
-
-        DWORD cchWrite;
-        TotalLen = len, dwNumBytes = 0;
-
-        while (len > 0)
-        {
-            cchWrite = min(len, 65535 / sizeof(WCHAR));
-
-            // FIXME: Check return value!
-            WriteConsole(Stream->hHandle, szStr, cchWrite, &dwNumBytes, NULL);
-
-            szStr += cchWrite;
-            len -= cchWrite;
-        }
-
-        return (INT)TotalLen; // FIXME: Really return the number of chars written!
-    }
+    if (!Buffer || BufferLength == 0)
+        return TRUE;
 
     /*
-     * We are redirected and writing to a file or pipe instead of the console.
+     * We are writing to a file or pipe instead of the console.
      * Convert the string from TCHARs to the desired output format, if the two differ.
      *
      * Implementation NOTE:
@@ -124,6 +194,7 @@ ConWrite(
      *   uselessly depend on user32.dll, while MultiByteToWideChar and
      *   WideCharToMultiByte only need kernel32.dll.
      */
+
     if ((Stream->Mode == WideText) || (Stream->Mode == UTF16Text))
     {
 #ifndef _UNICODE // UNICODE means that TCHAR == WCHAR == UTF-16
@@ -132,7 +203,7 @@ ConWrite(
         if (!buffer)
         {
             SetLastError(ERROR_NOT_ENOUGH_MEMORY);
-            return 0;
+            return FALSE;
         }
         len = (DWORD)MultiByteToWideChar(CP_THREAD_ACP, // CP_ACP, CP_OEMCP
                                          0, szStr, (INT)len, buffer, (INT)len);
@@ -165,7 +236,7 @@ ConWrite(
 
             /* Write everything up to \n */
             dwNumBytes = ((PCWCH)p - (PCWCH)szStr) * sizeof(WCHAR);
-            WriteFile(Stream->hHandle, szStr, dwNumBytes, &dwNumBytes, NULL);
+            bSuccess = WriteFile(Stream->Writer.hHandle, szStr, dwNumBytes, &dwNumBytes, NULL);
 
             /*
              * If we hit a newline and the previous character is not a carriage-return,
@@ -174,9 +245,9 @@ ConWrite(
             if (len > 0 && *(PCWCH)p == L'\n')
             {
                 if (p == (LPCVOID)szStr || (p > (LPCVOID)szStr && *((PCWCH)p - 1) != L'\r'))
-                    WriteFile(Stream->hHandle, L"\r\n", 2 * sizeof(WCHAR), &dwNumBytes, NULL);
+                    bSuccess = WriteFile(Stream->Writer.hHandle, L"\r\n", 2 * sizeof(WCHAR), &dwNumBytes, NULL);
                 else
-                    WriteFile(Stream->hHandle, L"\n", sizeof(WCHAR), &dwNumBytes, NULL);
+                    bSuccess = WriteFile(Stream->Writer.hHandle, L"\n", sizeof(WCHAR), &dwNumBytes, NULL);
 
                 /* Skip \n */
                 p = (LPCVOID)((PCWCH)p + 1);
@@ -212,7 +283,7 @@ ConWrite(
         if (!buffer)
         {
             SetLastError(ERROR_NOT_ENOUGH_MEMORY);
-            return 0;
+            return FALSE;
         }
         len = WideCharToMultiByte(CodePage, 0,
                                   szStr, len, buffer, len * MB_LEN_MAX,
@@ -249,7 +320,7 @@ ConWrite(
 
             /* Write everything up to \n */
             dwNumBytes = ((PCCH)p - (PCCH)szStr) * sizeof(CHAR);
-            WriteFile(Stream->hHandle, szStr, dwNumBytes, &dwNumBytes, NULL);
+            bSuccess = WriteFile(Stream->Writer.hHandle, szStr, dwNumBytes, &dwNumBytes, NULL);
 
             /*
              * If we hit a newline and the previous character is not a carriage-return,
@@ -258,9 +329,9 @@ ConWrite(
             if (len > 0 && *(PCCH)p == '\n')
             {
                 if (p == (LPCVOID)szStr || (p > (LPCVOID)szStr && *((PCCH)p - 1) != '\r'))
-                    WriteFile(Stream->hHandle, "\r\n", 2, &dwNumBytes, NULL);
+                    bSuccess = WriteFile(Stream->Writer.hHandle, "\r\n", 2, &dwNumBytes, NULL);
                 else
-                    WriteFile(Stream->hHandle, "\n", 1, &dwNumBytes, NULL);
+                    bSuccess = WriteFile(Stream->Writer.hHandle, "\n", 1, &dwNumBytes, NULL);
 
                 /* Skip \n */
                 p = (LPCVOID)((PCCH)p + 1);
@@ -278,81 +349,37 @@ ConWrite(
     else // if (Stream->Mode == Binary)
     {
         /* Directly output the string */
-        WriteFile(Stream->hHandle, szStr, len, &dwNumBytes, NULL);
+        bSuccess = WriteFile(Stream->Writer.hHandle, szStr, len, &dwNumBytes, NULL);
     }
 
-    // FIXME!
-    return (INT)TotalLen;
-
-#else /* defined(USE_CRT) */
-
-    DWORD total = len;
-    DWORD written = 0;
-
-    /* If we do not write anything, just return */
-    if (!szStr || len == 0)
-        return 0;
-
-#if 1
-    /*
-     * There is no "counted" printf-to-stream or puts-like function, therefore
-     * we use this trick to output the counted string to the stream.
-     */
-    while (1)
-    {
-        written = fwprintf(Stream->fStream, L"%.*s", total, szStr);
-        if (written < total)
-        {
-            /*
-             * Some embedded NULL or special character
-             * was encountered, print it apart.
-             */
-            if (written == 0)
-            {
-                fputwc(*szStr, Stream->fStream);
-                written++;
-            }
-
-            szStr += written;
-            total -= written;
-        }
-        else
-        {
-            break;
-        }
-    }
-    return (INT)len;
-#else
-    /* ANSI text or Binary output only */
-    _setmode(_fileno(Stream->fStream), _O_TEXT); // _O_BINARY
-    return fwrite(szStr, sizeof(*szStr), len, Stream->fStream);
-#endif
-
-#endif /* defined(USE_CRT) */
+    if (pWrittenLength) *pWrittenLength = TotalLen * sizeof(TCHAR);
+    return bSuccess;
 }
 
+/*
+ * Default writer callback for Win32 "streams".
+ * No-lock.
+ */
+BOOL __stdcall
+Win32StreamWriter(
+    IN PCON_WRITER32 Writer,
+    IN PCVOID Buffer,
+    IN ULONG BufferLength,
+    OUT PULONG pWrittenLength OPTIONAL)
+{
+    PCON_STREAM Stream = (PCON_STREAM)CONTAINING_RECORD(Writer, CON_STREAM, Writer);
+    BOOL bSuccess;
 
-#define CON_STREAM_WRITE_CALL(Stream, Str, Len) \
-    (Stream)->WriteFunc((Stream), (Str), (Len))
+    EnterCriticalSection(&Stream->Lock);
+    if (Stream->IsConsole)
+        bSuccess = ConWriter(Stream, Buffer, BufferLength, pWrittenLength);
+    else
+        bSuccess = FileWriter(Stream, Buffer, BufferLength, pWrittenLength);
+    LeaveCriticalSection(&Stream->Lock);
+    return bSuccess;
+}
 
-/* Lock the stream only in non-USE_CRT mode (otherwise use the CRT stream lock) */
-#ifndef USE_CRT
-
-#define CON_STREAM_WRITE2(Stream, Str, Len, RetLen) \
-do { \
-    EnterCriticalSection(&(Stream)->Lock); \
-    (RetLen) = CON_STREAM_WRITE_CALL((Stream), (Str), (Len)); \
-    LeaveCriticalSection(&(Stream)->Lock); \
-} while(0)
-
-#else
-
-#define CON_STREAM_WRITE2(Stream, Str, Len, RetLen) \
-do { \
-    (RetLen) = CON_STREAM_WRITE_CALL((Stream), (Str), (Len)); \
-} while(0)
-
-#endif
+#endif /* defined(USE_CRT) */
 
 
 /**
@@ -372,17 +399,14 @@ do { \
  * @return
  *     Numbers of characters successfully written to @p Stream.
  **/
-INT
+DWORD
 ConStreamWrite(
     IN PCON_STREAM Stream,
     IN PCTCH szStr,
-    IN DWORD len)
+    IN DWORD Len)
 {
-    INT Len;
-    CON_STREAM_WRITE2(Stream, szStr, len, Len);
-    return Len;
+    return ConWrite(GET_W32(&Stream->Writer), szStr, Len);
 }
-
 
 VOID
 ConClearLine(IN PCON_STREAM Stream)
@@ -412,7 +436,7 @@ ConClearLine(IN PCON_STREAM Stream)
     }
     else if (IsTTYHandle(hOutput))
     {
-        ConPuts(Stream, L"\x1B[2K\x1B[1G"); // FIXME: Just use WriteFile
+        ConPuts(GET_W32(&Stream->Writer), L"\x1B[2K\x1B[1G"); // FIXME: Just use WriteFile
     }
     // else, do nothing for files
 }

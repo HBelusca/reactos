@@ -37,6 +37,7 @@
 #include <winnls.h> // For CP_xxx
 #include <wincon.h> // Console APIs (only if kernel32 support included)
 
+#define __CON_STREAM_IMPL
 #include "conutils.h"
 #include "stream.h"
 #include "stream_private.h"
@@ -84,12 +85,19 @@ static int ConToCRTMode[] =
 // NOTE3: _setmode returns the previous mode, or -1 if failure.
 #define CON_STREAM_SET_MODE(Stream, Mode, CacheCodePage)    \
 do { \
-    fflush((Stream)->fStream); \
+    fflush((Stream)->Writer.fStream); \
     if ((Mode) < ARRAYSIZE(ConToCRTMode))   \
-        _setmode(_fileno((Stream)->fStream), ConToCRTMode[(Mode)]); \
+        _setmode(_fileno((Stream)->Writer.fStream), ConToCRTMode[(Mode)]); \
     else \
-        _setmode(_fileno((Stream)->fStream), _O_TEXT); /* Default to ANSI text */ \
+        _setmode(_fileno((Stream)->Writer.fStream), _O_TEXT); /* Default to ANSI text */ \
 } while(0)
+
+BOOL __stdcall
+CrtStreamWriter(
+    IN PCON_WRITER Writer,
+    IN PCVOID Buffer,
+    IN SIZE_T BufferLength,
+    OUT PSIZE_T pWrittenLength OPTIONAL);
 
 #else /* defined(USE_CRT) */
 
@@ -118,17 +126,24 @@ do { \
         (Stream)->CodePage = INVALID_CP;    /* Not assigned (meaningless) */ \
 } while(0)
 
+BOOL __stdcall
+Win32StreamWriter(
+    IN PCON_WRITER32 Writer,
+    IN PCVOID Buffer,
+    IN ULONG BufferLength,
+    OUT PULONG pWrittenLength OPTIONAL);
+
 #endif /* defined(USE_CRT) */
 
 
-BOOL
+static BOOL
 ConStreamInitEx(
     OUT PCON_STREAM Stream,
     IN  PVOID Handle,
     IN  CON_STREAM_MODE Mode,
-    IN  UINT CacheCodePage OPTIONAL,
-    // IN  CON_READ_FUNC ReadFunc OPTIONAL,
-    IN  CON_WRITE_FUNC WriteFunc OPTIONAL)
+    IN  UINT CacheCodePage OPTIONAL /*,
+    IN  CON_READ_FUNC ReadFunc OPTIONAL,
+    IN  CON_WRITE_FUNC WriteFunc OPTIONAL */)
 {
     /* Parameters validation */
     if (!Stream || !Handle || (Mode > UTF8Text))
@@ -136,7 +151,8 @@ ConStreamInitEx(
 
 #ifdef USE_CRT
 
-    Stream->fStream = (FILE*)Handle;
+    Stream->Writer.fStream = (FILE*)Handle;
+    Stream->Writer.__callFunc = CrtStreamWriter;
 
 #else
 
@@ -151,10 +167,10 @@ ConStreamInitEx(
      */
 #if 0
     /* Attempt to close the handle of the old stream */
-    if (/* Stream->IsInitialized && */ Stream->hHandle &&
-        Stream->hHandle != INVALID_HANDLE_VALUE)
+    if (/* Stream->IsInitialized && */ Stream->Writer.hHandle &&
+        Stream->Writer.hHandle != INVALID_HANDLE_VALUE)
     {
-        CloseHandle(Stream->hHandle);
+        CloseHandle(Stream->Writer.hHandle);
     }
 #endif
 
@@ -165,28 +181,28 @@ ConStreamInitEx(
         Stream->IsInitialized = TRUE;
     }
 
-    Stream->hHandle   = (HANDLE)Handle;
-    Stream->IsConsole = IsConsoleHandle(Stream->hHandle);
+    /* Check whether we are using the console, or are redirected to a file or pipe */
+    Stream->IsConsole = IsConsoleHandle(Handle);
+    Stream->Writer.hHandle = Handle;
+    Stream->Writer.__callFunc = Win32StreamWriter;
 
 #endif /* defined(USE_CRT) */
 
     /* Set the correct file translation mode */
     CON_STREAM_SET_MODE(Stream, Mode, CacheCodePage);
 
-    /* Use the default 'ConWrite' helper if nothing is specified */
-    Stream->WriteFunc = (WriteFunc ? WriteFunc : ConWrite);
-
     return TRUE;
 }
 
 BOOL
 ConStreamInit(
-    OUT PCON_STREAM Stream,
-    IN  PVOID Handle,
-    IN  CON_STREAM_MODE Mode,
-    IN  UINT CacheCodePage OPTIONAL)
+    IN OUT PCON_STREAM Stream,
+    IN PVOID Handle,
+    // IN ReadWriteMode ????
+    IN CON_STREAM_MODE Mode,
+    IN UINT CacheCodePage OPTIONAL)
 {
-    return ConStreamInitEx(Stream, Handle, Mode, CacheCodePage, ConWrite);
+    return ConStreamInitEx(Stream, Handle, Mode, CacheCodePage);
 }
 
 BOOL
@@ -200,7 +216,7 @@ ConStreamSetMode(
         return FALSE;
 
 #ifdef USE_CRT
-    if (!Stream->fStream)
+    if (!Stream->Writer.fStream)
         return FALSE;
 #endif
 
@@ -234,6 +250,7 @@ ConStreamSetCacheCodePage(
     return TRUE;
 }
 
+
 HANDLE
 ConStreamGetOSHandle(
     IN PCON_STREAM Stream)
@@ -243,17 +260,17 @@ ConStreamGetOSHandle(
         return INVALID_HANDLE_VALUE;
 
     /*
-     * See https://support.microsoft.com/kb/99173
+     * See https://web.archive.org/web/20100109134746/https://support.microsoft.com/kb/99173
      * for more details.
      */
 
 #ifdef USE_CRT
-    if (!Stream->fStream)
+    if (!Stream->Writer.fStream)
         return INVALID_HANDLE_VALUE;
 
-    return (HANDLE)_get_osfhandle(_fileno(Stream->fStream));
+    return (HANDLE)_get_osfhandle(_fileno(Stream->Writer.fStream));
 #else
-    return Stream->hHandle;
+    return Stream->Writer.hHandle;
 #endif
 }
 
@@ -267,27 +284,30 @@ ConStreamSetOSHandle(
         return FALSE;
 
     /*
-     * See https://support.microsoft.com/kb/99173
+     * See https://web.archive.org/web/20100109134746/https://support.microsoft.com/kb/99173
      * for more details.
      */
 
 #ifdef USE_CRT
-    if (!Stream->fStream)
+    if (!Stream->Writer.fStream)
         return FALSE;
 
     int fdOut = _open_osfhandle((intptr_t)Handle, _O_TEXT /* FIXME! */);
     FILE* fpOut = _fdopen(fdOut, "w");
-    *Stream->fStream = *fpOut;
-    /// setvbuf(Stream->fStream, NULL, _IONBF, 0);
+    *Stream->Writer.fStream = *fpOut;
+    /// setvbuf(Stream->Writer.fStream, NULL, _IONBF, 0);
+    // Stream->Writer.__callFunc = CrtStreamWriter;
 
     return TRUE;
 #else
     /* Flush the stream and reset its handle */
-    if (Stream->hHandle != INVALID_HANDLE_VALUE)
-        FlushFileBuffers(Stream->hHandle);
+    if (Stream->Writer.hHandle != INVALID_HANDLE_VALUE)
+        FlushFileBuffers(Stream->Writer.hHandle);
 
-    Stream->hHandle   = Handle;
-    Stream->IsConsole = IsConsoleHandle(Stream->hHandle);
+    /* Check whether we are using the console, or are redirected to a file or pipe */
+    Stream->IsConsole = IsConsoleHandle(Handle);
+    Stream->Writer.hHandle = Handle;
+    Stream->Writer.__callFunc = Win32StreamWriter;
 
     // NOTE: Mode reset??
 
