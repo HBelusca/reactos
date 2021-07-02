@@ -103,8 +103,9 @@ ApicStartApplicationProcessor(ULONG NTProcessorNumber, PHYSICAL_ADDRESS StartupL
 
     /* Stall execution for a bit to give APIC time */
     KeStallExecutionProcessor(1000);
-
+    DPRINT1("ApicStartApplicationProcessor: CPU Awake!\n");
     /* Startup IPI */
     ApicRequestGlobalInterrupt(NTProcessorNumber, (StartupLoc.LowPart) >> 12,
         APIC_MT_Startup, APIC_TGM_Edge, APIC_DSH_Destination);
+    DPRINT1("ApicStartApplicationProcessor: CPU Spinning up\n");
 }
