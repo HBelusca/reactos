@@ -640,6 +640,59 @@ fail:
     return FALSE;
 }
 
+/*
+ * NOTE: One should first fetch a token with ParseToken() before calling this function.
+ * Returns FALSE either because we don't have a redirection, or because of a parsing error.
+ * The distinction can be made by looking at the bParseError flag.
+ */
+static __inline BOOL
+ParseRedirections(
+    IN TCHAR ExtraEnd OPTIONAL,
+    IN OUT REDIRECTION** List)
+{
+    BOOL bProcessed = FALSE; // TRUE when at least the first redirection is treated.
+
+#ifdef MSCMD_REDIR_PARSE_BUGS
+    UNREFERENCED_PARAMETER(ExtraEnd);
+#endif
+
+#ifndef MSCMD_REDIR_PARSE_BUGS
+    while (CurrentTokenType == TOK_REDIRECTION)
+    {
+        if (!ParseRedirection(List))
+        {
+            /* We failed while the current token was a redirection,
+             * this means an actual parsing error has happened. */
+            ASSERT(bParseError);
+            return FALSE;
+        }
+        bProcessed = TRUE;
+
+        ParseToken(ExtraEnd, STANDARD_SEPS);
+    }
+#else
+    while (CurrentTokenType != TOK_END)
+    {
+        if (!ParseRedirection(List))
+        {
+            /* If an actual error happened in ParseRedirection(), bail out */
+            if (bParseError)
+                return FALSE;
+
+            /* Otherwise it just returned FALSE because the current token
+             * is not a redirection. Unparse the token and refetch it. */
+            break;
+        }
+        bProcessed = TRUE;
+
+        ParseToken(0, STANDARD_SEPS);
+    }
+#endif
+
+    return bProcessed;
+}
+
+
 static __inline PARSED_COMMAND*
 ParseCommandOp(
     IN COMMAND_TYPE OpType);
@@ -724,32 +777,18 @@ ParseBlock(
     }
 
     /* Process any trailing redirections and append them to the list */
-#ifndef MSCMD_REDIR_PARSE_BUGS
-    while (ParseToken(0, STANDARD_SEPS) == TOK_REDIRECTION)
+    ParseToken(0, STANDARD_SEPS);
+    if (!ParseRedirections(0, RedirList))
     {
-        if (!ParseRedirection(RedirList))
+        /* If an actual error happened in ParseRedirection(), bail out */
+        if (bParseError)
         {
             FreeCommand(Cmd);
             return NULL;
         }
+        /* Otherwise it just returned FALSE because the current token
+         * is not a redirection. Unparse the token and refetch it. */
     }
-#else
-    while (ParseToken(0, STANDARD_SEPS) != TOK_END)
-    {
-        if (!ParseRedirection(RedirList))
-        {
-            /* If an actual error happened in ParseRedirection(), bail out */
-            if (bParseError)
-            {
-                FreeCommand(Cmd);
-                return NULL;
-            }
-            /* Otherwise it just returned FALSE because the current token
-             * is not a redirection. Unparse the token and refetch it. */
-            break;
-        }
-    }
-#endif
     if (CurrentTokenType != TOK_END)
     {
         /*
@@ -1127,51 +1166,27 @@ ParseCommandPart(
             }
             Pos = _stpcpy(Pos, CurrentToken);
         }
-#ifndef MSCMD_REDIR_PARSE_BUGS
-        else if (CurrentTokenType == TOK_REDIRECTION)
+        else
+        /* Process any trailing redirections and append them to the list */
         {
-            /* Process any trailing redirections and append them to the list */
-            while (CurrentTokenType == TOK_REDIRECTION)
+            BOOL bSuccess;
+
+#ifndef MSCMD_REDIR_PARSE_BUGS
+            if (CurrentTokenType != TOK_REDIRECTION)
             {
-                if (!ParseRedirection(RedirList))
+                /* There is no need to do a UnParseToken() / ParseToken() cycle */
+                break;
+            }
+#endif
+            bSuccess = ParseRedirections(0, RedirList);
+            if (!bSuccess)
+            {
+                /* If an actual error happened in ParseRedirection(), bail out */
+                if (bParseError)
                     return NULL;
 
-                ParseToken(0, STANDARD_SEPS);
-            }
-            if (CurrentTokenType == TOK_END)
-                break;
-
-            /* Unparse the current token, and reparse it below with no separators */
-            UnParseToken();
-        }
-        else
-        {
-            /* There is no need to do a UnParseToken() / ParseToken() cycle */
-            break;
-        }
-#else
-        else
-        {
-            /* Process any trailing redirections and append them to the list */
-            BOOL bSuccess = FALSE;
-
-            ASSERT(CurrentTokenType != TOK_END);
-
-            while (CurrentTokenType != TOK_END)
-            {
-                if (!ParseRedirection(RedirList))
-                {
-                    /* If an actual error happened in ParseRedirection(), bail out */
-                    if (bParseError)
-                        return NULL;
-
-                    /* Otherwise it just returned FALSE because the current token
-                     * is not a redirection. Unparse the token and refetch it. */
-                    break;
-                }
-                bSuccess = TRUE;
-
-                ParseToken(0, STANDARD_SEPS);
+                /* Otherwise it just returned FALSE because the current token
+                 * is not a redirection. Unparse the token and refetch it. */
             }
             if (CurrentTokenType == TOK_END)
                 break;
@@ -1179,6 +1194,7 @@ ParseCommandPart(
             /* Unparse the current token, and reparse it below with no separators */
             UnParseToken();
 
+#ifdef MSCMD_REDIR_PARSE_BUGS
             /* If bSuccess == FALSE, we know that it's still the old fetched token, but
              * it has been unparsed, so we need to refetch it before quitting the loop. */
             if (!bSuccess)
@@ -1186,8 +1202,8 @@ ParseCommandPart(
                 ParseToken(0, NULL);
                 break;
             }
-        }
 #endif
+        }
 
         ParseToken(0, NULL);
     }
@@ -1228,41 +1244,23 @@ ParsePrimary(VOID)
     }
 
     /* Process leading redirections and get the head of the command */
-#ifndef MSCMD_REDIR_PARSE_BUGS
-    while (CurrentTokenType == TOK_REDIRECTION)
+    if (!ParseRedirections(_T('('), &RedirList))
     {
-        if (!ParseRedirection(&RedirList))
+        /* If an actual error happened in ParseRedirection(), bail out */
+        if (bParseError)
             return NULL;
 
-        ParseToken(_T('('), STANDARD_SEPS);
+        /* Otherwise it just returned FALSE because
+         * the current token is not a redirection. */
     }
-#else
-    {
-    BOOL bSuccess = FALSE;
-    while (CurrentTokenType != TOK_END)
-    {
-        if (!ParseRedirection(&RedirList))
-        {
-            /* If an actual error happened in ParseRedirection(), bail out */
-            if (bParseError)
-                return NULL;
-
-            /* Otherwise it just returned FALSE because
-             * the current token is not a redirection. */
-            break;
-        }
-        bSuccess = TRUE;
-
-        ParseToken(0, STANDARD_SEPS);
-    }
-    if (bSuccess)
+#ifdef MSCMD_REDIR_PARSE_BUGS
+    else
     {
         /* Unparse the current token, and reparse it with support for parenthesis */
         if (CurrentTokenType != TOK_END)
             UnParseToken();
 
         ParseToken(_T('('), STANDARD_SEPS);
-    }
     }
 #endif
 
