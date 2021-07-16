@@ -32,8 +32,8 @@
  * cmd!fDumpTokens and cmd!fDumpParse booleans.
  * (Same names are used for compatibility as they are documented online.)
  */
-BOOLEAN fDumpTokens = FALSE;
-BOOLEAN fDumpParse  = FALSE;
+BOOLEAN fDumpTokens = TRUE;
+BOOLEAN fDumpParse  = TRUE;
 
 #define C_OP_LOWEST C_MULTI
 #define C_OP_HIGHEST C_PIPE
@@ -1100,34 +1100,60 @@ ParseCommandPart(
     PTCHAR Pos = _stpcpy(ParsedLine, CurrentToken) + 1;
     SIZE_T TailOffset = Pos - ParsedLine;
 
-    /* Check for special forms */
-    if ((Func = ParseFor, _tcsicmp(ParsedLine, _T("FOR")) == 0) ||
-        (Func = ParseIf,  _tcsicmp(ParsedLine, _T("IF"))  == 0) ||
-        (Func = ParseRem, _tcsicmp(ParsedLine, _T("REM")) == 0))
+    PCTSTR Separators = NULL;
+
+    /*
+     * Check for special FOR,IF,REM forms.
+     *
+     * Note that the "<command>/?" forms are handled manually here too.
+     * Indeed these are recognized and get the same validation as the usual
+     * FOR,IF,REM commands, but are then converted to regular "<command> /?"
+     * forms that and parsed as usual commands only for help. Otherwise, any
+     * other "<command></switch>" (without separating space) is considered
+     * as a usual command instead, and get parsed as such.
+     * This behaviour is the same as in Windows' CMD.
+     */
+    if ((Func = ParseFor, _tcsicmp(ParsedLine, _T("FOR")) == 0 || _tcsicmp(ParsedLine, _T("FOR/?")) == 0) ||
+        (Func = ParseIf,  _tcsicmp(ParsedLine, _T("IF") ) == 0 || _tcsicmp(ParsedLine, _T("IF/?") ) == 0) ||
+        (Func = ParseRem, _tcsicmp(ParsedLine, _T("REM")) == 0 || _tcsicmp(ParsedLine, _T("REM/?")) == 0))
     {
         PTCHAR pHelp;
 
-        ParseToken(0, STANDARD_SEPS);
-
-        if ((pHelp = _tcsstr(CurrentToken, _T("/?"))) &&
-            (Func == ParseIf ? (pHelp[2] == _T('/') || pHelp[2] == 0) : TRUE))
+        pHelp = (Func == ParseIf ? &ParsedLine[2] : &ParsedLine[3]);
+        if (*pHelp == _T('/'))
         {
-            /* /? was found within the first token */
-            ParseToken(0, STANDARD_SEPS);
+            /* This is the help form, so no need to read the next token right now.
+             * Adjust the command tail pointer to point to the /? switch and remove it
+             * in order to separate it from the command name.
+             * The /? switch will be restored separately from the command name below. */
+            Pos = pHelp;
+            *Pos++ = 0;
+            TailOffset = Pos - ParsedLine;
         }
         else
         {
-            pHelp = NULL;
-        }
-        if (pHelp && (CurrentTokenType == TOK_NORMAL))
-        {
-            /* We encountered /? first, but is followed
-             * by another token: that's an error. */
-            ParseError();
-            return NULL;
+            /* The command name is separated from the options: retrieve
+             * the next token and check whether it contains /? */
+            ParseToken(0, STANDARD_SEPS);
+            pHelp = _tcsstr(CurrentToken, _T("/?"));
         }
 
-        /* Do actual parsing only if no help is present */
+        // TODO: If this is help, verify only for IF that the switch is exactly /?
+        if (pHelp && (Func == ParseIf ? (pHelp[2] == _T('/') || pHelp[2] == 0) : TRUE))
+        {
+            /* /? was found within the first token; sanitize it */
+            ASSERT(CurrentTokenType == TOK_NORMAL);
+            _tcscpy(CurrentToken, _T("/?"));
+        }
+        else
+        {
+            /* Either no /?, or, in case it was found (only for IF) and there
+             * is something following it, reset the pointer so that the command
+             * gets parsed and parsing failure arises properly. */
+            pHelp = NULL;
+        }
+
+        /* Do actual command parsing only if no help is present */
         if (!pHelp)
         {
             /* FOR and IF commands cannot have leading redirection, but REM can */
@@ -1142,19 +1168,22 @@ ParseCommandPart(
         }
 
         /* Otherwise, run FOR,IF,REM as regular commands only for help support */
-        if (Pos + _tcslen(_T("/?")) >= &ParsedLine[CMDLINE_LENGTH])
-        {
-            ParseError();
-            return NULL;
-        }
-        Pos = _stpcpy(Pos, _T("/?"));
+        ASSERT(CurrentTokenType == TOK_NORMAL);
+        Separators = STANDARD_SEPS;
     }
     else
     {
+        /* Normal command parsing */
         ParseToken(0, NULL);
     }
 
-    /* Now get the tail */
+    /*
+     * Now get the command tail. Two situations arise:
+     * 1. Normal command parsing (Separators == NULL), where we loop over any
+     *    token (normal or redirection), as long as there are any present.
+     * 2. FOR,IF,REM help forms (Separators != NULL), where we expect first
+     *    a normal token (should be /?), followed by redirections only.
+     */
     while (CurrentTokenType != TOK_END)
     {
         if (CurrentTokenType == TOK_NORMAL)
@@ -1170,7 +1199,7 @@ ParseCommandPart(
         /* Process any trailing redirections and append them to the list */
         {
             BOOL bSuccess;
-
+DoRedirect:
 #ifndef MSCMD_REDIR_PARSE_BUGS
             if (CurrentTokenType != TOK_REDIRECTION)
             {
@@ -1199,14 +1228,26 @@ ParseCommandPart(
              * it has been unparsed, so we need to refetch it before quitting the loop. */
             if (!bSuccess)
             {
-                ParseToken(0, NULL);
+                ParseToken(0, Separators);
                 break;
             }
 #endif
+
+            /* If we handle FOR,IF,REM help, stop now as we do not
+             * expect any other tokens after the redirections. */
+            if (Separators)
+                break;
         }
 
-        ParseToken(0, NULL);
+        /* Fetch the next token */
+        ParseToken(0, Separators);
+
+        /* If we handle FOR,IF,REM help, the next tokens
+         * must be redirections; treat them immediately. */
+        if (Separators)
+            goto DoRedirect;
     }
+
     *Pos = _T('\0');
 
     Cmd = AllocCommand(C_COMMAND,
