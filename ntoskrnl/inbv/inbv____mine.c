@@ -1,19 +1,9 @@
 /* INCLUDES ******************************************************************/
 
 #include <ntoskrnl.h>
-
 #define NDEBUG
 #include <debug.h>
-
-#include "inbv/logo.h"
-
-/* See also mm/ARM3/miarm.h */
-#define MM_READONLY     1   // PAGE_READONLY
-#define MM_READWRITE    4   // PAGE_WRITECOPY
-
-#ifndef TAG_OSTR
-#define TAG_OSTR    'RTSO'
-#endif
+#include "bootvid/bootvid.h"
 
 /* GLOBALS *******************************************************************/
 
@@ -34,44 +24,6 @@
  */
 // #define REACTOS_SKUS
 
-typedef struct _INBV_PROGRESS_STATE
-{
-    ULONG Floor;
-    ULONG Ceiling;
-    ULONG Bias;
-} INBV_PROGRESS_STATE;
-
-typedef struct _BT_PROGRESS_INDICATOR
-{
-    ULONG Count;
-    ULONG Expected;
-    ULONG Percentage;
-} BT_PROGRESS_INDICATOR, *PBT_PROGRESS_INDICATOR;
-
-typedef enum _ROT_BAR_TYPE
-{
-    RB_UNSPECIFIED,
-    RB_SQUARE_CELLS,
-    RB_PROGRESS_BAR
-} ROT_BAR_TYPE;
-
-/*
- * BitBltAligned() alignments
- */
-typedef enum _BBLT_VERT_ALIGNMENT
-{
-    AL_VERTICAL_TOP = 0,
-    AL_VERTICAL_CENTER,
-    AL_VERTICAL_BOTTOM
-} BBLT_VERT_ALIGNMENT;
-
-typedef enum _BBLT_HORZ_ALIGNMENT
-{
-    AL_HORIZONTAL_LEFT = 0,
-    AL_HORIZONTAL_CENTER,
-    AL_HORIZONTAL_RIGHT
-} BBLT_HORZ_ALIGNMENT;
-
 /*
  * Enable this define when Inbv will support rotating progress bar.
  */
@@ -84,7 +36,6 @@ BOOLEAN InbvBootDriverInstalled = FALSE;
 static BOOLEAN InbvDisplayDebugStrings = FALSE;
 static INBV_DISPLAY_STRING_FILTER InbvDisplayFilter = NULL;
 static ULONG ProgressBarLeft = 0, ProgressBarTop = 0;
-static ULONG ProgressBarWidth = 0, ProgressBarHeight = 0;
 static BOOLEAN ShowProgressBar = FALSE;
 static INBV_PROGRESS_STATE InbvProgressState;
 static BT_PROGRESS_INDICATOR InbvProgressIndicator = {0, 25, 0};
@@ -96,29 +47,13 @@ static PUCHAR ResourceList[1 + IDB_MAX_RESOURCE]; // First entry == NULL, follow
 /*
  * Change this to modify progress bar behaviour
  */
-#define ROT_BAR_DEFAULT_MODE    RB_PROGRESS_BAR // RB_SQUARE_CELLS // RB_PROGRESS_BAR
-
-/*
- * Values for PltRotBarStatus:
- * - PltRotBarStatus == 1, do palette fading-in (done elsewhere in ReactOS);
- * - PltRotBarStatus == 2, do rotation bar animation;
- * - PltRotBarStatus == 3, stop the animation thread.
- * - Any other value is ignored and the animation thread continues to run.
- */
-typedef enum _ROT_BAR_STATUS
-{
-    RBS_FADEIN = 1,
-    RBS_ANIMATE,
-    RBS_STOP_ANIMATE,
-    RBS_STATUS_MAX
-} ROT_BAR_STATUS;
-
+#define ROT_BAR_DEFAULT_MODE  RB_PROGRESS_BAR // RB_SQUARE_CELLS // RB_PROGRESS_BAR
 static BOOLEAN RotBarThreadActive = FALSE;
-static ROT_BAR_TYPE RotBarSelection = RB_UNSPECIFIED;
-static ROT_BAR_STATUS PltRotBarStatus = 0;  // 0: Reset, 1: Start (fade palette), 2: Animate, 3: Finish
+static ROT_BAR_TYPE RotBarSelection;
+static ULONG PltRotBarStatus; // 0: Reset, 1: Start (fade palette), 2: Animate, 3: Finish
 static PVOID RotBarThread = NULL;
 static UCHAR RotBarBuffer[24 * 9];
-static UCHAR RotLineBuffer[SCREEN_WIDTH * 6];
+static UCHAR RotLineBuffer[640 * 6];
 #endif
 
 
@@ -174,8 +109,8 @@ typedef struct tagRGBQUAD
 
 static RGBQUAD MainPalette[16];
 
-#define PALETTE_FADE_STEPS  12
-#define PALETTE_FADE_TIME   (15 * 1000) /* 15 ms */
+#define PALETTE_FADE_STEPS  15
+#define PALETTE_FADE_TIME   20 * 1000 /* 20ms */
 
 /** From bootvid/precomp.h **/
 //
@@ -209,12 +144,13 @@ BootLogoFadeIn(VOID)
     UCHAR PaletteBitmapBuffer[sizeof(BITMAPINFOHEADER) + sizeof(MainPalette)];
     PBITMAPINFOHEADER PaletteBitmap = (PBITMAPINFOHEADER)PaletteBitmapBuffer;
     LPRGBQUAD Palette = (LPRGBQUAD)(PaletteBitmapBuffer + sizeof(BITMAPINFOHEADER));
+
     ULONG Iteration, Index, ClrUsed;
 
     LARGE_INTEGER Delay;
-    Delay.QuadPart = -(PALETTE_FADE_TIME * 10); // in nanosecs
+    Delay.QuadPart = - ((PALETTE_FADE_TIME) * 10); // in nanosecs
 
-    /* Check if we are installed and we own the display */
+    /* Check if we're installed and we own it */
     if (!InbvBootDriverInstalled ||
         (InbvDisplayState != INBV_DISPLAY_STATE_OWNED))
     {
@@ -277,101 +213,11 @@ BootLogoFadeIn(VOID)
     InbvReleaseLock();
 }
 
-static VOID
-BitBltPalette(
-    IN PVOID Image,
-    IN BOOLEAN NoPalette,
-    IN ULONG X,
-    IN ULONG Y)
-{
-    LPRGBQUAD Palette;
-    RGBQUAD OrigPalette[RTL_NUMBER_OF(MainPalette)];
-
-    /* If requested, remove the palette from the image */
-    if (NoPalette)
-    {
-        /* Get bitmap header and palette */
-        PBITMAPINFOHEADER BitmapInfoHeader = Image;
-        Palette = (LPRGBQUAD)((PUCHAR)Image + BitmapInfoHeader->biSize);
-
-        /* Save the image original palette and remove palette information */
-        RtlCopyMemory(OrigPalette, Palette, sizeof(OrigPalette));
-        RtlZeroMemory(Palette, sizeof(OrigPalette));
-    }
-
-    /* Draw the image */
-    InbvBitBlt(Image, X, Y);
-
-    /* Restore the image original palette */
-    if (NoPalette)
-    {
-        RtlCopyMemory(Palette, OrigPalette, sizeof(OrigPalette));
-    }
-}
-
-static VOID
-BitBltAligned(
-    IN PVOID Image,
-    IN BOOLEAN NoPalette,
-    IN BBLT_HORZ_ALIGNMENT HorizontalAlignment,
-    IN BBLT_VERT_ALIGNMENT VerticalAlignment,
-    IN ULONG MarginLeft,
-    IN ULONG MarginTop,
-    IN ULONG MarginRight,
-    IN ULONG MarginBottom)
-{
-    PBITMAPINFOHEADER BitmapInfoHeader = Image;
-    ULONG X, Y;
-
-    /* Calculate X */
-    switch (HorizontalAlignment)
-    {
-        case AL_HORIZONTAL_LEFT:
-            X = MarginLeft - MarginRight;
-            break;
-
-        case AL_HORIZONTAL_CENTER:
-            X = MarginLeft - MarginRight + (SCREEN_WIDTH - BitmapInfoHeader->biWidth + 1) / 2;
-            break;
-
-        case AL_HORIZONTAL_RIGHT:
-            X = MarginLeft - MarginRight + SCREEN_WIDTH - BitmapInfoHeader->biWidth;
-            break;
-
-        default:
-            /* Unknown */
-            return;
-    }
-
-    /* Calculate Y */
-    switch (VerticalAlignment)
-    {
-        case AL_VERTICAL_TOP:
-            Y = MarginTop - MarginBottom;
-            break;
-
-        case AL_VERTICAL_CENTER:
-            Y = MarginTop - MarginBottom + (SCREEN_HEIGHT - BitmapInfoHeader->biHeight + 1) / 2;
-            break;
-
-        case AL_VERTICAL_BOTTOM:
-            Y = MarginTop - MarginBottom + SCREEN_HEIGHT - BitmapInfoHeader->biHeight;
-            break;
-
-        default:
-            /* Unknown */
-            return;
-    }
-
-    /* Finally draw the image */
-    BitBltPalette(Image, NoPalette, X, Y);
-}
-
 /* FUNCTIONS *****************************************************************/
 
-INIT_FUNCTION
 PVOID
 NTAPI
+INIT_FUNCTION
 FindBitmapResource(IN PLOADER_PARAMETER_BLOCK LoaderBlock,
                    IN ULONG ResourceId)
 {
@@ -434,9 +280,9 @@ FindBitmapResource(IN PLOADER_PARAMETER_BLOCK LoaderBlock,
     return Data;
 }
 
-INIT_FUNCTION
 BOOLEAN
 NTAPI
+INIT_FUNCTION
 InbvDriverInitialize(IN PLOADER_PARAMETER_BLOCK LoaderBlock,
                      IN ULONG Count)
 {
@@ -516,6 +362,7 @@ InbvReleaseLock(VOID)
 
 VOID
 NTAPI
+INIT_FUNCTION
 InbvEnableBootDriver(IN BOOLEAN Enable)
 {
     /* Check if we're installed */
@@ -778,9 +625,9 @@ InbvSolidColorFill(IN ULONG Left,
     }
 }
 
-INIT_FUNCTION
 VOID
 NTAPI
+INIT_FUNCTION
 InbvUpdateProgressBar(IN ULONG Progress)
 {
     ULONG FillCount, BoundedProgress;
@@ -792,7 +639,7 @@ InbvUpdateProgressBar(IN ULONG Progress)
     {
         /* Compute fill count */
         BoundedProgress = (InbvProgressState.Floor / 100) + Progress;
-        FillCount = ProgressBarWidth * (InbvProgressState.Bias * BoundedProgress) / 1000000;
+        FillCount = 121 * (InbvProgressState.Bias * BoundedProgress) / 1000000;
 
         /* Acquire the lock */
         InbvAcquireLock();
@@ -801,8 +648,8 @@ InbvUpdateProgressBar(IN ULONG Progress)
         VidSolidColorFill(ProgressBarLeft,
                           ProgressBarTop,
                           ProgressBarLeft + FillCount,
-                          ProgressBarTop + ProgressBarHeight,
-                          BV_COLOR_WHITE);
+                          ProgressBarTop + 12,
+                          15);
 
         /* Release the lock */
         InbvReleaseLock();
@@ -850,7 +697,7 @@ InbvBitBlt(IN PUCHAR Buffer,
 
 VOID
 NTAPI
-InbvScreenToBufferBlt(OUT PUCHAR Buffer,
+InbvScreenToBufferBlt(IN PUCHAR Buffer,
                       IN ULONG X,
                       IN ULONG Y,
                       IN ULONG Width,
@@ -866,25 +713,19 @@ InbvScreenToBufferBlt(OUT PUCHAR Buffer,
     }
 }
 
-INIT_FUNCTION
 VOID
 NTAPI
 InbvSetProgressBarCoordinates(IN ULONG Left,
-                              IN ULONG Top,
-                              IN ULONG Width,
-                              IN ULONG Height)
+                              IN ULONG Top)
 {
     /* Update the coordinates */
-    ProgressBarLeft   = Left;
-    ProgressBarTop    = Top;
-    ProgressBarWidth  = Width;
-    ProgressBarHeight = Height;
+    ProgressBarLeft = Left;
+    ProgressBarTop  = Top;
 
     /* Enable the progress bar */
     ShowProgressBar = TRUE;
 }
 
-INIT_FUNCTION
 VOID
 NTAPI
 InbvSetProgressBarSubset(IN ULONG Floor,
@@ -900,9 +741,9 @@ InbvSetProgressBarSubset(IN ULONG Floor,
     InbvProgressState.Bias = (Ceiling * 100) - Floor;
 }
 
-INIT_FUNCTION
 VOID
 NTAPI
+INIT_FUNCTION
 InbvIndicateProgress(VOID)
 {
     ULONG Percentage;
@@ -937,66 +778,15 @@ NTSTATUS
 NTAPI
 NtDisplayString(IN PUNICODE_STRING DisplayString)
 {
-    NTSTATUS Status;
-    UNICODE_STRING CapturedString;
     OEM_STRING OemString;
-    ULONG OemLength;
-    KPROCESSOR_MODE PreviousMode;
 
-    PAGED_CODE();
-
-    PreviousMode = ExGetPreviousMode();
-
-    /* We require the TCB privilege */
-    if (!SeSinglePrivilegeCheck(SeTcbPrivilege, PreviousMode))
-        return STATUS_PRIVILEGE_NOT_HELD;
-
-    /* Capture the string */
-    Status = ProbeAndCaptureUnicodeString(&CapturedString, PreviousMode, DisplayString);
-    if (!NT_SUCCESS(Status))
-        return Status;
-
-    /* Do not display the string if it is empty */
-    if (CapturedString.Length == 0 || CapturedString.Buffer == NULL)
-    {
-        Status = STATUS_SUCCESS;
-        goto Quit;
-    }
-
-    /*
-     * Convert the string since INBV understands only ANSI/OEM. Allocate the
-     * string buffer in non-paged pool because INBV passes it down to BOOTVID.
-     * We cannot perform the allocation using RtlUnicodeStringToOemString()
-     * since its allocator uses PagedPool.
-     */
-    OemLength = RtlUnicodeStringToOemSize(&CapturedString);
-    if (OemLength > MAXUSHORT)
-    {
-        Status = STATUS_BUFFER_OVERFLOW;
-        goto Quit;
-    }
-    RtlInitEmptyAnsiString((PANSI_STRING)&OemString, NULL, (USHORT)OemLength);
-    OemString.Buffer = ExAllocatePoolWithTag(NonPagedPool, OemLength, TAG_OSTR);
-    if (OemString.Buffer == NULL)
-    {
-        Status = STATUS_NO_MEMORY;
-        goto Quit;
-    }
-    RtlUnicodeStringToOemString(&OemString, &CapturedString, FALSE);
-
-    /* Display the string */
+    /* Convert the string to OEM and display it */
+    RtlUnicodeStringToOemString(&OemString, DisplayString, TRUE);
     InbvDisplayString(OemString.Buffer);
+    RtlFreeOemString(&OemString);
 
-    /* Free the string buffer */
-    ExFreePoolWithTag(OemString.Buffer, TAG_OSTR);
-
-    Status = STATUS_SUCCESS;
-
-Quit:
-    /* Free the captured string */
-    ReleaseCapturedUnicodeString(&CapturedString, PreviousMode);
-
-    return Status;
+    /* Return success */
+    return STATUS_SUCCESS;
 }
 
 #ifdef INBV_ROTBAR_IMPLEMENTED
@@ -1006,18 +796,18 @@ NTAPI
 InbvAnimationThread(
     _In_ PVOID Context)
 {
-    ULONG X, Y, Index, Total;
-    LARGE_INTEGER Delay = {{0}};
+    ULONG X, Y, Index, Total = 18;
+    LARGE_INTEGER Delay;
 
     InbvAcquireLock();
     if (RotBarSelection == RB_SQUARE_CELLS)
     {
-        Delay.QuadPart = -800000; // 80 ms
+        Delay.QuadPart = -800000; // 80ms
         Index = 0;
     }
     else
     {
-        Delay.QuadPart = -400000; // 40 ms
+        Delay.QuadPart = -400000; // 60ms
         Index = 32;
     }
     X = ProgressBarLeft + 2;
@@ -1053,25 +843,12 @@ InbvAnimationThread(
             goto Wait;
         }
 
-        /* Unknown unexpected command */
-        ASSERT(PltRotBarStatus < RBS_STATUS_MAX);
-
-        if (PltRotBarStatus == RBS_STOP_ANIMATE)
-        {
-            /* Stop the thread */
-            InbvReleaseLock();
-            break;
-        }
-
         if (RotBarSelection == RB_SQUARE_CELLS)
         {
-            Total = 18;
-            Index %= Total;
-
             if (Index >= 3)
             {
                 /* Fill previous bar position */
-                VidSolidColorFill(X + ((Index - 3) * 8), Y, (X + ((Index - 3) * 8)) + 8 - 1, Y + 9 - 1, BV_COLOR_BLACK);
+                VidSolidColorFill(X + ((Index - 3) * 8), Y, (X + ((Index - 3) * 8)) + 8 - 1, Y + 9 - 1, 0);
             }
             if (Index < Total - 1)
             {
@@ -1091,21 +868,18 @@ InbvAnimationThread(
                     VidBufferToScreenBlt(RotBarBuffer, X + ((Index - 2) * 8), Y, 22, 9, 24);
                 }
             }
-            Index++;
+            Index = (Index + 1) % Total;
         }
         else if (RotBarSelection == RB_PROGRESS_BAR)
         {
-            Total = SCREEN_WIDTH;
-            Index %= Total;
-
             /* Right part */
-            VidBufferToScreenBlt(RotLineBuffer, Index, SCREEN_HEIGHT-6, SCREEN_WIDTH - Index, 6, SCREEN_WIDTH);
+            VidBufferToScreenBlt(RotLineBuffer, Index, 474, 640 - Index, 6, 640);
             if (Index > 0)
             {
                 /* Left part */
-                VidBufferToScreenBlt(RotLineBuffer + (SCREEN_WIDTH - Index) / 2, 0, SCREEN_HEIGHT-6, Index - 2, 6, SCREEN_WIDTH);
+                VidBufferToScreenBlt(RotLineBuffer + (640 - Index) / 2, 0, 474, Index - 2, 6, 640);
             }
-            Index += 32;
+            Index = (Index + 32) % 640;
         }
 
         InbvReleaseLock();
@@ -1119,9 +893,9 @@ Wait:
     PsTerminateSystemThread(STATUS_SUCCESS);
 }
 
-INIT_FUNCTION
 VOID
 NTAPI
+INIT_FUNCTION
 InbvRotBarInit(VOID)
 {
     NTSTATUS Status;
@@ -1133,21 +907,18 @@ InbvRotBarInit(VOID)
     RotBarThread = NULL;
 
     InbvAcquireLock();
-    // PltRotBarStatus = RBS_FADEIN;
     // PltRotBarStatus = 0;
     PltRotBarStatus = 1;
     InbvReleaseLock();
 
-    /* Perform other initialization if needed */
-
-    /* Start the animation thread */
     Status = PsCreateSystemThread(&ThreadHandle,
-                                  SYNCHRONIZE, // 0
+                                  SYNCHRONIZE,
                                   NULL,
                                   NULL,
                                   NULL,
                                   InbvAnimationThread,
                                   NULL);
+
     if (NT_SUCCESS(Status))
     {
         Status = ObReferenceObjectByHandle(ThreadHandle,
@@ -1161,7 +932,6 @@ InbvRotBarInit(VOID)
             KeSetPriorityThread(RotBarThread, HIGH_PRIORITY);
             RotBarThreadActive = TRUE;
         }
-        /* The thread has started, close the handle as we don't need it */
         ObCloseHandle(ThreadHandle, KernelMode);
     }
 
@@ -1173,14 +943,39 @@ InbvRotBarInit(VOID)
         KeDelayExecutionThread(KernelMode, FALSE, &Delay);
     }
 }
-#endif
 
-INIT_FUNCTION
 VOID
 NTAPI
+INIT_FUNCTION
+InbvRotBarStop(VOID)
+{
+    if (!RotBarThread)
+    {
+        RotBarThreadActive = FALSE;
+        return;
+    }
+
+    InbvAcquireLock();
+    PltRotBarStatus = 3;
+    InbvReleaseLock();
+
+    KeWaitForSingleObject(RotBarThread,
+                          Executive,
+                          KernelMode,
+                          FALSE,
+                          NULL);
+    ObDereferenceObject(RotBarThread);
+    RotBarThread = NULL;
+    RotBarThreadActive = FALSE;
+}
+#endif
+
+VOID
+NTAPI
+INIT_FUNCTION
 DisplayBootBitmap(IN BOOLEAN TextMode)
 {
-    PVOID BootCopy = NULL, BootProgress = NULL, BootLogo = NULL, Header = NULL, Footer = NULL;
+    PVOID Header = NULL, Footer = NULL, Screen = NULL;
 
 #ifdef INBV_ROTBAR_IMPLEMENTED
     UCHAR Buffer[24 * 9];
@@ -1193,7 +988,7 @@ DisplayBootBitmap(IN BOOLEAN TextMode)
 #endif
 
 #ifdef INBV_ROTBAR_IMPLEMENTED
-    /* Check if the animation thread has already been created */
+    /* Check if the system thread has already been created */
     if (RotBarThreadActive)
     {
         /* Yes, just reset the progress bar but keep the thread alive */
@@ -1210,19 +1005,13 @@ DisplayBootBitmap(IN BOOLEAN TextMode)
     /* Check if this is text mode */
     if (TextMode)
     {
-        /*
-         * Make the kernel resource section temporarily writable,
-         * as we are going to change the bitmaps' palette in place.
-         */
-        MmChangeKernelResourceSectionProtection(MM_READWRITE);
-
         /* Check the type of the OS: workstation or server */
         if (SharedUserData->NtProductType == NtProductWinNt)
         {
             /* Workstation; set colors */
-            InbvSetTextColor(BV_COLOR_WHITE);
-            InbvSolidColorFill(0, 0, SCREEN_WIDTH-1, SCREEN_HEIGHT-1, BV_COLOR_DARK_GRAY);
-            InbvSolidColorFill(0, VID_FOOTER_BG_TOP, SCREEN_WIDTH-1, SCREEN_HEIGHT-1, BV_COLOR_RED);
+            InbvSetTextColor(15);
+            InbvSolidColorFill(0, 0, 639, 479, 7);
+            InbvSolidColorFill(0, 421, 639, 479, 1);
 
             /* Get resources */
             Header = InbvGetResourceAddress(IDB_WKSTA_HEADER);
@@ -1231,9 +1020,9 @@ DisplayBootBitmap(IN BOOLEAN TextMode)
         else
         {
             /* Server; set colors */
-            InbvSetTextColor(BV_COLOR_LIGHT_CYAN);
-            InbvSolidColorFill(0, 0, SCREEN_WIDTH-1, SCREEN_HEIGHT-1, BV_COLOR_CYAN);
-            InbvSolidColorFill(0, VID_FOOTER_BG_TOP, SCREEN_WIDTH-1, SCREEN_HEIGHT-1, BV_COLOR_RED);
+            InbvSetTextColor(14);
+            InbvSolidColorFill(0, 0, 639, 479, 6);
+            InbvSolidColorFill(0, 421, 639, 479, 1);
 
             /* Get resources */
             Header = InbvGetResourceAddress(IDB_SERVER_HEADER);
@@ -1241,41 +1030,23 @@ DisplayBootBitmap(IN BOOLEAN TextMode)
         }
 
         /* Set the scrolling region */
-        InbvSetScrollRegion(VID_SCROLL_AREA_LEFT, VID_SCROLL_AREA_TOP,
-                            VID_SCROLL_AREA_RIGHT, VID_SCROLL_AREA_BOTTOM);
+        InbvSetScrollRegion(32, 80, 631, 400);
 
         /* Make sure we have resources */
         if (Header && Footer)
         {
             /* BitBlt them on the screen */
-            BitBltAligned(Footer,
-                          TRUE,
-                          AL_HORIZONTAL_CENTER,
-                          AL_VERTICAL_BOTTOM,
-                          0, 0, 0, 59);
-            BitBltAligned(Header,
-                          FALSE,
-                          AL_HORIZONTAL_CENTER,
-                          AL_VERTICAL_TOP,
-                          0, 0, 0, 0);
+            InbvBitBlt(Footer, 0, 419);
+            InbvBitBlt(Header, 0, 0);
         }
-
-        /* Restore the kernel resource section protection to be read-only */
-        MmChangeKernelResourceSectionProtection(MM_READONLY);
     }
     else
     {
         /* Is the boot driver installed? */
         if (!InbvBootDriverInstalled) return;
 
-        /*
-         * Make the kernel resource section temporarily writable,
-         * as we are going to change the bitmaps' palette in place.
-         */
-        MmChangeKernelResourceSectionProtection(MM_READWRITE);
-
-        /* Load boot screen logo */
-        BootLogo = InbvGetResourceAddress(IDB_LOGO_DEFAULT);
+        /* Load the standard boot screen */
+        Screen = InbvGetResourceAddress(IDB_BOOT_SCREEN);
 
 #ifdef REACTOS_SKUS
         Text = NULL;
@@ -1307,7 +1078,7 @@ DisplayBootBitmap(IN BOOLEAN TextMode)
 
 #ifdef INBV_ROTBAR_IMPLEMENTED
             /* Server product, use appropriate status bar color */
-            Bar = InbvGetResourceAddress(IDB_BAR_DEFAULT);
+            Bar = InbvGetResourceAddress(IDB_BAR_SERVER);
 #endif
         }
 #else
@@ -1316,22 +1087,22 @@ DisplayBootBitmap(IN BOOLEAN TextMode)
 #endif
 
         /* Make sure we have a logo */
-        if (BootLogo)
+        if (Screen)
         {
+            PBITMAPINFOHEADER BitmapInfoHeader;
+            LPRGBQUAD Palette;
+
             /*
              * Save the main image palette and replace it with black palette,
              * so that we can do fade-in effect later.
              */
-            PBITMAPINFOHEADER BitmapInfoHeader = BootLogo;
-            LPRGBQUAD Palette = (LPRGBQUAD)((PUCHAR)BootLogo + BitmapInfoHeader->biSize);
+            BitmapInfoHeader = (PBITMAPINFOHEADER)Screen;
+            Palette = (LPRGBQUAD)((PUCHAR)Screen + BitmapInfoHeader->biSize);
             RtlCopyMemory(MainPalette, Palette, sizeof(MainPalette));
+            RtlZeroMemory(Palette, sizeof(MainPalette));
 
-            /* Draw the logo at the center of the screen */
-            BitBltAligned(BootLogo,
-                          TRUE,
-                          AL_HORIZONTAL_CENTER,
-                          AL_VERTICAL_CENTER,
-                          0, 0, 0, 34);
+            /* Blit the background */
+            InbvBitBlt(Screen, 0, 0);
 
 #ifdef INBV_ROTBAR_IMPLEMENTED
             /* Choose progress bar */
@@ -1339,22 +1110,16 @@ DisplayBootBitmap(IN BOOLEAN TextMode)
 #endif
 
             /* Set progress bar coordinates and display it */
-            InbvSetProgressBarCoordinates(VID_PROGRESS_BAR_LEFT,
-                                          VID_PROGRESS_BAR_TOP,
-                                          VID_PROGRESS_BAR_WIDTH,
-                                          VID_PROGRESS_BAR_HEIGHT);
+            InbvSetProgressBarCoordinates(259, 352);
 
 #ifdef REACTOS_SKUS
             /* Check for non-workstation products */
             if (SharedUserData->NtProductType != NtProductWinNt)
             {
                 /* Overwrite part of the logo for a server product */
-                InbvScreenToBufferBlt(Buffer, VID_SKU_SAVE_AREA_LEFT,
-                                      VID_SKU_SAVE_AREA_TOP, 7, 7, 8);
-                InbvSolidColorFill(VID_SKU_AREA_LEFT, VID_SKU_AREA_TOP,
-                                   VID_SKU_AREA_RIGHT, VID_SKU_AREA_BOTTOM, BV_COLOR_BLACK);
-                InbvBufferToScreenBlt(Buffer, VID_SKU_SAVE_AREA_LEFT,
-                                      VID_SKU_SAVE_AREA_TOP, 7, 7, 8);
+                InbvScreenToBufferBlt(Buffer, 413, 237, 7, 7, 8);
+                InbvSolidColorFill(418, 230, 454, 256, 0);
+                InbvBufferToScreenBlt(Buffer, 413, 237, 7, 7, 8);
 
                 /* In setup mode, you haven't selected a SKU yet */
                 if (ExpInTextModeSetup) Text = NULL;
@@ -1362,35 +1127,18 @@ DisplayBootBitmap(IN BOOLEAN TextMode)
 #endif
         }
 
-        /* Load and draw progress bar bitmap */
-        BootProgress = InbvGetResourceAddress(IDB_PROGRESS_BAR);
-        BitBltAligned(BootProgress,
-                      TRUE,
-                      AL_HORIZONTAL_CENTER,
-                      AL_VERTICAL_CENTER,
-                      0, 118, 0, 0);
-
-        /* Load and draw copyright text bitmap */
-        BootCopy = InbvGetResourceAddress(IDB_COPYRIGHT);
-        BitBltAligned(BootCopy,
-                      TRUE,
-                      AL_HORIZONTAL_LEFT,
-                      AL_VERTICAL_BOTTOM,
-                      22, 0, 0, 20);
-
 #ifdef REACTOS_SKUS
         /* Draw the SKU text if it exits */
-        if (Text)
-            BitBltPalette(Text, TRUE, VID_SKU_TEXT_LEFT, VID_SKU_TEXT_TOP);
+        if (Text) InbvBitBlt(Text, 180, 121);
 #endif
 
 #ifdef INBV_ROTBAR_IMPLEMENTED
-        if ((TempRotBarSelection == RB_SQUARE_CELLS) && Bar)
+        if (Bar)
         {
             /* Save previous screen pixels to buffer */
             InbvScreenToBufferBlt(Buffer, 0, 0, 22, 9, 24);
             /* Draw the progress bar bit */
-            BitBltPalette(Bar, TRUE, 0, 0);
+            InbvBitBlt(Bar, 0, 0);
             /* Store it in global buffer */
             InbvScreenToBufferBlt(RotBarBuffer, 0, 0, 22, 9, 24);
             /* Restore screen pixels */
@@ -1407,22 +1155,18 @@ DisplayBootBitmap(IN BOOLEAN TextMode)
             LineBmp = InbvGetResourceAddress(IDB_ROTATING_LINE);
             if (LineBmp)
             {
-                /* Draw the line and store it in global buffer */
-                BitBltPalette(LineBmp, TRUE, 0, SCREEN_HEIGHT-6);
-                InbvScreenToBufferBlt(RotLineBuffer, 0, SCREEN_HEIGHT-6, SCREEN_WIDTH, 6, SCREEN_WIDTH);
+                /* Draw the line */
+                InbvBitBlt(LineBmp, 0, 474);
+                /* Store it in global buffer */
+                InbvScreenToBufferBlt(RotLineBuffer, 0, 474, 640, 6, 640);
             }
         }
-        else
+
+        if (TempRotBarSelection != RB_PROGRESS_BAR)
         {
-            /* Hide the simple progress bar if not used */
+            /* Hide simple progress bar if not used */
             ShowProgressBar = FALSE;
         }
-
-        /* Restore the kernel resource section protection to be read-only */
-        MmChangeKernelResourceSectionProtection(MM_READONLY);
-
-        /* Display the boot logo and fade it in */
-        BootLogoFadeIn();
 
         /* Do we have an animation thread? */
         if (!RotBarThreadActive)
@@ -1447,23 +1191,11 @@ DisplayBootBitmap(IN BOOLEAN TextMode)
         /* Set filter which will draw text display if needed */
         InbvInstallDisplayStringFilter(DisplayFilter);
     }
-
-#ifdef INBV_ROTBAR_IMPLEMENTED
-    /* Do we have the animation thread? */
-    if (RotBarThreadActive)
-    {
-        /* We do, initialize the progress bar */
-        InbvAcquireLock();
-        RotBarSelection = TempRotBarSelection;
-        InbvRotBarInit();
-        InbvReleaseLock();
-    }
-#endif
 }
 
-INIT_FUNCTION
 VOID
 NTAPI
+INIT_FUNCTION
 DisplayFilter(PCHAR *String)
 {
     /* Windows hack to skip first dots */
@@ -1485,14 +1217,14 @@ DisplayFilter(PCHAR *String)
     }
 }
 
-INIT_FUNCTION
 VOID
 NTAPI
+INIT_FUNCTION
 FinalizeBootLogo(VOID)
 {
 #ifdef INBV_ROTBAR_IMPLEMENTED
     /* Reset rotation bar */
-    // InbvRotBarStop();
+    InbvRotBarStop();
 
     // InbvAcquireLock();
     // PltRotBarStatus = 3;
@@ -1504,13 +1236,8 @@ FinalizeBootLogo(VOID)
     if (InbvGetDisplayState() == INBV_DISPLAY_STATE_OWNED)
     {
         /* Clear the screen */
-        VidSolidColorFill(0, 0, SCREEN_WIDTH-1, SCREEN_HEIGHT-1, BV_COLOR_BLACK);
+        VidSolidColorFill(0, 0, 639, 479, 0);
     }
-
-    /* Reset progress bar and lock */
-#ifdef INBV_ROTBAR_IMPLEMENTED
-    PltRotBarStatus = RBS_STOP_ANIMATE;
-    RotBarThreadActive = FALSE;
-#endif
+    /* Reset lock */
     InbvReleaseLock();
 }
