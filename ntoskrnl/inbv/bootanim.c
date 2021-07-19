@@ -63,7 +63,7 @@ extern BOOLEAN ShowProgressBar;
 /*
  * Change this to modify progress bar behaviour
  */
-#define ROT_BAR_DEFAULT_MODE    RB_PROGRESS_BAR
+#define ROT_BAR_DEFAULT_MODE    RB_PROGRESS_BAR // RB_SQUARE_CELLS // RB_PROGRESS_BAR
 
 /*
  * Values for PltRotBarStatus:
@@ -89,7 +89,8 @@ typedef enum _ROT_BAR_TYPE
 
 static BOOLEAN RotBarThreadActive = FALSE;
 static ROT_BAR_TYPE RotBarSelection = RB_UNSPECIFIED;
-static ROT_BAR_STATUS PltRotBarStatus = 0;
+static ROT_BAR_STATUS PltRotBarStatus = 0;  // 0: Reset, 1: Start (fade palette), 2: Animate, 3: Finish
+static PVOID RotBarThread = NULL;
 static UCHAR RotBarBuffer[24 * 9];
 static UCHAR RotLineBuffer[SCREEN_WIDTH * 6];
 #endif // INBV_ROTBAR_IMPLEMENTED
@@ -139,7 +140,7 @@ BootLogoFadeIn(VOID)
     ULONG Iteration, Index, ClrUsed;
 
     LARGE_INTEGER Delay;
-    Delay.QuadPart = -(PALETTE_FADE_TIME * 10);
+    Delay.QuadPart = -(PALETTE_FADE_TIME * 10); // in nanosecs
 
     /* Check if we are installed and we own the display */
     if (!InbvBootDriverInstalled ||
@@ -163,6 +164,14 @@ BootLogoFadeIn(VOID)
      */
     for (Iteration = 0; Iteration <= PALETTE_FADE_STEPS; ++Iteration)
     {
+        InbvAcquireLock();
+        if ((InbvGetDisplayState() != INBV_DISPLAY_STATE_OWNED) ||
+            (PltRotBarStatus != 1))
+        {
+            InbvReleaseLock();
+            return;
+        }
+
         for (Index = 0; Index < ClrUsed; Index++)
         {
             Palette[Index].rgbRed = (UCHAR)
@@ -173,14 +182,27 @@ BootLogoFadeIn(VOID)
                 (MainPalette[Index].rgbBlue * Iteration / PALETTE_FADE_STEPS);
         }
 
-        /* Do the animation */
-        InbvAcquireLock();
+        // /* Acquire the lock */
+        // InbvAcquireLock();
+
         VidBitBlt(PaletteBitmapBuffer, 0, 0);
+
+        /* Release the lock */
         InbvReleaseLock();
 
         /* Wait for a bit */
+        // KeStallExecutionProcessor(PALETTE_FADE_TIME);
         KeDelayExecutionThread(KernelMode, FALSE, &Delay);
     }
+
+    // /* Wait for a bit */
+    // // KeStallExecutionProcessor(PALETTE_FADE_TIME);
+    // KeDelayExecutionThread(KernelMode, FALSE, &Delay);
+
+    /* Go to the next step */
+    InbvAcquireLock();
+    PltRotBarStatus = 2;
+    InbvReleaseLock();
 }
 
 static VOID
@@ -346,7 +368,7 @@ BootAnimTickProgressBar(
 static
 VOID
 NTAPI
-InbvRotationThread(
+InbvAnimationThread(
     _In_ PVOID Context)
 {
     ULONG X, Y, Index, Total;
@@ -357,22 +379,44 @@ InbvRotationThread(
     InbvAcquireLock();
     if (RotBarSelection == RB_SQUARE_CELLS)
     {
+        Delay.QuadPart = -800000; // 80 ms
         Index = 0;
     }
     else
     {
+        Delay.QuadPart = -400000; // 40 ms
         Index = 32;
     }
     X = ProgressBarLeft + 2;
     Y = ProgressBarTop + 2;
     InbvReleaseLock();
 
-    while (InbvGetDisplayState() == INBV_DISPLAY_STATE_OWNED)
+    while (InbvGetDisplayState() == INBV_DISPLAY_STATE_OWNED /*&& PltRotBarStatus != 3*/)
     {
-        /* Wait for a bit */
-        KeDelayExecutionThread(KernelMode, FALSE, &Delay);
-
         InbvAcquireLock();
+        if (PltRotBarStatus == 1)
+        {
+            InbvReleaseLock();
+
+            /* Display the boot logo and fade it in */
+            BootLogoFadeIn();
+
+            /* Go to the next step */
+            InbvAcquireLock();
+            PltRotBarStatus = 2;
+            InbvReleaseLock();
+            continue;
+        }
+        if (PltRotBarStatus == 3)
+        {
+            InbvReleaseLock();
+            break;
+        }
+        if (PltRotBarStatus != 2)
+        {
+            InbvReleaseLock();
+            goto Wait;
+        }
 
         /* Unknown unexpected command */
         ASSERT(PltRotBarStatus < RBS_STATUS_MAX);
@@ -386,7 +430,6 @@ InbvRotationThread(
 
         if (RotBarSelection == RB_SQUARE_CELLS)
         {
-            Delay.QuadPart = -800000LL; // 80 ms
             Total = 18;
             Index %= Total;
 
@@ -417,7 +460,6 @@ InbvRotationThread(
         }
         else if (RotBarSelection == RB_PROGRESS_BAR)
         {
-            Delay.QuadPart = -600000LL; // 60 ms
             Total = SCREEN_WIDTH;
             Index %= Total;
 
@@ -432,8 +474,13 @@ InbvRotationThread(
         }
 
         InbvReleaseLock();
+
+Wait:
+        /* Wait for a bit */
+        KeDelayExecutionThread(KernelMode, FALSE, &Delay);
     }
 
+    RotBarThreadActive = FALSE;
     PsTerminateSystemThread(STATUS_SUCCESS);
 }
 
@@ -442,8 +489,54 @@ VOID
 NTAPI
 InbvRotBarInit(VOID)
 {
-    PltRotBarStatus = RBS_FADEIN;
+    NTSTATUS Status;
+    HANDLE ThreadHandle = NULL;
+
+    if (!InbvBootDriverInstalled || RotBarSelection == RB_UNSPECIFIED)
+        return;
+
+    RotBarThread = NULL;
+
+    InbvAcquireLock();
+    // PltRotBarStatus = RBS_FADEIN;
+    // PltRotBarStatus = 0;
+    PltRotBarStatus = 1;
+    InbvReleaseLock();
+
     /* Perform other initialization if needed */
+
+    /* Start the animation thread */
+    Status = PsCreateSystemThread(&ThreadHandle,
+                                  SYNCHRONIZE, // 0
+                                  NULL,
+                                  NULL,
+                                  NULL,
+                                  InbvAnimationThread,
+                                  NULL);
+    if (NT_SUCCESS(Status))
+    {
+        Status = ObReferenceObjectByHandle(ThreadHandle,
+                                           SYNCHRONIZE,
+                                           PsThreadType,
+                                           KernelMode,
+                                           &RotBarThread,
+                                           NULL);
+        if (NT_SUCCESS(Status))
+        {
+            KeSetPriorityThread(RotBarThread, HIGH_PRIORITY);
+            RotBarThreadActive = TRUE;
+        }
+        /* The thread has started, close the handle as we don't need it */
+        ObCloseHandle(ThreadHandle, KernelMode);
+    }
+
+    /* Wait a little bit to have the animation thread settled down... */
+    if (RotBarSelection != RB_UNSPECIFIED)
+    {
+        LARGE_INTEGER Delay;
+        Delay.QuadPart = -6000000; // augmented from original 300ms
+        KeDelayExecutionThread(KernelMode, FALSE, &Delay);
+    }
 }
 #endif // INBV_ROTBAR_IMPLEMENTED
 
@@ -513,8 +606,6 @@ DisplayBootBitmap(
     UCHAR Buffer[RTL_NUMBER_OF(RotBarBuffer)];
     PVOID Bar = NULL, LineBmp = NULL;
     ROT_BAR_TYPE TempRotBarSelection = RB_UNSPECIFIED;
-    NTSTATUS Status;
-    HANDLE ThreadHandle = NULL;
 #endif
 
 #ifdef REACTOS_SKUS
@@ -526,7 +617,9 @@ DisplayBootBitmap(
     if (RotBarThreadActive)
     {
         /* Yes, just reset the progress bar but keep the thread alive */
+        // InbvRotBarStop();
         InbvAcquireLock();
+        // PltRotBarStatus = 3; // This would kill the thread...
         RotBarSelection = RB_UNSPECIFIED;
         InbvReleaseLock();
     }
@@ -654,7 +747,10 @@ DisplayBootBitmap(
         /* Make sure we have a logo */
         if (BootLogo)
         {
-            /* Save the main image palette for implementing the fade-in effect */
+            /*
+             * Save the main image palette and replace it with black palette,
+             * so that we can do fade-in effect later.
+             */
             PBITMAPINFOHEADER BitmapInfoHeader = BootLogo;
             LPRGBQUAD Palette = (LPRGBQUAD)((PUCHAR)BootLogo + BitmapInfoHeader->biSize);
             RtlCopyMemory(MainPalette, Palette, sizeof(MainPalette));
@@ -748,7 +844,6 @@ DisplayBootBitmap(
             /* Hide the simple progress bar if not used */
             ShowProgressBar = FALSE;
         }
-#endif // INBV_ROTBAR_IMPLEMENTED
 
         /* Restore the kernel resource section protection to be read-only */
         MmChangeKernelResourceSectionProtection(MM_READONLY);
@@ -756,26 +851,26 @@ DisplayBootBitmap(
         /* Display the boot logo and fade it in */
         BootLogoFadeIn();
 
-#ifdef INBV_ROTBAR_IMPLEMENTED
-        if (!RotBarThreadActive && TempRotBarSelection != RB_UNSPECIFIED)
+        /* Do we have an animation thread? */
+        if (!RotBarThreadActive)
         {
-            /* Start the animation thread */
-            Status = PsCreateSystemThread(&ThreadHandle,
-                                          0,
-                                          NULL,
-                                          NULL,
-                                          NULL,
-                                          InbvRotationThread,
-                                          NULL);
-            if (NT_SUCCESS(Status))
-            {
-                /* The thread has started, close the handle as we don't need it */
-                RotBarThreadActive = TRUE;
-                ObCloseHandle(ThreadHandle, KernelMode);
-            }
+            /* We don't, initialize the progress bar */
+            RotBarSelection = TempRotBarSelection;
+            InbvRotBarInit();
         }
+
+        // /* Start rotating bar */
+        // InbvAcquireLock();
+        // PltRotBarStatus = 1;
+        // InbvReleaseLock();
+
+        /* Restart the boot logo animation (fade-in, and progress bar) */
+        /* Display the boot logo and fade it in */
+        // BootLogoFadeIn();
+
 #endif // INBV_ROTBAR_IMPLEMENTED
 
+        // FIXME: Move it before??
         /* Set filter which will draw text display if needed */
         InbvInstallDisplayStringFilter(DisplayFilter);
     }
@@ -798,6 +893,15 @@ VOID
 NTAPI
 FinalizeBootLogo(VOID)
 {
+#ifdef INBV_ROTBAR_IMPLEMENTED
+    /* Reset rotation bar */
+    // InbvRotBarStop();
+
+    // InbvAcquireLock();
+    // PltRotBarStatus = 3;
+    // InbvReleaseLock();
+
+#endif
     /* Acquire lock and check the display state */
     InbvAcquireLock();
     if (InbvGetDisplayState() == INBV_DISPLAY_STATE_OWNED)
