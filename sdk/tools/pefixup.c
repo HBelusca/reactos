@@ -24,15 +24,10 @@
 static const char* g_ApplicationName;
 static const char* g_Target;
 
-enum fixup_mode
-{
-    MODE_NONE = 0,
-    MODE_LOADCONFIG,
-    MODE_KERNELDRIVER,
-    MODE_WDMDRIVER,
-    MODE_KERNELDLL,
-    MODE_KERNEL
-};
+#define MODE_NONE           0
+#define MODE_LOADCONFIG     1
+#define MODE_KERNELDRIVER   2
+#define MODE_WDMDRIVER      4
 
 void *rva_to_ptr(unsigned char *buffer, PIMAGE_NT_HEADERS nt_header, DWORD rva)
 {
@@ -128,7 +123,7 @@ static int add_loadconfig(unsigned char *buffer, PIMAGE_NT_HEADERS nt_header)
     return 1;
 }
 
-static int driver_fixup(enum fixup_mode mode, unsigned char *buffer, PIMAGE_NT_HEADERS nt_header)
+static int driver_fixup(unsigned short mode, unsigned char *buffer, PIMAGE_NT_HEADERS nt_header)
 {
     /* GNU LD just doesn't know what a driver is, and has notably no idea of paged vs non-paged sections */
     for (unsigned int i = 0; i < nt_header->FileHeader.NumberOfSections; i++)
@@ -142,15 +137,12 @@ static int driver_fixup(enum fixup_mode mode, unsigned char *buffer, PIMAGE_NT_H
         if (Section->Characteristics & IMAGE_SCN_CNT_CODE)
             Section->Characteristics &= ~IMAGE_SCN_CNT_INITIALIZED_DATA;
 
+        /* .rsrc is discardable for (Kernel-Mode) driver images.
+         * For some reason, .rsrc is made writable by windres. */
         if (strncmp((char*)Section->Name, ".rsrc", 5) == 0)
         {
-            /* .rsrc is discardable for driver images, WDM drivers and Kernel-Mode DLLs */
-            if (mode == MODE_KERNELDRIVER || mode == MODE_WDMDRIVER || mode == MODE_KERNELDLL)
-            {
-                Section->Characteristics |= IMAGE_SCN_MEM_DISCARDABLE;
-            }
-
-            /* For some reason, .rsrc is made writable by windres */
+            Section->Characteristics |= IMAGE_SCN_MEM_DISCARDABLE;
+            Section->Characteristics &= ~IMAGE_SCN_MEM_NOT_PAGED;
             Section->Characteristics &= ~IMAGE_SCN_MEM_WRITE;
             continue;
         }
@@ -362,10 +354,8 @@ print_usage(void)
     printf("Usage: %s <options> <filename>\n\n", g_ApplicationName);
     printf("<options> can be one of the following options:\n"
            "  --loadconfig          Fix the LOAD_CONFIG directory entry;\n"
-           "  --kernelmodedriver    Fix code, data and resource sections for driver images;\n"
+           "  --driver              Fix code, data and resource sections for driver images;\n" // Kernel-Mode
            "  --wdmdriver           Fix code, data and resource sections for WDM drivers;\n"
-           "  --kerneldll           Fix code, data and resource sections for Kernel-Mode DLLs;\n"
-           "  --kernel              Fix code, data and resource sections for kernels;\n"
            "\n"
            "and/or a combination of the following ones:\n"
            "  --section:name[=newname][,[[!]{CDEIKOMPRSUW}][A{1248PTSX}]]\n"
@@ -376,7 +366,7 @@ print_usage(void)
 int main(int argc, char **argv)
 {
     int result = 1;
-    enum fixup_mode mode = MODE_NONE;
+    unsigned short mode = MODE_NONE;
     int i;
     FILE* file;
     size_t len;
@@ -398,33 +388,15 @@ int main(int argc, char **argv)
 
         if (strcmp(&argv[i][2], "loadconfig") == 0)
         {
-            if (mode != MODE_NONE)
-                goto mode_error;
-            mode = MODE_LOADCONFIG;
+            mode |= MODE_LOADCONFIG;
         }
-        else if (strcmp(&argv[i][2], "kernelmodedriver") == 0)
+        else if (strcmp(&argv[i][2], "driver") == 0)
         {
-            if (mode != MODE_NONE)
-                goto mode_error;
-            mode = MODE_KERNELDRIVER;
+            mode |= MODE_KERNELDRIVER;
         }
         else if (strcmp(&argv[i][2], "wdmdriver") == 0)
         {
-            if (mode != MODE_NONE)
-                goto mode_error;
-            mode = MODE_WDMDRIVER;
-        }
-        else if (strcmp(&argv[i][2], "kerneldll") == 0)
-        {
-            if (mode != MODE_NONE)
-                goto mode_error;
-            mode = MODE_KERNELDLL;
-        }
-        else if (strcmp(&argv[i][2], "kernel") == 0)
-        {
-            if (mode != MODE_NONE)
-                goto mode_error;
-            mode = MODE_KERNEL;
+            mode |= MODE_WDMDRIVER;
         }
         else if (strncmp(&argv[i][2], "section:", 8) == 0)
         {
@@ -433,10 +405,6 @@ int main(int argc, char **argv)
         else
         {
             fprintf(stderr, "%s ERROR: Unknown option: '%s'.\n", g_ApplicationName, argv[i]);
-            goto failure;
-    mode_error:
-            fprintf(stderr, "%s ERROR: Specific mode already set.\n", g_ApplicationName);
-    failure:
             print_usage();
             return 1;
         }
@@ -501,9 +469,9 @@ int main(int argc, char **argv)
     /* Apply mode fixups */
     if (mode != MODE_NONE)
     {
-        if (mode == MODE_LOADCONFIG)
+        if (mode & MODE_LOADCONFIG)
             result = add_loadconfig(buffer, nt_header);
-        else
+        if ((result == 0) && ((mode & MODE_KERNELDRIVER) || (mode & MODE_WDMDRIVER)))
             result = driver_fixup(mode, buffer, nt_header);
     }
 

@@ -65,6 +65,12 @@ ULONG CmpTypeCount[MaximumType + 1];
 
 HANDLE CmpRegistryRootHandle;
 
+/* For MSVC, this is required before using DATA_SEG */
+#ifdef _MSC_VER
+// # pragma section("INIT", read,execute,discard)
+# pragma section("INITDATA", read,write,discard)
+#endif
+
 DATA_SEG("INITDATA") UNICODE_STRING CmClassName[MaximumClass + 1] =
 {
     RTL_CONSTANT_STRING(L"System"),

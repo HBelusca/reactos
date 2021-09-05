@@ -581,7 +581,7 @@ function(set_module_type MODULE TYPE)
     cmake_parse_arguments(__module "UNICODE" "IMAGEBASE" "ENTRYPOINT" ${ARGN})
 
     if(__module_UNPARSED_ARGUMENTS)
-        message(STATUS "set_module_type : unparsed arguments ${__module_UNPARSED_ARGUMENTS}, module : ${MODULE}")
+        message(STATUS "set_module_type: unparsed arguments ${__module_UNPARSED_ARGUMENTS}, module: ${MODULE}")
     endif()
 
     # Check this is a type that we know

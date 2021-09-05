@@ -303,22 +303,35 @@ function(set_module_type_toolchain MODULE TYPE)
         -Wl,--major-image-version,5 -Wl,--minor-image-version,01 -Wl,--major-os-version,5 -Wl,--minor-os-version,01)
 
     if(TYPE IN_LIST KERNEL_MODULE_TYPES)
-        target_link_options(${MODULE} PRIVATE -Wl,--exclude-all-symbols,-file-alignment=0x1000,-section-alignment=0x1000)
+        target_link_options(${MODULE} PRIVATE -Wl,--exclude-all-symbols,-file-alignment=0x200,-section-alignment=0x1000)
 
         if(${TYPE} STREQUAL "wdmdriver")
             target_link_options(${MODULE} PRIVATE "-Wl,--wdmdriver")
         endif()
 
         # Place INIT &.rsrc section at the tail of the module, before .reloc
-        add_linker_script(${MODULE} ${REACTOS_SOURCE_DIR}/sdk/cmake/init-section.lds)
+        if (TYPE STREQUAL kernel)
+            # Merge all INIT sections together for the kernel
+            add_linker_script(${MODULE} ${REACTOS_SOURCE_DIR}/sdk/cmake/init-section-merged.lds)
+        else()
+            add_linker_script(${MODULE} ${REACTOS_SOURCE_DIR}/sdk/cmake/init-section.lds)
+        endif()
 
         # Fixup section characteristics
-        #  - Remove flags that LD overzealously puts (alignment flag, Initialized flags for code sections)
-        #  - INIT section is made discardable
-        #  - .rsrc is made read-only and discardable
-        #  - PAGE & .edata sections are made pageable.
-        add_custom_command(TARGET ${MODULE} POST_BUILD
-            COMMAND native-pefixup --${TYPE} $<TARGET_FILE:${MODULE}>)
+        # - Remove flags that LD overzealously puts (alignment flag, Initialized flags for code sections)
+        # - INIT section is made discardable
+        # - .rsrc is made read-only and discardable (except for the kernel)
+        # - PAGE & .edata sections are made pageable.
+        if(TYPE STREQUAL kernel)
+            add_custom_command(TARGET ${MODULE} POST_BUILD
+                COMMAND native-pefixup --driver --section:.rsrc,!D!P $<TARGET_FILE:${MODULE}>)
+        elseif(TYPE STREQUAL wdmdriver)
+            add_custom_command(TARGET ${MODULE} POST_BUILD
+                COMMAND native-pefixup --wdmdriver $<TARGET_FILE:${MODULE}>)
+        else()
+            add_custom_command(TARGET ${MODULE} POST_BUILD
+                COMMAND native-pefixup --driver $<TARGET_FILE:${MODULE}>)
+        endif()
 
         # Believe it or not, cmake doesn't do that
         set_property(TARGET ${MODULE} APPEND PROPERTY LINK_DEPENDS $<TARGET_PROPERTY:native-pefixup,IMPORTED_LOCATION>)

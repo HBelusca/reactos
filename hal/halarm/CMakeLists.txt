@@ -16,4 +16,4 @@ list(APPEND SOURCES
 add_library(hal MODULE
     ${SOURCES})
 
-set_module_type(hal kerneldll ENTRYPOINT 0)
+set_module_type(hal kerneldll ENTRYPOINT HalInitSystem 8)

@@ -273,15 +273,19 @@ function(set_module_type_toolchain MODULE TYPE)
         target_link_options(${MODULE} PRIVATE /DLL)
     elseif(TYPE IN_LIST KERNEL_MODULE_TYPES)
         # Mark INIT section as Executable Read Write Discardable
-        target_link_options(${MODULE} PRIVATE /SECTION:INIT,ERWD)
+        ## target_link_options(${MODULE} PRIVATE /SECTION:INIT,ERWD)
+        target_link_options(${MODULE} PRIVATE /SECTION:INIT,D)
 
-        if(TYPE STREQUAL kernelmodedriver)
-            target_link_options(${MODULE} PRIVATE /DRIVER)
-        elseif(TYPE STREQUAL wdmdriver)
+        # All kernel-type modules get the /driver flag
+        target_link_options(${MODULE} PRIVATE /DRIVER)
+
+        if(TYPE STREQUAL wdmdriver) # Extra WDM handling
             target_link_options(${MODULE} PRIVATE /DRIVER:WDM)
-        elseif (TYPE STREQUAL kernel)
-            # Mark .rsrc section as non-disposable non-pageable, as bugcheck code needs to access it
-            target_link_options(${MODULE} PRIVATE /SECTION:.rsrc,!DP)
+        elseif(TYPE STREQUAL kernel)
+            # Merge all the INIT* sections together
+            # warning LNK4254: section 'INITDATA' (C2000040) merged into 'INIT' (60000020) with different attributes
+            # Mark .rsrc section as non-discardable non-pageable, as bugcheck code needs to access it
+            target_link_options(${MODULE} PRIVATE /ignore:4254 /MERGE:INITDATA=INIT /SECTION:.rsrc,!D!P)
         endif()
     endif()
 
