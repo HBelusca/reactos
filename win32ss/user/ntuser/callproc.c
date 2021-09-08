@@ -36,7 +36,7 @@ CreateCallProc(IN PDESKTOP Desktop,
 
     /* We can send any thread pointer to the object manager here,
      * What's important is the process info */
-    NewCallProc = (PCALLPROCDATA)UserCreateObject(gHandleTable,
+    NewCallProc = (PCALLPROCDATA)UserCreateObject(&gHandleTable,
                                              Desktop,
                                              pi->ptiList,
                                              &Handle,
@@ -61,7 +61,7 @@ UserGetCallProcInfo(IN HANDLE hCallProc,
 {
     PCALLPROCDATA CallProc;
 
-    CallProc = UserGetObject(gHandleTable,
+    CallProc = UserGetObject(&gHandleTable,
                              hCallProc,
                              TYPE_CALLPROC);
     if (CallProc == NULL)

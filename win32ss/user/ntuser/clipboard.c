@@ -188,7 +188,7 @@ IntSynthesizeDib(
     cjDataSize = cjInfoSize + pbmi->bmiHeader.biSizeImage;
 
     /* Create the clipboard data */
-    pClipboardData = (PCLIPBOARDDATA)UserCreateObject(gHandleTable,
+    pClipboardData = (PCLIPBOARDDATA)UserCreateObject(&gHandleTable,
                                                       NULL,
                                                       NULL,
                                                       &hMem,
@@ -243,7 +243,7 @@ IntSynthesizeBitmap(PWINSTATION_OBJECT pWinStaObj, PCLIP pBmEl)
     if (!pDibEl->fGlobalHandle)
         return;
 
-    pMemObj = (PCLIPBOARDDATA)UserGetObject(gHandleTable, pDibEl->hData, TYPE_CLIPDATA);
+    pMemObj = (PCLIPBOARDDATA)UserGetObject(&gHandleTable, pDibEl->hData, TYPE_CLIPDATA);
     if (!pMemObj)
         return;
 
@@ -307,7 +307,7 @@ IntAddSynthesizedFormats(PWINSTATION_OBJECT pWinStaObj)
         PCLIPBOARDDATA pMemObj;
         HANDLE hMem;
 
-        pMemObj = (PCLIPBOARDDATA)UserCreateObject(gHandleTable, NULL, NULL, &hMem, TYPE_CLIPDATA,
+        pMemObj = (PCLIPBOARDDATA)UserCreateObject(&gHandleTable, NULL, NULL, &hMem, TYPE_CLIPDATA,
                                                    sizeof(CLIPBOARDDATA) + sizeof(LCID));
         if (pMemObj)
         {
@@ -1194,7 +1194,7 @@ NtUserConvertMemHandle(
     UserEnterExclusive();
 
     /* Create Clipboard data object */
-    pMemObj = UserCreateObject(gHandleTable, NULL, NULL, &hMem, TYPE_CLIPDATA, sizeof(CLIPBOARDDATA) + cbData);
+    pMemObj = UserCreateObject(&gHandleTable, NULL, NULL, &hMem, TYPE_CLIPDATA, sizeof(CLIPBOARDDATA) + cbData);
     if (!pMemObj)
         goto cleanup;
 
@@ -1241,7 +1241,7 @@ NtUserCreateLocalMemHandle(
     UserEnterShared();
 
     /* Get Clipboard data object */
-    pMemObj = (PCLIPBOARDDATA)UserGetObject(gHandleTable, hMem, TYPE_CLIPDATA);
+    pMemObj = (PCLIPBOARDDATA)UserGetObject(&gHandleTable, hMem, TYPE_CLIPDATA);
     if (!pMemObj)
     {
         Status = STATUS_INVALID_HANDLE;

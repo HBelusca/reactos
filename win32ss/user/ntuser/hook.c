@@ -945,7 +945,7 @@ IntGetHookObject(HHOOK hHook)
        return NULL;
     }
 
-    Hook = (PHOOK)UserGetObject(gHandleTable, hHook, TYPE_HOOK);
+    Hook = (PHOOK)UserGetObject(&gHandleTable, hHook, TYPE_HOOK);
     if (!Hook)
     {
        EngSetLastError(ERROR_INVALID_HOOK_HANDLE);
@@ -1241,7 +1241,7 @@ co_HOOK_CallHooks( INT HookId,
        */
        for(i = 0; pHookHandles[i]; ++i)
        {
-          Hook = (PHOOK)UserGetObject(gHandleTable, pHookHandles[i], TYPE_HOOK);
+          Hook = (PHOOK)UserGetObject(&gHandleTable, pHookHandles[i], TYPE_HOOK);
           if(!Hook)
           {
               ERR("Invalid hook!\n");
@@ -1563,7 +1563,7 @@ NtUserSetWindowsHookEx( HINSTANCE Mod,
     }
     ObDereferenceObject(WinStaObj);
 
-    Hook = UserCreateObject(gHandleTable, NULL, ptiHook, (PHANDLE)&Handle, TYPE_HOOK, sizeof(HOOK));
+    Hook = UserCreateObject(&gHandleTable, NULL, ptiHook, (PHANDLE)&Handle, TYPE_HOOK, sizeof(HOOK));
 
     if (!Hook)
     {

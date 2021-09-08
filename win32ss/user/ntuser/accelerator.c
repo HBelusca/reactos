@@ -28,7 +28,7 @@ PACCELERATOR_TABLE FASTCALL UserGetAccelObject(HACCEL hAccel)
         return NULL;
     }
 
-    Accel = UserGetObject(gHandleTable, hAccel, TYPE_ACCELTABLE);
+    Accel = UserGetObject(&gHandleTable, hAccel, TYPE_ACCELTABLE);
     if (!Accel)
     {
         EngSetLastError(ERROR_INVALID_ACCEL_HANDLE);
@@ -249,7 +249,7 @@ NtUserCreateAcceleratorTable(
 
     pti = PsGetCurrentThreadWin32Thread();
 
-    Accel = UserCreateObject(gHandleTable,
+    Accel = UserCreateObject(&gHandleTable,
         pti->rpdesk,
         pti,
         (PHANDLE)&hAccel,

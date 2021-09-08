@@ -182,7 +182,7 @@ UserProcessDestroy(PEPROCESS Process)
         ppiScrnSaver = NULL;
 
     /* Destroy user objects */
-    UserDestroyObjectsForOwner(gHandleTable, ppiCurrent);
+    UserDestroyObjectsForOwner(&gHandleTable, ppiCurrent);
 
     TRACE_CH(UserProcess, "Freeing ppi 0x%p\n", ppiCurrent);
 #if DBG
@@ -753,7 +753,7 @@ ExitThreadCallback(PETHREAD Thread)
         KeSetEvent(ptiCurrent->pEventQueueServer, IO_NO_INCREMENT, FALSE);
         UnregisterThreadHotKeys(ptiCurrent);
 
-        if (!UserDestroyObjectsForOwner(gHandleTable, ptiCurrent))
+        if (!UserDestroyObjectsForOwner(&gHandleTable, ptiCurrent))
         {
             DPRINT1("Failed to delete objects belonging to thread %p. This is VERY BAD!.\n", ptiCurrent);
             ASSERT(FALSE);

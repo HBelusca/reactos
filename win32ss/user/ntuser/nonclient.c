@@ -701,7 +701,7 @@ PCURICON_OBJECT FASTCALL NC_IconForWindow( PWND pWnd )
    }
    if (hIcon)
    {
-       pIcon = (PCURICON_OBJECT)UserGetObjectNoErr(gHandleTable,
+       pIcon = (PCURICON_OBJECT)UserGetObjectNoErr(&gHandleTable,
                                                    hIcon,
                                                    TYPE_CURSOR);
    }

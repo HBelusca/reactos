@@ -179,7 +179,7 @@ NtUserCallOneParam(
             /* Windows allows zero count, in which case it allocates context for 8 moves */
             if (count == 0) count = 8;
 
-            psmwp = (PSMWP)UserCreateObject(gHandleTable,
+            psmwp = (PSMWP)UserCreateObject(&gHandleTable,
                                             NULL,
                                             NULL,
                                             (PHANDLE)&hDwp,
