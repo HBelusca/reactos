@@ -10,6 +10,8 @@
 #define UserLeaveCo UserLeave
 
 extern PSERVERINFO gpsi;
+extern SHAREDINFO  gSharedInfo;
+
 extern PTHREADINFO gptiCurrent;
 extern PPROCESSINFO gppiList;
 extern PPROCESSINFO ppiScrnSaver;

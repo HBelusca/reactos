@@ -24,7 +24,8 @@ NTSTATUS GdiProcessDestroy(PEPROCESS Process);
 NTSTATUS GdiThreadCreate(PETHREAD Thread);
 NTSTATUS GdiThreadDestroy(PETHREAD Thread);
 
-PSERVERINFO gpsi = NULL; // Global User Server Information.
+PSERVERINFO gpsi = NULL;        // Global User Server Information.
+SHAREDINFO  gSharedInfo = {0};  // Global User Shared Information.
 
 USHORT gusLanguageID;
 PPROCESSINFO ppiScrnSaver;
@@ -1013,10 +1014,9 @@ DriverEntry(
     /* Init the global user lock */
     ExInitializeResourceLite(&UserLock);
 
-    /* Lock while we use the heap (UserHeapAlloc asserts on this) */
+    /* Allocate global server info structure.
+     * Lock while we use the heap (UserHeapAlloc asserts on this). */
     UserEnterExclusive();
-
-    /* Allocate global server info structure */
     gpsi = UserHeapAlloc(sizeof(*gpsi));
     UserLeave();
     if (!gpsi)
@@ -1027,6 +1027,9 @@ DriverEntry(
 
     RtlZeroMemory(gpsi, sizeof(*gpsi));
     DPRINT("Global Server Data -> %p\n", gpsi);
+
+    /* Save it in the shared info block */
+    gSharedInfo.psi = gpsi;
 
     NT_ROF(InitGdiHandleTable());
     NT_ROF(InitPaletteImpl());
