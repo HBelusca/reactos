@@ -170,33 +170,29 @@ static PVOID FASTCALL DesktopPtrToUser(PVOID ptr)
 // Win: HMValidateHandleNoRip
 LPVOID FASTCALL ValidateHandleNoErr(HANDLE hObject, UINT uType)
 {
-    UINT index;
-    PUSER_HANDLE_TABLE ht;
-    PUSER_HANDLE_ENTRY he;
+    PHANDLEENTRY handleTable;
+    INT index;
     WORD generation;
     LPVOID ptr;
 
     if (!NtUserValidateHandleSecure(hObject))
         return NULL;
 
-    ht = gSharedInfo.aheList; /* handle table */
-    ASSERT(ht);
-    /* ReactOS-Specific! */
-    ASSERT(gSharedInfo.ulSharedDelta != 0);
-    he = (PUSER_HANDLE_ENTRY)((ULONG_PTR)ht->handles - gSharedInfo.ulSharedDelta);
+    handleTable = g_SharedInfo.aheList;
+    ASSERT(handleTable);
 
     index = (LOWORD(hObject) - FIRST_USER_HANDLE) >> 1;
-    if ((INT)index < 0 || ht->nb_handles <= index || he[index].type != uType)
+    if (index < 0 || index >= g_psi->cHandleEntries || handleTable[index].type != uType)
         return NULL;
 
-    if (he[index].flags & HANDLEENTRY_DESTROY)
+    if (handleTable[index].flags & HANDLEENTRY_DESTROY)
         return NULL;
 
     generation = HIWORD(hObject);
-    if (generation != he[index].generation && generation && generation != 0xFFFF)
+    if (generation != handleTable[index].generation && generation && generation != 0xFFFF)
         return NULL;
 
-    ptr = he[index].ptr;
+    ptr = handleTable[index].ptr;
     if (ptr)
         ptr = DesktopPtrToUser(ptr);
 

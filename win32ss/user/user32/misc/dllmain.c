@@ -29,8 +29,6 @@ HINSTANCE User32Instance;
 PPROCESSINFO g_ppi = NULL;
 SHAREDINFO gSharedInfo = {0};
 PSERVERINFO gpsi = NULL;
-PUSER_HANDLE_TABLE gHandleTable = NULL;
-PUSER_HANDLE_ENTRY gHandleEntries = NULL;
 BOOLEAN gfLogonProcess  = FALSE;
 BOOLEAN gfServerProcess = FALSE;
 BOOLEAN gfFirstThread   = TRUE;
@@ -282,8 +280,6 @@ ClientThreadSetupHelper(BOOL IsCallback)
         g_ppi = ClientInfo->ppi; // Snapshot PI, used as pointer only!
         gSharedInfo = UserCon.siClient;
         gpsi = gSharedInfo.psi;
-        gHandleTable = gSharedInfo.aheList;
-        /* ReactOS-Specific! */ gHandleEntries = SharedPtrToUser(gHandleTable->handles);
 
         // ERR("1 SI 0x%x : HT 0x%x : D 0x%x\n",
         //     gSharedInfo.psi, gSharedInfo.aheList, gSharedInfo.ulSharedDelta);
@@ -436,8 +432,6 @@ Init(PUSERCONNECT UserCon /*PUSERSRV_API_CONNECTINFO*/)
         g_ppi = GetWin32ClientInfo()->ppi; // Snapshot PI, used as pointer only!
         gSharedInfo = UserCon->siClient;
         gpsi = gSharedInfo.psi;
-        gHandleTable = gSharedInfo.aheList;
-        /* ReactOS-Specific! */ gHandleEntries = SharedPtrToUser(gHandleTable->handles);
     }
 
     // FIXME: Yet another hack... This call should normally not be done here, but

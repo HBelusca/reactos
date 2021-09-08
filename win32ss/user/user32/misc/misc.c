@@ -193,27 +193,29 @@ TestState(PWND pWnd, UINT Flag)
     return FALSE;
 }
 
-PUSER_HANDLE_ENTRY
+static PHANDLEENTRY
 FASTCALL
 GetUser32Handle(HANDLE handle)
 {
+    PHANDLEENTRY handleTable;
     INT Index;
     USHORT generation;
 
     if (!handle) return NULL;
 
-    Index = (((UINT_PTR)handle & 0xffff) - FIRST_USER_HANDLE) >> 1;
+    handleTable = gSharedInfo.aheList;
+    ASSERT(handleTable);
 
-    if (Index < 0 || Index >= gHandleTable->nb_handles)
+    Index = (LOWORD(handle) - FIRST_USER_HANDLE) >> 1;
+    if (Index < 0 || Index >= gpsi->cHandleEntries)
         return NULL;
 
-    if (!gHandleEntries[Index].type || !gHandleEntries[Index].ptr)
+    if (!handleTable[Index].type || !handleTable[Index].ptr)
         return NULL;
 
-    generation = (UINT_PTR)handle >> 16;
-
-    if (generation == gHandleEntries[Index].generation || !generation || generation == 0xffff)
-        return &gHandleEntries[Index];
+    generation = HIWORD(handle);
+    if (generation == handleTable[Index].generation || !generation || generation == 0xFFFF)
+        return &handleTable[Index];
 
     return NULL;
 }
@@ -255,7 +257,7 @@ FASTCALL
 ValidateHandle(HANDLE handle, UINT uType)
 {
     PVOID ret;
-    PUSER_HANDLE_ENTRY pEntry;
+    PHANDLEENTRY pEntry;
 
     ASSERT(uType < TYPE_CTYPES);
 
@@ -313,7 +315,7 @@ FASTCALL
 ValidateHandleNoErr(HANDLE handle, UINT uType)
 {
     PVOID ret;
-    PUSER_HANDLE_ENTRY pEntry;
+    PHANDLEENTRY pEntry;
 
     ASSERT(uType < TYPE_CTYPES);
 
@@ -341,7 +343,7 @@ PCALLPROCDATA
 FASTCALL
 ValidateCallProc(HANDLE hCallProc)
 {
-    PUSER_HANDLE_ENTRY pEntry;
+    PHANDLEENTRY pEntry;
 
     PCALLPROCDATA CallProc = ValidateHandle(hCallProc, TYPE_CALLPROC);
 
