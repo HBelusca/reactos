@@ -9,7 +9,6 @@
 #include <win32k.h>
 DBG_DEFAULT_CHANNEL(UserObj);
 
-//int usedHandles=0;
 PUSER_HANDLE_TABLE gHandleTable = NULL;
 
 /* Forward declarations */
@@ -281,24 +280,29 @@ static const struct
 
 void DbgUserDumpHandleTable(VOID)
 {
-    int HandleCounts[TYPE_CTYPES];
+    static const PWCHAR TypeNames[TYPE_CTYPES] =
+    {
+        L"Free", L"Window", L"Menu", L"CursorIcon", L"SMWP", L"Hook", L"ClipBoardData", L"CallProc",
+        L"Accel", L"DDEaccess", L"DDEconv", L"DDExact", L"Monitor", L"KBDlayout", L"KBDfile",
+        L"Event", L"Timer", L"InputContext", L"HidData", L"DeviceInfo", L"TouchInput", L"GestureInfo"
+    };
+
+    ULONG HandleCounts[TYPE_CTYPES];
+    ULONG_PTR i;
     PPROCESSINFO ppiList;
-    int i;
-    PWCHAR TypeNames[] = {L"Free",L"Window",L"Menu", L"CursorIcon", L"SMWP", L"Hook", L"ClipBoardData", L"CallProc",
-                          L"Accel", L"DDEaccess", L"DDEconv", L"DDExact", L"Monitor", L"KBDlayout", L"KBDfile",
-                          L"Event", L"Timer", L"InputContext", L"HidData", L"DeviceInfo", L"TouchInput",L"GestureInfo"};
 
     ERR("Total handles count: %lu\n", gpsi->cHandleEntries);
 
-    memset(HandleCounts, 0, sizeof(HandleCounts));
+    RtlZeroMemory(HandleCounts, sizeof(HandleCounts));
 
     /* First of all count the number of handles per type */
     ppiList = gppiList;
     while (ppiList)
     {
-        ERR("Process %s (%p) handles count: %d\n\t", ppiList->peProcess->ImageFileName, ppiList->peProcess->UniqueProcessId, ppiList->UserHandleCount);
+        ERR("Process %s (%p) handles count: %d\n\t",
+            ppiList->peProcess->ImageFileName, ppiList->peProcess->UniqueProcessId, ppiList->UserHandleCount);
 
-        for (i = 1 ;i < TYPE_CTYPES; i++)
+        for (i = 1; i < TYPE_CTYPES; i++)
         {
             HandleCounts[i] += ppiList->DbgHandleCount[i];
 
@@ -312,8 +316,8 @@ void DbgUserDumpHandleTable(VOID)
     }
 
     /* Print total type counts */
-    ERR("Total handles of the running processes: \n\t");
-    for (i = 1 ;i < TYPE_CTYPES; i++)
+    ERR("Total handles of the running processes:\n\t");
+    for (i = 1; i < TYPE_CTYPES; i++)
     {
         DbgPrint("%S: %d, ", TypeNames[i], HandleCounts[i]);
         if (i % 6 == 0)
@@ -322,12 +326,14 @@ void DbgUserDumpHandleTable(VOID)
     DbgPrint("\n");
 
     /* Now count the handle counts that are allocated from the handle table */
-    memset(HandleCounts, 0, sizeof(HandleCounts));
+    RtlZeroMemory(HandleCounts, sizeof(HandleCounts));
     for (i = 0; i < gHandleTable->nb_handles; i++)
-         HandleCounts[gHandleTable->handles[i].type]++;
+    {
+        HandleCounts[gHandleTable->handles[i].type]++;
+    }
 
-    ERR("Total handles count allocated: \n\t");
-    for (i = 1 ;i < TYPE_CTYPES; i++)
+    ERR("Total handles count allocated:\n\t");
+    for (i = 1; i < TYPE_CTYPES; i++)
     {
         DbgPrint("%S: %d, ", TypeNames[i], HandleCounts[i]);
         if (i % 6 == 0)
@@ -338,120 +344,126 @@ void DbgUserDumpHandleTable(VOID)
 
 #endif
 
-PUSER_HANDLE_ENTRY handle_to_entry(PUSER_HANDLE_TABLE ht, HANDLE handle )
+PUSER_HANDLE_ENTRY handle_to_entry(PUSER_HANDLE_TABLE ht, HANDLE handle)
 {
-   unsigned short generation;
-   int index = (LOWORD(handle) - FIRST_USER_HANDLE) >> 1;
-   if (index < 0 || index >= ht->nb_handles)
-      return NULL;
-   if (!ht->handles[index].type)
-      return NULL;
-   generation = HIWORD(handle);
-   if (generation == ht->handles[index].generation || !generation || generation == 0xffff)
-      return &ht->handles[index];
-   return NULL;
+    INT index;
+    USHORT generation;
+
+    index = (LOWORD(handle) - FIRST_USER_HANDLE) >> 1;
+    if (index < 0 || index >= ht->nb_handles)
+        return NULL;
+
+    if (!ht->handles[index].type)
+        return NULL;
+
+    generation = HIWORD(handle);
+    if (generation == ht->handles[index].generation || !generation || generation == 0xFFFF)
+        return &ht->handles[index];
+
+    return NULL;
 }
 
-__inline static HANDLE entry_to_handle(PUSER_HANDLE_TABLE ht, PUSER_HANDLE_ENTRY ptr )
+__inline static HANDLE entry_to_handle(PUSER_HANDLE_TABLE ht, PUSER_HANDLE_ENTRY ptr)
 {
-   int index = ptr - ht->handles;
-   return (HANDLE)((((INT_PTR)index << 1) + FIRST_USER_HANDLE) + (ptr->generation << 16));
+    int index = ptr - ht->handles;
+    return (HANDLE)((((INT_PTR)index << 1) + FIRST_USER_HANDLE) + (ptr->generation << 16));
 }
 
 __inline static PUSER_HANDLE_ENTRY alloc_user_entry(PUSER_HANDLE_TABLE ht)
 {
-   PUSER_HANDLE_ENTRY entry;
-   TRACE("handles used %lu\n", gpsi->cHandleEntries);
+    PUSER_HANDLE_ENTRY entry;
 
-   if (ht->freelist)
-   {
-      entry = ht->freelist;
-      ht->freelist = entry->ptr;
+    TRACE("handles used %lu\n", gpsi->cHandleEntries);
 
-      gpsi->cHandleEntries++;
-      return entry;
-   }
+    if (ht->freelist)
+    {
+        entry = ht->freelist;
+        ht->freelist = entry->ptr;
 
-   if (ht->nb_handles >= ht->allocated_handles)  /* Need to grow the array */
-   {
-       ERR("Out of user handles! Used -> %lu, NM_Handle -> %d\n", gpsi->cHandleEntries, ht->nb_handles);
+        gpsi->cHandleEntries++;
+        return entry;
+    }
+
+    if (ht->nb_handles >= ht->allocated_handles)  /* Need to grow the array */
+    {
+        ERR("Out of user handles! Used -> %lu, NM_Handle -> %d\n", gpsi->cHandleEntries, ht->nb_handles);
 
 #if DBG
-       DbgUserDumpHandleTable();
+        DbgUserDumpHandleTable();
 #endif
 
-      return NULL;
+        return NULL;
 #if 0
-      PUSER_HANDLE_ENTRY new_handles;
-      /* Grow array by 50% (but at minimum 32 entries) */
-      int growth = max( 32, ht->allocated_handles / 2 );
-      int new_size = min( ht->allocated_handles + growth, (LAST_USER_HANDLE-FIRST_USER_HANDLE+1) >> 1 );
-      if (new_size <= ht->allocated_handles)
-         return NULL;
-      if (!(new_handles = UserHeapReAlloc( ht->handles, new_size * sizeof(*ht->handles) )))
-         return NULL;
-      ht->handles = new_handles;
-      ht->allocated_handles = new_size;
+        PUSER_HANDLE_ENTRY new_handles;
+        /* Grow array by 50% (but at minimum 32 entries) */
+        int growth = max( 32, ht->allocated_handles / 2 );
+        int new_size = min( ht->allocated_handles + growth, (LAST_USER_HANDLE-FIRST_USER_HANDLE+1) >> 1 );
+        if (new_size <= ht->allocated_handles)
+            return NULL;
+        if (!(new_handles = UserHeapReAlloc( ht->handles, new_size * sizeof(*ht->handles) )))
+            return NULL;
+        ht->handles = new_handles;
+        ht->allocated_handles = new_size;
 #endif
-   }
+    }
 
-   entry = &ht->handles[ht->nb_handles++];
+    entry = &ht->handles[ht->nb_handles++];
 
-   entry->generation = 1;
+    entry->generation = 1;
 
-   gpsi->cHandleEntries++;
+    gpsi->cHandleEntries++;
 
-   return entry;
+    return entry;
 }
 
 VOID UserInitHandleTable(PUSER_HANDLE_TABLE ht, PVOID mem, ULONG bytes)
 {
-   ht->freelist = NULL;
-   ht->handles = mem;
+    ht->freelist = NULL;
+    ht->handles = mem;
 
-   ht->nb_handles = 0;
-   ht->allocated_handles = bytes / sizeof(USER_HANDLE_ENTRY);
+    ht->nb_handles = 0;
+    ht->allocated_handles = bytes / sizeof(USER_HANDLE_ENTRY);
 }
 
 
 __inline static void *free_user_entry(PUSER_HANDLE_TABLE ht, PUSER_HANDLE_ENTRY entry)
 {
-   void *ret;
+    void *ret;
 
 #if DBG
-   {
-       PPROCESSINFO ppi;
-       switch (entry->type)
-       {
-           case TYPE_WINDOW:
-           case TYPE_HOOK:
-           case TYPE_WINEVENTHOOK:
-               ppi = ((PTHREADINFO)entry->pi)->ppi;
-               break;
-           case TYPE_MENU:
-           case TYPE_CURSOR:
-           case TYPE_CALLPROC:
-           case TYPE_ACCELTABLE:
-               ppi = entry->pi;
-               break;
-           default:
-               ppi = NULL;
-       }
-       if (ppi)
-           ppi->DbgHandleCount[entry->type]--;
-   }
+    {
+        PPROCESSINFO ppi;
+        switch (entry->type)
+        {
+            case TYPE_WINDOW:
+            case TYPE_HOOK:
+            case TYPE_WINEVENTHOOK:
+                ppi = ((PTHREADINFO)entry->pi)->ppi;
+                break;
+            case TYPE_MENU:
+            case TYPE_CURSOR:
+            case TYPE_CALLPROC:
+            case TYPE_ACCELTABLE:
+                ppi = entry->pi;
+                break;
+            default:
+                ppi = NULL;
+        }
+        if (ppi)
+            ppi->DbgHandleCount[entry->type]--;
+    }
 #endif
 
-   ret = entry->ptr;
-   entry->ptr  = ht->freelist;
-   entry->type = 0;
-   entry->flags = 0;
-   entry->pi = NULL;
-   ht->freelist  = entry;
+    ret = entry->ptr;
+    entry->ptr  = ht->freelist;
+    entry->type = 0;
+    entry->flags = 0;
+    entry->pi = NULL;
+    ht->freelist  = entry;
 
-   gpsi->cHandleEntries--;
+    gpsi->cHandleEntries--;
 
-   return ret;
+    return ret;
 }
 
 /* allocate a user handle for a given object */
@@ -461,158 +473,156 @@ HANDLE UserAllocHandle(
     _In_ HANDLE_TYPE type,
     _In_ PVOID HandleOwner)
 {
-   PUSER_HANDLE_ENTRY entry = alloc_user_entry(ht);
-   if (!entry)
-      return 0;
-   entry->ptr  = object;
-   entry->type = type;
-   entry->flags = 0;
-   entry->pi = HandleOwner;
-   if (++entry->generation >= 0xffff)
-      entry->generation = 1;
+    PUSER_HANDLE_ENTRY entry = alloc_user_entry(ht);
+    if (!entry)
+        return NULL;
 
-   /* We have created a handle, which is a reference! */
-   UserReferenceObject(object);
+    entry->ptr  = object;
+    entry->type = type;
+    entry->flags = 0;
+    entry->pi = HandleOwner;
+    if (++entry->generation >= 0xFFFF)
+        entry->generation = 1;
 
-   return entry_to_handle(ht, entry );
+    /* We have created a handle, which is a reference! */
+    UserReferenceObject(object);
+
+    return entry_to_handle(ht, entry);
 }
 
 /* return a pointer to a user object from its handle without setting an error */
-PVOID UserGetObjectNoErr(PUSER_HANDLE_TABLE ht, HANDLE handle, HANDLE_TYPE type )
+PVOID UserGetObjectNoErr(PUSER_HANDLE_TABLE ht, HANDLE handle, HANDLE_TYPE type)
 {
-   PUSER_HANDLE_ENTRY entry;
+    PUSER_HANDLE_ENTRY entry;
 
-   ASSERT(ht);
+    ASSERT(ht);
 
-   if (!(entry = handle_to_entry(ht, handle )) || entry->type != type)
-   {
-      return NULL;
-   }
-   return entry->ptr;
+    if (!(entry = handle_to_entry(ht, handle)) || entry->type != type)
+    {
+        return NULL;
+    }
+    return entry->ptr;
 }
 
 /* return a pointer to a user object from its handle */
-PVOID UserGetObject(PUSER_HANDLE_TABLE ht, HANDLE handle, HANDLE_TYPE type )
+PVOID UserGetObject(PUSER_HANDLE_TABLE ht, HANDLE handle, HANDLE_TYPE type)
 {
-   PUSER_HANDLE_ENTRY entry;
+    PUSER_HANDLE_ENTRY entry;
 
-   ASSERT(ht);
+    ASSERT(ht);
 
-   if (!(entry = handle_to_entry(ht, handle )) || entry->type != type)
-   {
-      EngSetLastError(ERROR_INVALID_HANDLE);
-      return NULL;
-   }
-   return entry->ptr;
+    if (!(entry = handle_to_entry(ht, handle)) || entry->type != type)
+    {
+        EngSetLastError(ERROR_INVALID_HANDLE);
+        return NULL;
+    }
+    return entry->ptr;
 }
 
 
 /* Get the full handle (32bit) for a possibly truncated (16bit) handle */
-HANDLE get_user_full_handle(PUSER_HANDLE_TABLE ht,  HANDLE handle )
+HANDLE get_user_full_handle(PUSER_HANDLE_TABLE ht, HANDLE handle)
 {
-   PUSER_HANDLE_ENTRY entry;
+    PUSER_HANDLE_ENTRY entry;
 
-   if ((ULONG_PTR)handle >> 16)
-      return handle;
-   if (!(entry = handle_to_entry(ht, handle )))
-      return handle;
-   return entry_to_handle( ht, entry );
+    if ((ULONG_PTR)handle >> 16)
+        return handle;
+    if (!(entry = handle_to_entry(ht, handle)))
+        return handle;
+    return entry_to_handle(ht, entry);
 }
 
 
 /* Same as get_user_object plus set the handle to the full 32-bit value */
-void *get_user_object_handle(PUSER_HANDLE_TABLE ht,  HANDLE* handle, HANDLE_TYPE type )
+PVOID get_user_object_handle(PUSER_HANDLE_TABLE ht, HANDLE* handle, HANDLE_TYPE type)
 {
-   PUSER_HANDLE_ENTRY entry;
+    PUSER_HANDLE_ENTRY entry;
 
-   if (!(entry = handle_to_entry(ht, *handle )) || entry->type != type)
-      return NULL;
-   *handle = entry_to_handle( ht, entry );
-   return entry->ptr;
+    if (!(entry = handle_to_entry(ht, *handle)) || entry->type != type)
+        return NULL;
+    *handle = entry_to_handle(ht, entry);
+    return entry->ptr;
 }
 
 
 
 BOOL FASTCALL UserCreateHandleTable(VOID)
 {
-   PVOID mem;
-   INT HandleCount = 1024 * 4;
+    PVOID mem;
+    INT HandleCount = 1024 * 4;
 
-   // FIXME: Don't alloc all at once! Must be mapped into umode also...
-   mem = UserHeapAlloc(sizeof(USER_HANDLE_ENTRY) * HandleCount);
-   if (!mem)
-   {
-      ERR("Failed creating handle table\n");
-      return FALSE;
-   }
+    // FIXME: Don't alloc all at once! Must be mapped into umode also...
+    mem = UserHeapAlloc(sizeof(USER_HANDLE_ENTRY) * HandleCount);
+    if (!mem)
+    {
+        ERR("Failed creating handle table\n");
+        return FALSE;
+    }
 
-   gHandleTable = UserHeapAlloc(sizeof(USER_HANDLE_TABLE));
-   if (gHandleTable == NULL)
-   {
-       UserHeapFree(mem);
-       ERR("Failed creating handle table\n");
-       return FALSE;
-   }
+    gHandleTable = UserHeapAlloc(sizeof(USER_HANDLE_TABLE));
+    if (gHandleTable == NULL)
+    {
+        UserHeapFree(mem);
+        ERR("Failed creating handle table\n");
+        return FALSE;
+    }
 
-   // FIXME: Make auto growable
-   UserInitHandleTable(gHandleTable, mem, sizeof(USER_HANDLE_ENTRY) * HandleCount);
+    // FIXME: Make auto growable
+    UserInitHandleTable(gHandleTable, mem, sizeof(USER_HANDLE_ENTRY) * HandleCount);
 
-   return TRUE;
+    return TRUE;
 }
 
-//
-// New
-//
 PVOID
 FASTCALL
-UserCreateObject( PUSER_HANDLE_TABLE ht,
-                  PDESKTOP pDesktop,
-                  PTHREADINFO pti,
-                  HANDLE* h,
-                  HANDLE_TYPE type,
-                  ULONG size)
+UserCreateObject(PUSER_HANDLE_TABLE ht,
+                 PDESKTOP pDesktop,
+                 PTHREADINFO pti,
+                 HANDLE* h,
+                 HANDLE_TYPE type,
+                 ULONG size)
 {
-   HANDLE hi;
-   PVOID Object;
-   PVOID ObjectOwner;
+    HANDLE hi;
+    PVOID Object;
+    PVOID ObjectOwner;
 
-   /* Some sanity checks. Other checks will be made in the allocator */
-   ASSERT(type < TYPE_CTYPES);
-   ASSERT(type != TYPE_FREE);
-   ASSERT(ht != NULL);
+    /* Some sanity checks. Other checks will be made in the allocator */
+    ASSERT(type < TYPE_CTYPES);
+    ASSERT(type != TYPE_FREE);
+    ASSERT(ht != NULL);
 
-   /* Allocate the object */
-   ASSERT(ObjectCallbacks[type].ObjectAlloc != NULL);
-   Object = ObjectCallbacks[type].ObjectAlloc(pDesktop, pti, size, &ObjectOwner);
-   if (!Object)
-   {
-       ERR("User object allocation failed. Out of memory!\n");
-       return NULL;
-   }
+    /* Allocate the object */
+    ASSERT(ObjectCallbacks[type].ObjectAlloc != NULL);
+    Object = ObjectCallbacks[type].ObjectAlloc(pDesktop, pti, size, &ObjectOwner);
+    if (!Object)
+    {
+        ERR("User object allocation failed. Out of memory!\n");
+        return NULL;
+    }
 
-   hi = UserAllocHandle(ht, Object, type, ObjectOwner);
-   if (hi == NULL)
-   {
-       ERR("Out of user handles!\n");
-       ObjectCallbacks[type].ObjectFree(Object);
-       return NULL;
-   }
+    hi = UserAllocHandle(ht, Object, type, ObjectOwner);
+    if (hi == NULL)
+    {
+        ERR("Out of user handles!\n");
+        ObjectCallbacks[type].ObjectFree(Object);
+        return NULL;
+    }
 
 #if DBG
-   if (pti)
-       pti->ppi->DbgHandleCount[type]++;
+    if (pti)
+        pti->ppi->DbgHandleCount[type]++;
 #endif
 
-   /* Give this object its identity. */
-   ((PHEAD)Object)->h = hi;
+    /* Give this object its identity */
+    ((PHEAD)Object)->h = hi;
 
-   /* The caller will get a locked object.
-    * Note: with the reference from the handle, that makes two */
-   UserReferenceObject(Object);
+    /* The caller will get a locked object.
+     * Note: with the reference from the handle, that makes two */
+    UserReferenceObject(Object);
 
-   if (h)
-      *h = hi;
-   return Object;
+    if (h)
+        *h = hi;
+    return Object;
 }
 
 // Win: HMMarkObjectDestroy
@@ -664,7 +674,7 @@ UserDereferenceObject(PVOID Object)
         ASSERT(type < TYPE_CTYPES);
 
         /* We can now get rid of everything */
-        free_user_entry(gHandleTable, entry );
+        free_user_entry(gHandleTable, entry);
 
 #if 0
         /* Call the object destructor */
@@ -683,57 +693,57 @@ UserDereferenceObject(PVOID Object)
 
 BOOL
 FASTCALL
-UserFreeHandle(PUSER_HANDLE_TABLE ht,  HANDLE handle )
+UserFreeHandle(PUSER_HANDLE_TABLE ht, HANDLE handle)
 {
-  PUSER_HANDLE_ENTRY entry;
+    PUSER_HANDLE_ENTRY entry;
 
-  if (!(entry = handle_to_entry( ht, handle )))
-  {
-     SetLastNtError( STATUS_INVALID_HANDLE );
-     return FALSE;
-  }
+    if (!(entry = handle_to_entry(ht, handle)))
+    {
+        SetLastNtError(STATUS_INVALID_HANDLE);
+        return FALSE;
+    }
 
-  entry->flags = HANDLEENTRY_INDESTROY;
+    entry->flags = HANDLEENTRY_INDESTROY;
 
-  return UserDereferenceObject(entry->ptr);
+    return UserDereferenceObject(entry->ptr);
 }
 
 BOOL
 FASTCALL
 UserObjectInDestroy(HANDLE h)
 {
-  PUSER_HANDLE_ENTRY entry;
+    PUSER_HANDLE_ENTRY entry;
 
-  if (!(entry = handle_to_entry( gHandleTable, h )))
-  {
-     SetLastNtError( STATUS_INVALID_HANDLE );
-     return TRUE;
-  }
-  return (entry->flags & HANDLEENTRY_INDESTROY);
+    if (!(entry = handle_to_entry(gHandleTable, h)))
+    {
+        SetLastNtError(STATUS_INVALID_HANDLE);
+        return TRUE;
+    }
+    return (entry->flags & HANDLEENTRY_INDESTROY);
 }
 
 BOOL
 FASTCALL
-UserDeleteObject(HANDLE h, HANDLE_TYPE type )
+UserDeleteObject(HANDLE h, HANDLE_TYPE type)
 {
-   PVOID body = UserGetObject(gHandleTable, h, type);
+    PVOID body = UserGetObject(gHandleTable, h, type);
 
-   if (!body) return FALSE;
+    if (!body) return FALSE;
 
-   ASSERT( ((PHEAD)body)->cLockObj >= 1);
-   ASSERT( ((PHEAD)body)->cLockObj < 0x10000);
+    ASSERT(((PHEAD)body)->cLockObj >= 1);
+    ASSERT(((PHEAD)body)->cLockObj < 0x10000);
 
-   return UserFreeHandle(gHandleTable, h);
+    return UserFreeHandle(gHandleTable, h);
 }
 
 VOID
 FASTCALL
 UserReferenceObject(PVOID obj)
 {
-   PHEAD ObjHead = obj;
-   ASSERT(ObjHead->cLockObj < 0x10000);
+    PHEAD ObjHead = obj;
+    ASSERT(ObjHead->cLockObj < 0x10000);
 
-   ObjHead->cLockObj++;
+    ObjHead->cLockObj++;
 }
 
 PVOID
@@ -745,7 +755,7 @@ UserReferenceObjectByHandle(HANDLE handle, HANDLE_TYPE type)
     object = UserGetObject(gHandleTable, handle, type);
     if (object)
     {
-       UserReferenceObject(object);
+        UserReferenceObject(object);
     }
     return object;
 }
@@ -792,48 +802,48 @@ APIENTRY
 NtUserValidateHandleSecure(
    HANDLE handle)
 {
-   UINT uType;
-   PPROCESSINFO ppi;
-   PUSER_HANDLE_ENTRY entry;
+    UINT uType;
+    PPROCESSINFO ppi;
+    PUSER_HANDLE_ENTRY entry;
 
-   DECLARE_RETURN(BOOL);
-   UserEnterExclusive();
+    DECLARE_RETURN(BOOL);
+    UserEnterExclusive();
 
-   if (!(entry = handle_to_entry(gHandleTable, handle )))
-   {
-      EngSetLastError(ERROR_INVALID_HANDLE);
-      RETURN( FALSE);
-   }
-   uType = entry->type;
-   switch (uType)
-   {
-       case TYPE_WINDOW:
-       case TYPE_INPUTCONTEXT:
-          ppi = ((PTHREADINFO)entry->pi)->ppi;
-          break;
-       case TYPE_MENU:
-       case TYPE_ACCELTABLE:
-       case TYPE_CURSOR:
-       case TYPE_HOOK:
-       case TYPE_CALLPROC:
-       case TYPE_SETWINDOWPOS:
-          ppi = entry->pi;
-          break;
-       default:
-          ppi = NULL;
-          break;
-   }
+    if (!(entry = handle_to_entry(gHandleTable, handle)))
+    {
+        EngSetLastError(ERROR_INVALID_HANDLE);
+        RETURN(FALSE);
+    }
+    uType = entry->type;
+    switch (uType)
+    {
+        case TYPE_WINDOW:
+        case TYPE_INPUTCONTEXT:
+            ppi = ((PTHREADINFO)entry->pi)->ppi;
+            break;
+        case TYPE_MENU:
+        case TYPE_ACCELTABLE:
+        case TYPE_CURSOR:
+        case TYPE_HOOK:
+        case TYPE_CALLPROC:
+        case TYPE_SETWINDOWPOS:
+            ppi = entry->pi;
+            break;
+        default:
+            ppi = NULL;
+            break;
+    }
 
-   if (!ppi) RETURN( FALSE);
+    if (!ppi) RETURN(FALSE);
 
-   // Same process job returns TRUE.
-   if (gptiCurrent->ppi->pW32Job == ppi->pW32Job) RETURN( TRUE);
+    // Same process job returns TRUE.
+    if (gptiCurrent->ppi->pW32Job == ppi->pW32Job) RETURN(TRUE);
 
-   RETURN( FALSE);
+    RETURN(FALSE);
 
 CLEANUP:
-   UserLeave();
-   END_CLEANUP;
+    UserLeave();
+    END_CLEANUP;
 }
 
 // Win: HMAssignmentLock

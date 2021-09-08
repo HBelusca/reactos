@@ -145,31 +145,34 @@ WINAPI
 IsGUIThread(
     BOOL bConvert)
 {
-  PTHREADINFO ti = (PTHREADINFO)NtCurrentTeb()->Win32ThreadInfo;
-  if (ti == NULL)
-  {
-    if(bConvert)
+    PTHREADINFO ti = (PTHREADINFO)NtCurrentTeb()->Win32ThreadInfo;
+    if (ti == NULL)
     {
-      NtUserGetThreadState(THREADSTATE_GETTHREADINFO);
-      if ((PTHREADINFO)NtCurrentTeb()->Win32ThreadInfo) return TRUE;
-      else
-         SetLastError(ERROR_NOT_ENOUGH_MEMORY);
+        if (bConvert)
+        {
+            NtUserGetThreadState(THREADSTATE_GETTHREADINFO);
+            if ((PTHREADINFO)NtCurrentTeb()->Win32ThreadInfo)
+                return TRUE;
+            else
+                SetLastError(ERROR_NOT_ENOUGH_MEMORY);
+        }
+        return FALSE;
     }
-    return FALSE;
-  }
-  else
-    return TRUE;
+    else
+    {
+        return TRUE;
+    }
 }
 
 BOOL
 FASTCALL
 TestWindowProcess(PWND Wnd)
 {
-   if (Wnd->head.pti == (PTHREADINFO)NtCurrentTeb()->Win32ThreadInfo)
-      return TRUE;
-   else
-      return (NtUserQueryWindow(Wnd->head.h, QUERY_WINDOW_UNIQUE_PROCESS_ID) ==
-              (DWORD_PTR)NtCurrentTeb()->ClientId.UniqueProcess );
+    if (Wnd->head.pti == (PTHREADINFO)NtCurrentTeb()->Win32ThreadInfo)
+        return TRUE;
+    else
+        return (NtUserQueryWindow(Wnd->head.h, QUERY_WINDOW_UNIQUE_PROCESS_ID) ==
+                (DWORD_PTR)NtCurrentTeb()->ClientId.UniqueProcess );
 }
 
 BOOL
@@ -180,8 +183,8 @@ TestState(PWND pWnd, UINT Flag)
     bit = 1 << LOWORD(Flag);
     switch(HIWORD(Flag))
     {
-       case 0: 
-          return (pWnd->state & bit); 
+       case 0:
+          return (pWnd->state & bit);
        case 1:
           return (pWnd->state2 & bit);
        case 2:
@@ -251,55 +254,55 @@ PVOID
 FASTCALL
 ValidateHandle(HANDLE handle, UINT uType)
 {
-  PVOID ret;
-  PUSER_HANDLE_ENTRY pEntry;
+    PVOID ret;
+    PUSER_HANDLE_ENTRY pEntry;
 
-  ASSERT(uType < TYPE_CTYPES);
+    ASSERT(uType < TYPE_CTYPES);
 
-  pEntry = GetUser32Handle(handle);
+    pEntry = GetUser32Handle(handle);
 
-  if (pEntry && uType == 0)
-      uType = pEntry->type;
+    if (pEntry && uType == 0)
+        uType = pEntry->type;
 
-// Must have an entry and must be the same type!
-  if ( (!pEntry) ||
-        (pEntry->type != uType) ||
-        !pEntry->ptr ||
-        (pEntry->flags & HANDLEENTRY_DESTROY) || (pEntry->flags & HANDLEENTRY_INDESTROY) )
-  {
-     switch ( uType )
-     {  // Test (with wine too) confirms these results!
-        case TYPE_WINDOW:
-          SetLastError(ERROR_INVALID_WINDOW_HANDLE);
-          break;
-        case TYPE_MENU:
-          SetLastError(ERROR_INVALID_MENU_HANDLE);
-          break;
-        case TYPE_CURSOR:
-          SetLastError(ERROR_INVALID_CURSOR_HANDLE);
-          break;
-        case TYPE_SETWINDOWPOS:
-          SetLastError(ERROR_INVALID_DWP_HANDLE);
-          break;
-        case TYPE_HOOK:
-          SetLastError(ERROR_INVALID_HOOK_HANDLE);
-          break;
-        case TYPE_ACCELTABLE:
-          SetLastError(ERROR_INVALID_ACCEL_HANDLE);
-          break;
-        default:
-          SetLastError(ERROR_INVALID_HANDLE);
-          break;
+    // Must have an entry and must be the same type!
+    if ( (!pEntry) ||
+         (pEntry->type != uType) ||
+         !pEntry->ptr ||
+         (pEntry->flags & HANDLEENTRY_DESTROY) || (pEntry->flags & HANDLEENTRY_INDESTROY) )
+    {
+        switch ( uType )
+        {  // Test (with wine too) confirms these results!
+            case TYPE_WINDOW:
+                SetLastError(ERROR_INVALID_WINDOW_HANDLE);
+                break;
+            case TYPE_MENU:
+                SetLastError(ERROR_INVALID_MENU_HANDLE);
+                break;
+            case TYPE_CURSOR:
+                SetLastError(ERROR_INVALID_CURSOR_HANDLE);
+                break;
+            case TYPE_SETWINDOWPOS:
+                SetLastError(ERROR_INVALID_DWP_HANDLE);
+                break;
+            case TYPE_HOOK:
+                SetLastError(ERROR_INVALID_HOOK_HANDLE);
+                break;
+            case TYPE_ACCELTABLE:
+                SetLastError(ERROR_INVALID_ACCEL_HANDLE);
+                break;
+            default:
+                SetLastError(ERROR_INVALID_HANDLE);
+                break;
+        }
+        return NULL;
     }
-    return NULL;
-  }
 
-  if (g_ObjectHeapTypeShared[uType])
-    ret = SharedPtrToUser(pEntry->ptr);
-  else
-    ret = DesktopPtrToUser(pEntry->ptr);
+    if (g_ObjectHeapTypeShared[uType])
+        ret = SharedPtrToUser(pEntry->ptr);
+    else
+        ret = DesktopPtrToUser(pEntry->ptr);
 
-  return ret;
+    return ret;
 }
 
 //
@@ -309,26 +312,26 @@ PVOID
 FASTCALL
 ValidateHandleNoErr(HANDLE handle, UINT uType)
 {
-  PVOID ret;
-  PUSER_HANDLE_ENTRY pEntry;
+    PVOID ret;
+    PUSER_HANDLE_ENTRY pEntry;
 
-  ASSERT(uType < TYPE_CTYPES);
+    ASSERT(uType < TYPE_CTYPES);
 
-  pEntry = GetUser32Handle(handle);
+    pEntry = GetUser32Handle(handle);
 
-  if (pEntry && uType == 0)
-      uType = pEntry->type;
+    if (pEntry && uType == 0)
+        uType = pEntry->type;
 
-// Must have an entry and must be the same type!
-  if ( (!pEntry) || (pEntry->type != uType) || !pEntry->ptr )
-    return NULL;
+    // Must have an entry and must be the same type!
+    if ( (!pEntry) || (pEntry->type != uType) || !pEntry->ptr )
+        return NULL;
 
-  if (g_ObjectHeapTypeShared[uType])
-    ret = SharedPtrToUser(pEntry->ptr);
-  else
-    ret = DesktopPtrToUser(pEntry->ptr);
+    if (g_ObjectHeapTypeShared[uType])
+        ret = SharedPtrToUser(pEntry->ptr);
+    else
+        ret = DesktopPtrToUser(pEntry->ptr);
 
-  return ret;
+    return ret;
 }
 
 //
@@ -338,16 +341,16 @@ PCALLPROCDATA
 FASTCALL
 ValidateCallProc(HANDLE hCallProc)
 {
-  PUSER_HANDLE_ENTRY pEntry;
+    PUSER_HANDLE_ENTRY pEntry;
 
-  PCALLPROCDATA CallProc = ValidateHandle(hCallProc, TYPE_CALLPROC);
+    PCALLPROCDATA CallProc = ValidateHandle(hCallProc, TYPE_CALLPROC);
 
-  pEntry = GetUser32Handle(hCallProc);
+    pEntry = GetUser32Handle(hCallProc);
 
-  if (CallProc != NULL && pEntry->ppi == g_ppi)
-     return CallProc;
+    if (CallProc != NULL && pEntry->ppi == g_ppi)
+        return CallProc;
 
-  return NULL;
+    return NULL;
 }
 
 
@@ -418,72 +421,88 @@ ValidateHwndOrDesk(HWND hwnd)
 /*
  * @implemented
  */
-DWORD WINAPI WCSToMBEx(WORD CodePage,LPWSTR UnicodeString,LONG UnicodeSize,LPSTR *MBString,LONG MBSize,BOOL Allocate)
+DWORD
+WINAPI
+WCSToMBEx(
+    WORD CodePage,
+    LPWSTR UnicodeString,
+    LONG UnicodeSize,
+    LPSTR *MBString,
+    LONG MBSize,
+    BOOL Allocate)
 {
-	DWORD Size;
-	if (UnicodeSize == -1)
-	{
-		UnicodeSize = wcslen(UnicodeString)+1;
-	}
-	if (MBSize == -1)
-	{
-		if (!Allocate)
-		{
-			return 0;
-		}
-		MBSize = UnicodeSize * 2;
-	}
-	if (Allocate)
-	{
-		LPSTR SafeString = RtlAllocateHeap(GetProcessHeap(), 0, MBSize);
+    DWORD Size;
+    if (UnicodeSize == -1)
+    {
+        UnicodeSize = wcslen(UnicodeString)+1;
+    }
+    if (MBSize == -1)
+    {
+        if (!Allocate)
+        {
+            return 0;
+        }
+        MBSize = UnicodeSize * 2;
+    }
+    if (Allocate)
+    {
+        LPSTR SafeString = RtlAllocateHeap(GetProcessHeap(), 0, MBSize);
         if (SafeString == NULL)
             return 0;
         *MBString = SafeString;
-	}
-	if (CodePage == 0)
-	{
-		RtlUnicodeToMultiByteN(*MBString,MBSize,&Size,UnicodeString,UnicodeSize);
-	}
-	else
-	{
-		WideCharToMultiByte(CodePage,0,UnicodeString,UnicodeSize,*MBString,MBSize,0,0);
-	}
-	return UnicodeSize;
+    }
+    if (CodePage == 0)
+    {
+        RtlUnicodeToMultiByteN(*MBString,MBSize,&Size,UnicodeString,UnicodeSize);
+    }
+    else
+    {
+        WideCharToMultiByte(CodePage,0,UnicodeString,UnicodeSize,*MBString,MBSize,0,0);
+    }
+    return UnicodeSize;
 }
 
 /*
  * @implemented
  */
-DWORD WINAPI MBToWCSEx(WORD CodePage,LPSTR MBString,LONG MBSize,LPWSTR *UnicodeString,LONG UnicodeSize,BOOL Allocate)
+DWORD
+WINAPI
+MBToWCSEx(
+    WORD CodePage,
+    LPSTR MBString,
+    LONG MBSize,
+    LPWSTR *UnicodeString,
+    LONG UnicodeSize,
+    BOOL Allocate)
 {
-	DWORD Size;
-	if (MBSize == -1)
-	{
-		MBSize = strlen(MBString)+1;
-	}
-	if (UnicodeSize == -1)
-	{
-		if (!Allocate)
-		{
-			return 0;
-		}
-		UnicodeSize = MBSize;
-	}
-	if (Allocate)
-	{
-		LPWSTR SafeString = RtlAllocateHeap(GetProcessHeap(), 0, UnicodeSize);
+    DWORD Size;
+    if (MBSize == -1)
+    {
+        MBSize = strlen(MBString)+1;
+    }
+    if (UnicodeSize == -1)
+    {
+        if (!Allocate)
+        {
+            return 0;
+        }
+        UnicodeSize = MBSize;
+    }
+    if (Allocate)
+    {
+        LPWSTR SafeString = RtlAllocateHeap(GetProcessHeap(), 0, UnicodeSize);
         if (SafeString == NULL)
             return 0;
         *UnicodeString = SafeString;
-	}
-	UnicodeSize *= sizeof(WCHAR);
-	if (CodePage == 0)
-	{
-		RtlMultiByteToUnicodeN(*UnicodeString,UnicodeSize,&Size,MBString,MBSize);
-	}
-	else
-	{
-		Size = MultiByteToWideChar(CodePage,0,MBString,MBSize,*UnicodeString,UnicodeSize);
-	}
-	return Size;
+    }
+    UnicodeSize *= sizeof(WCHAR);
+    if (CodePage == 0)
+    {
+        RtlMultiByteToUnicodeN(*UnicodeString,UnicodeSize,&Size,MBString,MBSize);
+    }
+    else
+    {
+        Size = MultiByteToWideChar(CodePage,0,MBString,MBSize,*UnicodeString,UnicodeSize);
+    }
+    return Size;
 }
