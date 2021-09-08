@@ -633,7 +633,7 @@ UserMarkObjectDestroy(PVOID Object)
     PUSER_HANDLE_ENTRY entry;
     PHEAD ObjHead = Object;
 
-    entry = handle_to_entry(gHandleTable, ObjHead->h);
+    entry = handle_to_entry(&gHandleTable, ObjHead->h);
 
     ASSERT(entry != NULL);
 
@@ -663,7 +663,7 @@ UserDereferenceObject(PVOID Object)
         PUSER_HANDLE_ENTRY entry;
         HANDLE_TYPE type;
 
-        entry = handle_to_entry(gHandleTable, ObjHead->h);
+        entry = handle_to_entry(&gHandleTable, ObjHead->h);
 
         ASSERT(entry != NULL);
         /* The entry should be marked as in deletion */
@@ -674,7 +674,7 @@ UserDereferenceObject(PVOID Object)
         ASSERT(type < TYPE_CTYPES);
 
         /* We can now get rid of everything */
-        free_user_entry(gHandleTable, entry);
+        free_user_entry(&gHandleTable, entry);
 
 #if 0
         /* Call the object destructor */
@@ -714,7 +714,7 @@ UserObjectInDestroy(HANDLE h)
 {
     PUSER_HANDLE_ENTRY entry;
 
-    if (!(entry = handle_to_entry(gHandleTable, h)))
+    if (!(entry = handle_to_entry(&gHandleTable, h)))
     {
         SetLastNtError(STATUS_INVALID_HANDLE);
         return TRUE;
@@ -726,14 +726,14 @@ BOOL
 FASTCALL
 UserDeleteObject(HANDLE h, HANDLE_TYPE type)
 {
-    PVOID body = UserGetObject(gHandleTable, h, type);
+    PVOID body = UserGetObject(&gHandleTable, h, type);
 
     if (!body) return FALSE;
 
     ASSERT(((PHEAD)body)->cLockObj >= 1);
     ASSERT(((PHEAD)body)->cLockObj < 0x10000);
 
-    return UserFreeHandle(gHandleTable, h);
+    return UserFreeHandle(&gHandleTable, h);
 }
 
 VOID
@@ -752,7 +752,7 @@ UserReferenceObjectByHandle(HANDLE handle, HANDLE_TYPE type)
 {
     PVOID object;
 
-    object = UserGetObject(gHandleTable, handle, type);
+    object = UserGetObject(&gHandleTable, handle, type);
     if (object)
     {
         UserReferenceObject(object);
@@ -809,7 +809,7 @@ NtUserValidateHandleSecure(
     DECLARE_RETURN(BOOL);
     UserEnterExclusive();
 
-    if (!(entry = handle_to_entry(gHandleTable, handle)))
+    if (!(entry = handle_to_entry(&gHandleTable, handle)))
     {
         EngSetLastError(ERROR_INVALID_HANDLE);
         RETURN(FALSE);

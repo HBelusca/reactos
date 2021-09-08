@@ -734,7 +734,7 @@ IntCreateMenu(
 {
    PMENU Menu;
 
-   Menu = (PMENU)UserCreateObject( gHandleTable,
+   Menu = (PMENU)UserCreateObject( &gHandleTable,
                                           Desktop,
                                           ppi->ptiList,
                                           Handle,
@@ -828,7 +828,7 @@ IntCloneMenu(PMENU Source)
       return NULL;
 
    /* A menu is valid process wide. We can pass to the object manager any thread ptr */
-   Menu = (PMENU)UserCreateObject( gHandleTable,
+   Menu = (PMENU)UserCreateObject( &gHandleTable,
                                    Source->head.rpdesk,
                                    ((PPROCESSINFO)Source->head.hTaskWow)->ptiList,
                                    &hMenu,

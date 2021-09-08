@@ -284,7 +284,7 @@ IntCreateCurIconHandle(BOOLEAN Animated)
     HANDLE hCurIcon;
 
     CurIcon = UserCreateObject(
-        gHandleTable,
+        &gHandleTable,
         NULL,
         GetW32ThreadInfo(),
         &hCurIcon,
@@ -1074,7 +1074,7 @@ NtUserSetCursor(
 
     // If returning an old cursor than validate it, Justin Case!
     if ( pcurOld &&
-        (pcurOld = UserGetObjectNoErr(gHandleTable, UserHMGetHandle(pcurOld), TYPE_CURSOR)))
+        (pcurOld = UserGetObjectNoErr(&gHandleTable, UserHMGetHandle(pcurOld), TYPE_CURSOR)))
     {
         hOldCursor = UserHMGetHandle(pcurOld);
     /*

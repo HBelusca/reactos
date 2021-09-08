@@ -366,7 +366,7 @@ NtUserSetWinEventHook(
        pti = PsGetCurrentThreadWin32Thread();
    }
    // Creator, pti is set here.
-   pEH = UserCreateObject(gHandleTable, NULL, pti, &Handle, TYPE_WINEVENTHOOK, sizeof(EVENTHOOK));
+   pEH = UserCreateObject(&gHandleTable, NULL, pti, &Handle, TYPE_WINEVENTHOOK, sizeof(EVENTHOOK));
    if (pEH)
    {
       InsertTailList(&GlobalEvents->Events, &pEH->Chain);
@@ -419,7 +419,7 @@ NtUserUnhookWinEvent(
 
    UserEnterExclusive();
 
-   pEH = (PEVENTHOOK)UserGetObject(gHandleTable, hWinEventHook, TYPE_WINEVENTHOOK);
+   pEH = (PEVENTHOOK)UserGetObject(&gHandleTable, hWinEventHook, TYPE_WINEVENTHOOK);
    if (pEH)
    {
       Ret = IntRemoveEvent(pEH);

@@ -117,7 +117,7 @@ PWND FASTCALL VerifyWnd(PWND pWnd)
 
 PWND FASTCALL ValidateHwndNoErr(HWND hWnd)
 {
-   if (hWnd) return (PWND)UserGetObjectNoErr(gHandleTable, hWnd, TYPE_WINDOW);
+   if (hWnd) return (PWND)UserGetObjectNoErr(&gHandleTable, hWnd, TYPE_WINDOW);
    return NULL;
 }
 
@@ -133,7 +133,7 @@ PWND FASTCALL UserGetWindowObject(HWND hWnd)
       return NULL;
    }
 
-   Window = (PWND)UserGetObject(gHandleTable, hWnd, TYPE_WINDOW);
+   Window = (PWND)UserGetObject(&gHandleTable, hWnd, TYPE_WINDOW);
    if (!Window || 0 != (Window->state & WNDS_DESTROYED))
    {
       EngSetLastError(ERROR_INVALID_WINDOW_HANDLE);
@@ -842,7 +842,7 @@ IntSetWindowProc(PWND pWnd,
 
    if (IsCallProcHandle(NewWndProc))
    {
-      CallProc = UserGetObject(gHandleTable, NewWndProc, TYPE_CALLPROC);
+      CallProc = UserGetObject(&gHandleTable, NewWndProc, TYPE_CALLPROC);
       if (CallProc)
       {  // Reset new WndProc.
          NewWndProc = CallProc->pfnClientPrevious;
@@ -1842,7 +1842,7 @@ PWND FASTCALL IntCreateWindow(CREATESTRUCTW* Cs,
    Cs->dwExStyle &= ~WS_EX_SETANSICREATOR;
 
    /* Allocate the new window */
-   pWnd = (PWND) UserCreateObject( gHandleTable,
+   pWnd = (PWND) UserCreateObject( &gHandleTable,
                                    pdeskCreated ? pdeskCreated : pti->rpdesk,
                                    pti,
                                   (PHANDLE)&hWnd,

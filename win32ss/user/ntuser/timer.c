@@ -54,7 +54,7 @@ CreateTimer(VOID)
   HANDLE Handle;
   PTIMER Ret = NULL;
 
-  Ret = UserCreateObject(gHandleTable, NULL, NULL, &Handle, TYPE_TIMER, sizeof(TIMER));
+  Ret = UserCreateObject(&gHandleTable, NULL, NULL, &Handle, TYPE_TIMER, sizeof(TIMER));
   if (Ret)
   {
      Ret->head.h = Handle;
