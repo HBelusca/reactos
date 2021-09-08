@@ -13,27 +13,19 @@ struct tagPOPUPMENU;
 #define HANDLEENTRY_DESTROY 1
 #define HANDLEENTRY_INDESTROY 2
 
-typedef struct _USER_HANDLE_ENTRY
+typedef struct _HANDLEENTRY
 {
-    void *ptr; /* pointer to object */
+    PVOID ptr; /* pointer to object */
     union
     {
         PVOID pi;
-        struct _THREADINFO *pti; /* pointer to Win32ThreadInfo */
+        struct _THREADINFO *pti;  /* pointer to Win32ThreadInfo */
         struct _PROCESSINFO *ppi; /* pointer to W32ProcessInfo */
     };
-    unsigned char type; /* object type (0 if free) */
-    unsigned char flags;
-    unsigned short generation; /* generation counter */
-} USER_HANDLE_ENTRY, *PUSER_HANDLE_ENTRY;
-
-typedef struct _USER_HANDLE_TABLE
-{
-    PUSER_HANDLE_ENTRY handles;
-    PUSER_HANDLE_ENTRY freelist;
-    int nb_handles;
-    int allocated_handles;
-} USER_HANDLE_TABLE, *PUSER_HANDLE_TABLE;
+    BYTE type;       /* HANDLE_TYPE: object type (0 if free) */
+    BYTE flags;
+    WORD generation; /* generation counter */
+} HANDLEENTRY, *PHANDLEENTRY;
 
 typedef enum _HANDLE_TYPE
 {
@@ -1095,7 +1087,7 @@ typedef struct _WNDMSG
 typedef struct _SHAREDINFO
 {
     PSERVERINFO psi;         /* Global Server Info */
-    PVOID aheList;           /* Handle Entry List */
+    PHANDLEENTRY aheList;    /* Handle Entry List */
     PVOID pDispInfo;         /* Global PDISPLAYINFO pointer */
     ULONG_PTR ulSharedDelta; /* Shared USER mapped section delta */
     WNDMSG awmControl[FNID_NUM];

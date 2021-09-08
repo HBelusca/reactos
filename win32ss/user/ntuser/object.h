@@ -6,7 +6,25 @@ typedef struct _USER_REFERENCE_ENTRY
    PVOID obj;
 } USER_REFERENCE_ENTRY, *PUSER_REFERENCE_ENTRY;
 
-extern PUSER_HANDLE_TABLE gHandleTable;
+typedef struct _HANDLEENTRY USER_HANDLE_ENTRY, *PUSER_HANDLE_ENTRY;
+
+typedef struct _USER_HANDLE_TABLE
+{
+    /* Pointers to shared data */
+    PUSER_HANDLE_ENTRY* handles;  /* Pointer to gSharedInfo.aheList, the handle table */
+    PULONG_PTR allocated_handles; /* Pointer to SERVERINFO::cHandleEntries, the total
+                                   * number of allocated handle entries in the table;
+                                   * also related to SERVERINFO::cbHandleTable */
+
+    /* Private information */
+    PUSER_HANDLE_ENTRY freelist;  /* Linked list of free handle entries in the region below nb_handles */
+    ULONG_PTR nb_handles;         /* Start index of the continuous free handle entries region
+                                   * [nb_handles; *allocated_handles] */
+    ULONG_PTR nb_used_handles;    /* (STATISTICS ONLY) Number of used (non-free) handles */
+} USER_HANDLE_TABLE, *PUSER_HANDLE_TABLE;
+
+extern USER_HANDLE_TABLE gHandleTable;
+
 VOID FASTCALL UserReferenceObject(PVOID obj);
 PVOID FASTCALL UserReferenceObjectByHandle(HANDLE handle, HANDLE_TYPE type);
 BOOL FASTCALL UserDereferenceObject(PVOID obj);
