@@ -9,7 +9,7 @@
 #include <win32k.h>
 DBG_DEFAULT_CHANNEL(UserObj);
 
-PUSER_HANDLE_TABLE gHandleTable = NULL;
+USER_HANDLE_TABLE gHandleTable = { NULL };
 
 /* Forward declarations */
 _Success_(return!=NULL)
@@ -291,7 +291,7 @@ void DbgUserDumpHandleTable(VOID)
     ULONG_PTR i;
     PPROCESSINFO ppiList;
 
-    ERR("Total handles count: %lu\n", gpsi->cHandleEntries);
+    ERR("Total handles count: %lu\n", gHandleTable.nb_used_handles);
 
     RtlZeroMemory(HandleCounts, sizeof(HandleCounts));
 
@@ -327,9 +327,9 @@ void DbgUserDumpHandleTable(VOID)
 
     /* Now count the handle counts that are allocated from the handle table */
     RtlZeroMemory(HandleCounts, sizeof(HandleCounts));
-    for (i = 0; i < gHandleTable->nb_handles; i++)
+    for (i = 0; i < gHandleTable.nb_handles; i++)
     {
-        HandleCounts[gHandleTable->handles[i].type]++;
+        HandleCounts[(*gHandleTable.handles)[i].type]++;
     }
 
     ERR("Total handles count allocated:\n\t");
@@ -353,19 +353,22 @@ PUSER_HANDLE_ENTRY handle_to_entry(PUSER_HANDLE_TABLE ht, HANDLE handle)
     if (index < 0 || index >= ht->nb_handles)
         return NULL;
 
-    if (!ht->handles[index].type)
+    if (!(*ht->handles)[index].type)
         return NULL;
 
     generation = HIWORD(handle);
-    if (generation == ht->handles[index].generation || !generation || generation == 0xFFFF)
-        return &ht->handles[index];
+    if (generation == (*ht->handles)[index].generation || !generation || generation == 0xFFFF)
+        return &(*ht->handles)[index];
 
     return NULL;
 }
 
 __inline static HANDLE entry_to_handle(PUSER_HANDLE_TABLE ht, PUSER_HANDLE_ENTRY ptr)
 {
-    int index = ptr - ht->handles;
+    ULONG_PTR index;
+
+    ASSERT((ULONG_PTR)ptr >= (ULONG_PTR)*ht->handles);
+    index = ptr - *ht->handles;
     return (HANDLE)((((INT_PTR)index << 1) + FIRST_USER_HANDLE) + (ptr->generation << 16));
 }
 
@@ -373,62 +376,83 @@ __inline static PUSER_HANDLE_ENTRY alloc_user_entry(PUSER_HANDLE_TABLE ht)
 {
     PUSER_HANDLE_ENTRY entry;
 
-    TRACE("handles used %lu\n", gpsi->cHandleEntries);
+    TRACE("Handles used: %lu\n", ht->nb_used_handles);
 
+    /* Find the next free handle */
     if (ht->freelist)
     {
+        ULONG_PTR index;
+
+        /* Unlink the first head entry from the freelist */
         entry = ht->freelist;
         ht->freelist = entry->ptr;
 
-        gpsi->cHandleEntries++;
+        /* Calculate its index, verify it's in the region below nb_handles */
+        ASSERT((ULONG_PTR)entry >= (ULONG_PTR)*ht->handles);
+        index = entry - *ht->handles;
+        ASSERT(index < ht->nb_handles);
+
+        ht->nb_used_handles++;
         return entry;
     }
 
-    if (ht->nb_handles >= ht->allocated_handles)  /* Need to grow the array */
+    /* If there are no more free entries, need to grow the array */
+    if (ht->nb_handles >= *ht->allocated_handles)
     {
-        ERR("Out of user handles! Used -> %lu, NM_Handle -> %d\n", gpsi->cHandleEntries, ht->nb_handles);
+        ERR("Out of user handles! Used -> %lu, NM_Handle -> %lu, Alloc -> %lu\n",
+            ht->nb_used_handles, ht->nb_handles, *ht->allocated_handles);
 
 #if DBG
         DbgUserDumpHandleTable();
 #endif
 
         return NULL;
+
+        // TODO: Implement growing!
 #if 0
         PUSER_HANDLE_ENTRY new_handles;
         /* Grow array by 50% (but at minimum 32 entries) */
-        int growth = max( 32, ht->allocated_handles / 2 );
-        int new_size = min( ht->allocated_handles + growth, (LAST_USER_HANDLE-FIRST_USER_HANDLE+1) >> 1 );
-        if (new_size <= ht->allocated_handles)
+        ULONG_PTR growth = max( 32, *ht->allocated_handles / 2 );
+        ULONG_PTR new_size = min( *ht->allocated_handles + growth, (LAST_USER_HANDLE-FIRST_USER_HANDLE+1) >> 1 );
+        if (new_size <= *ht->allocated_handles)
             return NULL;
-        if (!(new_handles = UserHeapReAlloc( ht->handles, new_size * sizeof(*ht->handles) )))
+        if (!(new_handles = UserHeapReAlloc(*ht->handles, new_size * sizeof(**ht->handles))))
             return NULL;
-        ht->handles = new_handles;
-        ht->allocated_handles = new_size;
+        *ht->handles = new_handles;
+        *ht->allocated_handles = new_size;
 #endif
     }
 
-    entry = &ht->handles[ht->nb_handles++];
-
+    /* Get the next free entry in the continuous free handle entries region (and shrink it) */
+    entry = &(*ht->handles)[ht->nb_handles++];
     entry->generation = 1;
 
-    gpsi->cHandleEntries++;
-
+    ht->nb_used_handles++;
     return entry;
 }
 
-VOID UserInitHandleTable(PUSER_HANDLE_TABLE ht, PVOID mem, ULONG bytes)
+static VOID
+UserInitHandleTable(
+    _Inout_ PUSER_HANDLE_TABLE ht,
+    _In_ PVOID mem,
+    _In_ SIZE_T bytes)
 {
     ht->freelist = NULL;
-    ht->handles = mem;
+    *ht->handles = mem;
 
-    ht->nb_handles = 0;
-    ht->allocated_handles = bytes / sizeof(USER_HANDLE_ENTRY);
+    ht->nb_handles = ht->nb_used_handles = 0;
+    *ht->allocated_handles = bytes / sizeof(USER_HANDLE_ENTRY);
 }
 
 
-__inline static void *free_user_entry(PUSER_HANDLE_TABLE ht, PUSER_HANDLE_ENTRY entry)
+__inline
+static PVOID
+free_user_entry(
+    _Inout_ PUSER_HANDLE_TABLE ht,
+    _In_ PUSER_HANDLE_ENTRY entry)
 {
-    void *ret;
+    PVOID ret;
+    ULONG_PTR index;
 
 #if DBG
     {
@@ -454,15 +478,34 @@ __inline static void *free_user_entry(PUSER_HANDLE_TABLE ht, PUSER_HANDLE_ENTRY 
     }
 #endif
 
+    /* Retrieve the original pointed object */
     ret = entry->ptr;
-    entry->ptr  = ht->freelist;
-    entry->type = 0;
+
+    /* Calculate its index, verify it's in the region below nb_handles */
+    ASSERT((ULONG_PTR)entry >= (ULONG_PTR)*ht->handles);
+    index = entry - *ht->handles;
+    ASSERT(index < ht->nb_handles);
+
+    /* If we are just below the existing continuous
+     * free handle entries region, just enlarge it. */
+    if (index + 1 == ht->nb_handles)
+    {
+        ht->nb_handles = index;
+        entry->ptr = NULL;
+    }
+    /* Otherwise, link the entry at the top of the freelist */
+    else
+    {
+        entry->ptr   = ht->freelist;
+        ht->freelist = entry;
+    }
+
+    /* Invalidate the entry */
+    entry->type  = TYPE_FREE;
     entry->flags = 0;
     entry->pi = NULL;
-    ht->freelist  = entry;
 
-    gpsi->cHandleEntries--;
-
+    ht->nb_used_handles--;
     return ret;
 }
 
@@ -549,26 +592,29 @@ PVOID get_user_object_handle(PUSER_HANDLE_TABLE ht, HANDLE* handle, HANDLE_TYPE 
 BOOL FASTCALL UserCreateHandleTable(VOID)
 {
     PVOID mem;
+    SIZE_T Size;
     INT HandleCount = 1024 * 4;
 
+    RtlZeroMemory(&gHandleTable, sizeof(gHandleTable));
+    ASSERT(gpsi);
+    gHandleTable.handles = &gSharedInfo.aheList;
+    gHandleTable.allocated_handles = &gpsi->cHandleEntries;
+
+    *gHandleTable.handles = NULL;
+    *gHandleTable.allocated_handles = 0;
+
     // FIXME: Don't alloc all at once! Must be mapped into umode also...
-    mem = UserHeapAlloc(sizeof(USER_HANDLE_ENTRY) * HandleCount);
+    Size = sizeof(USER_HANDLE_ENTRY) * HandleCount;
+    mem = UserHeapAlloc(Size);
     if (!mem)
     {
         ERR("Failed creating handle table\n");
         return FALSE;
     }
-
-    gHandleTable = UserHeapAlloc(sizeof(USER_HANDLE_TABLE));
-    if (gHandleTable == NULL)
-    {
-        UserHeapFree(mem);
-        ERR("Failed creating handle table\n");
-        return FALSE;
-    }
+    RtlZeroMemory(mem, Size);
 
     // FIXME: Make auto growable
-    UserInitHandleTable(gHandleTable, mem, sizeof(USER_HANDLE_ENTRY) * HandleCount);
+    UserInitHandleTable(&gHandleTable, mem, Size);
 
     return TRUE;
 }
@@ -763,14 +809,14 @@ UserReferenceObjectByHandle(HANDLE handle, HANDLE_TYPE type)
 BOOLEAN
 UserDestroyObjectsForOwner(PUSER_HANDLE_TABLE Table, PVOID Owner)
 {
-    int i;
+    ULONG_PTR i;
     PUSER_HANDLE_ENTRY Entry;
     BOOLEAN Ret = TRUE;
 
     /* Sweep the whole handle table */
-    for (i = 0; i < Table->allocated_handles; i++)
+    for (i = 0; i < *Table->allocated_handles; i++)
     {
-        Entry = &Table->handles[i];
+        Entry = &(*Table->handles)[i];
 
         if (Entry->pi != Owner)
             continue;
