@@ -530,14 +530,13 @@ NtUserProcessConnect(
 #define SERVER_TO_CLIENT(ptr) \
     ((PVOID)((ULONG_PTR)ptr - pUserConnect->siClient.ulSharedDelta))
 
-        ASSERT(gpsi);
-        ASSERT(gHandleTable);
+        ASSERT(gpsi && (gSharedInfo.psi == gpsi));
+        ASSERT(gSharedInfo.aheList && (&gSharedInfo.aheList == gHandleTable.handles));
 
-        pUserConnect->siClient.psi       = SERVER_TO_CLIENT(gpsi);
-        pUserConnect->siClient.aheList   = SERVER_TO_CLIENT(gHandleTable);
+        pUserConnect->siClient.psi       = SERVER_TO_CLIENT(gSharedInfo.psi);
+        pUserConnect->siClient.aheList   = SERVER_TO_CLIENT(gSharedInfo.aheList);
         pUserConnect->siClient.pDispInfo = NULL;
 
-        // NOTE: kernel server should also have a SHAREDINFO gSharedInfo;
         // FIXME: These USER window-proc data should be used somehow!
 
         pUserConnect->siClient.DefWindowMsgs.maxMsgs     = 0;
