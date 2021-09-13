@@ -317,8 +317,8 @@ function(generate_import_lib _libname _dllname _spec_file)
     # Generate the def and asm stub files
     add_custom_command(
         OUTPUT ${_asm_stubs_file} ${_def_file}
-        COMMAND native-spec2def --ms -a=${SPEC2DEF_ARCH} --implib -n=${_dllname} -d=${_def_file} -l=${_asm_stubs_file} ${CMAKE_CURRENT_SOURCE_DIR}/${_spec_file}
-        DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${_spec_file} native-spec2def)
+        COMMAND native-spec2def --ms -a=${SPEC2DEF_ARCH} --implib -n=${_dllname} -d=${_def_file} -l=${_asm_stubs_file} ${_spec_file}
+        DEPENDS ${_spec_file} native-spec2def)
 
     # Compile the generated asm stub file
     if(ARCH STREQUAL "arm" OR ARCH STREQUAL "arm64")
@@ -367,7 +367,7 @@ else()
 endif()
 function(spec2def _dllname _spec_file)
 
-    cmake_parse_arguments(__spec2def "ADD_IMPORTLIB;NO_PRIVATE_WARNINGS;WITH_RELAY" "VERSION" "" ${ARGN})
+    cmake_parse_arguments(__spec2def "ADD_IMPORTLIB;NO_PRIVATE_WARNINGS;WITH_RELAY;PREPROCESS" "VERSION" "" ${ARGN})
 
     # Get library basename
     get_filename_component(_file ${_dllname} NAME_WE)
@@ -385,14 +385,54 @@ function(spec2def _dllname _spec_file)
         set(__version_arg "--version=0x${__spec2def_VERSION}")
     endif()
 
+message("Running spec2def() for \"${_spec_file}\"")
+
+    # Build the full file path
+    set(_spec_full_file ${CMAKE_CURRENT_SOURCE_DIR}/${_spec_file})
+
+    # Preprocess if needed, compatible with C preprocessor
+    if(__spec2def_PREPROCESS)
+        get_filename_component(_subdir "${_spec_file}" DIRECTORY)
+        get_filename_component(_basename "${_spec_file}" NAME_WE)
+        get_filename_component(_ext "${_spec_file}" EXT)
+        set(_preprocess_file ${CMAKE_CURRENT_BINARY_DIR}/${_subdir}/${_basename}.out${_ext})
+
+message(" --> Preprocessing spec file \"${_spec_full_file}\" to \"${_preprocess_file}\"")
+
+        # Perform replacements
+        file(WRITE ${_preprocess_file} "")
+        file(STRINGS ${_spec_full_file} __lines)
+        foreach(__line IN LISTS __lines)
+            # Replace '#'-comments by ';' ones, so as not to collide with the C preprocessor.
+            string(REGEX REPLACE "^(\\s*)\\#(.*)$" "\\1;\\2" __line "${__line}")
+            # Then, restore the '$'-tokens that tag C preprocessor tokens back to '#' ones.
+            string(REGEX REPLACE "^(\\s*)\\$(.*)$" "\\1#\\2" __line "${__line}")
+            file(APPEND ${_preprocess_file} "${__line}\n")
+        endforeach()
+
+        # Pass it through the preprocessor
+        set(_spec_full_file ${CMAKE_CURRENT_BINARY_DIR}/${_subdir}/${_basename}${_ext})
+
+message(" --> Resetting spec file to \"${_spec_full_file}\"")
+
+        get_defines(_defines)
+        get_includes(_includes)
+        add_custom_command(
+            OUTPUT ${_spec_full_file}
+            COMMAND cl /nologo /X ${_includes} ${_defines} /EP /c ${_preprocess_file} > ${_spec_full_file}
+            DEPENDS ${_preprocess_file})
+    endif()
+
+message(" --> Calling spec2def on file \"${_spec_full_file}\"")
+
     # Generate exports def and C stubs file for the DLL
     add_custom_command(
         OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/${_file}.def ${CMAKE_CURRENT_BINARY_DIR}/${_file}_stubs.c
-        COMMAND native-spec2def --ms -a=${SPEC2DEF_ARCH} -n=${_dllname} -d=${CMAKE_CURRENT_BINARY_DIR}/${_file}.def -s=${CMAKE_CURRENT_BINARY_DIR}/${_file}_stubs.c ${__with_relay_arg} ${__version_arg} ${CMAKE_CURRENT_SOURCE_DIR}/${_spec_file}
-        DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${_spec_file} native-spec2def)
+        COMMAND native-spec2def --ms -a=${SPEC2DEF_ARCH} -n=${_dllname} -d=${CMAKE_CURRENT_BINARY_DIR}/${_file}.def -s=${CMAKE_CURRENT_BINARY_DIR}/${_file}_stubs.c ${__with_relay_arg} ${__version_arg} ${_spec_full_file}
+        DEPENDS ${_spec_full_file} native-spec2def)
 
     if(__spec2def_ADD_IMPORTLIB)
-        generate_import_lib(lib${_file} ${_dllname} ${_spec_file})
+        generate_import_lib(lib${_file} ${_dllname} ${_spec_full_file})
         if(__spec2def_NO_PRIVATE_WARNINGS)
             set_property(TARGET lib${_file} APPEND PROPERTY STATIC_LIBRARY_OPTIONS /ignore:4104)
         endif()

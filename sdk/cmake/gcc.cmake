@@ -348,8 +348,8 @@ function(generate_import_lib _libname _dllname _spec_file)
     # Generate the def for the import lib
     add_custom_command(
         OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/${_libname}_implib.def
-        COMMAND native-spec2def -n=${_dllname} -a=${ARCH2} ${ARGN} --implib -d=${CMAKE_CURRENT_BINARY_DIR}/${_libname}_implib.def ${CMAKE_CURRENT_SOURCE_DIR}/${_spec_file}
-        DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${_spec_file} native-spec2def)
+        COMMAND native-spec2def -n=${_dllname} -a=${ARCH2} ${ARGN} --implib -d=${CMAKE_CURRENT_BINARY_DIR}/${_libname}_implib.def ${_spec_file}
+        DEPENDS ${_spec_file} native-spec2def)
 
     # With this, we let DLLTOOL create an import library
     set(LIBRARY_PRIVATE_DIR ${CMAKE_CURRENT_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/${_libname}.dir)
@@ -398,7 +398,7 @@ endfunction()
 
 function(spec2def _dllname _spec_file)
 
-    cmake_parse_arguments(__spec2def "ADD_IMPORTLIB;NO_PRIVATE_WARNINGS;WITH_RELAY" "VERSION" "" ${ARGN})
+    cmake_parse_arguments(__spec2def "ADD_IMPORTLIB;NO_PRIVATE_WARNINGS;WITH_RELAY;PREPROCESS" "VERSION" "" ${ARGN})
 
     # Get library basename
     get_filename_component(_file ${_dllname} NAME_WE)
@@ -428,7 +428,7 @@ function(spec2def _dllname _spec_file)
             set(_extraflags --no-private-warnings)
         endif()
 
-        generate_import_lib(lib${_file} ${_dllname} ${_spec_file} ${_extraflags})
+        generate_import_lib(lib${_file} ${_dllname} ${CMAKE_CURRENT_SOURCE_DIR}/${_spec_file} ${_extraflags})
     endif()
 endfunction()
 
