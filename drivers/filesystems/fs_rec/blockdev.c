@@ -16,7 +16,6 @@
 /* FUNCTIONS ****************************************************************/
 
 BOOLEAN
-NTAPI
 FsRecGetDeviceSectors(IN PDEVICE_OBJECT DeviceObject,
                       IN ULONG SectorSize,
                       OUT PLARGE_INTEGER SectorCount)
@@ -72,7 +71,6 @@ FsRecGetDeviceSectors(IN PDEVICE_OBJECT DeviceObject,
 }
 
 BOOLEAN
-NTAPI
 FsRecGetDeviceSectorSize(IN PDEVICE_OBJECT DeviceObject,
                          OUT PULONG SectorSize)
 {
@@ -142,7 +140,6 @@ FsRecGetDeviceSectorSize(IN PDEVICE_OBJECT DeviceObject,
 }
 
 BOOLEAN
-NTAPI
 FsRecReadBlock(IN PDEVICE_OBJECT DeviceObject,
                IN PLARGE_INTEGER Offset,
                IN ULONG Length,

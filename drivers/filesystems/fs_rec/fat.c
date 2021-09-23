@@ -14,8 +14,7 @@
 
 /* FUNCTIONS ****************************************************************/
 
-BOOLEAN
-NTAPI
+static BOOLEAN
 FsRecIsFatVolume(IN PPACKED_BOOT_SECTOR PackedBootSector)
 {
     BIOS_PARAMETER_BLOCK Bpb;
@@ -23,7 +22,7 @@ FsRecIsFatVolume(IN PPACKED_BOOT_SECTOR PackedBootSector)
 
     PAGED_CODE();
 
-    RtlZeroMemory(&Bpb, sizeof(BIOS_PARAMETER_BLOCK));
+    RtlZeroMemory(&Bpb, sizeof(Bpb));
 
     /* Unpack the BPB and do a small fix up */
     FatUnpackBios(&Bpb, &PackedBootSector->PackedBpb);
@@ -95,7 +94,6 @@ FsRecIsFatVolume(IN PPACKED_BOOT_SECTOR PackedBootSector)
 }
 
 NTSTATUS
-NTAPI
 FsRecVfatFsControl(IN PDEVICE_OBJECT DeviceObject,
                    IN PIRP Irp)
 {
@@ -139,7 +137,7 @@ FsRecVfatFsControl(IN PDEVICE_OBJECT DeviceObject,
                 }
 
                 /* Free the boot sector if we have one */
-                ExFreePool(Bpb);
+                ExFreePoolWithTag(Bpb, FSREC_TAG);
             }
             else
             {

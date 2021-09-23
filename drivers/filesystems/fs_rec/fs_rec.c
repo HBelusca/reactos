@@ -10,12 +10,11 @@
 
 #include "fs_rec.h"
 
-PKEVENT FsRecLoadSync;
+static PKEVENT FsRecLoadSync;
 
 /* FUNCTIONS ****************************************************************/
 
 NTSTATUS
-NTAPI
 FsRecLoadFileSystem(IN PDEVICE_OBJECT DeviceObject,
                     IN PWCHAR DriverServiceName)
 {
@@ -198,11 +197,11 @@ FsRecUnload(IN PDRIVER_OBJECT DriverObject)
     }
 
     /* Free the lock */
-    ExFreePool(FsRecLoadSync);
+    ExFreePoolWithTag(FsRecLoadSync, FSREC_TAG);
 }
 
-NTSTATUS
-NTAPI
+CODE_SEG("INIT")
+static NTSTATUS
 FsRecRegisterFs(IN PDRIVER_OBJECT DriverObject,
                 IN PDEVICE_OBJECT ParentObject OPTIONAL,
                 OUT PDEVICE_OBJECT *NewDeviceObject OPTIONAL,
@@ -223,15 +222,18 @@ FsRecRegisterFs(IN PDRIVER_OBJECT DriverObject,
     /* Assume failure */
     if (NewDeviceObject) *NewDeviceObject = NULL;
 
-    /* Setup the attributes */
+    /*
+     * Try to open the file system driver's device to see whether it's already
+     * loaded. If so then don't do anything else; otherwise create a recognizer
+     * device for it.
+     */
     RtlInitUnicodeString(&DeviceName, FsName);
     InitializeObjectAttributes(&ObjectAttributes,
                                &DeviceName,
                                OBJ_CASE_INSENSITIVE,
-                               0,
+                               NULL,
                                NULL);
 
-    /* Open the device */
     Status = ZwCreateFile(&FileHandle,
                           SYNCHRONIZE,
                           &ObjectAttributes,
@@ -257,7 +259,7 @@ FsRecRegisterFs(IN PDRIVER_OBJECT DriverObject,
     /* If we succeeded, there's no point in trying this again */
     if (NT_SUCCESS(Status)) return STATUS_IMAGE_ALREADY_LOADED;
 
-    /* Create recognizer device object */
+    /* Create the recognizer device object */
     RtlInitUnicodeString(&DeviceName, RecognizerName);
     Status = IoCreateDevice(DriverObject,
                             sizeof(DEVICE_EXTENSION),
@@ -300,6 +302,7 @@ FsRecRegisterFs(IN PDRIVER_OBJECT DriverObject,
     return Status;
 }
 
+CODE_SEG("INIT")
 NTSTATUS
 NTAPI
 DriverEntry(IN PDRIVER_OBJECT DriverObject,

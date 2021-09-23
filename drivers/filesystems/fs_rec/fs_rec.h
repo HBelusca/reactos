@@ -26,7 +26,6 @@
 /* Filesystem Types */
 typedef enum _FILE_SYSTEM_TYPE
 {
-    FS_TYPE_UNUSED,
     FS_TYPE_VFAT,
     FS_TYPE_NTFS,
     FS_TYPE_CDFS,
@@ -55,63 +54,54 @@ typedef struct _DEVICE_EXTENSION
 
 /* Prototypes */
 NTSTATUS
-NTAPI
 FsRecCdfsFsControl(
     IN PDEVICE_OBJECT DeviceObject,
     IN PIRP Irp
 );
 
 NTSTATUS
-NTAPI
 FsRecVfatFsControl(
     IN PDEVICE_OBJECT DeviceObject,
     IN PIRP Irp
 );
 
 NTSTATUS
-NTAPI
 FsRecNtfsFsControl(
     IN PDEVICE_OBJECT DeviceObject,
     IN PIRP Irp
 );
 
 NTSTATUS
-NTAPI
 FsRecUdfsFsControl(
     IN PDEVICE_OBJECT DeviceObject,
     IN PIRP Irp
 );
 
 NTSTATUS
-NTAPI
 FsRecExt2FsControl(
     IN PDEVICE_OBJECT DeviceObject,
     IN PIRP Irp
 );
 
 NTSTATUS
-NTAPI
 FsRecBtrfsFsControl(
     IN PDEVICE_OBJECT DeviceObject,
     IN PIRP Irp
 );
 
 NTSTATUS
-NTAPI
 FsRecReiserfsFsControl(
     IN PDEVICE_OBJECT DeviceObject,
     IN PIRP Irp
 );
 
 NTSTATUS
-NTAPI
 FsRecFfsFsControl(
     IN PDEVICE_OBJECT DeviceObject,
     IN PIRP Irp
 );
 
 BOOLEAN
-NTAPI
 FsRecGetDeviceSectors(
     IN PDEVICE_OBJECT DeviceObject,
     IN ULONG SectorSize,
@@ -119,14 +109,12 @@ FsRecGetDeviceSectors(
 );
 
 BOOLEAN
-NTAPI
 FsRecGetDeviceSectorSize(
     IN PDEVICE_OBJECT DeviceObject,
     OUT PULONG SectorSize
 );
 
 BOOLEAN
-NTAPI
 FsRecReadBlock(
     IN PDEVICE_OBJECT DeviceObject,
     IN PLARGE_INTEGER Offset,
@@ -137,7 +125,6 @@ FsRecReadBlock(
 );
 
 NTSTATUS
-NTAPI
 FsRecLoadFileSystem(
     IN PDEVICE_OBJECT DeviceObject,
     IN PWCHAR DriverServiceName

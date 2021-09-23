@@ -13,8 +13,7 @@
 
 /* FUNCTIONS ****************************************************************/
 
-BOOLEAN
-NTAPI
+static BOOLEAN
 FsRecIsReiserfsVolume(IN PRFSD_SUPER_BLOCK sb)
 {
     static const UCHAR sz_MagicKey[] = REISER2FS_SUPER_MAGIC_STRING;
@@ -36,7 +35,6 @@ FsRecIsReiserfsVolume(IN PRFSD_SUPER_BLOCK sb)
 }
 
 NTSTATUS
-NTAPI
 FsRecReiserfsFsControl(IN PDEVICE_OBJECT DeviceObject,
                        IN PIRP Irp)
 {
@@ -81,7 +79,7 @@ FsRecReiserfsFsControl(IN PDEVICE_OBJECT DeviceObject,
                 }
 
                 /* Free the boot sector if we have one */
-                ExFreePool(Spb);
+                ExFreePoolWithTag(Spb, FSREC_TAG);
             }
             else
             {

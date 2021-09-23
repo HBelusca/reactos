@@ -9,7 +9,8 @@
 /* INCLUDES ******************************************************************/
 
 #include <bl.h>
-#include <fs_rec/fs_rec.h>
+#include <fs_rec/fat.h>
+#include <fs_rec/fat_ntfs.h>
 
 /* DATA VARIABLES ************************************************************/
 

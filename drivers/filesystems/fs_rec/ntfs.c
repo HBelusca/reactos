@@ -13,8 +13,7 @@
 
 /* FUNCTIONS ****************************************************************/
 
-BOOLEAN
-NTAPI
+static BOOLEAN
 FsRecIsNtfsVolume(IN PPACKED_BOOT_SECTOR BootSector,
                   IN ULONG BytesPerSector,
                   IN PLARGE_INTEGER  NumberOfSectors)
@@ -45,7 +44,6 @@ FsRecIsNtfsVolume(IN PPACKED_BOOT_SECTOR BootSector,
 }
 
 NTSTATUS
-NTAPI
 FsRecNtfsFsControl(IN PDEVICE_OBJECT DeviceObject,
                    IN PIRP Irp)
 {
@@ -122,7 +120,7 @@ FsRecNtfsFsControl(IN PDEVICE_OBJECT DeviceObject,
                 }
 
                 /* Free the boot sector if we have one */
-                ExFreePool(Bpb);
+                ExFreePoolWithTag(Bpb, FSREC_TAG);
             }
             break;
 

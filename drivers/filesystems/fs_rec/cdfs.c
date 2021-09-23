@@ -17,8 +17,7 @@
 
 /* FUNCTIONS ****************************************************************/
 
-BOOLEAN
-NTAPI
+static BOOLEAN
 FsRecIsCdfsVolume(IN PDEVICE_OBJECT DeviceObject,
                   IN ULONG SectorSize)
 {
@@ -56,13 +55,12 @@ FsRecIsCdfsVolume(IN PDEVICE_OBJECT DeviceObject,
 
 Cleanup:
     if (pVdHeader)
-        ExFreePool(pVdHeader);
+        ExFreePoolWithTag(pVdHeader, FSREC_TAG);
 
     return bReturnValue;
 }
 
 NTSTATUS
-NTAPI
 FsRecCdfsFsControl(IN PDEVICE_OBJECT DeviceObject,
                    IN PIRP Irp)
 {

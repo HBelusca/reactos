@@ -17,8 +17,7 @@
 
 /* FUNCTIONS ****************************************************************/
 
-BOOLEAN
-NTAPI
+static BOOLEAN
 FsRecIsUdfsVolume(IN PDEVICE_OBJECT DeviceObject,
                   IN ULONG SectorSize)
 {
@@ -97,12 +96,11 @@ FsRecIsUdfsVolume(IN PDEVICE_OBJECT DeviceObject,
     }
 
     if (VolumeStructDesc)
-        ExFreePool(VolumeStructDesc);
+        ExFreePoolWithTag(VolumeStructDesc, FSREC_TAG);
     return ret;
 }
 
 NTSTATUS
-NTAPI
 FsRecUdfsFsControl(IN PDEVICE_OBJECT DeviceObject,
                    IN PIRP Irp)
 {

@@ -13,29 +13,25 @@
 
 /* FUNCTIONS ****************************************************************/
 
-BOOLEAN
-NTAPI
+static BOOLEAN
 FsRecIsFfsDiskLabel(IN PFFSD_DISKLABEL dl)
 {
     return (dl->d_magic == DISKMAGIC);
 }
 
-BOOLEAN
-NTAPI
+static BOOLEAN
 FsRecIsFfs1Volume(IN PFFSD_SUPER_BLOCK sb)
 {
     return (sb->fs_magic == FS_UFS1_MAGIC);
 }
 
-BOOLEAN
-NTAPI
+static BOOLEAN
 FsRecIsFfs2Volume(IN PFFSD_SUPER_BLOCK sb)
 {
     return (sb->fs_magic == FS_UFS2_MAGIC);
 }
 
 NTSTATUS
-NTAPI
 FsRecFfsFsControl(IN PDEVICE_OBJECT DeviceObject,
                   IN PIRP Irp)
 {
@@ -103,7 +99,7 @@ FsRecFfsFsControl(IN PDEVICE_OBJECT DeviceObject,
                                     else
                                     {
                                         /* Free the boot sector if we have one */
-                                        ExFreePool(Spb);
+                                        ExFreePoolWithTag(Spb, FSREC_TAG);
                                         Spb = NULL;
 
                                         Offset.QuadPart = FSOffset+SBLOCK_UFS2;
@@ -125,7 +121,7 @@ FsRecFfsFsControl(IN PDEVICE_OBJECT DeviceObject,
                                 }
 
                                 /* Free the boot sector if we have one */
-                                ExFreePool(Spb);
+                                ExFreePoolWithTag(Spb, FSREC_TAG);
                                 Spb = NULL;
                             }
                         }
@@ -150,7 +146,7 @@ FsRecFfsFsControl(IN PDEVICE_OBJECT DeviceObject,
                             else
                             {
                                 /* Free the boot sector if we have one */
-                                ExFreePool(Spb);
+                                ExFreePoolWithTag(Spb, FSREC_TAG);
                                 Spb = NULL;
 
                                 Offset.QuadPart = FSOffset+SBLOCK_UFS2;
@@ -172,13 +168,13 @@ FsRecFfsFsControl(IN PDEVICE_OBJECT DeviceObject,
                         }
 
                         /* Free the boot sector if we have one */
-                        ExFreePool(Spb);
+                        ExFreePoolWithTag(Spb, FSREC_TAG);
                         Spb = NULL;
                     }
                 }
 
                 /* Free the boot sector if we have one */
-                ExFreePool(DiskLabel);
+                ExFreePoolWithTag(DiskLabel, FSREC_TAG);
             }
             else
             {

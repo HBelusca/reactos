@@ -13,8 +13,7 @@
 
 /* FUNCTIONS ****************************************************************/
 
-BOOLEAN
-NTAPI
+static BOOLEAN
 FsRecIsBtrfsVolume(IN PBTRFS_SUPER_BLOCK SuperBlock)
 {
     /* Just check for magic */
@@ -22,7 +21,6 @@ FsRecIsBtrfsVolume(IN PBTRFS_SUPER_BLOCK SuperBlock)
 }
 
 NTSTATUS
-NTAPI
 FsRecBtrfsFsControl(IN PDEVICE_OBJECT DeviceObject,
                     IN PIRP Irp)
 {
@@ -67,7 +65,7 @@ FsRecBtrfsFsControl(IN PDEVICE_OBJECT DeviceObject,
                 }
 
                 /* Free the boot sector if we have one */
-                ExFreePool(Spb);
+                ExFreePoolWithTag(Spb, FSREC_TAG);
             }
             else
             {

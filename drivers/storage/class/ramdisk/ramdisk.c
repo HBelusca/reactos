@@ -23,7 +23,8 @@
 #include <rtlfuncs.h>
 #include <arc/arc.h>
 #include <reactos/drivers/ntddrdsk.h>
-#include "../../../filesystems/fs_rec/fs_rec.h"
+#include "../../../filesystems/fs_rec/fat.h"
+#include "../../../filesystems/fs_rec/fat_ntfs.h"
 #include <stdio.h>
 #define NDEBUG
 #include <debug.h>
