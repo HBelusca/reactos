@@ -197,7 +197,7 @@ IoShutdownSystem(IN ULONG Phase)
     }
     else if (Phase == 1)
     {
-        /* Acquire resource forever */
+        /* Acquire the FS lock forever so that no other FS operations can take place */
         ExAcquireResourceExclusiveLite(&IopDatabaseResource, TRUE);
 
         /* Shutdown disk file systems */
@@ -253,8 +253,7 @@ IoShutdownSystem(IN ULONG Phase)
             /* Go to the next entry */
             ListEntry = ExInterlockedRemoveHeadList(&LastChanceShutdownListHead,
                                                     &ShutdownListLock);
-         }
-
+        }
     }
 }
 

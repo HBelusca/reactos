@@ -493,7 +493,7 @@ IopMountVolume(IN PDEVICE_OBJECT DeviceObject,
         }
     }
 
-    /* Acquire the FS Lock*/
+    /* Acquire the FS Lock */
     KeEnterCriticalRegion();
     ExAcquireResourceSharedLite(&IopDatabaseResource, TRUE);
 

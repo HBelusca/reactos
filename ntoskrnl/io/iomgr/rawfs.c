@@ -191,6 +191,7 @@ RawClose(IN PVCB Vcb,
          IN PIO_STACK_LOCATION IoStackLocation)
 {
     NTSTATUS Status;
+
     PAGED_CODE();
 
     DPRINT("RawClose(%p, %p, %p)\n", Vcb, Irp, IoStackLocation);
@@ -234,6 +235,7 @@ RawCreate(IN PVCB Vcb,
     USHORT ShareAccess;
     ACCESS_MASK DesiredAccess;
     BOOLEAN Deleted = FALSE;
+
     PAGED_CODE();
 
     DPRINT("RawCreate(%p, %p, %p)\n", Vcb, Irp, IoStackLocation);
@@ -342,6 +344,7 @@ RawReadWriteDeviceControl(IN PVCB Vcb,
                           IN PIO_STACK_LOCATION IoStackLocation)
 {
     NTSTATUS Status;
+
     PAGED_CODE();
 
     DPRINT("RawReadWriteDeviceControl(%p, %p, %p)\n", Vcb, Irp, IoStackLocation);
@@ -384,6 +387,7 @@ RawMountVolume(IN PIO_STACK_LOCATION IoStackLocation)
     PDEVICE_OBJECT DeviceObject;
     PVOLUME_DEVICE_OBJECT Volume;
     PFILE_OBJECT FileObject = NULL;
+
     PAGED_CODE();
 
     DPRINT("RawMountVolume(%p)\n", IoStackLocation);
@@ -466,6 +470,7 @@ RawUserFsCtrl(IN PIO_STACK_LOCATION IoStackLocation,
               IN PVCB Vcb)
 {
     NTSTATUS Status;
+
     PAGED_CODE();
 
     DPRINT("RawUserFsCtrl(%p, %p)\n", IoStackLocation, Vcb);
@@ -579,6 +584,7 @@ RawFileSystemControl(IN PVCB Vcb,
                      IN PIO_STACK_LOCATION IoStackLocation)
 {
     NTSTATUS Status;
+
     PAGED_CODE();
 
     DPRINT("RawFileSystemControl(%p, %p, %p)\n", Vcb, Irp, IoStackLocation);
@@ -647,6 +653,7 @@ RawQueryInformation(IN PVCB Vcb,
     NTSTATUS Status = STATUS_INVALID_DEVICE_REQUEST;
     PULONG Length;
     PFILE_POSITION_INFORMATION Buffer;
+
     PAGED_CODE();
 
     DPRINT("RawQueryInformation(%p, %p, %p)\n", Vcb, Irp, IoStackLocation);
@@ -694,6 +701,7 @@ RawSetInformation(IN PVCB Vcb,
     NTSTATUS Status = STATUS_INVALID_DEVICE_REQUEST;
     PFILE_POSITION_INFORMATION Buffer;
     PDEVICE_OBJECT DeviceObject;
+
     PAGED_CODE();
 
     DPRINT("RawSetInformation(%p, %p, %p)\n", Vcb, Irp, IoStackLocation);
@@ -767,6 +775,7 @@ RawQueryFsSizeInfo(IN PVCB Vcb,
     DISK_GEOMETRY DiskGeometry;
     PARTITION_INFORMATION PartitionInformation;
     BOOLEAN DiskHasPartitions;
+
     PAGED_CODE();
 
     DPRINT("RawQueryFsSizeInfo(%p, %p, %p)\n", Vcb, Buffer, Length);
@@ -925,8 +934,9 @@ RawQueryFsAttributeInfo(IN PVCB Vcb,
                         IN PFILE_FS_ATTRIBUTE_INFORMATION Buffer,
                         IN OUT PULONG Length)
 {
-    const WCHAR szRawFSName[] = L"RAW";
+    static const WCHAR szRawFSName[] = L"RAW";
     ULONG ReturnLength;
+
     PAGED_CODE();
 
     DPRINT("RawQueryFsAttributeInfo(%p, %p, %p)\n", Vcb, Buffer, Length);
@@ -956,6 +966,7 @@ RawQueryVolumeInformation(IN PVCB Vcb,
     NTSTATUS Status;
     ULONG Length;
     PVOID Buffer;
+
     PAGED_CODE();
 
     DPRINT("RawQueryVolumeInformation(%p, %p, %p)\n", Vcb, Irp, IoStackLocation);
@@ -1014,6 +1025,7 @@ RawCleanup(IN PVCB Vcb,
            IN PIO_STACK_LOCATION IoStackLocation)
 {
     NTSTATUS Status;
+
     PAGED_CODE();
 
     DPRINT("RawCleanup(%p, %p, %p)\n", Vcb, Irp, IoStackLocation);
@@ -1037,6 +1049,8 @@ RawCleanup(IN PVCB Vcb,
     }
 
     KeReleaseMutex(&Vcb->Mutex, FALSE);
+
+    /* Complete the request */
     Irp->IoStatus.Status = STATUS_SUCCESS;
     IoCompleteRequest(Irp, IO_DISK_INCREMENT);
     return STATUS_SUCCESS;
@@ -1051,6 +1065,7 @@ RawDispatch(IN PDEVICE_OBJECT DeviceObject,
     NTSTATUS Status = STATUS_INVALID_DEVICE_REQUEST;
     PIO_STACK_LOCATION IoStackLocation;
     PVCB Vcb;
+
     PAGED_CODE();
 
     DPRINT("RawDispatch(%p, %p)\n", DeviceObject, Irp);
