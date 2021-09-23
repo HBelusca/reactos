@@ -1,10 +1,9 @@
 /*
- * COPYRIGHT:        See COPYING in the top level directory
- * PROJECT:          ReactOS File System Recognizer
- * FILE:             drivers/filesystems/fs_rec/blockdev.c
- * PURPOSE:          Generic Helper Functions
- * PROGRAMMER:       Alex Ionescu (alex.ionescu@reactos.org)
- *                   Eric Kohl
+ * PROJECT:     ReactOS File System Recognizer
+ * LICENSE:     GPL-2.0+ (https://spdx.org/licenses/GPL-2.0+)
+ * PURPOSE:     Generic Helper Functions
+ * COPYRIGHT:   Copyright 2002 Eric Kohl
+ *              Copyright 2007 Alex Ionescu (alex.ionescu@reactos.org)
  */
 
 /* INCLUDES *****************************************************************/
@@ -13,9 +12,6 @@
 
 #include <ntdddisk.h>
 #include <ntddcdrm.h>
-
-#define NDEBUG
-#include <debug.h>
 
 /* FUNCTIONS ****************************************************************/
 
@@ -86,25 +82,23 @@ FsRecGetDeviceSectorSize(IN PDEVICE_OBJECT DeviceObject,
     PIRP Irp;
     NTSTATUS Status;
     ULONG ControlCode;
+
     PAGED_CODE();
 
     /* Check what device we have */
     switch (DeviceObject->DeviceType)
     {
         case FILE_DEVICE_CD_ROM:
-
             /* Use the CD IOCTL */
             ControlCode = IOCTL_CDROM_GET_DRIVE_GEOMETRY;
             break;
 
         case FILE_DEVICE_DISK:
-
             /* Use the Disk IOCTL */
             ControlCode = IOCTL_DISK_GET_DRIVE_GEOMETRY;
             break;
 
         default:
-
             /* Invalid device type */
             return FALSE;
     }
@@ -153,13 +147,14 @@ FsRecReadBlock(IN PDEVICE_OBJECT DeviceObject,
                IN PLARGE_INTEGER Offset,
                IN ULONG Length,
                IN ULONG SectorSize,
-               IN OUT PVOID *Buffer,
+               IN OUT PVOID* Buffer,
                OUT PBOOLEAN DeviceError OPTIONAL)
 {
     IO_STATUS_BLOCK IoStatusBlock;
     KEVENT Event;
     PIRP Irp;
     NTSTATUS Status;
+
     PAGED_CODE();
 
     /* Assume failure */
@@ -225,3 +220,5 @@ FsRecReadBlock(IN PDEVICE_OBJECT DeviceObject,
     /* All went well */
     return TRUE;
 }
+
+/* EOF */

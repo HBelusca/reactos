@@ -1,18 +1,16 @@
 /*
- * COPYRIGHT:        See COPYING in the top level directory
- * PROJECT:          ReactOS File System Recognizer
- * FILE:             drivers/filesystems/fs_rec/fat.c
- * PURPOSE:          FAT Recognizer
- * PROGRAMMER:       Alex Ionescu (alex.ionescu@reactos.org)
- *                   Eric Kohl
+ * PROJECT:     ReactOS File System Recognizer
+ * LICENSE:     GPL-2.0+ (https://spdx.org/licenses/GPL-2.0+)
+ * PURPOSE:     FAT Recognizer
+ * COPYRIGHT:   Copyright 2002 Eric Kohl
+ *              Copyright 2007 Alex Ionescu (alex.ionescu@reactos.org)
  */
 
 /* INCLUDES *****************************************************************/
 
 #include "fs_rec.h"
-
-#define NDEBUG
-#include <debug.h>
+#include "fat.h"
+#include "fat_ntfs.h"
 
 /* FUNCTIONS ****************************************************************/
 
@@ -22,6 +20,7 @@ FsRecIsFatVolume(IN PPACKED_BOOT_SECTOR PackedBootSector)
 {
     BIOS_PARAMETER_BLOCK Bpb;
     BOOLEAN Result = TRUE;
+
     PAGED_CODE();
 
     RtlZeroMemory(&Bpb, sizeof(BIOS_PARAMETER_BLOCK));
@@ -107,6 +106,7 @@ FsRecVfatFsControl(IN PDEVICE_OBJECT DeviceObject,
     ULONG SectorSize;
     LARGE_INTEGER Offset = {{0, 0}};
     BOOLEAN DeviceError = FALSE;
+
     PAGED_CODE();
 
     /* Get the I/O Stack and check the function type */
@@ -161,14 +161,12 @@ FsRecVfatFsControl(IN PDEVICE_OBJECT DeviceObject,
             break;
 
         case IRP_MN_LOAD_FILE_SYSTEM:
-
             /* Load the file system */
             Status = FsRecLoadFileSystem(DeviceObject,
                                          L"\\Registry\\Machine\\System\\CurrentControlSet\\Services\\fastfat");
             break;
 
         default:
-
             /* Invalid request */
             Status = STATUS_INVALID_DEVICE_REQUEST;
     }

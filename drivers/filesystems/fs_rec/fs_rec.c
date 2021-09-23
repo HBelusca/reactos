@@ -1,18 +1,14 @@
 /*
- * COPYRIGHT:        See COPYING in the top level directory
- * PROJECT:          ReactOS File System Recognizer
- * FILE:             drivers/filesystems/fs_rec/fs_rec.c
- * PURPOSE:          Main Driver Entrypoint and FS Registration
- * PROGRAMMER:       Alex Ionescu (alex.ionescu@reactos.org)
- *                   Eric Kohl
+ * PROJECT:     ReactOS File System Recognizer
+ * LICENSE:     GPL-2.0+ (https://spdx.org/licenses/GPL-2.0+)
+ * PURPOSE:     Main Driver Entrypoint and FS Registration
+ * COPYRIGHT:   Copyright 2002 Eric Kohl
+ *              Copyright 2007 Alex Ionescu (alex.ionescu@reactos.org)
  */
 
 /* INCLUDES *****************************************************************/
 
 #include "fs_rec.h"
-
-#define NDEBUG
-#include <debug.h>
 
 PKEVENT FsRecLoadSync;
 
@@ -83,6 +79,7 @@ FsRecCreate(IN PDEVICE_OBJECT DeviceObject,
 {
     PIO_STACK_LOCATION IoStack = IoGetCurrentIrpStackLocation(Irp);
     NTSTATUS Status;
+
     PAGED_CODE();
 
     UNREFERENCED_PARAMETER(DeviceObject);
@@ -129,61 +126,53 @@ FsRecFsControl(IN PDEVICE_OBJECT DeviceObject,
 {
     PDEVICE_EXTENSION DeviceExtension = DeviceObject->DeviceExtension;
     NTSTATUS Status;
+
     PAGED_CODE();
 
     /* Check the file system type */
     switch (DeviceExtension->FsType)
     {
         case FS_TYPE_VFAT:
-
             /* Send FAT command */
             Status = FsRecVfatFsControl(DeviceObject, Irp);
             break;
 
         case FS_TYPE_NTFS:
-
             /* Send NTFS command */
             Status = FsRecNtfsFsControl(DeviceObject, Irp);
             break;
 
         case FS_TYPE_CDFS:
-
             /* Send CDFS command */
             Status = FsRecCdfsFsControl(DeviceObject, Irp);
             break;
 
         case FS_TYPE_UDFS:
-
             /* Send UDFS command */
             Status = FsRecUdfsFsControl(DeviceObject, Irp);
             break;
 
         case FS_TYPE_EXT2:
-
             /* Send EXT2 command */
             Status = FsRecExt2FsControl(DeviceObject, Irp);
             break;
 
         case FS_TYPE_BTRFS:
-
             /* Send BTRFS command */
             Status = FsRecBtrfsFsControl(DeviceObject, Irp);
             break;
 
         case FS_TYPE_REISERFS:
-
             /* Send REISERFS command */
             Status = FsRecReiserfsFsControl(DeviceObject, Irp);
             break;
 
         case FS_TYPE_FFS:
-
             /* Send FFS command */
             Status = FsRecFfsFsControl(DeviceObject, Irp);
             break;
 
         default:
-
             /* Unrecognized FS */
             Status = STATUS_INVALID_DEVICE_REQUEST;
     }
@@ -277,39 +266,37 @@ FsRecRegisterFs(IN PDRIVER_OBJECT DriverObject,
                             0,
                             FALSE,
                             &DeviceObject);
-    if (NT_SUCCESS(Status))
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    /* Set additional flags in the device object */
+    DeviceObject->Flags |= AdditionalFlags;
+
+    /* Get the device extension and set it up */
+    DeviceExtension = DeviceObject->DeviceExtension;
+    DeviceExtension->FsType = FsType;
+    DeviceExtension->State = Pending;
+
+    /* Do we have a parent? */
+    if (ParentObject)
     {
-        /* Set additional flags in the device object */
-        DeviceObject->Flags |= AdditionalFlags;
-
-        /* Get the device extension and set it up */
-        DeviceExtension = DeviceObject->DeviceExtension;
-        DeviceExtension->FsType = FsType;
-        DeviceExtension->State = Pending;
-
-        /* Do we have a parent? */
-        if (ParentObject)
-        {
-            /* Link it in */
-            DeviceExtension->Alternate =
-                ((PDEVICE_EXTENSION)ParentObject->DeviceExtension)->Alternate;
-            ((PDEVICE_EXTENSION)ParentObject->DeviceExtension)->Alternate =
-                DeviceObject;
-        }
-        else
-        {
-            /* Otherwise, we're the only one */
-            DeviceExtension->Alternate = DeviceObject;
-        }
-
-        /* Return the DO if needed */
-        if (NewDeviceObject) *NewDeviceObject = DeviceObject;
-
-        /* Register the file system */
-        IoRegisterFileSystem(DeviceObject);
+        /* Link it in */
+        DeviceExtension->Alternate =
+            ((PDEVICE_EXTENSION)ParentObject->DeviceExtension)->Alternate;
+        ((PDEVICE_EXTENSION)ParentObject->DeviceExtension)->Alternate =
+            DeviceObject;
+    }
+    else
+    {
+        /* Otherwise, we're the only one */
+        DeviceExtension->Alternate = DeviceObject;
     }
 
-    /* Return Status */
+    /* Return the DO if needed */
+    if (NewDeviceObject) *NewDeviceObject = DeviceObject;
+
+    /* Register the recognizer as a file system */
+    IoRegisterFileSystem(DeviceObject);
     return Status;
 }
 

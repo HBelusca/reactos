@@ -1,18 +1,15 @@
 /*
- * COPYRIGHT:        See COPYING in the top level directory
- * PROJECT:          ReactOS File System Recognizer
- * FILE:             drivers/filesystems/fs_rec/ntfs.c
- * PURPOSE:          NTFS Recognizer
- * PROGRAMMER:       Alex Ionescu (alex.ionescu@reactos.org)
- *                   Eric Kohl
+ * PROJECT:     ReactOS File System Recognizer
+ * LICENSE:     GPL-2.0+ (https://spdx.org/licenses/GPL-2.0+)
+ * PURPOSE:     NTFS Recognizer
+ * COPYRIGHT:   Copyright 2002 Eric Kohl
+ *              Copyright 2007 Alex Ionescu (alex.ionescu@reactos.org)
  */
 
 /* INCLUDES *****************************************************************/
 
 #include "fs_rec.h"
-
-#define NDEBUG
-#include <debug.h>
+#include "fat_ntfs.h"
 
 /* FUNCTIONS ****************************************************************/
 
@@ -25,10 +22,10 @@ FsRecIsNtfsVolume(IN PPACKED_BOOT_SECTOR BootSector,
     /* Assume failure */
     BOOLEAN Result = FALSE;
 
+    PAGED_CODE();
+
     UNREFERENCED_PARAMETER(BytesPerSector);
     UNREFERENCED_PARAMETER(NumberOfSectors);
-
-    PAGED_CODE();
 
     if ((BootSector->Oem[0] == 'N') &&
         (BootSector->Oem[1] == 'T') &&
@@ -58,6 +55,7 @@ FsRecNtfsFsControl(IN PDEVICE_OBJECT DeviceObject,
     PPACKED_BOOT_SECTOR Bpb = NULL;
     ULONG SectorSize;
     LARGE_INTEGER Offset = {{0, 0}}, Offset2, Offset3, SectorCount;
+
     PAGED_CODE();
 
     /* Get the I/O Stack and check the function type */
@@ -129,14 +127,12 @@ FsRecNtfsFsControl(IN PDEVICE_OBJECT DeviceObject,
             break;
 
         case IRP_MN_LOAD_FILE_SYSTEM:
-
             /* Load the file system */
             Status = FsRecLoadFileSystem(DeviceObject,
                                          L"\\Registry\\Machine\\System\\CurrentControlSet\\Services\\Ntfs");
             break;
 
         default:
-
             /* Invalid request */
             Status = STATUS_INVALID_DEVICE_REQUEST;
     }

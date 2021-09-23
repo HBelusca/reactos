@@ -10,11 +10,10 @@
 /* INCLUDES *****************************************************************/
 
 #include "fs_rec.h"
+#include "cdfs.h"
 
 #define NDEBUG
 #include <debug.h>
-
-#include "cdfs.h"
 
 /* FUNCTIONS ****************************************************************/
 
@@ -26,17 +25,18 @@ FsRecIsCdfsVolume(IN PDEVICE_OBJECT DeviceObject,
     BOOLEAN bReturnValue = FALSE;
     LARGE_INTEGER Offset;
     PVD_HEADER pVdHeader = NULL;
+
     PAGED_CODE();
 
-    // Read the Primary Volume Descriptor.
+    /* Read the Primary Volume Descriptor */
     Offset.QuadPart = VD_HEADER_OFFSET;
     if (!FsRecReadBlock(DeviceObject, &Offset, sizeof(VD_HEADER), SectorSize, (PVOID*)&pVdHeader, NULL))
     {
-        // We cannot read this block, so no reason to let the CDFS driver try it.
+        /* We cannot read this block, so no reason to let the CDFS driver try it */
         goto Cleanup;
     }
 
-    // Verify the fields.
+    /* Verify the fields */
     if (pVdHeader->Type != VD_TYPE_PRIMARY)
         goto Cleanup;
 
@@ -70,6 +70,7 @@ FsRecCdfsFsControl(IN PDEVICE_OBJECT DeviceObject,
     ULONG SectorSize;
     PIO_STACK_LOCATION Stack;
     NTSTATUS Status;
+
     PAGED_CODE();
 
     /* Get the I/O Stack and check the function type */
@@ -96,14 +97,12 @@ FsRecCdfsFsControl(IN PDEVICE_OBJECT DeviceObject,
             break;
 
         case IRP_MN_LOAD_FILE_SYSTEM:
-
             /* Load the file system */
             Status = FsRecLoadFileSystem(DeviceObject,
                                          L"\\Registry\\Machine\\System\\CurrentControlSet\\Services\\Cdfs");
             break;
 
         default:
-
             /* Invalid request */
             Status = STATUS_INVALID_DEVICE_REQUEST;
     }

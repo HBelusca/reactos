@@ -1,19 +1,15 @@
 /*
- * COPYRIGHT:        See COPYING in the top level directory
- * PROJECT:          ReactOS File System Recognizer
- * FILE:             drivers/filesystems/fs_rec/ffs.c
- * PURPOSE:          FFS Recognizer
- * PROGRAMMER:       Peter Hater
- *                   Pierre Schweitzer (pierre@reactos.org)
+ * PROJECT:     ReactOS File System Recognizer
+ * LICENSE:     GPL-2.0+ (https://spdx.org/licenses/GPL-2.0+)
+ * PURPOSE:     FFS Recognizer
+ * COPYRIGHT:   Copyright 2016 Peter Hater
+ *              Copyright 2016 Pierre Schweitzer (pierre@reactos.org)
  */
 
 /* INCLUDES *****************************************************************/
 
 #include "fs_rec.h"
 #include "ffs.h"
-
-#define NDEBUG
-#include <debug.h>
 
 /* FUNCTIONS ****************************************************************/
 
@@ -41,7 +37,7 @@ FsRecIsFfs2Volume(IN PFFSD_SUPER_BLOCK sb)
 NTSTATUS
 NTAPI
 FsRecFfsFsControl(IN PDEVICE_OBJECT DeviceObject,
-                    IN PIRP Irp)
+                  IN PIRP Irp)
 {
     PIO_STACK_LOCATION Stack;
     NTSTATUS Status;
@@ -53,6 +49,7 @@ FsRecFfsFsControl(IN PDEVICE_OBJECT DeviceObject,
     ULONG SectorSize;
     LARGE_INTEGER Offset;
     BOOLEAN DeviceError = FALSE;
+
     PAGED_CODE();
 
     /* Get the I/O Stack and check the function type */
@@ -203,14 +200,12 @@ FsRecFfsFsControl(IN PDEVICE_OBJECT DeviceObject,
             break;
 
         case IRP_MN_LOAD_FILE_SYSTEM:
-
             /* Load the file system */
             Status = FsRecLoadFileSystem(DeviceObject,
                                          L"\\Registry\\Machine\\System\\CurrentControlSet\\Services\\ffs");
             break;
 
         default:
-
             /* Invalid request */
             Status = STATUS_INVALID_DEVICE_REQUEST;
     }
@@ -218,3 +213,5 @@ FsRecFfsFsControl(IN PDEVICE_OBJECT DeviceObject,
     /* Return Status */
     return Status;
 }
+
+/* EOF */

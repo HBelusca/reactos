@@ -1,9 +1,8 @@
 /*
- * COPYRIGHT:        See COPYING in the top level directory
- * PROJECT:          ReactOS File System Recognizer
- * FILE:             drivers/filesystems/fs_rec/udfs.h
- * PURPOSE:          UDFS Header File
- * PROGRAMMER:       Dmitry Chapyshev (dmitry@reactos.org)
+ * PROJECT:     ReactOS File System Recognizer
+ * LICENSE:     GPL-2.0+ (https://spdx.org/licenses/GPL-2.0+)
+ * PURPOSE:     UDFS Recognizer Header File
+ * COPYRIGHT:   Copyright 2009 Dmitry Chapyshev (dmitry@reactos.org)
  */
 
 /* Standard Identifier (EMCA 167r2 2/9.1.2) */
@@ -27,3 +26,36 @@ typedef struct _VOLSTRUCTDESC
     UCHAR Data[2041];
 } VOLSTRUCTDESC, *PVOLSTRUCTDESC;
 
+
+/* UDFS Offsets */
+#define UDFS_VRS_START_OFFSET  32768
+#define UDFS_AVDP_SECTOR       256
+
+#include <pshpack1.h>
+typedef struct _TAG
+{
+    USHORT Identifier;
+    USHORT Version;
+    UCHAR  Checksum;
+    UCHAR  Reserved;
+    USHORT SerialNumber;
+    USHORT Crc;
+    USHORT CrcLength;
+    ULONG  Location;
+} TAG, *PTAG;
+
+typedef struct _EXTENT
+{
+    ULONG Length;
+    ULONG Location;
+} EXTENT, *PEXTENT;
+
+typedef struct _AVDP
+{
+    TAG DescriptorTag;
+    EXTENT MainVolumeDescriptorExtent;
+    EXTENT ReserveVolumeDescriptorExtent;
+} AVDP, *PAVDP;
+#include <poppack.h>
+
+/* EOF */

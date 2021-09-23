@@ -1,19 +1,15 @@
 /*
- * COPYRIGHT:        See COPYING in the top level directory
- * PROJECT:          ReactOS File System Recognizer
- * FILE:             drivers/filesystems/fs_rec/ext2.c
- * PURPOSE:          EXT2 Recognizer
- * PROGRAMMER:       Eric Kohl
- *                   Pierre Schweitzer (pierre@reactos.org)
+ * PROJECT:     ReactOS File System Recognizer
+ * LICENSE:     GPL-2.0+ (https://spdx.org/licenses/GPL-2.0+)
+ * PURPOSE:     EXT2 Recognizer
+ * COPYRIGHT:   Copyright 2005 Art Yerkes
+ *              Copyright 2015-2016 Pierre Schweitzer (pierre@reactos.org)
  */
 
 /* INCLUDES *****************************************************************/
 
 #include "fs_rec.h"
 #include "ext2.h"
-
-#define NDEBUG
-#include <debug.h>
 
 /* FUNCTIONS ****************************************************************/
 
@@ -37,6 +33,7 @@ FsRecExt2FsControl(IN PDEVICE_OBJECT DeviceObject,
     ULONG SectorSize;
     LARGE_INTEGER Offset;
     BOOLEAN DeviceError = FALSE;
+
     PAGED_CODE();
 
     /* Get the I/O Stack and check the function type */
@@ -92,14 +89,12 @@ FsRecExt2FsControl(IN PDEVICE_OBJECT DeviceObject,
             break;
 
         case IRP_MN_LOAD_FILE_SYSTEM:
-
             /* Load the file system */
             Status = FsRecLoadFileSystem(DeviceObject,
                                          L"\\Registry\\Machine\\System\\CurrentControlSet\\Services\\Ext2fs");
             break;
 
         default:
-
             /* Invalid request */
             Status = STATUS_INVALID_DEVICE_REQUEST;
     }

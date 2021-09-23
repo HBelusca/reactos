@@ -1,7 +1,7 @@
 /*
  * PROJECT:     ReactOS File System Recognizer
- * LICENSE:     GPL-2.0 (https://spdx.org/licenses/GPL-2.0+)
- * PURPOSE:     CDFS Recognizer
+ * LICENSE:     GPL-2.0 (https://spdx.org/licenses/GPL-2.0)
+ * PURPOSE:     CDFS Recognizer Header File
  * COPYRIGHT:   Copyright 2017 Colin Finck <colin@reactos.org>
  */
 
@@ -22,3 +22,5 @@ VD_HEADER, *PVD_HEADER;
 #define VD_IDENTIFIER_LENGTH    5           // Character count of VD_IDENTIFIER
 #define VD_TYPE_PRIMARY         1           // Type code for Primary Volume Descriptor
 #define VD_VERSION              1           // Volume Descriptor Version
+
+/* EOF */

@@ -1,10 +1,9 @@
 /*
- * COPYRIGHT:        See COPYING in the top level directory
- * PROJECT:          ReactOS File System Recognizer
- * FILE:             drivers/filesystems/fs_rec/btrfs.h
- * PURPOSE:          BTRFS Header File
- * PROGRAMMER:       Peter Hater
- *                   Pierre Schweitzer (pierre@reactos.org)
+ * PROJECT:     ReactOS File System Recognizer
+ * LICENSE:     GPL-2.0+ (https://spdx.org/licenses/GPL-2.0+)
+ * PURPOSE:     REISERFS Recognizer Header File
+ * COPYRIGHT:   Copyright 2016 Peter Hater
+ *              Copyright 2016 Pierre Schweitzer (pierre@reactos.org)
  */
 
 #include <pshpack1.h>
@@ -74,3 +73,5 @@ C_ASSERT(FIELD_OFFSET(RFSD_SUPER_BLOCK, s_magic) == 52);
 #define REISER2FS_SUPER_MAGIC_STRING "ReIsEr2Fs"
 #define REISER2FS_JR_SUPER_MAGIC_STRING "ReIsEr3Fs"
 #define MAGIC_KEY_LENGTH 9
+
+/* EOF */

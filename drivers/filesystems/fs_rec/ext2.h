@@ -1,9 +1,8 @@
 /*
- * COPYRIGHT:        See COPYING in the top level directory
- * PROJECT:          ReactOS File System Recognizer
- * FILE:             drivers/filesystems/fs_rec/ext2.h
- * PURPOSE:          EXT2 Header File
- * PROGRAMMER:       Pierre Schweitzer (pierre@reactos.org)
+ * PROJECT:     ReactOS File System Recognizer
+ * LICENSE:     GPL-2.0+ (https://spdx.org/licenses/GPL-2.0+)
+ * PURPOSE:     EXT2 Recognizer Header File
+ * COPYRIGHT:   Copyright 2015-2016 Pierre Schweitzer (pierre@reactos.org)
  */
 
 #include <pshpack1.h>
@@ -46,3 +45,5 @@ C_ASSERT(FIELD_OFFSET(EXT2_SUPER_BLOCK, DefResUid) == 0x50);
 #define EXT2_SUPER_MAGIC 0xEF53
 #define EXT2_SB_OFFSET 0x400
 #define EXT2_SB_SIZE 0x400
+
+/* EOF */

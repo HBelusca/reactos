@@ -1,20 +1,19 @@
 /*
- * COPYRIGHT:        See COPYING in the top level directory
- * PROJECT:          ReactOS File System Recognizer
- * FILE:             drivers/filesystems/fs_rec/udfs.c
- * PURPOSE:          USFS Recognizer
- * PROGRAMMER:       Alex Ionescu (alex.ionescu@reactos.org)
- *                   Eric Kohl
+ * PROJECT:     ReactOS File System Recognizer
+ * LICENSE:     GPL-2.0+ (https://spdx.org/licenses/GPL-2.0+)
+ * PURPOSE:     UDFS Recognizer
+ * COPYRIGHT:   Copyright 2003 Eric Kohl
+ *              Copyright 2007 Alex Ionescu (alex.ionescu@reactos.org)
+ *              Copyright 2016 Peter Hater
  */
 
 /* INCLUDES *****************************************************************/
 
 #include "fs_rec.h"
+#include "udfs.h"
 
 #define NDEBUG
 #include <debug.h>
-
-#include "udfs.h"
 
 /* FUNCTIONS ****************************************************************/
 
@@ -27,6 +26,7 @@ FsRecIsUdfsVolume(IN PDEVICE_OBJECT DeviceObject,
     LARGE_INTEGER Offset;
     BOOLEAN ret = FALSE;
     int i;
+
     PAGED_CODE();
 
     Offset.QuadPart = 16 * SectorSize;
@@ -36,59 +36,59 @@ FsRecIsUdfsVolume(IN PDEVICE_OBJECT DeviceObject,
                             &Offset,
                             SectorSize,
                             SectorSize,
-                            (PVOID *)&VolumeStructDesc,
+                            (PVOID*)&VolumeStructDesc,
                             NULL))
         {
             break;
         }
 
         if (!strncmp((const char*)VolumeStructDesc->Ident,
-                        VSD_STD_ID_BEA01,
-                        VSD_STD_ID_LEN))
+                     VSD_STD_ID_BEA01,
+                     VSD_STD_ID_LEN))
         {
             DPRINT("BEA01 found\n");
         }
 
         if (!strncmp((const char*)VolumeStructDesc->Ident,
-                        VSD_STD_ID_NSR03,
-                        VSD_STD_ID_LEN))
+                     VSD_STD_ID_NSR03,
+                     VSD_STD_ID_LEN))
         {
             DPRINT("NSR03 found\n");
             ret = TRUE;
         }
 
         if (!strncmp((const char*)VolumeStructDesc->Ident,
-                        VSD_STD_ID_NSR02,
-                        VSD_STD_ID_LEN))
+                     VSD_STD_ID_NSR02,
+                     VSD_STD_ID_LEN))
         {
             DPRINT("NSR02 found\n");
             ret = TRUE;
         }
 
         if (!strncmp((const char*)VolumeStructDesc->Ident,
-                        VSD_STD_ID_TEA01,
-                        VSD_STD_ID_LEN))
+                     VSD_STD_ID_TEA01,
+                     VSD_STD_ID_LEN))
         {
             DPRINT("TEA01 found\n");
         }
 
         if (!strncmp((const char*)VolumeStructDesc->Ident,
-                        VSD_STD_ID_CD001,
-                        VSD_STD_ID_LEN))
+                     VSD_STD_ID_CD001,
+                     VSD_STD_ID_LEN))
         {
             DPRINT("CD001 found\n");
         }
 
         if (!strncmp((const char*)VolumeStructDesc->Ident,
-                        VSD_STD_ID_CDW02,
-                        VSD_STD_ID_LEN))
+                     VSD_STD_ID_CDW02,
+                     VSD_STD_ID_LEN))
         {
             DPRINT("CDW02 found\n");
         }
 
         if (!strncmp((const char*)VolumeStructDesc->Ident,
-                        VSD_STD_ID_BOOT2,
-                        VSD_STD_ID_LEN))
+                     VSD_STD_ID_BOOT2,
+                     VSD_STD_ID_LEN))
         {
             DPRINT("BOOT2 found\n");
         }
@@ -110,6 +110,7 @@ FsRecUdfsFsControl(IN PDEVICE_OBJECT DeviceObject,
     NTSTATUS Status;
     PDEVICE_OBJECT MountDevice;
     ULONG SectorSize;
+
     PAGED_CODE();
 
     /* Get the I/O Stack and check the function type */
@@ -136,14 +137,12 @@ FsRecUdfsFsControl(IN PDEVICE_OBJECT DeviceObject,
             break;
 
         case IRP_MN_LOAD_FILE_SYSTEM:
-
             /* Load the file system */
             Status = FsRecLoadFileSystem(DeviceObject,
                                          L"\\Registry\\Machine\\System\\CurrentControlSet\\Services\\Udfs");
             break;
 
         default:
-
             /* Invalid request */
             Status = STATUS_INVALID_DEVICE_REQUEST;
     }

@@ -1,10 +1,9 @@
 /*
- * COPYRIGHT:        See COPYING in the top level directory
- * PROJECT:          ReactOS File System Recognizer
- * FILE:             drivers/filesystems/fs_rec/ffs.h
- * PURPOSE:          FFS Header File
- * PROGRAMMER:       Peter Hater
- *                   Pierre Schweitzer (pierre@reactos.org)
+ * PROJECT:     ReactOS File System Recognizer
+ * LICENSE:     GPL-2.0+ (https://spdx.org/licenses/GPL-2.0+)
+ * PURPOSE:     FFS Recognizer Header File
+ * COPYRIGHT:   Copyright 2016 Peter Hater
+ *              Copyright 2016 Pierre Schweitzer (pierre@reactos.org)
  */
 
 #include <pshpack1.h>
@@ -295,3 +294,5 @@ C_ASSERT(FIELD_OFFSET(FFSD_SUPER_BLOCK, fs_ocsp) == 728);
 #define	LABELSECTOR		1	/* sector containing label */
 
 #define	FS_BSDFFS	7		/* 4.2BSD fast file system */
+
+/* EOF */
