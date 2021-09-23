@@ -1172,8 +1172,11 @@ NTAPI
 RawShutdown(IN PDEVICE_OBJECT DeviceObject,
             IN PIRP Irp)
 {
+DPRINT1("RawShutdown\n");
+
+    UNREFERENCED_PARAMETER(DeviceObject);
+
     /* Unregister file systems */
-#if 0 // FIXME: This freezes ROS at shutdown. PnP Problem?
     IoUnregisterFileSystem(RawDiskDeviceObject);
     IoUnregisterFileSystem(RawCdromDeviceObject);
     IoUnregisterFileSystem(RawTapeDeviceObject);
@@ -1182,7 +1185,6 @@ RawShutdown(IN PDEVICE_OBJECT DeviceObject,
     IoDeleteDevice(RawDiskDeviceObject);
     IoDeleteDevice(RawCdromDeviceObject);
     IoDeleteDevice(RawTapeDeviceObject);
-#endif
 
     /* Complete the request */
     Irp->IoStatus.Status = STATUS_SUCCESS;
@@ -1194,12 +1196,14 @@ VOID
 NTAPI
 RawUnload(IN PDRIVER_OBJECT DriverObject)
 {
-#if 0 // FIXME: DriverUnload is never called
-    /* Dereference device objects */
+DPRINT1("RawUnload\n");
+
+    UNREFERENCED_PARAMETER(DriverObject);
+
+    /* Dereference the global device objects */
     ObDereferenceObject(RawDiskDeviceObject);
     ObDereferenceObject(RawCdromDeviceObject);
     ObDereferenceObject(RawTapeDeviceObject);
-#endif
 }
 
 CODE_SEG("INIT")
@@ -1279,17 +1283,17 @@ RawFsDriverEntry(IN PDRIVER_OBJECT DriverObject,
     DriverObject->MajorFunction[IRP_MJ_SHUTDOWN] = RawShutdown;
     DriverObject->DriverUnload = RawUnload;
 
+DPRINT1("RawFsDriverEntry loading\n");
     /* Register the file systems */
     IoRegisterFileSystem(RawDiskDeviceObject);
     IoRegisterFileSystem(RawCdromDeviceObject);
     IoRegisterFileSystem(RawTapeDeviceObject);
 
-#if 0 // FIXME: DriverUnload is never called
-    /* Reference device objects */
+    /* Reference the global device objects */
     ObReferenceObject(RawDiskDeviceObject);
     ObReferenceObject(RawCdromDeviceObject);
     ObReferenceObject(RawTapeDeviceObject);
-#endif
+
     return STATUS_SUCCESS;
 }
 
