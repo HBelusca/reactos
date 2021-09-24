@@ -124,9 +124,27 @@ FsRecFsControl(IN PDEVICE_OBJECT DeviceObject,
                IN PIRP Irp)
 {
     PDEVICE_EXTENSION DeviceExtension = DeviceObject->DeviceExtension;
+    PIO_STACK_LOCATION Stack;
     NTSTATUS Status;
 
     PAGED_CODE();
+
+//
+// TODO: Check recognizer status and return appropriate error code if needed....
+//
+    Stack = IoGetCurrentIrpStackLocation(Irp);
+    if ((DeviceExtension->State != Pending) && (Stack->MinorFunction == IRP_MN_MOUNT_VOLUME))
+    {
+        if (DeviceExtension->State == Loaded)
+            Status = STATUS_UNRECOGNIZED_VOLUME;
+        else // DeviceExtension->State == Unloading
+            Status = STATUS_FS_DRIVER_REQUIRED;
+
+        /* Complete the IRP */
+        Irp->IoStatus.Status = Status;
+        IoCompleteRequest(Irp, IO_NO_INCREMENT);
+        return Status;
+    }
 
     /* Check the file system type */
     switch (DeviceExtension->FsType)
