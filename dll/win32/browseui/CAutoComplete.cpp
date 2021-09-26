@@ -509,13 +509,16 @@ LRESULT CACListView::OnMouseWheel(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL 
 // WM_NCHITTEST
 LRESULT CACListView::OnNCHitTest(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled)
 {
-    TRACE("CACListView::OnNCHitTest(%p)\n", this);
+    ERR("CACListView::OnNCHitTest(%p)\n", this);
     ATLASSERT(m_pDropDown);
     POINT pt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) }; // in screen coordinates
     ScreenToClient(&pt); // into client coordinates
     HWND hwndTarget = m_pDropDown->ChildWindowFromPoint(pt);
     if (hwndTarget != m_hWnd)
+    {
+        ERR(" --> CACListView::OnNCHitTest return_stuff\n");
         return HTTRANSPARENT; // pass through (for resizing the drop-down window)
+    }
     bHandled = FALSE; // do default
     return 0;
 }
@@ -526,7 +529,7 @@ LRESULT CACListView::OnNCHitTest(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &
 HWND CACScrollBar::Create(HWND hwndParent)
 {
     ATLASSERT(m_hWnd == NULL);
-    DWORD dwStyle = WS_CHILD | /*WS_VISIBLE |*/ SBS_BOTTOMALIGN | SBS_VERT;
+    DWORD dwStyle = WS_CHILD | /*WS_VISIBLE |*/ SBS_RIGHTALIGN | SBS_VERT;
     m_hWnd = ::CreateWindowExW(0, GetWndClassName(), NULL, dwStyle,
                                0, 0, 0, 0, hwndParent, NULL,
                                _AtlBaseModule.GetModuleInstance(), NULL);
@@ -540,7 +543,7 @@ HWND CACScrollBar::Create(HWND hwndParent)
 HWND CACSizeBox::Create(HWND hwndParent)
 {
     ATLASSERT(m_hWnd == NULL);
-    DWORD dwStyle = WS_CHILD | /*WS_VISIBLE |*/ SBS_SIZEBOX;
+    DWORD dwStyle = WS_CHILD | /*WS_VISIBLE |*/ SBS_SIZEBOX | SBS_SIZEBOXBOTTOMRIGHTALIGN;
     HWND hWnd = ::CreateWindowExW(0, GetWndClassName(), NULL, dwStyle,
                                   0, 0, 0, 0, hwndParent, NULL,
                                   _AtlBaseModule.GetModuleInstance(), NULL);
@@ -1586,17 +1589,22 @@ LRESULT CAutoComplete::OnNCDestroy(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL
     return 0;
 }
 
+static volatile BOOL g_bUseThick = TRUE;
+
 // WM_EXITSIZEMOVE
 // This message is sent once to a window after it has exited the moving or sizing mode.
 LRESULT CAutoComplete::OnExitSizeMove(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled)
 {
-    TRACE("CAutoComplete::OnExitSizeMove(%p)\n", this);
+    ERR("CAutoComplete::OnExitSizeMove(%p)\n", this);
     m_bResized = TRUE; // remember resized
 
+    if ((volatile BOOL)g_bUseThick)
+    {
     ModifyStyle(WS_THICKFRAME, 0); // remove thick frame to resize
     // frame changed
     UINT uSWP_ = SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED | SWP_NOACTIVATE;
     SetWindowPos(NULL, 0, 0, 0, 0, uSWP_);
+    }
 
     ::SetFocus(m_hwndEdit); // restore focus
     return 0;
@@ -1679,13 +1687,13 @@ LRESULT CAutoComplete::OnMouseActivate(UINT uMsg, WPARAM wParam, LPARAM lParam, 
     return MA_NOACTIVATE; // don't activate by mouse
 }
 
-// WM_NCACTIVATE
-// This message is sent to a window to indicate an active or inactive state.
-LRESULT CAutoComplete::OnNCActivate(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled)
-{
-    bHandled = FALSE; // do default
-    return 0;
-}
+// // // WM_NCACTIVATE
+// // // This message is sent to a window to indicate an active or inactive state.
+// // LRESULT CAutoComplete::OnNCActivate(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled)
+// // {
+    // // // bHandled = FALSE; // do default
+    // // return 0;
+// // }
 
 // WM_NCLBUTTONDOWN
 LRESULT CAutoComplete::OnNCLButtonDown(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled)
@@ -1694,11 +1702,15 @@ LRESULT CAutoComplete::OnNCLButtonDown(UINT uMsg, WPARAM wParam, LPARAM lParam, 
     {
         case HTBOTTOMRIGHT: case HTTOPRIGHT:
         {
+            ERR("CAutoComplete::OnNCLButtonDown(%p, %lu)\n", this, wParam);
             // add thick frame to resize.
+            if ((volatile BOOL)g_bUseThick)
+            {
             ModifyStyle(0, WS_THICKFRAME);
             // frame changed
             UINT uSWP_ = SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED | SWP_NOACTIVATE;
             SetWindowPos(NULL, 0, 0, 0, 0, uSWP_);
+            }
             break;
         }
     }
@@ -1816,12 +1828,13 @@ LRESULT CAutoComplete::OnNotify(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &b
 // The return value is indicating the cursor shape and the behaviour.
 LRESULT CAutoComplete::OnNCHitTest(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled)
 {
-    TRACE("CAutoComplete::OnNCHitTest(%p)\n", this);
+    ERR("CAutoComplete::OnNCHitTest(%p)\n", this);
     POINT pt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) }; // in screen coordinates
     ScreenToClient(&pt); // into client coordinates
     if (ChildWindowFromPoint(pt) == m_hwndSizeBox) // hit?
     {
         // allow resizing (with cursor shape)
+        ERR(" --> CAutoComplete::OnNCHitTest return_stuff\n");
         return m_bDowner ? HTBOTTOMRIGHT : HTTOPRIGHT;
     }
     bHandled = FALSE; // do default
@@ -1835,6 +1848,13 @@ LRESULT CAutoComplete::OnSize(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHa
     // calculate the positions of the controls
     CRect rcList, rcScrollBar, rcSizeBox;
     CalcRects(m_bDowner, rcList, rcScrollBar, rcSizeBox);
+
+    INT nWidth  = LOWORD(lParam);
+    INT nHeight = HIWORD(lParam);
+
+    nWidth = nWidth;
+    nHeight = nHeight;
+    ERR("CAutoComplete::OnSize(%p): nWidth = %d, nHeight = %d\n", this, nWidth, nHeight);
 
     // reposition the controls in smartest way
     UINT uSWP_ = SWP_NOACTIVATE | SWP_NOCOPYBITS;

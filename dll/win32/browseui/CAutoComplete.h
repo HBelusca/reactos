@@ -63,6 +63,7 @@ protected:
         MESSAGE_HANDLER(WM_RBUTTONDOWN, OnMRButtonDown)
         MESSAGE_HANDLER(WM_RBUTTONUP, OnButtonUp)
     END_MSG_MAP()
+
     // message handlers
     LRESULT OnButtonUp(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled);
     LRESULT OnLButtonDown(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled);
@@ -104,12 +105,14 @@ protected:
     // protected variables
     BOOL m_bDowner;
     BOOL m_bLongList;
+
     // message map
     BEGIN_MSG_MAP(CACSizeBox)
         MESSAGE_HANDLER(WM_ERASEBKGND, OnEraseBkGnd)
         MESSAGE_HANDLER(WM_NCHITTEST, OnNCHitTest)
         MESSAGE_HANDLER(WM_PAINT, OnPaint)
     END_MSG_MAP()
+
     // message handlers
     LRESULT OnEraseBkGnd(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled);
     LRESULT OnNCHitTest(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled);
@@ -149,8 +152,8 @@ class CAutoComplete
     , public IEnumString
 {
 public:
-    DECLARE_WND_CLASS_EX(WC_DROPDOWNW, CS_DROPSHADOW | CS_SAVEBITS, COLOR_3DFACE)
-    static LPCWSTR GetWndClassName() { return WC_DROPDOWNW; }
+    DECLARE_WND_CLASS_EX(WC_DROPDOWNW, CS_DROPSHADOW | CS_SAVEBITS, COLOR_WINDOW)
+    // static LPCWSTR GetWndClassName() { return WC_DROPDOWNW; }
     BOOL m_bInSetText; // this flag avoids subsequent action in WM_SETTEXT
     BOOL m_bInSelectItem; // this flag avoids subsequent action in LVN_ITEMCHANGED
 
@@ -255,7 +258,7 @@ protected:
         MESSAGE_HANDLER(WM_GETMINMAXINFO, OnGetMinMaxInfo)
         MESSAGE_HANDLER(WM_MEASUREITEM, OnMeasureItem)
         MESSAGE_HANDLER(WM_MOUSEACTIVATE, OnMouseActivate)
-        MESSAGE_HANDLER(WM_NCACTIVATE, OnNCActivate)
+        // // MESSAGE_HANDLER(WM_NCACTIVATE, OnNCActivate)
         MESSAGE_HANDLER(WM_NCLBUTTONDOWN, OnNCLButtonDown)
         MESSAGE_HANDLER(WM_NOTIFY, OnNotify)
         MESSAGE_HANDLER(WM_NCHITTEST, OnNCHitTest)
@@ -273,7 +276,7 @@ protected:
     LRESULT OnGetMinMaxInfo(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled);
     LRESULT OnMeasureItem(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled);
     LRESULT OnMouseActivate(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled);
-    LRESULT OnNCActivate(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled);
+    // // LRESULT OnNCActivate(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled);
     LRESULT OnNCLButtonDown(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled);
     LRESULT OnNotify(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled);
     LRESULT OnNCHitTest(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled);
