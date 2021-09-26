@@ -75,8 +75,7 @@ VOID APIENTRY LogFontWideToAnsi(const LOGFONTW *plfW, LPLOGFONTA plfA)
 PWND FASTCALL ValidateHwndNoErr(HWND hwnd)
 {
     PCLIENTINFO ClientInfo = GetWin32ClientInfo();
-    PUSER_HANDLE_TABLE handleTable;
-    PHANDLEENTRY he;
+    PHANDLEENTRY handleTable;
     INT index;
     WORD generation;
 
@@ -89,19 +88,16 @@ PWND FASTCALL ValidateHwndNoErr(HWND hwnd)
 
     handleTable = g_SharedInfo.aheList;
     ASSERT(handleTable);
-    /* ReactOS-Specific! */
-    ASSERT(g_SharedInfo.ulSharedDelta != 0);
-    he = (PHANDLEENTRY)((ULONG_PTR)handleTable->handles - g_SharedInfo.ulSharedDelta);
 
     index = (LOWORD(hwnd) - FIRST_USER_HANDLE) >> 1;
-    if (index < 0 || index >= handleTable->nb_handles || he[index].type != TYPE_WINDOW)
+    if (index < 0 || index >= g_psi->cHandleEntries || handleTable[index].type != TYPE_WINDOW)
         return NULL;
 
     generation = HIWORD(hwnd);
-    if (generation != he[index].generation && generation && generation != 0xFFFF)
+    if (generation != handleTable[index].generation && generation && generation != 0xFFFF)
         return NULL;
 
-    return (PWND)&he[index];
+    return (PWND)&handleTable[index];
 }
 
 LPVOID APIENTRY Imm32HeapAlloc(DWORD dwFlags, DWORD dwBytes)

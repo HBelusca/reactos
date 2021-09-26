@@ -197,8 +197,7 @@ static PHANDLEENTRY
 FASTCALL
 GetUser32Handle(HANDLE handle)
 {
-    PUSER_HANDLE_TABLE handleTable;
-    PHANDLEENTRY he;
+    PHANDLEENTRY handleTable;
     INT Index;
     USHORT generation;
 
@@ -206,19 +205,17 @@ GetUser32Handle(HANDLE handle)
 
     handleTable = gSharedInfo.aheList;
     ASSERT(handleTable);
-    /* ReactOS-Specific! */
-    he = SharedPtrToUser(handleTable->handles);
 
     Index = (LOWORD(handle) - FIRST_USER_HANDLE) >> 1;
-    if (Index < 0 || Index >= handleTable->nb_handles)
+    if (Index < 0 || Index >= gpsi->cHandleEntries)
         return NULL;
 
-    if (!he[Index].type || !he[Index].ptr)
+    if (!handleTable[Index].type || !handleTable[Index].ptr)
         return NULL;
 
     generation = HIWORD(handle);
-    if (generation == he[Index].generation || !generation || generation == 0xFFFF)
-        return &he[Index];
+    if (generation == handleTable[Index].generation || !generation || generation == 0xFFFF)
+        return &handleTable[Index];
 
     return NULL;
 }

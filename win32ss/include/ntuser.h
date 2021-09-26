@@ -27,16 +27,6 @@ typedef struct _HANDLEENTRY
     WORD generation; /* generation counter */
 } HANDLEENTRY, *PHANDLEENTRY;
 
-/* ReactOS-Specific! */
-typedef struct _HANDLEENTRY USER_HANDLE_ENTRY, *PUSER_HANDLE_ENTRY;
-typedef struct _USER_HANDLE_TABLE
-{
-    PUSER_HANDLE_ENTRY handles;
-    PUSER_HANDLE_ENTRY freelist;
-    int nb_handles;
-    int allocated_handles;
-} USER_HANDLE_TABLE, *PUSER_HANDLE_TABLE;
-
 typedef enum _HANDLE_TYPE
 {
     TYPE_FREE = 0,
@@ -1088,7 +1078,7 @@ typedef struct _WNDMSG
 typedef struct _SHAREDINFO
 {
     PSERVERINFO psi;         /* Global Server Info */
-    PVOID aheList;           /* Handle Entry List */
+    PHANDLEENTRY aheList;    /* Handle Entry List */
     PVOID pDispInfo;         /* Global PDISPLAYINFO pointer */
     ULONG_PTR ulSharedDelta; /* Shared USER mapped section delta */
     WNDMSG awmControl[FNID_NUM];
