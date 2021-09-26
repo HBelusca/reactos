@@ -8,25 +8,27 @@ struct _WND;
 struct tagPOPUPMENU;
 
 #define FIRST_USER_HANDLE 0x0020 /* first possible value for low word of user handle */
-#define LAST_USER_HANDLE 0xffef /* last possible value for low word of user handle */
+#define LAST_USER_HANDLE  0xffef /* last possible value for low word of user handle */
 
-#define HANDLEENTRY_DESTROY 1
+#define HANDLEENTRY_DESTROY   1
 #define HANDLEENTRY_INDESTROY 2
 
-typedef struct _USER_HANDLE_ENTRY
+typedef struct _HANDLEENTRY
 {
-    void *ptr; /* pointer to object */
+    PVOID ptr; /* pointer to object */
     union
     {
         PVOID pi;
-        struct _THREADINFO *pti; /* pointer to Win32ThreadInfo */
+        struct _THREADINFO *pti;  /* pointer to Win32ThreadInfo */
         struct _PROCESSINFO *ppi; /* pointer to W32ProcessInfo */
     };
-    unsigned char type; /* object type (0 if free) */
-    unsigned char flags;
-    unsigned short generation; /* generation counter */
-} USER_HANDLE_ENTRY, *PUSER_HANDLE_ENTRY;
+    BYTE type;       /* HANDLE_TYPE: object type (0 if free) */
+    BYTE flags;
+    WORD generation; /* generation counter */
+} HANDLEENTRY, *PHANDLEENTRY;
 
+/* ReactOS-Specific! */
+typedef struct _HANDLEENTRY USER_HANDLE_ENTRY, *PUSER_HANDLE_ENTRY;
 typedef struct _USER_HANDLE_TABLE
 {
     PUSER_HANDLE_ENTRY handles;

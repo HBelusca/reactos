@@ -193,27 +193,32 @@ TestState(PWND pWnd, UINT Flag)
     return FALSE;
 }
 
-PUSER_HANDLE_ENTRY
+static PHANDLEENTRY
 FASTCALL
 GetUser32Handle(HANDLE handle)
 {
+    PUSER_HANDLE_TABLE handleTable;
+    PHANDLEENTRY he;
     INT Index;
     USHORT generation;
 
     if (!handle) return NULL;
 
-    Index = (((UINT_PTR)handle & 0xffff) - FIRST_USER_HANDLE) >> 1;
+    handleTable = gSharedInfo.aheList;
+    ASSERT(handleTable);
+    /* ReactOS-Specific! */
+    he = SharedPtrToUser(handleTable->handles);
 
-    if (Index < 0 || Index >= gHandleTable->nb_handles)
+    Index = (LOWORD(handle) - FIRST_USER_HANDLE) >> 1;
+    if (Index < 0 || Index >= handleTable->nb_handles)
         return NULL;
 
-    if (!gHandleEntries[Index].type || !gHandleEntries[Index].ptr)
+    if (!he[Index].type || !he[Index].ptr)
         return NULL;
 
-    generation = (UINT_PTR)handle >> 16;
-
-    if (generation == gHandleEntries[Index].generation || !generation || generation == 0xffff)
-        return &gHandleEntries[Index];
+    generation = HIWORD(handle);
+    if (generation == he[Index].generation || !generation || generation == 0xFFFF)
+        return &he[Index];
 
     return NULL;
 }
@@ -255,7 +260,7 @@ FASTCALL
 ValidateHandle(HANDLE handle, UINT uType)
 {
     PVOID ret;
-    PUSER_HANDLE_ENTRY pEntry;
+    PHANDLEENTRY pEntry;
 
     ASSERT(uType < TYPE_CTYPES);
 
@@ -313,7 +318,7 @@ FASTCALL
 ValidateHandleNoErr(HANDLE handle, UINT uType)
 {
     PVOID ret;
-    PUSER_HANDLE_ENTRY pEntry;
+    PHANDLEENTRY pEntry;
 
     ASSERT(uType < TYPE_CTYPES);
 
@@ -341,7 +346,7 @@ PCALLPROCDATA
 FASTCALL
 ValidateCallProc(HANDLE hCallProc)
 {
-    PUSER_HANDLE_ENTRY pEntry;
+    PHANDLEENTRY pEntry;
 
     PCALLPROCDATA CallProc = ValidateHandle(hCallProc, TYPE_CALLPROC);
 

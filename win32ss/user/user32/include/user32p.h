@@ -41,8 +41,6 @@ extern HINSTANCE User32Instance;
 extern PPROCESSINFO g_ppi;
 extern SHAREDINFO gSharedInfo;
 extern PSERVERINFO gpsi;
-extern PUSER_HANDLE_TABLE gHandleTable;
-extern PUSER_HANDLE_ENTRY gHandleEntries;
 extern BOOLEAN gfLogonProcess;
 extern BOOLEAN gfServerProcess;
 extern CRITICAL_SECTION U32AccelCacheLock;
