@@ -1700,6 +1700,7 @@ public:
     CMessageMap *m_pObject;
     DWORD m_dwMsgMapID;
     const _ATL_MSG *m_pCurrentMsg;
+
 public:
     CContainedWindowT(CMessageMap *pObject, DWORD dwMsgMapID = 0)
     {
@@ -1826,103 +1827,103 @@ public:
 };
 typedef CContainedWindowT<CWindow> CContainedWindow;
 
-#define BEGIN_MSG_MAP(theClass)                                                                                                \
-public:                                                                                                                        \
-    BOOL ProcessWindowMessage(HWND GCCU(hWnd), UINT GCCU(uMsg), WPARAM GCCU(wParam), LPARAM GCCU(lParam), LRESULT &GCCU(lResult), DWORD dwMsgMapID = 0)    \
-    {                                                                                                                        \
-        BOOL GCCU(bHandled) = TRUE;                                                                                            \
-        Unused(hWnd);                                                                                                        \
-        Unused(uMsg);                                                                                                        \
-        Unused(wParam);                                                                                                        \
-        Unused(lParam);                                                                                                        \
-        Unused(lResult);                                                                                                    \
-        Unused(bHandled);                                                                                                    \
-        switch(dwMsgMapID)                                                                                                    \
-        {                                                                                                                    \
+#define BEGIN_MSG_MAP(theClass) \
+public:                         \
+    BOOL ProcessWindowMessage(HWND GCCU(hWnd), UINT GCCU(uMsg), WPARAM GCCU(wParam), LPARAM GCCU(lParam), LRESULT &GCCU(lResult), DWORD dwMsgMapID = 0) \
+    {                               \
+        BOOL GCCU(bHandled) = TRUE; \
+        Unused(hWnd);               \
+        Unused(uMsg);               \
+        Unused(wParam);             \
+        Unused(lParam);             \
+        Unused(lResult);            \
+        Unused(bHandled);           \
+        switch(dwMsgMapID)          \
+        {                           \
         case 0:
 
-#define ALT_MSG_MAP(map)                                                                        \
-            break;                                                                                \
+#define ALT_MSG_MAP(map) \
+            break;       \
         case map:
 
-#define END_MSG_MAP()                                                                            \
-            break;                                                                                \
-        default:                                                                                \
-            ATLASSERT(FALSE);                                                                    \
-            break;                                                                                \
-        }                                                                                        \
-        return FALSE;                                                                            \
+#define END_MSG_MAP()           \
+            break;              \
+        default:                \
+            ATLASSERT(FALSE);   \
+            break;              \
+        }                       \
+        return FALSE;           \
     }
 
-#define MESSAGE_HANDLER(msg, func)                                                                \
-    if (uMsg == msg)                                                                            \
-    {                                                                                            \
-        bHandled = TRUE;                                                                        \
-        lResult = func(uMsg, wParam, lParam, bHandled);                                            \
-        if (bHandled)                                                                            \
-            return TRUE;                                                                        \
+#define MESSAGE_HANDLER(msg, func)                      \
+    if (uMsg == msg)                                    \
+    {                                                   \
+        bHandled = TRUE;                                \
+        lResult = func(uMsg, wParam, lParam, bHandled); \
+        if (bHandled)                                   \
+            return TRUE;                                \
     }
 
-#define MESSAGE_RANGE_HANDLER(msgFirst, msgLast, func)                                            \
-    if (uMsg >= msgFirst && uMsg <= msgLast)                                                    \
-    {                                                                                            \
-        bHandled = TRUE;                                                                        \
-        lResult = func(uMsg, wParam, lParam, bHandled);                                            \
-        if (bHandled)                                                                            \
-            return TRUE;                                                                        \
+#define MESSAGE_RANGE_HANDLER(msgFirst, msgLast, func)  \
+    if (uMsg >= msgFirst && uMsg <= msgLast)            \
+    {                                                   \
+        bHandled = TRUE;                                \
+        lResult = func(uMsg, wParam, lParam, bHandled); \
+        if (bHandled)                                   \
+            return TRUE;                                \
     }
 
-#define COMMAND_HANDLER(id, code, func)                                                         \
-    if (uMsg == WM_COMMAND && id == LOWORD(wParam) && code == HIWORD(wParam))                   \
-    {                                                                                           \
-        bHandled = TRUE;                                                                        \
-        lResult = func(HIWORD(wParam), LOWORD(wParam), (HWND)lParam, bHandled);                 \
-        if (bHandled)                                                                           \
-            return TRUE;                                                                        \
+#define COMMAND_HANDLER(id, code, func)                                         \
+    if (uMsg == WM_COMMAND && id == LOWORD(wParam) && code == HIWORD(wParam))   \
+    {                                                                           \
+        bHandled = TRUE;                                                        \
+        lResult = func(HIWORD(wParam), LOWORD(wParam), (HWND)lParam, bHandled); \
+        if (bHandled)                                                           \
+            return TRUE;                                                        \
     }
 
-#define COMMAND_ID_HANDLER(id, func)                                                            \
-    if (uMsg == WM_COMMAND && id == LOWORD(wParam))                                                \
-    {                                                                                            \
-        bHandled = TRUE;                                                                        \
-        lResult = func(HIWORD(wParam), LOWORD(wParam), (HWND)lParam, bHandled);                    \
-        if (bHandled)                                                                            \
-            return TRUE;                                                                        \
+#define COMMAND_ID_HANDLER(id, func)                                            \
+    if (uMsg == WM_COMMAND && id == LOWORD(wParam))                             \
+    {                                                                           \
+        bHandled = TRUE;                                                        \
+        lResult = func(HIWORD(wParam), LOWORD(wParam), (HWND)lParam, bHandled); \
+        if (bHandled)                                                           \
+            return TRUE;                                                        \
     }
 
-#define COMMAND_CODE_HANDLER(code, func)                                                            \
-    if (uMsg == WM_COMMAND && code == HIWORD(wParam))                                                \
-    {                                                                                            \
-        bHandled = TRUE;                                                                        \
-        lResult = func(HIWORD(wParam), LOWORD(wParam), (HWND)lParam, bHandled);                    \
-        if (bHandled)                                                                            \
-            return TRUE;                                                                        \
+#define COMMAND_CODE_HANDLER(code, func)                                        \
+    if (uMsg == WM_COMMAND && code == HIWORD(wParam))                           \
+    {                                                                           \
+        bHandled = TRUE;                                                        \
+        lResult = func(HIWORD(wParam), LOWORD(wParam), (HWND)lParam, bHandled); \
+        if (bHandled)                                                           \
+            return TRUE;                                                        \
     }
 
-#define COMMAND_RANGE_HANDLER(idFirst, idLast, func)                                            \
-    if (uMsg == WM_COMMAND && LOWORD(wParam) >= idFirst  && LOWORD(wParam) <= idLast)            \
-    {                                                                                            \
-        bHandled = TRUE;                                                                        \
-        lResult = func(HIWORD(wParam), LOWORD(wParam), (HWND)lParam, bHandled);                    \
-        if (bHandled)                                                                            \
-            return TRUE;                                                                        \
+#define COMMAND_RANGE_HANDLER(idFirst, idLast, func)                                    \
+    if (uMsg == WM_COMMAND && LOWORD(wParam) >= idFirst  && LOWORD(wParam) <= idLast)   \
+    {                                                                                   \
+        bHandled = TRUE;                                                                \
+        lResult = func(HIWORD(wParam), LOWORD(wParam), (HWND)lParam, bHandled);         \
+        if (bHandled)                                                                   \
+            return TRUE;                                                                \
     }
 
-#define NOTIFY_CODE_HANDLER(cd, func)                                                            \
-    if(uMsg == WM_NOTIFY && cd == ((LPNMHDR)lParam)->code)                                        \
-    {                                                                                            \
-        bHandled = TRUE;                                                                        \
-        lResult = func((int)wParam, (LPNMHDR)lParam, bHandled);                                    \
-        if (bHandled)                                                                            \
-            return TRUE;                                                                        \
+#define NOTIFY_CODE_HANDLER(cd, func)                           \
+    if(uMsg == WM_NOTIFY && cd == ((LPNMHDR)lParam)->code)      \
+    {                                                           \
+        bHandled = TRUE;                                        \
+        lResult = func((int)wParam, (LPNMHDR)lParam, bHandled); \
+        if (bHandled)                                           \
+            return TRUE;                                        \
     }
 
 #define NOTIFY_HANDLER(id, cd, func)                                                            \
-    if(uMsg == WM_NOTIFY && id == ((LPNMHDR)lParam)->idFrom && cd == ((LPNMHDR)lParam)->code)    \
-    {                                                                                            \
+    if(uMsg == WM_NOTIFY && id == ((LPNMHDR)lParam)->idFrom && cd == ((LPNMHDR)lParam)->code)   \
+    {                                                                                           \
         bHandled = TRUE;                                                                        \
-        lResult = func((int)wParam, (LPNMHDR)lParam, bHandled);                                    \
-        if (bHandled)                                                                            \
+        lResult = func((int)wParam, (LPNMHDR)lParam, bHandled);                                 \
+        if (bHandled)                                                                           \
             return TRUE;                                                                        \
     }
 
@@ -1932,17 +1933,53 @@ public:                                                                         
             return TRUE; \
     }
 
-#define DECLARE_WND_CLASS_EX(WndClassName, style, bkgnd)                                        \
-static ATL::CWndClassInfo& GetWndClassInfo()                                                    \
-{                                                                                                \
-    static ATL::CWndClassInfo wc =                                                                \
-    {                                                                                            \
-        { sizeof(WNDCLASSEX), style, StartWindowProc,                                            \
-          0, 0, NULL, NULL, NULL, (HBRUSH)(bkgnd + 1), NULL, WndClassName, NULL },                \
-        NULL, NULL, IDC_ARROW, TRUE, 0, _T("")                                                    \
-    };                                                                                            \
-    return wc;                                                                                    \
+#define DECLARE_WND_CLASS(WndClassName)                         \
+    DECLARE_WND_CLASS_EX(WndClassName,                          \
+                         CS_HREDRAW | CS_VREDRAW | CS_DBLCLKS,  \
+                         COLOR_WINDOW)
+
+#define DECLARE_WND_CLASS2(WndClassName, EnclosingClass)        \
+    DECLARE_WND_CLASS_EX2(WndClassName, EnclosingClass,         \
+                          CS_HREDRAW | CS_VREDRAW | CS_DBLCLKS, \
+                          COLOR_WINDOW)
+
+#define DECLARE_WND_CLASS_EX(WndClassName, style, bkgnd)                            \
+static ATL::CWndClassInfo& GetWndClassInfo()                                        \
+{                                                                                   \
+    static ATL::CWndClassInfo wc =                                                  \
+    {                                                                               \
+        { sizeof(WNDCLASSEX), style, StartWindowProc,                               \
+          0, 0, NULL, NULL, NULL, (HBRUSH)(bkgnd + 1), NULL, WndClassName, NULL },  \
+        NULL, NULL, IDC_ARROW, TRUE, 0, _T("")                                      \
+    };                                                                              \
+    return wc;                                                                      \
 }
+
+#define DECLARE_WND_CLASS_EX2(WndClassName, EnclosingClass, style, bkgnd)           \
+static ATL::CWndClassInfo& GetWndClassInfo()                                        \
+{                                                                                   \
+    static ATL::CWndClassInfo wc =                                                  \
+    {                                                                               \
+        { sizeof(WNDCLASSEX), style, EnclosingClass::StartWindowProc,               \
+          0, 0, NULL, NULL, NULL, (HBRUSH)(bkgnd + 1), NULL, WndClassName, NULL },  \
+        NULL, NULL, IDC_ARROW, TRUE, 0, _T("")                                      \
+    };                                                                              \
+    return wc;                                                                      \
+}
+
+#if 0 // TODO: Enable once superclassing is fully implemented.
+#define DECLARE_WND_SUPERCLASS(WndClassName, OrigWndClassName)      \
+static ATL::CWndClassInfo& GetWndClassInfo()                        \
+{                                                                   \
+    static ATL::CWndClassInfo wc =                                  \
+    {                                                               \
+        { sizeof(WNDCLASSEX), 0, StartWindowProc,                   \
+          0, 0, NULL, NULL, NULL, NULL, NULL, WndClassName, NULL }, \
+        OrigWndClassName, NULL, NULL, TRUE, 0, _T("")               \
+    };                                                              \
+    return wc;                                                      \
+}
+#endif
 
 struct _ATL_WNDCLASSINFOW
 {
