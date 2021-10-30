@@ -294,7 +294,7 @@ GetDriveTypeAndCharacteristics(HANDLE hDevice, DEVICE_TYPE *pDeviceType, ULONG *
     Status = NtQueryVolumeInformationFile(hDevice, &IoStatusBlock,
                                           &DeviceInfo, sizeof(DeviceInfo),
                                           FileFsDeviceInformation);
-    if (Status == NO_ERROR)
+    if (Status == STATUS_SUCCESS)
     {
         *pDeviceType = DeviceInfo.DeviceType;
         *pCharacteristics = DeviceInfo.Characteristics;
@@ -304,7 +304,8 @@ GetDriveTypeAndCharacteristics(HANDLE hDevice, DEVICE_TYPE *pDeviceType, ULONG *
     return FALSE;
 }
 
-BOOL IsDriveFloppyW(LPCWSTR pszDriveRoot)
+static BOOL
+IsDriveFloppyW(_In_ PCWSTR pszDriveRoot)
 {
     LPCWSTR RootPath = pszDriveRoot;
     WCHAR szRoot[16], szDeviceName[16];
@@ -370,12 +371,75 @@ BOOL IsDriveFloppyW(LPCWSTR pszDriveRoot)
     return ret;
 }
 
-BOOL IsDriveFloppyA(LPCSTR pszDriveRoot)
+static BOOL
+IsDriveFloppyA(_In_ PCSTR pszDriveRoot)
 {
     WCHAR szRoot[8];
     MultiByteToWideChar(CP_ACP, 0, pszDriveRoot, -1, szRoot, _countof(szRoot));
     return IsDriveFloppyW(szRoot);
 }
+
+BOOL
+GetDriveInfoAW( // GetShellDriveInfo
+    _In_ PCVOID pszDrive, // PCWSTR or PCSTR
+    _In_ BOOL bUnicode,
+    // _Out_ PUINT  pDriveType,
+    _Out_opt_ PUINT pIconResId,
+    _Out_opt_ PUINT pTypeStrResId)
+{
+    static const struct
+    {
+        UINT IconId;
+        UINT TypeStrId;
+    } DriveIds[7] =
+    {
+        { IDI_SHELL_DRIVE,       IDS_DRIVE_FIXED   }, /* DRIVE_UNKNOWN     */
+        { IDI_SHELL_CDROM,       IDS_DRIVE_FIXED   }, /* DRIVE_NO_ROOT_DIR */
+        { IDI_SHELL_3_14_FLOPPY, IDS_DRIVE_FLOPPY  }, /* DRIVE_REMOVABLE   */
+        { IDI_SHELL_DRIVE,       IDS_DRIVE_FIXED   }, /* DRIVE_FIXED       */
+        { IDI_SHELL_NETDRIVE,    IDS_DRIVE_NETWORK }, /* DRIVE_REMOTE      */
+        { IDI_SHELL_CDROM,       IDS_DRIVE_CDROM   }, /* DRIVE_CDROM       */
+        { IDI_SHELL_RAMDISK,     IDS_DRIVE_FIXED   }  /* DRIVE_RAMDISK     */
+    };
+
+    UINT DriveType = (bUnicode ? GetDriveTypeW(pszDrive) : GetDriveTypeA(pszDrive));
+    UINT IconId, TypeStrId;
+
+    if (DriveType > DRIVE_RAMDISK)
+        DriveType = DRIVE_UNKNOWN; // DRIVE_FIXED;
+
+#if 0
+    if (DriveType == DRIVE_REMOVABLE && !IsDriveFloppyA(pszDrive))
+    {
+        IconId = IDI_SHELL_REMOVEABLE;
+        TypeStrId = IDS_DRIVE_REMOVABLE;
+    }
+#endif
+    if (DriveType == DRIVE_REMOVABLE)
+    {
+        if (bUnicode ? !IsDriveFloppyW(pszDrive) : !IsDriveFloppyA(pszDrive))
+        {
+            IconId = IDI_SHELL_REMOVEABLE;
+            TypeStrId = IDS_DRIVE_REMOVABLE;
+        }
+        else
+        {
+            IconId = IDI_SHELL_3_14_FLOPPY;
+            TypeStrId = IDS_DRIVE_FLOPPY;
+        }
+    }
+    else
+    {
+        IconId = DriveIds[DriveType].IconId;
+        TypeStrId = DriveIds[DriveType].TypeStrId;
+    }
+
+    if (pIconResId)
+        *pIconResId = IconId;
+    if (pTypeStrResId)
+        *pTypeStrResId = TypeStrId;
+}
+
 
 VOID
 CDrvDefExt::InitGeneralPage(HWND hwndDlg)
@@ -400,20 +464,8 @@ CDrvDefExt::InitGeneralPage(HWND hwndDlg)
 
     /* Set drive type and icon */
     UINT DriveType = GetDriveTypeW(m_wszDrive);
-    UINT IconId, TypeStrId = 0;
-    switch (DriveType)
-    {
-        case DRIVE_REMOVABLE:
-            if (IsDriveFloppyW(m_wszDrive))
-                IconId = IDI_SHELL_3_14_FLOPPY;
-            else
-                IconId = IDI_SHELL_REMOVEABLE;
-            break;
-        case DRIVE_CDROM: IconId = IDI_SHELL_CDROM; TypeStrId = IDS_DRIVE_CDROM; break;
-        case DRIVE_REMOTE: IconId = IDI_SHELL_NETDRIVE; TypeStrId = IDS_DRIVE_NETWORK; break;
-        case DRIVE_RAMDISK: IconId = IDI_SHELL_RAMDISK; break;
-        default: IconId = IDI_SHELL_DRIVE; TypeStrId = IDS_DRIVE_FIXED;
-    }
+    UINT IconId, TypeStrId;
+    GetDriveInfoAW(m_wszDrive, TRUE, /*&DriveType,*/ &IconId, &TypeStrId);
 
     if (DriveType == DRIVE_CDROM || DriveType == DRIVE_REMOTE)
     {
@@ -434,7 +486,7 @@ CDrvDefExt::InitGeneralPage(HWND hwndDlg)
         SetDlgItemTextW(hwndDlg, 14001, wszBuf);
 
     ULARGE_INTEGER FreeBytesAvailable, TotalNumberOfBytes;
-    if(GetDiskFreeSpaceExW(m_wszDrive, &FreeBytesAvailable, &TotalNumberOfBytes, NULL))
+    if (GetDiskFreeSpaceExW(m_wszDrive, &FreeBytesAvailable, &TotalNumberOfBytes, NULL))
     {
         /* Init free space percentage used for drawing piechart */
         m_FreeSpacePerc = (UINT)(FreeBytesAvailable.QuadPart * 100ull / TotalNumberOfBytes.QuadPart);
