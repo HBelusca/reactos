@@ -412,7 +412,7 @@ BOOL COpenWithList::GetPathFromCmd(LPWSTR pwszAppPath, LPCWSTR pwszCmd)
 
     *pwszDest = 0;
 
-    /* Expand evn vers and optionally search for path */
+    /* Expand env vars and optionally search for path */
     ExpandEnvironmentStrings(wszBuf, pwszAppPath, MAX_PATH);
     if (!PathFileExists(pwszAppPath))
         return SearchPath(NULL, pwszAppPath, NULL, MAX_PATH, pwszAppPath, NULL);

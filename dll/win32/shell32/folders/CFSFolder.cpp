@@ -639,7 +639,7 @@ HRESULT SHELL32_GetFSItemAttributes(IShellFolder * psf, LPCITEMIDLIST pidl, LPDW
                     DWORD dwSize = sizeof(dwAttributes);
                     LSTATUS Status;
 
-                    Status = SHRegGetValueW(hkey, NULL, L"Attributes", RRF_RT_REG_DWORD, NULL, &dwAttributes, &dwSize);
+                    Status = SHRegGetValueW(hkey, NULL, L"Attributes", SRRF_RT_REG_DWORD, NULL, &dwAttributes, &dwSize);
                     if (Status == STATUS_SUCCESS)
                     {
                         TRACE("Augmenting '%S' with dwAttributes=0x%x\n", szFileName, dwAttributes);

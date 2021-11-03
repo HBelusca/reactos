@@ -427,64 +427,6 @@ void WINAPI RunFileDlg(
     DialogBoxParamW(shell32_hInstance, MAKEINTRESOURCEW(IDD_RUN), hWndOwner, RunDlgProc, (LPARAM)&rfdp);
 }
 
-
-/* find the directory that contains the file being run */
-static LPWSTR RunDlg_GetParentDir(LPCWSTR cmdline)
-{
-    const WCHAR *src;
-    WCHAR *dest, *result, *result_end=NULL;
-
-    result = (WCHAR *)HeapAlloc(GetProcessHeap(), 0, sizeof(WCHAR)*(strlenW(cmdline)+5));
-
-    if (NULL == result)
-    {
-        TRACE("HeapAlloc couldn't allocate %d bytes\n", sizeof(WCHAR)*(strlenW(cmdline)+5));
-        return NULL;
-    }
-
-    src = cmdline;
-    dest = result;
-
-    if (*src == '"')
-    {
-        src++;
-        while (*src && *src != '"')
-        {
-            if (*src == '\\')
-                result_end = dest;
-            *dest++ = *src++;
-        }
-    }
-    else {
-        while (*src)
-        {
-            if (isspaceW(*src))
-            {
-                *dest = 0;
-                if (INVALID_FILE_ATTRIBUTES != GetFileAttributesW(result))
-                    break;
-                strcatW(dest, L".exe");
-                if (INVALID_FILE_ATTRIBUTES != GetFileAttributesW(result))
-                    break;
-            }
-            else if (*src == '\\')
-                result_end = dest;
-            *dest++ = *src++;
-        }
-    }
-
-    if (result_end)
-    {
-        *result_end = 0;
-        return result;
-    }
-    else
-    {
-        HeapFree(GetProcessHeap(), 0, result);
-        return NULL;
-    }
-}
-
 static void EnableOkButtonFromEditContents(HWND hwnd)
 {
     BOOL Enable = FALSE;
@@ -511,12 +453,14 @@ static void EnableOkButtonFromEditContents(HWND hwnd)
 static INT_PTR CALLBACK RunDlgProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
     RUNFILEDLGPARAMS *prfdp = (RUNFILEDLGPARAMS *)GetWindowLongPtrW(hwnd, DWLP_USER);
-    HWND hwndCombo, hwndEdit;
-    COMBOBOXINFO ComboInfo;
 
     switch (message)
     {
         case WM_INITDIALOG:
+        {
+            HWND hwndCombo, hwndEdit;
+            COMBOBOXINFO ComboInfo;
+
             prfdp = (RUNFILEDLGPARAMS *)lParam;
             SetWindowLongPtrW(hwnd, DWLP_USER, (LONG_PTR)prfdp);
 
@@ -567,6 +511,7 @@ static INT_PTR CALLBACK RunDlgProc(HWND hwnd, UINT message, WPARAM wParam, LPARA
 
             SetFocus(hwndCombo);
             return TRUE;
+        }
 
         case WM_DESTROY:
             if (prfdp->bCoInited)
@@ -581,36 +526,29 @@ static INT_PTR CALLBACK RunDlgProc(HWND hwnd, UINT message, WPARAM wParam, LPARA
                     LRESULT lRet;
                     HWND htxt = GetDlgItem(hwnd, IDC_RUNDLG_EDITPATH);
                     INT ic;
-                    WCHAR *psz, *pszExpanded, *parent = NULL;
+                    LPWSTR psz, pszExpanded;
                     DWORD cchExpand;
-                    SHELLEXECUTEINFOW sei;
                     NMRUNFILEDLGW nmrfd;
 
+                    /*
+                     * Allocate a new MRU entry, we need to add two characters
+                     * for the terminating "\\1" part, then the NULL character.
+                     */
                     ic = GetWindowTextLengthW(htxt);
                     if (ic == 0)
                     {
                         EndDialog(hwnd, IDCANCEL);
                         return TRUE;
                     }
-
-                    ZeroMemory(&sei, sizeof(sei));
-                    sei.cbSize = sizeof(sei);
-
-                    /*
-                     * Allocate a new MRU entry, we need to add two characters
-                     * for the terminating "\\1" part, then the NULL character.
-                     */
-                    psz = (WCHAR*)HeapAlloc(GetProcessHeap(), 0, (ic + 2 + 1)*sizeof(WCHAR));
+                    psz = (WCHAR*)HeapAlloc(GetProcessHeap(), 0, (ic + 2 + 1) * sizeof(WCHAR));
                     if (!psz)
                     {
                         EndDialog(hwnd, IDCANCEL);
                         return TRUE;
                     }
 
+                    /* Retrieve the command line and expand it */
                     GetWindowTextW(htxt, psz, ic + 1);
-                    sei.hwnd = hwnd;
-                    sei.nShow = SW_SHOWNORMAL;
-                    sei.lpFile = psz;
                     StrTrimW(psz, L" \t");
 
                     if (wcschr(psz, L'%') != NULL)
@@ -624,35 +562,16 @@ static INT_PTR CALLBACK RunDlgProc(HWND hwnd, UINT message, WPARAM wParam, LPARA
                             return TRUE;
                         }
                         ExpandEnvironmentStringsW(psz, pszExpanded, cchExpand);
-                        StrTrimW(pszExpanded, L" \t");
                     }
                     else
                     {
                         pszExpanded = psz;
                     }
 
-                    /*
-                     * The precedence is the following: first the user-given
-                     * current directory is used; if there is none, a current
-                     * directory is computed if the RFF_CALCDIRECTORY is set,
-                     * otherwise no current directory is defined.
-                     */
-                    LPCWSTR pszStartDir;
-                    if (prfdp->lpstrDirectory)
-                    {
-                        sei.lpDirectory = prfdp->lpstrDirectory;
-                        pszStartDir = prfdp->lpstrDirectory;
-                    }
-                    else if (prfdp->uFlags & RFF_CALCDIRECTORY)
-                    {
-                        sei.lpDirectory = parent = RunDlg_GetParentDir(sei.lpFile);
-                        pszStartDir = parent = RunDlg_GetParentDir(pszExpanded);
-                    }
-                    else
-                    {
-                        sei.lpDirectory = NULL;
-                        pszStartDir = NULL;
-                    }
+                    //
+                    // TODO (optional): Windows prompts for removable media, like
+                    // a floppy, before continuing with notification and stuff...
+                    //
 
                     /* Hide the dialog for now on, we will show it up in case of retry */
                     ShowWindow(hwnd, SW_HIDE);
@@ -662,7 +581,7 @@ static INT_PTR CALLBACK RunDlgProc(HWND hwnd, UINT message, WPARAM wParam, LPARA
                      * of the notification structure will not modify what the
                      * Run-Dialog will use for the nShow parameter. However the
                      * lpFile and lpDirectory pointers are set to the buffers used
-                     * by the Run-Dialog, as a consequence they can be modified by
+                     * by the Run-Dialog; as a consequence they can be modified by
                      * the notification receiver, as long as it respects the lengths
                      * of the buffers (to avoid buffer overflows).
                      */
@@ -670,7 +589,7 @@ static INT_PTR CALLBACK RunDlgProc(HWND hwnd, UINT message, WPARAM wParam, LPARA
                     nmrfd.hdr.hwndFrom = hwnd;
                     nmrfd.hdr.idFrom = 0;
                     nmrfd.lpFile = pszExpanded;
-                    nmrfd.lpDirectory = pszStartDir;
+                    nmrfd.lpDirectory = prfdp->lpstrDirectory;
                     nmrfd.nShow = SW_SHOWNORMAL;
 
                     lRet = SendMessageW(prfdp->hwndOwner, WM_NOTIFY, 0, (LPARAM)&nmrfd.hdr);
@@ -682,11 +601,18 @@ static INT_PTR CALLBACK RunDlgProc(HWND hwnd, UINT message, WPARAM wParam, LPARA
                             break;
 
                         case RF_OK:
-                            /* We use SECL_NO_UI because we don't want to see
-                             * errors here, but we will try again below and
-                             * there we will output our errors. */
-                            if (SUCCEEDED(ShellExecCmdLine(hwnd, pszExpanded, pszStartDir, SW_SHOWNORMAL, NULL,
-                                                           SECL_ALLOW_NONEXE | SECL_NO_UI)))
+                        {
+                            DWORD dwFlags = /* SECL_USE_IDLIST | */
+                                            SECL_LOG_USAGE |
+                                            SECL_USERCMD_PARSE_UNSAFE |
+                                            ((prfdp->uFlags & RFF_CALCDIRECTORY) ? SECL_CALCDIRECTORY : 0);
+
+                            if (SUCCEEDED(ShellExecCmdLine(prfdp->hwndOwner,
+                                                           pszExpanded,
+                                                           prfdp->lpstrDirectory,
+                                                           SW_SHOWNORMAL,
+                                                           NULL,
+                                                           dwFlags)))
                             {
                                 /* Call GetWindowText again in case the contents of the edit box have changed. */
                                 GetWindowTextW(htxt, psz, ic + 1);
@@ -694,28 +620,20 @@ static INT_PTR CALLBACK RunDlgProc(HWND hwnd, UINT message, WPARAM wParam, LPARA
                                 EndDialog(hwnd, IDOK);
                                 break;
                             }
-                            else if (SUCCEEDED(ShellExecuteExW(&sei)))
-                            {
-                                /* Call GetWindowText again in case the contents of the edit box have changed. */
-                                GetWindowTextW(htxt, psz, ic + 1);
-                                FillList(htxt, psz, ic + 2 + 1, FALSE);
-                                EndDialog(hwnd, IDOK);
-                                break;
-                            }
+                        }
 
                         /* Fall-back */
                         case RF_RETRY:
                         default:
-                            SendMessageW(htxt, CB_SETEDITSEL, 0, MAKELPARAM (0, -1));
+                            SendMessageW(htxt, CB_SETEDITSEL, 0, MAKELPARAM(0, -1));
                             /* Show back the dialog */
                             ShowWindow(hwnd, SW_SHOW);
                             break;
                     }
 
-                    HeapFree(GetProcessHeap(), 0, parent);
-                    HeapFree(GetProcessHeap(), 0, psz);
                     if (psz != pszExpanded)
                         HeapFree(GetProcessHeap(), 0, pszExpanded);
+                    HeapFree(GetProcessHeap(), 0, psz);
                     return TRUE;
                 }
 
@@ -765,6 +683,7 @@ static INT_PTR CALLBACK RunDlgProc(HWND hwnd, UINT message, WPARAM wParam, LPARA
 
                     return TRUE;
                 }
+
                 case IDC_RUNDLG_EDITPATH:
                 {
                     if (HIWORD(wParam) == CBN_EDITCHANGE)
@@ -968,7 +887,7 @@ Continue:
     {
         SendMessageW(hCb, CB_INSERTSTRING, 0, (LPARAM)pszLatest);
         SetWindowTextW(hCb, pszLatest);
-        SendMessageW(hCb, CB_SETEDITSEL, 0, MAKELPARAM (0, -1));
+        SendMessageW(hCb, CB_SETEDITSEL, 0, MAKELPARAM(0, -1));
 
         cMatch = ++cMax;
 

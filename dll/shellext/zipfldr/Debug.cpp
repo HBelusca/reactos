@@ -15,7 +15,7 @@ static bool GetInterfaceName(const WCHAR* InterfaceString, WCHAR* buf, size_t si
     if (!SUCCEEDED(StringCchPrintfW(LocalBuf, _countof(LocalBuf), L"Interface\\%s", InterfaceString)))
         return false;
 
-    return SHRegGetValueW(HKEY_CLASSES_ROOT, LocalBuf, NULL, RRF_RT_REG_SZ, &dwType, buf, &dwDataSize) == ERROR_SUCCESS;
+    return SHRegGetValueW(HKEY_CLASSES_ROOT, LocalBuf, NULL, SRRF_RT_REG_SZ, &dwType, buf, &dwDataSize) == ERROR_SUCCESS;
 }
 
 WCHAR* guid2string(REFCLSID iid)
