@@ -770,6 +770,7 @@ static BOOL SHIsCdRom(LPCWSTR path)
  * Copies a file. Also triggers a change notify if one exists.
  *
  * PARAMS
+ *  op            [I]   file operation context
  *  src           [I]   path to source file to move
  *  dest          [I]   path to target file to move to
  *  bFailIfExists [I]   if TRUE, the target file will not be overwritten if
