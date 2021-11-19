@@ -590,7 +590,7 @@ BaseUpdateVDMEntry(IN ULONG UpdateIndex,
     if (BinaryType == BINARY_TYPE_WOW)
     {
         /* Magic value for 16-bit apps */
-        UpdateVdmEntry->ConsoleHandle = (HANDLE)-1;
+        UpdateVdmEntry->ConsoleHandle = (HANDLE)-1; // HANDLE_DETACHED_PROCESS
     }
     else if (UpdateVdmEntry->iTask)
     {
@@ -683,8 +683,8 @@ BaseGetVdmConfigInfo(IN LPCWSTR CommandLineReserved,
     *VdmSize = 0x1000000;
 
     /* Get the system directory */
-    Length = GetSystemDirectoryW(Buffer, MAX_PATH);
-    if (!(Length) || (Length >= MAX_PATH))
+    Length = GetSystemDirectoryW(Buffer, ARRAYSIZE(Buffer));
+    if (!Length || (Length >= ARRAYSIZE(Buffer)))
     {
         /* Eliminate no path or path too big */
         SetLastError(ERROR_INVALID_NAME);
@@ -1625,7 +1625,6 @@ GetNextVDMCommand(PVDM_COMMAND_INFO CommandData)
         if (Status != STATUS_SUCCESS)
         {
             /* Fail if we timed out, or if some other error happened */
-            BaseSetLastNTError(Status);
             goto Cleanup;
         }
 
@@ -1633,6 +1632,9 @@ GetNextVDMCommand(PVDM_COMMAND_INFO CommandData)
         GetNextVdmCommand->VDMState |= VDM_FLAG_RETRY;
         GetNextVdmCommand->ExitCode = 0;
     }
+    /* Retrieve the actual API status, in case of success */
+    if (NT_SUCCESS(Status))
+        Status = ApiMessage.Status;
 
     if (!NT_SUCCESS(Status))
     {
@@ -1664,8 +1666,6 @@ GetNextVDMCommand(PVDM_COMMAND_INFO CommandData)
             CommandData->TitleLen    = 0;
             CommandData->ReservedLen = 0;
         }
-
-        BaseSetLastNTError(Status);
         goto Cleanup;
     }
 
@@ -1780,7 +1780,12 @@ GetNextVDMCommand(PVDM_COMMAND_INFO CommandData)
     Success = TRUE;
 
 Cleanup:
-    if (CaptureBuffer != NULL) CsrFreeCaptureBuffer(CaptureBuffer);
+    /* Free the capture buffer */
+    if (CaptureBuffer) CsrFreeCaptureBuffer(CaptureBuffer);
+
+    if (!Success)
+        BaseSetLastNTError(Status);
+
     return Success;
 }
 
@@ -1816,9 +1821,6 @@ GetVDMCurrentDirectories(DWORD cchCurDirs, PCHAR lpszzCurDirs)
                         CSR_CREATE_API_NUMBER(BASESRV_SERVERDLL_INDEX, BasepGetVDMCurDirs),
                         sizeof(*VDMCurrentDirsRequest));
 
-    /* Set the last error */
-    BaseSetLastNTError(ApiMessage.Status);
-
     if (NT_SUCCESS(ApiMessage.Status))
     {
         /* Copy the result */
@@ -1827,6 +1829,12 @@ GetVDMCurrentDirectories(DWORD cchCurDirs, PCHAR lpszzCurDirs)
 
     /* Free the capture buffer */
     CsrFreeCaptureBuffer(CaptureBuffer);
+
+    if (!NT_SUCCESS(ApiMessage.Status))
+    {
+        /* Set the last error */
+        BaseSetLastNTError(ApiMessage.Status);
+    }
 
     /* Return the size if it was successful, or if the buffer was too small */
     return (NT_SUCCESS(ApiMessage.Status) || (ApiMessage.Status == STATUS_BUFFER_TOO_SMALL))
@@ -1999,7 +2007,7 @@ SetVDMCurrentDirectories(DWORD cchCurDirs, PCHAR lpszzCurDirs)
     /* Set the last error */
     BaseSetLastNTError(ApiMessage.Status);
 
-    return NT_SUCCESS(ApiMessage.Status) ? TRUE : FALSE;
+    return NT_SUCCESS(ApiMessage.Status);
 }
 
 /*
