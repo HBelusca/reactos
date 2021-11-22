@@ -2485,7 +2485,7 @@ CreateProcessInternalW(IN HANDLE hUserToken,
                          BELOW_NORMAL_PRIORITY_CLASS |
                          ABOVE_NORMAL_PRIORITY_CLASS);
 
-    /* You cannot request both a shared and a separate WoW VDM */
+    /* You cannot request both a shared and a separate WOW VDM */
     if ((dwCreationFlags & CREATE_SEPARATE_WOW_VDM) &&
         (dwCreationFlags & CREATE_SHARED_WOW_VDM))
     {
@@ -2497,16 +2497,16 @@ CreateProcessInternalW(IN HANDLE hUserToken,
     else if (!(dwCreationFlags & CREATE_SHARED_WOW_VDM) &&
              (BaseStaticServerData->DefaultSeparateVDM))
     {
-        /* A shared WoW VDM was not requested but system enforces separation */
+        /* A shared WOW VDM was not requested but system enforces separation */
         dwCreationFlags |= CREATE_SEPARATE_WOW_VDM;
     }
 
-    /* If a shared WoW VDM is used, make sure the process isn't in a job */
+    /* If a shared WOW VDM is used, make sure the process isn't in a job */
     if (!(dwCreationFlags & CREATE_SEPARATE_WOW_VDM) &&
         (NtIsProcessInJob(NtCurrentProcess(), NULL)))
     {
         /* Remove the shared flag and add the separate flag */
-        dwCreationFlags = (dwCreationFlags &~ CREATE_SHARED_WOW_VDM) |
+        dwCreationFlags = (dwCreationFlags & ~CREATE_SHARED_WOW_VDM) |
                                               CREATE_SEPARATE_WOW_VDM;
     }
 
@@ -3003,9 +3003,9 @@ StartScan:
     if (!SkipSaferAndAppCompat)
     {
         /* Is everything OK so far, OR do we have an non-MZ, non-DOS app? */
-        if ((NT_SUCCESS(Status)) ||
+        if (NT_SUCCESS(Status) ||
             ((Status == STATUS_INVALID_IMAGE_NOT_MZ) &&
-            !(BaseIsDosApplication(&PathName, Status))))
+            !BaseIsDosApplication(&PathName, Status)))
         {
             /* Clear the machine type in case of failure */
             ImageMachine = 0;
@@ -3170,9 +3170,8 @@ StartScan:
                 while (TRUE)
                 {
                     /* Pick which kind of WOW mode we want to run in */
-                    VdmBinaryType = (dwCreationFlags &
-                                     CREATE_SEPARATE_WOW_VDM) ?
-                                     BINARY_TYPE_SEPARATE_WOW : BINARY_TYPE_WOW;
+                    VdmBinaryType = (dwCreationFlags & CREATE_SEPARATE_WOW_VDM)
+                                    ? BINARY_TYPE_SEPARATE_WOW : BINARY_TYPE_WOW;
 
                     /* Get all the VDM settings and current status */
                     Status = BaseCheckVDM(VdmBinaryType,
@@ -3189,13 +3188,18 @@ StartScan:
                     /* If it worked, no need to try again */
                     if (NT_SUCCESS(Status)) break;
 
-                    /* Check if it's disallowed or if it's our second time */
                     BaseSetLastNTError(Status);
+
+                    /*
+                     * Check if it's disallowed or if it's our second time.
+                     * ERROR_ACCESS_DENIED could happen if the shared WOW
+                     * is on an inaccessible desktop (TODO handle in BaseCheckVDM too)
+                     */
                     if ((Status == STATUS_VDM_DISALLOWED) ||
                         (VdmBinaryType == BINARY_TYPE_SEPARATE_WOW) ||
-                        (GetLastError() == ERROR_ACCESS_DENIED))
+                        (GetLastError() != ERROR_ACCESS_DENIED))
                     {
-                        /* Fail the call -- we won't try again */
+                        /* Fail the call, we won't try again */
                         DPRINT1("VDM message failure for WOW: %lx\n", Status);
                         Result = FALSE;
                         goto Quickie;
@@ -3211,6 +3215,7 @@ StartScan:
                                                  VDM_READY))
                 {
                     case VDM_NOT_LOADED:
+                    {
                         /* VDM is not fully loaded, so not that much to undo */
                         VdmUndoLevel = VDM_UNDO_PARTIAL;
 
@@ -3241,22 +3246,26 @@ StartScan:
                         /* Force feedback on */
                         StartupInfo.dwFlags |= STARTF_FORCEONFEEDBACK;
                         break;
-
+                    }
 
                     case VDM_READY:
+                    {
                         /* VDM is ready, so we have to undo everything */
                         VdmUndoLevel = VDM_UNDO_REUSE;
 
                         /* Check if CSRSS wants us to wait on VDM */
                         VdmWaitObject = CheckVdmMsg->WaitObjectForParent;
                         break;
+                    }
 
                     case VDM_NOT_READY:
+                    {
                         /* Something is wrong with VDM, we'll fail the call */
                         DPRINT1("VDM is not ready for WOW\n");
                         SetLastError(ERROR_NOT_READY);
                         Result = FALSE;
                         goto Quickie;
+                    }
 
                     default:
                         break;
@@ -3272,8 +3281,7 @@ StartScan:
                 bInheritHandles = FALSE;
 
                 /* Had the user passed in environment? If so, destroy it */
-                if ((lpEnvironment) &&
-                    !(dwCreationFlags & CREATE_UNICODE_ENVIRONMENT))
+                if ((lpEnvironment) && !(dwCreationFlags & CREATE_UNICODE_ENVIRONMENT))
                 {
                     RtlDestroyEnvironment(lpEnvironment);
                 }
@@ -3337,6 +3345,7 @@ StartScan:
                                                  VDM_READY))
                 {
                     case VDM_NOT_LOADED:
+                    {
                         /* If VDM is not loaded, we'll do a partial undo */
                         VdmUndoLevel = VDM_UNDO_PARTIAL;
 
@@ -3345,7 +3354,8 @@ StartScan:
                         {
                             DPRINT1("Detached process but no VDM, not allowed\n");
                             SetLastError(ERROR_ACCESS_DENIED);
-                            return FALSE;
+                            Result = FALSE;
+                            goto Quickie;
                         }
 
                         /* Get the required parameters and names for launch */
@@ -3365,21 +3375,26 @@ StartScan:
                         lpCommandLine = VdmString.Buffer;
                         lpApplicationName = NULL;
                         break;
+                    }
 
                     case VDM_READY:
+                    {
                         /* VDM is ready, so we have to undo everything */
                         VdmUndoLevel = VDM_UNDO_REUSE;
 
                         /* Check if CSRSS wants us to wait on VDM */
                         VdmWaitObject = CheckVdmMsg->WaitObjectForParent;
                         break;
+                    }
 
                     case VDM_NOT_READY:
+                    {
                         /* Something is wrong with VDM, we'll fail the call */
                         DPRINT1("VDM is not ready for DOS\n");
                         SetLastError(ERROR_NOT_READY);
                         Result = FALSE;
                         goto Quickie;
+                    }
 
                     default:
                         break;
@@ -3395,8 +3410,7 @@ StartScan:
                 bInheritHandles = FALSE;
 
                 /* Had the user passed in environment? If so, destroy it */
-                if ((lpEnvironment) &&
-                    !(dwCreationFlags & CREATE_UNICODE_ENVIRONMENT))
+                if ((lpEnvironment) && !(dwCreationFlags & CREATE_UNICODE_ENVIRONMENT))
                 {
                     RtlDestroyEnvironment(lpEnvironment);
                 }
@@ -3509,7 +3523,7 @@ StartScan:
     }
 
     /* Is this not a WOW application, but a WOW32 VDM was requested for it? */
-    if (!(IsWowApp) && (dwCreationFlags & CREATE_SEPARATE_WOW_VDM))
+    if (!IsWowApp && (dwCreationFlags & CREATE_SEPARATE_WOW_VDM))
     {
         /* Ignore the nonsensical request */
         dwCreationFlags &= ~CREATE_SEPARATE_WOW_VDM;
@@ -4123,8 +4137,8 @@ StartScan:
     VdmString.Buffer = NULL;
 
     /* Non-VDM console applications usually inherit handles unless specified */
-    if (!(VdmBinaryType) &&
-        !(bInheritHandles) &&
+    if (!VdmBinaryType &&
+        !bInheritHandles &&
         !(StartupInfo.dwFlags & STARTF_USESTDHANDLES) &&
         !(dwCreationFlags & (CREATE_NO_WINDOW |
                              CREATE_NEW_CONSOLE |
@@ -4261,7 +4275,7 @@ StartScan:
 
     /* CSRSS needs to know if this is a GUI app or not */
     if ((ImageInformation.SubSystemType == IMAGE_SUBSYSTEM_WINDOWS_GUI) ||
-        (IsWowApp))
+        IsWowApp)
     {
         /*
          * For GUI apps we turn on the 2nd bit. This allow CSRSS server dlls
@@ -4500,6 +4514,7 @@ Quickie:
         }
     }
 #endif
+
     /* Check if an environment was passed in */
     if ((lpEnvironment) && !(dwCreationFlags & CREATE_UNICODE_ENVIRONMENT))
     {
