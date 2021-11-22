@@ -4603,6 +4603,15 @@ Language=English
 The domain controller does not support the Kerberos Service for User protocol.
 .
 
+MessageId=0x414
+Severity=Error
+Facility=System
+SymbolicName=STATUS_VDM_DISALLOWED
+Language=English
+%hs is a 16-bit application. You do not have permissions to execute 16-bit applications.
+Check your permissions with your system administrator.
+.
+
 MessageId=0x425
 Severity=Error
 Facility=System
