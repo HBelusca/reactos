@@ -534,6 +534,21 @@ Cleanup:
     /* Free the short app name */
     if (ShortAppName) RtlFreeHeap(RtlGetProcessHeap(), 0, ShortAppName);
 
+    /* In case we failed because VDM is disabled, show an error */
+    if (Status == STATUS_VDM_DISALLOWED)
+    {
+        UNICODE_STRING UnicodeString;
+        ULONG ErrorResponse;
+
+        RtlInitUnicodeString(&UnicodeString, ApplicationName);
+        NtRaiseHardError(Status,
+                         1,
+                         1,
+                         (PULONG_PTR)&UnicodeString,
+                         OptionOk,
+                         &ErrorResponse);
+    }
+
     return Status;
 }
 
