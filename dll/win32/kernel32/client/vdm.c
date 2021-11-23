@@ -669,7 +669,7 @@ WINAPI
 BaseGetVdmConfigInfo(IN LPCWSTR CommandLineReserved,
                      IN ULONG DosSeqId,
                      IN ULONG BinaryType,
-                     IN PUNICODE_STRING CmdLineString,
+                     OUT PUNICODE_STRING CmdLineString,
                      OUT PULONG VdmSize)
 {
     WCHAR Buffer[MAX_PATH];
@@ -677,7 +677,7 @@ BaseGetVdmConfigInfo(IN LPCWSTR CommandLineReserved,
     ULONG Length;
 
     /* Clear the buffer in case we fail */
-    CmdLineString->Buffer = 0;
+    CmdLineString->Buffer = NULL;
 
     /* Always return the same size: 16 Mb */
     *VdmSize = 0x1000000;
@@ -691,34 +691,34 @@ BaseGetVdmConfigInfo(IN LPCWSTR CommandLineReserved,
         return FALSE;
     }
 
-    /* Check if this is VDM with a DOS Sequence ID */
+    /* Build the VDM command line */
     if (DosSeqId)
     {
         /*
-         * Build the VDM string for it:
+         * VDM with a DOS Sequence ID:
          * -i%lx : Gives the DOS Sequence ID;
-         * %s%c  : Nothing if DOS VDM, -w if WoW VDM, -ws if separate WoW VDM.
+         * %s%c  : Nothing if DOS VDM, -w if WOW VDM, -ws if separate WOW VDM.
          */
         _snwprintf(CommandLine,
                    ARRAYSIZE(CommandLine),
                    L"\"%s\\ntvdm.exe\" -i%lx %s%c",
                    Buffer,
                    DosSeqId,
-                   (BinaryType == BINARY_TYPE_DOS) ? L" " : L"-w",
-                   (BinaryType == BINARY_TYPE_SEPARATE_WOW) ? L's' : L' ');
+                   (BinaryType == BINARY_TYPE_WOW) ? L"-w" : L"",
+                   (BinaryType == BINARY_TYPE_SEPARATE_WOW) ? L's' : L'\0');
     }
     else
     {
         /*
-         * Build the string for it without the DOS Sequence ID:
-         * %s%c  : Nothing if DOS VDM, -w if WoW VDM, -ws if separate WoW VDM.
+         * VDM without a DOS Sequence ID:
+         * %s%c  : Nothing if DOS VDM, -w if WOW VDM, -ws if separate WOW VDM.
          */
         _snwprintf(CommandLine,
                    ARRAYSIZE(CommandLine),
                    L"\"%s\\ntvdm.exe\" %s%c",
                    Buffer,
-                   (BinaryType == BINARY_TYPE_DOS) ? L" " : L"-w",
-                   (BinaryType == BINARY_TYPE_SEPARATE_WOW) ? L's' : L' ');
+                   (BinaryType == BINARY_TYPE_WOW) ? L"-w" : L"",
+                   (BinaryType == BINARY_TYPE_SEPARATE_WOW) ? L's' : L'\0');
     }
 
     /* Create the actual string */

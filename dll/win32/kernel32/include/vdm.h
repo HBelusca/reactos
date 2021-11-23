@@ -31,7 +31,7 @@ BaseGetVdmConfigInfo(
     IN LPCWSTR CommandLineReserved,
     IN ULONG DosSeqId,
     IN ULONG BinaryType,
-    IN PUNICODE_STRING CmdLineString,
+    OUT PUNICODE_STRING CmdLineString,
     OUT PULONG VdmSize
 );
 
