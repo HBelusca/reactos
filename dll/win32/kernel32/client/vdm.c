@@ -510,6 +510,8 @@ BaseCheckVDM(IN ULONG BinaryType,
                                  CaptureBuffer,
                                  CSR_CREATE_API_NUMBER(BASESRV_SERVERDLL_INDEX, BasepCheckVDM),
                                  sizeof(*CheckVdm));
+    if (!NT_SUCCESS(Status))
+        goto Cleanup;
 
     /* Write back the task ID */
     *iTask = CheckVdm->iTask;
@@ -1540,7 +1542,7 @@ GetNextVDMCommand(PVDM_COMMAND_INFO CommandData)
     if (CaptureBuffer == NULL)
     {
         BaseSetLastNTError(STATUS_NO_MEMORY);
-        goto Cleanup;
+        return FALSE;
     }
 
     /* Capture the data */
