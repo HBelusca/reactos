@@ -12,12 +12,6 @@
 /* BUILD CONFIGURATION ********************************************************/
 
 /*
- * Activate this line if you want to run NTVDM in standalone mode with:
- * ntvdm.exe <program>
- */
-// #define STANDALONE
-
-/*
  * Activate this line for Win2k compliancy
  */
 // #define WIN2K_COMPLIANT
@@ -90,6 +84,12 @@ typedef struct _NTVDM_SETTINGS
 } NTVDM_SETTINGS, *PNTVDM_SETTINGS;
 
 extern NTVDM_SETTINGS GlobalSettings;
+
+/*
+ * TRUE if Standalone mode; FALSE if not (default).
+ * Run NTVDM in Standalone mode with: ntvdm.exe -r <program>
+ */
+extern BOOL bStandalone;
 
 // Command line of NTVDM
 extern INT     NtVdmArgc;

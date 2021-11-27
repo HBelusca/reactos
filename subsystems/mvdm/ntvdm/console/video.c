@@ -453,7 +453,7 @@ VOID ScreenEventHandler(PWINDOW_BUFFER_SIZE_RECORD ScreenEvent)
      * made by explicit calls to SetConsoleScreenBufferSize by external applications, are forbidden.
      * In that case only a console window resize is done in case the size is reduced.
      * This protection is enabled in CONSRV side when NTVDM registers as a VDM to CONSRV,
-     * but we also implement it there in case we are running in STANDALONE mode without
+     * but we also implement it there in case we are running in Standalone mode without
      * CONSRV registration.
      *
      * The only potential problem we have is that, when this handler is called,

@@ -29,6 +29,8 @@
 
 NTVDM_SETTINGS GlobalSettings;
 
+BOOL bStandalone = FALSE; // TRUE if Standalone mode; FALSE if not (default).
+
 // Command line of NTVDM
 INT     NtVdmArgc;
 WCHAR** NtVdmArgv;
@@ -266,7 +268,6 @@ LoadGlobalSettings(IN PNTVDM_SETTINGS Settings)
      * - Sound choice
      * - Mem?
      * - ...
-     * - Standalone mode?
      * - Debug settings
      */
     Status = RtlQueryRegistryValues(RTL_REGISTRY_CONTROL,
@@ -481,39 +482,79 @@ PrintMessageAnsi(IN CHAR_PRINT CharPrint,
 #endif
 }
 
+static VOID
+Usage(VOID)
+{
+    wprintf(L"\n"
+            L"ReactOS Virtual DOS Machine\n"
+            L"\n"
+            L"Usage:\n"
+            L"NTVDM -h\n"
+            L"NTVDM -r <executable> [<parameters>]\n"
+            L"NTVDM [-i<SessionId>] [-w[s]]\n"
+            L"\n"
+            L"Options:\n"
+            L"    -?, -h  Displays this help message.\n"
+            L"    -r      Runs in Standalone mode the specified executable.\n"
+            L"            Without this option, NTVDM runs in OS-integrated mode.\n"
+            L"\n"
+            L"Options for OS-integrated mode:\n"
+            L"    -i<SessionId>   Specifies a DOS/WOW16 VDM session ID in hexadecimal format.\n"
+            L"    -w              Starts a shared WOW16 VDM.\n"
+            L"    -ws             Starts a separate WOW16 VDM.\n");
+}
+
 INT
 wmain(INT argc, WCHAR *argv[])
 {
     BOOL Success;
 
-#ifdef _USE_DOS_
-#ifdef STANDALONE
-
-    if (argc < 2)
+    /*
+     * Check the first argument only for -h (Help screen) or -r (Standalone mode).
+     */
+    if (argc >= 2)
     {
-        wprintf(L"\nReactOS Virtual DOS Machine\n\n"
-                L"Usage: NTVDM <executable> [<parameters>]\n");
-        return 0;
+        INT i = 1;
+        if (argv[i][0] == L'-' || argv[i][0] == L'/')
+        {
+            /* Help */
+            if ((argv[i][1] == L'?' || towlower(argv[i][1]) == L'h') && (argv[i][2] == 0))
+            {
+                Usage();
+                return 0;
+            }
+            else
+            /* "Run" - Standalone mode */
+            if ((towlower(argv[i][1]) == L'r') && (argv[i][2] == 0))
+            {
+                bStandalone = TRUE;
+            }
+        }
+
+        /* If Standalone mode, we must have more arguments following */
+        if (bStandalone && (argc <= 2))
+        {
+            Usage();
+            return 0;
+        }
     }
 
-#else
-
-    /* For non-STANDALONE builds, we must be started as a VDM */
-    NTSTATUS Status;
-    ULONG VdmPower = 0;
-    Status = NtQueryInformationProcess(NtCurrentProcess(),
-                                       ProcessWx86Information,
-                                       &VdmPower,
-                                       sizeof(VdmPower),
-                                       NULL);
-    if (!NT_SUCCESS(Status) || (VdmPower == 0))
+    if (!bStandalone)
     {
-        /* Not a VDM, bail out */
-        return 0;
+        /* If not Standalone mode, we must be started as a VDM */
+        NTSTATUS Status;
+        ULONG VdmPower = 0;
+        Status = NtQueryInformationProcess(NtCurrentProcess(),
+                                           ProcessWx86Information,
+                                           &VdmPower,
+                                           sizeof(VdmPower),
+                                           NULL);
+        if (!NT_SUCCESS(Status) || (VdmPower == 0))
+        {
+            /* Not a VDM, bail out */
+            return 0;
+        }
     }
-
-#endif // STANDALONE
-#endif // _USE_DOS_
 
     NtVdmArgc = argc;
     NtVdmArgv = argv;

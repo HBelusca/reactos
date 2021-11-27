@@ -170,8 +170,8 @@ BOOLEAN DosBuildSysEnvBlock(VOID)
     /*
      * Get the environment strings
      *
-     * NOTE: On non-STANDALONE builds, this corresponds to the VDM environment
-     * as created by BaseVDM for NTVDM. On STANDALONE builds this is the Win32
+     * NOTE: In non-Standalone mode, this corresponds to the VDM environment
+     * as created by BaseVDM for NTVDM. In Standalone mode, this is the Win32
      * environment. In this last case we need to convert it to a proper VDM env.
      */
     SourcePtr = Environment = GetEnvironmentStrings();

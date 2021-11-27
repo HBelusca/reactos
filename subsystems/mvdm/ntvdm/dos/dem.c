@@ -392,11 +392,12 @@ Command:
     *(PBYTE)(SEG_OFF_TO_PTR(DataStruct->CmdLineSeg, DataStruct->CmdLineOff)) = (BYTE)CmdLen;
     RtlCopyMemory(SEG_OFF_TO_PTR(DataStruct->CmdLineSeg, DataStruct->CmdLineOff + 1), CmdLine, DOS_CMDLINE_LENGTH);
 
-#ifndef STANDALONE
-    /* Update console title if we run in a separate console */
-    if (SessionId != 0)
-        SetConsoleTitleA(AppName);
-#endif
+    if (!bStandalone)
+    {
+        /* Update console title if we run in a separate console */
+        if (SessionId != 0)
+            SetConsoleTitleA(AppName);
+    }
 
     First = FALSE;
     setCF(0);
@@ -1198,9 +1199,6 @@ static VOID WINAPI DosStart(LPWORD Stack)
 {
     BOOLEAN Success;
     DWORD Result;
-#ifndef STANDALONE
-    INT i;
-#endif
 
     DPRINT("DosStart\n");
 
@@ -1225,55 +1223,56 @@ static VOID WINAPI DosStart(LPWORD Stack)
     /* Load the mouse driver */
     DosMouseInitialize();
 
-#ifndef STANDALONE
-
-    /* Parse the command line arguments */
-    for (i = 1; i < NtVdmArgc; i++)
+    if (!bStandalone)
     {
-        if (wcsncmp(NtVdmArgv[i], L"-i", 2) == 0)
+        /* Parse the command line arguments */
+        INT i;
+        for (i = 1; i < NtVdmArgc; i++)
         {
-            /* This is the session ID (hex format) */
-            SessionId = wcstoul(NtVdmArgv[i] + 2, NULL, 16);
+            if (wcsncmp(NtVdmArgv[i], L"-i", 2) == 0)
+            {
+                /* This is the session ID (hex format) */
+                SessionId = wcstoul(NtVdmArgv[i] + 2, NULL, 16);
+            }
         }
-    }
 
-    /* Initialize Win32-VDM environment */
-    Env = RtlAllocateHeap(RtlGetProcessHeap(), HEAP_ZERO_MEMORY, EnvSize);
-    if (Env == NULL)
-    {
-        DosDisplayMessage("Failed to initialize the global environment (Error: %u). The VDM will shut down.\n", GetLastError());
-        EmulatorTerminate();
-        return;
-    }
+        /* Initialize Win32-VDM environment */
+        Env = RtlAllocateHeap(RtlGetProcessHeap(), HEAP_ZERO_MEMORY, EnvSize);
+        if (Env == NULL)
+        {
+            DosDisplayMessage("Failed to initialize the global environment (Error: %u). The VDM will shut down.\n", GetLastError());
+            EmulatorTerminate();
+            return;
+        }
 
-    /* Clear the structure */
-    RtlZeroMemory(&CommandInfo, sizeof(CommandInfo));
+        /* Clear the structure */
+        RtlZeroMemory(&CommandInfo, sizeof(CommandInfo));
 
-    /* Get the initial information */
-    CommandInfo.TaskId = SessionId;
-    CommandInfo.VDMState = VDM_GET_FIRST_COMMAND | VDM_FLAG_DOS;
-    GetNextVDMCommand(&CommandInfo);
-
-#else
-
-    /* Retrieve the command to start */
-    if (NtVdmArgc >= 2)
-    {
-        WideCharToMultiByte(CP_ACP, 0, NtVdmArgv[1], -1, AppName, sizeof(AppName), NULL, NULL);
-
-        if (NtVdmArgc >= 3)
-            WideCharToMultiByte(CP_ACP, 0, NtVdmArgv[2], -1, CmdLine, sizeof(CmdLine), NULL, NULL);
-        else
-            strcpy(CmdLine, "");
+        /* Get the initial information */
+        CommandInfo.TaskId = SessionId;
+        CommandInfo.VDMState = VDM_GET_FIRST_COMMAND | VDM_FLAG_DOS;
+        GetNextVDMCommand(&CommandInfo);
     }
     else
     {
-        DosDisplayMessage("Invalid DOS command line\n");
-        EmulatorTerminate();
-        return;
-    }
+        /* Retrieve the command to start */
+        // FIXME TODO: All arguments remaining must be the CmdLine...
+        if (NtVdmArgc >= 2)
+        {
+            WideCharToMultiByte(CP_ACP, 0, NtVdmArgv[1], -1, AppName, sizeof(AppName), NULL, NULL);
 
-#endif
+            if (NtVdmArgc >= 3)
+                WideCharToMultiByte(CP_ACP, 0, NtVdmArgv[2], -1, CmdLine, sizeof(CmdLine), NULL, NULL);
+            else
+                strcpy(CmdLine, "");
+        }
+        else
+        {
+            DosDisplayMessage("Invalid DOS command line\n");
+            EmulatorTerminate();
+            return;
+        }
+    }
 
     /*
      * At this point, CS:IP points to the DOS BIOS exit code. If the
@@ -1298,12 +1297,10 @@ static VOID WINAPI DosStart(LPWORD Stack)
 
     Result = DosStartComSpec(TRUE, SEG_OFF_TO_PTR(SYSTEM_ENV_BLOCK, 0),
                              MAKELONG(getIP(), getCS()),
-#ifndef STANDALONE
-                             &RootCmd.ComSpecPsp
-#else
-                             NULL
-#endif
-                             );
+                             !bStandalone
+                                ? &RootCmd.ComSpecPsp
+                                : NULL
+                            );
     if (Result != ERROR_SUCCESS)
     {
         /* Unprepare the stack for DosStartComSpec */
@@ -1314,10 +1311,11 @@ static VOID WINAPI DosStart(LPWORD Stack)
         return;
     }
 
-#ifndef STANDALONE
-    RootCmd.Terminated = FALSE;
-    InsertComSpecInfo(&RootCmd);
-#endif
+    if (!bStandalone)
+    {
+        RootCmd.Terminated = FALSE;
+        InsertComSpecInfo(&RootCmd);
+    }
 
     /**/
     /* Attach to the console and resume the VM */
@@ -1335,7 +1333,12 @@ BOOLEAN DosShutdown(BOOLEAN Immediate)
      *             FALSE: Delayed shutdown (notification).
      */
 
-#ifndef STANDALONE
+    if (bStandalone)
+    {
+        UNREFERENCED_PARAMETER(Immediate);
+        return TRUE;
+    }
+
     if (Immediate)
     {
         ExitVDM(FALSE, 0);
@@ -1368,10 +1371,6 @@ extern HANDLE VdmTaskEvent; // see emulator.c
 
         return FALSE;
     }
-#else
-    UNREFERENCED_PARAMETER(Immediate);
-    return TRUE;
-#endif
 }
 
 
