@@ -655,7 +655,7 @@ Retry:
             goto StartDos;
     }
 
-    /* Go to next drive and invalidate the last half-byte. */
+    /* Go to next drive and invalidate the last half-byte */
     BootOrder = (BootOrder >> 4) | 0xF000;
     goto Retry;
 
@@ -668,8 +668,10 @@ StartDos:
     setES(ES);
     Stack[STACK_FLAGS] &= ~EMULATOR_FLAG_CF;
 
+#ifdef _USE_DOS_
     /* Load our DOS */
     DosBootsectorInitialize();
+#endif
 
 Quit:
     /*

@@ -18,7 +18,9 @@
 #include "bios/bios.h"
 #include "cpu/cpu.h"
 
+#ifdef _USE_DOS_
 #include "dos/dem.h"
+#endif
 
 /* Extra PSDK/NDK Headers */
 #include <ndk/psfuncs.h>
@@ -330,8 +332,10 @@ VdmShutdown(BOOLEAN Immediate)
         return;
     }
 
+#ifdef _USE_DOS_
     /* First notify DOS to see whether we can shut down now */
     MustShutdown = DosShutdown(Immediate);
+#endif
     /*
      * In case we perform an immediate shutdown, or the DOS says
      * we can shut down, do it now.

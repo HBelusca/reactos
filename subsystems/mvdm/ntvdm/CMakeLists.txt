@@ -1,18 +1,20 @@
 
 PROJECT(NTVDM)
 
-#####################################
-# Generate the integrated COMMAND.COM
-#
-add_custom_command(
-    OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/command_com.c ${CMAKE_CURRENT_BINARY_DIR}/command_com.h
-    COMMAND native-bin2c $<TARGET_PROPERTY:command,BINARY_PATH> ${CMAKE_CURRENT_BINARY_DIR}/command_com.c ${CMAKE_CURRENT_BINARY_DIR}/command_com.h BIN CommandCom
-    DEPENDS native-bin2c command)
-#####################################
+# Define to control the inclusion of DOS emulation inside NTVDM.
+set(USE_DOS TRUE)
 
 include_directories(${REACTOS_SOURCE_DIR}/sdk/include/reactos/libs/fast486)
 
-spec2def(ntvdm.exe ntvdm.spec ADD_IMPORTLIB)
+set(NTVDM_SPEC ntvdm.spec)
+if(USE_DOS)
+    add_definitions(-D_USE_DOS_)
+    include(dos.cmake)
+    set(DOS_LIB dos)
+    list(APPEND NTVDM_SPEC dos.spec)
+endif()
+
+spec2def(ntvdm.exe "${NTVDM_SPEC}" ADD_IMPORTLIB)
 
 list(APPEND SOURCE
     bios/bios32/bios32.c
@@ -41,20 +43,6 @@ list(APPEND SOURCE
     hardware/ps2.c
     hardware/sound/speaker.c
     hardware/video/svga.c
-    dos/dos32krnl/bios.c
-    dos/dos32krnl/condrv.c
-    dos/dos32krnl/country.c
-    dos/dos32krnl/device.c
-    dos/dos32krnl/dos.c
-    dos/dos32krnl/dosfiles.c
-    dos/dos32krnl/emsdrv.c
-    dos/dos32krnl/handle.c
-    dos/dos32krnl/himem.c
-    dos/dos32krnl/memory.c
-    dos/dos32krnl/process.c
-    dos/dem.c
-    dos/mouse32.c
-    ${CMAKE_CURRENT_BINARY_DIR}/command_com.c
     clock.c
     emulator.c
     int32.c
@@ -79,7 +67,8 @@ set_target_properties(ntvdm
     DEFINE_SYMBOL "")
 
 add_pch(ntvdm ntvdm.h SOURCE)
+
 set_module_type(ntvdm win32cui UNICODE IMAGEBASE 0x0F000000)
-target_link_libraries(ntvdm fast486 ${PSEH_LIB})
+target_link_libraries(ntvdm fast486 ${DOS_LIB} ${PSEH_LIB})
 add_importlibs(ntvdm user32 gdi32 advapi32 comdlg32 msvcrt kernel32 ntdll)
 add_cd_file(TARGET ntvdm DESTINATION reactos/system32 FOR all)
