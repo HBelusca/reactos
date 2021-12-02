@@ -1,12 +1,7 @@
 #ifndef __CMD_PRECOMP_H
 #define __CMD_PRECOMP_H
 
-#ifdef _MSC_VER
-#pragma warning ( disable : 4103 ) /* use #pragma pack to change alignment */
-#undef _CRT_SECURE_NO_DEPRECATE
 #define _CRT_SECURE_NO_DEPRECATE
-#endif /*_MSC_VER */
-
 #include <stdio.h>
 #include <stdarg.h>
 #include <stdlib.h>

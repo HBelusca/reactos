@@ -67,9 +67,9 @@ VOID InitPrompt(VOID)
 }
 
 /*
- * Print an information line on top of the screen.
+ * Print an information line on top of the screen (for $I).
  */
-VOID PrintInfoLine(VOID)
+static VOID PrintInfoLine(VOID)
 {
 #define FOREGROUND_WHITE (FOREGROUND_BLUE | FOREGROUND_GREEN | FOREGROUND_RED | FOREGROUND_INTENSITY)
 
@@ -106,6 +106,60 @@ VOID PrintInfoLine(VOID)
 /*
  * Print the command-line prompt.
  */
+/*****
+ ** JdBP:
+
+  $$          The $ (dollar) character
+  $A  $a      The & (ampersand) character
+  $B  $b      The | (bar) character
+  $C  $c      The ( character
+  $D          The date in standard ISO 8601 form
+  $d          The date in your country's local form
+  $E  $e      The escape character (ASCII 27)
+  $F  $f      The ) character
+  $G  $g      The > (greater than) character
+  $H  $h      The backspace character (ASCII 8)
+  $I  $i      The help banner
+  $L  $l      The < (less than) character
+  $M          The time in HH:MM form
+  $m          The time in HH:MM:SS XM form (12-hour)
+  $N  $n      The drive letter of the current drive
+  $P  $p      The current directory on the current drive
+  $Q  $q      The = (equals) character
+  $R  $r      The return value of the most recent command
+  $S  $s      The space character (ASCII 32)
+  $T          The time in standard ISO 8601 form
+  $t          The time in your country's local form
+  $U          The timezone as an offset from UTC
+  $u          The timezone name
+  $V  $v      The command interpreter and operating system version
+  $Xd $xd     The current directory on the drive 'd'
+  $_          A carriage return and line-feed
+
+
+DATE:
+  By default, the date will be displayed in ISO 8601 standard form.
+
+  /N  Do not prompt for a new date
+  /F  Specify a format string to use when displaying the date
+  /UTC          Display the date in UTC rather than in local time
+  /LOCALFORMAT  Use the local country's date and time formats
+
+
+DIR:
+...
+  /LOCALTZ      Display timestamps in local time rather than in UTC
+  /LOCALFORMAT  Use the local country's date and time formats
+
+TIME:
+  By default, the time will be displayed in ISO 8601 standard form.
+
+  /N  Do not prompt for a new time
+  /F  Specify a format string to use when displaying the date
+  /UTC          Display the time in UTC rather than in local time
+  /LOCALFORMAT  Use the local country's date and time formats
+
+*****/
 VOID PrintPrompt(VOID)
 {
     LPTSTR pr, Prompt;
@@ -159,7 +213,9 @@ VOID PrintPrompt(VOID)
                     break;
 
                 case _T('D'):
-                    ConOutPrintf(_T("%s"), GetDateString());
+                    // 4DOS/4NT: case-sensitive for different date formats.
+                    // JdBP: $D: date in standard ISO 8601 form; $d: date in your country's local form.
+                    ConOutPuts(GetDateString());
                     break;
 
                 case _T('E'):
@@ -179,12 +235,23 @@ VOID PrintPrompt(VOID)
                     break;
 
                 case _T('I'):
+                    // TODO, when extended commands available: /* ReactOS-only: if no batch context active, print the info line */
                     PrintInfoLine();
                     break;
+
+                // case _T('J'): // 4DOS/4NT: date in four-year ISO format.
+                // case _T('K'): // 4DOS/4NT: date in ISO week date format.
 
                 case _T('L'):
                     ConOutChar(_T('<'));
                     break;
+
+#if 0
+                case _T('M'):
+                    // TODO: UNC name for current drive if remote (NT).
+                    // 4DOS/4NT: current time w/o seconds (case-sensitive).
+                    break;
+#endif
 
                 case _T('N'):
                 {
@@ -196,7 +263,7 @@ VOID PrintPrompt(VOID)
                 case _T('P'):
                 {
                     GetCurrentDirectory(_countof(szPath), szPath);
-                    ConOutPrintf(_T("%s"), szPath);
+                    ConOutPuts(szPath);
                     break;
                 }
 
@@ -204,17 +271,44 @@ VOID PrintPrompt(VOID)
                     ConOutChar(_T('='));
                     break;
 
+#if 0
+                case _T('R'):
+                    // OS/2, 4DOS/4NT: Errorlevel.
+                    ConOutPrintf(_T("%i"), nErrorLevel);
+                    break;
+#endif
+
                 case _T('S'):
                     ConOutChar(_T(' '));
                     break;
 
                 case _T('T'):
-                    ConOutPrintf(_T("%s"), GetTimeString());
+                    // 4DOS/4NT: another time format (case-sensitive).
+                    // JdPB: $T: time in standard ISO 8601 form; $t: time in your country's local form
+                    ConOutPuts(GetTimeString());
                     break;
 
+                // case _T('U'):
+                    // // 4DOS/4NT: Current user.
+                    // // JdBP: $U: timezone as an offset from UTC; $u: timezone name
+                    // break;
+
                 case _T('V'):
+                // case _T('X'): // Version revision
                     PrintOSVersion();
                     break;
+
+                // case _T('W'):
+                    // // 4DOS/4NT: working directory in truncated form (w/ ellipses) (case-sensitive format).
+                    // break;
+
+                // case _T('X'):
+                    // // 4DOS/4NT: default dir for specified drive (case-sensitive format).
+                    // break;
+
+                // case _T('Z'):
+                    // // 4DOS/4NT: shell nesting level.
+                    // break;
 
                 case _T('_'):
                     ConOutChar(_T('\n'));
