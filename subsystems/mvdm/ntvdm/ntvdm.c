@@ -490,18 +490,23 @@ Usage(VOID)
             L"\n"
             L"Usage:\n"
             L"NTVDM -h\n"
+#ifdef _USE_DOS_
             L"NTVDM -r <executable> [<parameters>]\n"
             L"NTVDM [-i<SessionId>] [-w[s]]\n"
+#endif // _USE_DOS_
             L"\n"
             L"Options:\n"
             L"    -?, -h  Displays this help message.\n"
+#ifdef _USE_DOS_
             L"    -r      Runs in Standalone mode the specified executable.\n"
             L"            Without this option, NTVDM runs in OS-integrated mode.\n"
             L"\n"
             L"Options for OS-integrated mode:\n"
             L"    -i<SessionId>   Specifies a DOS/WOW16 VDM session ID in hexadecimal format.\n"
             L"    -w              Starts a shared WOW16 VDM.\n"
-            L"    -ws             Starts a separate WOW16 VDM.\n");
+            L"    -ws             Starts a separate WOW16 VDM.\n"
+#endif // _USE_DOS_
+            );
 }
 
 INT
@@ -523,22 +528,27 @@ wmain(INT argc, WCHAR *argv[])
                 Usage();
                 return 0;
             }
+#ifdef _USE_DOS_
             else
             /* "Run" - Standalone mode */
             if ((towlower(argv[i][1]) == L'r') && (argv[i][2] == 0))
             {
                 bStandalone = TRUE;
             }
+#endif // _USE_DOS_
         }
 
+#ifdef _USE_DOS_
         /* If Standalone mode, we must have more arguments following */
         if (bStandalone && (argc <= 2))
         {
             Usage();
             return 0;
         }
+#endif // _USE_DOS_
     }
 
+#ifdef _USE_DOS_
     if (!bStandalone)
     {
         /* If not Standalone mode, we must be started as a VDM */
@@ -555,6 +565,7 @@ wmain(INT argc, WCHAR *argv[])
             return 0;
         }
     }
+#endif // _USE_DOS_
 
     NtVdmArgc = argc;
     NtVdmArgv = argv;
