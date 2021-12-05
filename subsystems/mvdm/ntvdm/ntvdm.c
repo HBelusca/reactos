@@ -486,6 +486,7 @@ wmain(INT argc, WCHAR *argv[])
 {
     BOOL Success;
 
+#ifdef _USE_DOS_
 #ifdef STANDALONE
 
     if (argc < 2)
@@ -511,7 +512,8 @@ wmain(INT argc, WCHAR *argv[])
         return 0;
     }
 
-#endif
+#endif // STANDALONE
+#endif // _USE_DOS_
 
     NtVdmArgc = argc;
     NtVdmArgv = argv;

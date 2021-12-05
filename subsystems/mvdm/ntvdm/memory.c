@@ -727,7 +727,7 @@ MemInitialize(VOID)
 
     InitializeListHead(&HookList);
 
-#ifndef STANDALONE
+#if defined(_USE_DOS_) && !defined(STANDALONE)
 
     /*
      * The reserved region starts from the very first page.
@@ -754,7 +754,7 @@ MemInitialize(VOID)
                                      &BaseAddress,
                                      0,
                                      &MemorySize,
-#ifndef STANDALONE
+#if defined(_USE_DOS_) && !defined(STANDALONE)
                                      MEM_COMMIT,
 #else
                                      MEM_RESERVE | MEM_COMMIT,
@@ -766,7 +766,7 @@ MemInitialize(VOID)
         return FALSE;
     }
 
-#ifndef STANDALONE
+#if defined(_USE_DOS_) && !defined(STANDALONE)
     ASSERT(BaseAddress == NULL);
 #endif
 
@@ -796,7 +796,7 @@ MemCleanup(VOID)
     Status = NtFreeVirtualMemory(NtCurrentProcess(),
                                  &BaseAddress,
                                  &MemorySize,
-#ifndef STANDALONE
+#if defined(_USE_DOS_) && !defined(STANDALONE)
                                  MEM_DECOMMIT
 #else
                                  MEM_RELEASE
