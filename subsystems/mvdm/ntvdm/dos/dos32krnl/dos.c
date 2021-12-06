@@ -512,7 +512,7 @@ VOID WINAPI DosInt21h(LPWORD Stack)
                     getAL(), HIWORD(FarPointer), LOWORD(FarPointer));
 
             /* Write the new far pointer to the IDT */
-            ((PULONG)BaseAddress)[getAL()] = FarPointer;
+            ((PULONG)VdmBaseAddr)[getAL()] = FarPointer;
             break;
         }
 
@@ -762,7 +762,7 @@ VOID WINAPI DosInt21h(LPWORD Stack)
         /* Get Interrupt Vector */
         case 0x35:
         {
-            ULONG FarPointer = ((PULONG)BaseAddress)[getAL()];
+            ULONG FarPointer = ((PULONG)VdmBaseAddr)[getAL()];
 
             /* Read the address from the IDT into ES:BX */
             setES(HIWORD(FarPointer));

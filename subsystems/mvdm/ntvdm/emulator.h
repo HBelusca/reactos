@@ -24,18 +24,18 @@
 #define MEM_ALIGN_UP(ptr, align)    MEM_ALIGN_DOWN((ULONG_PTR)(ptr) + (align) - 1l, (align))
 
 #define TO_LINEAR(seg, off) (((seg) << 4) + (off))
-#define MAX_SEGMENT 0xFFFF
-#define MAX_OFFSET  0xFFFF
+// #define MAX_SEGMENT 0xFFFF
+// #define MAX_OFFSET  0xFFFF
 #define MAX_ADDRESS 0x1000000 // 16 MB of RAM; see also: kernel32/client/vdm.c!BaseGetVdmConfigInfo
 C_ASSERT(0x100000 <= MAX_ADDRESS);  // A minimum of 1 MB is required for PC emulation.
 
 #define SEG_OFF_TO_PTR(seg, off)    \
-    (PVOID)((ULONG_PTR)BaseAddress + TO_LINEAR((seg), (off)))
+    (PVOID)((ULONG_PTR)VdmBaseAddr + TO_LINEAR((seg), (off)))
 
 #define FAR_POINTER(x)      SEG_OFF_TO_PTR(HIWORD(x), LOWORD(x))
 
-#define REAL_TO_PHYS(ptr)   (PVOID)((ULONG_PTR)(ptr) + (ULONG_PTR)BaseAddress)
-#define PHYS_TO_REAL(ptr)   (PVOID)((ULONG_PTR)(ptr) - (ULONG_PTR)BaseAddress)
+#define REAL_TO_PHYS(ptr)   (PVOID)((ULONG_PTR)(ptr) + (ULONG_PTR)VdmBaseAddr)
+#define PHYS_TO_REAL(ptr)   (PVOID)((ULONG_PTR)(ptr) - (ULONG_PTR)VdmBaseAddr)
 
 #define ARRAY_INDEX(ptr, array) ((ULONG)(((ULONG_PTR)(ptr) - (ULONG_PTR)(array)) / sizeof(*array)))
 
@@ -102,7 +102,8 @@ enum
 };
 
 extern FAST486_STATE EmulatorContext;
-extern LPVOID  BaseAddress;
+extern PVOID   VdmBaseAddr;
+extern SIZE_T  VdmMemSize;
 extern BOOLEAN VdmRunning;
 
 

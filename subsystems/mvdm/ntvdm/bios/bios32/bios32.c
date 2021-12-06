@@ -217,6 +217,7 @@ static VOID WINAPI BiosMiscService(LPWORD Stack)
         case 0x80:  // Device Open
         case 0x81:  // Device Close
         case 0x82:  // Program Termination
+        case 0x85:  // SysReq Key Activity
         case 0x90:  // Device Busy
         case 0x91:  // Device POST
         {
@@ -369,6 +370,8 @@ static VOID WINAPI BiosMiscService(LPWORD Stack)
             if (Gdt[2].Granularity) SourceLimit = (SourceLimit << 12) | 0xFFF;
             if (Gdt[3].Granularity) DestLimit = (DestLimit << 12) | 0xFFF;
 
+            // TODO: Check that we are inside PC memory...
+
             if ((Count > SourceLimit) || (Count > DestLimit))
             {
                 setAX(0x80);
@@ -377,8 +380,9 @@ static VOID WINAPI BiosMiscService(LPWORD Stack)
             }
 
             /* Copy */
-            RtlMoveMemory((PVOID)((ULONG_PTR)BaseAddress + DestBase),
-                          (PVOID)((ULONG_PTR)BaseAddress + SourceBase),
+            // FIXME: EmulatorCopyMemory
+            RtlMoveMemory((PVOID)((ULONG_PTR)VdmBaseAddr + DestBase),
+                          (PVOID)((ULONG_PTR)VdmBaseAddr + SourceBase),
                           Count);
 
             setAX(ERROR_SUCCESS);
@@ -409,6 +413,7 @@ static VOID WINAPI BiosMiscService(LPWORD Stack)
         /* Switch to Protected Mode */
         case 0x89:
         {
+            // TODO: Implement!
             DPRINT1("BIOS INT 15h, AH=89h \"Switch to Protected Mode\" is UNIMPLEMENTED");
 
             Stack[STACK_FLAGS] |= EMULATOR_FLAG_CF;
@@ -476,10 +481,10 @@ static VOID WINAPI BiosMiscService(LPWORD Stack)
             if (getAL() == 0x01)
             {
                 /* The amount of memory between 1M and 16M, in kilobytes */
-                ULONG Above1M = (min(MAX_ADDRESS, 0x01000000) - 0x00100000) >> 10;
+                ULONG Above1M = (min(VdmMemSize, 0x01000000) - 0x00100000) >> 10;
 
                 /* The amount of memory above 16M, in 64K blocks */
-                ULONG Above16M = (MAX_ADDRESS > 0x01000000) ? ((MAX_ADDRESS - 0x01000000) >> 16) : 0;
+                ULONG Above16M = (VdmMemSize > 0x01000000) ? ((VdmMemSize - 0x01000000) >> 16) : 0;
 
                 setAX(Above1M);
                 setBX(Above16M);
@@ -499,7 +504,7 @@ static VOID WINAPI BiosMiscService(LPWORD Stack)
                 /* Assume the buffer won't be large enough */
                 Stack[STACK_FLAGS] &= ~EMULATOR_FLAG_CF;
 
-                while (BytesWritten < getECX() && (ULONG_PTR)Map < (MAX_ADDRESS - sizeof(BIOS_MEMORY_MAP)))
+                while (BytesWritten < getECX() && (ULONG_PTR)Map < (VdmMemSize - sizeof(BIOS_MEMORY_MAP)))
                 {
                     /* Let's ask our memory controller */
                     if (!MemQueryMemoryZone(Offset, &Length, &Hooked))
@@ -972,7 +977,7 @@ static VOID InitializeBiosInt32(VOID)
      * Zero out all of the IVT (0x00 -- 0xFF). Some applications
      * indeed expect to have free vectors at the end of the IVT.
      */
-    RtlZeroMemory(BaseAddress, 0x0100 * sizeof(ULONG));
+    RtlZeroMemory(VdmBaseAddr, 0x0100 * sizeof(ULONG));
 
 #if defined(ADVANCED_DEBUGGING) && (ADVANCED_DEBUGGING_LEVEL >= 3)
     // Initialize all the interrupt vectors to the default one.
@@ -1023,16 +1028,16 @@ static VOID InitializeBiosInt32(VOID)
     // They don't have any default handler at the moment.
 
     /* Some vectors are in fact addresses to tables */
-    ((PULONG)BaseAddress)[0x1D] = NULL32; // Video Parameter Tables
-    ((PULONG)BaseAddress)[0x1E] = NULL32; // Diskette Parameters
-    ((PULONG)BaseAddress)[0x1F] = NULL32; // 8x8 Graphics Font
-    ((PULONG)BaseAddress)[0x41] = NULL32; // Hard Disk 0 Parameter Table Address
-    ((PULONG)BaseAddress)[0x43] = NULL32; // Character Table (EGA, MCGA, VGA)
-    ((PULONG)BaseAddress)[0x46] = NULL32; // Hard Disk 1 Drive Parameter Table Address
+    ((PULONG)VdmBaseAddr)[0x1D] = NULL32; // Video Parameter Tables
+    ((PULONG)VdmBaseAddr)[0x1E] = NULL32; // Diskette Parameters
+    ((PULONG)VdmBaseAddr)[0x1F] = NULL32; // 8x8 Graphics Font
+    ((PULONG)VdmBaseAddr)[0x41] = NULL32; // Hard Disk 0 Parameter Table Address
+    ((PULONG)VdmBaseAddr)[0x43] = NULL32; // Character Table (EGA, MCGA, VGA)
+    ((PULONG)VdmBaseAddr)[0x46] = NULL32; // Hard Disk 1 Drive Parameter Table Address
     /* Tables that are always uninitialized */
-    ((PULONG)BaseAddress)[0x44] = NULL32; // ROM BIOS Character Font, Characters 00h-7Fh (PCjr)
-    ((PULONG)BaseAddress)[0x48] = NULL32; // Cordless Keyboard Translation (PCjr)
-    ((PULONG)BaseAddress)[0x49] = NULL32; // Non-Keyboard Scan-code Translation Table (PCJr)
+    ((PULONG)VdmBaseAddr)[0x44] = NULL32; // ROM BIOS Character Font, Characters 00h-7Fh (PCjr)
+    ((PULONG)VdmBaseAddr)[0x48] = NULL32; // Cordless Keyboard Translation (PCjr)
+    ((PULONG)VdmBaseAddr)[0x49] = NULL32; // Non-Keyboard Scan-code Translation Table (PCJr)
 }
 
 static VOID InitializeBiosData(VOID)

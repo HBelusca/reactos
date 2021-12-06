@@ -39,6 +39,9 @@ typedef struct _MEM_HOOK
     };
 } MEM_HOOK, *PMEM_HOOK;
 
+// FIXME: Make dynamic!
+#define TOTAL_PAGES (MAX_ADDRESS / PAGE_SIZE)
+
 static LIST_ENTRY HookList;
 static PMEM_HOOK PageTable[TOTAL_PAGES] = { NULL };
 static BOOLEAN A20Line = FALSE;
@@ -152,14 +155,14 @@ VOID FASTCALL EmulatorReadMemory(PFAST486_STATE State, ULONG Address, PVOID Buff
     /* If the A20 line is disabled, mask bit 20 */
     if (!A20Line) Address &= ~(1 << 20);
 
-    if ((Address + Size - 1) >= MAX_ADDRESS)
+    if ((Address + Size - 1) >= VdmMemSize)
     {
-        ULONG ExtraStart = (Address < MAX_ADDRESS) ? MAX_ADDRESS - Address : 0;
+        ULONG ExtraStart = (Address < VdmMemSize) ? VdmMemSize - Address : 0;
 
         /* Fill the memory that was above the limit with 0xFF */
         RtlFillMemory((PVOID)((ULONG_PTR)Buffer + ExtraStart), Size - ExtraStart, 0xFF);
 
-        if (Address < MAX_ADDRESS) Size = MAX_ADDRESS - Address;
+        if (Address < VdmMemSize) Size = VdmMemSize - Address;
         else return;
     }
 
@@ -193,8 +196,8 @@ VOID FASTCALL EmulatorWriteMemory(PFAST486_STATE State, ULONG Address, PVOID Buf
     /* If the A20 line is disabled, mask bit 20 */
     if (!A20Line) Address &= ~(1 << 20);
 
-    if (Address >= MAX_ADDRESS) return;
-    Size = min(Size, MAX_ADDRESS - Address);
+    if (Address >= VdmMemSize) return;
+    Size = min(Size, VdmMemSize - Address);
 
     FirstPage = Address >> 12;
     LastPage = (Address + Size - 1) >> 12;
@@ -289,7 +292,7 @@ MemExceptionHandler(ULONG FaultAddress, BOOLEAN Writing)
     DPRINT("The memory at 0x%08X could not be %s.\n", FaultAddress, Writing ? "written" : "read");
 
     /* Exceptions are only supposed to happen when using VDD-style memory hooks */
-    ASSERT(FaultAddress < MAX_ADDRESS && Hook != NULL && Hook->hVdd != NULL);
+    ASSERT(FaultAddress < VdmMemSize && Hook != NULL && Hook->hVdd != NULL);
 
     /* Call the VDD handler */
     Hook->VddHandler(REAL_TO_PHYS(FaultAddress), (ULONG)Writing);
@@ -723,7 +726,7 @@ BOOLEAN
 MemInitialize(VOID)
 {
     NTSTATUS Status;
-    SIZE_T MemorySize = MAX_ADDRESS; // See: kernel32/client/vdm.c!BaseGetVdmConfigInfo
+    SIZE_T MemorySize = VdmMemSize;
 
     InitializeListHead(&HookList);
 
@@ -735,7 +738,7 @@ MemInitialize(VOID)
      *
      * NOTE: NULL has another signification for NtAllocateVirtualMemory.
      */
-    BaseAddress = (PVOID)1;
+    VdmBaseAddr = (PVOID)1;
 
     /*
      * Since to get NULL, we allocated from 0x1, account for this.
@@ -746,12 +749,12 @@ MemInitialize(VOID)
 #else
 
     /* Allocate it anywhere */
-    BaseAddress = NULL;
+    VdmBaseAddr = NULL;
 
 #endif
 
     Status = NtAllocateVirtualMemory(NtCurrentProcess(),
-                                     &BaseAddress,
+                                     &VdmBaseAddr,
                                      0,
                                      &MemorySize,
 #if defined(_USE_DOS_) && !defined(STANDALONE)
@@ -767,7 +770,7 @@ MemInitialize(VOID)
     }
 
 #if defined(_USE_DOS_) && !defined(STANDALONE)
-    ASSERT(BaseAddress == NULL);
+    ASSERT(VdmBaseAddr == NULL);
 #endif
 
     /*
@@ -775,7 +778,7 @@ MemInitialize(VOID)
      * so that if a program wants to execute random code in memory, we can
      * retrieve the exact CS:IP where the problem happens.
      */
-    RtlFillMemory(BaseAddress, MAX_ADDRESS, 0xCC);
+    RtlFillMemory(VdmBaseAddr, VdmMemSize, 0xCC);
     return TRUE;
 }
 
@@ -783,7 +786,7 @@ VOID
 MemCleanup(VOID)
 {
     NTSTATUS Status;
-    SIZE_T MemorySize = MAX_ADDRESS;
+    SIZE_T MemorySize = VdmMemSize;
     PLIST_ENTRY Pointer;
 
     while (!IsListEmpty(&HookList))
@@ -794,7 +797,7 @@ MemCleanup(VOID)
 
     /* Decommit the VDM memory */
     Status = NtFreeVirtualMemory(NtCurrentProcess(),
-                                 &BaseAddress,
+                                 &VdmBaseAddr,
                                  &MemorySize,
 #if defined(_USE_DOS_) && !defined(STANDALONE)
                                  MEM_DECOMMIT

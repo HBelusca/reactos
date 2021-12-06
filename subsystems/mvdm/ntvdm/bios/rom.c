@@ -182,7 +182,7 @@ LoadBios(IN  PCSTR  BiosFileName,
     if (hBiosFile == NULL) return FALSE;
 
     /* BIOS location needs to be aligned on 32-bit boundary */
-    // (PVOID)((ULONG_PTR)BaseAddress + ROM_AREA_END + 1 - ulBiosSize)
+    // (PVOID)((ULONG_PTR)VdmBaseAddr + ROM_AREA_END + 1 - ulBiosSize)
     pBiosLocation = MEM_ALIGN_DOWN(TO_LINEAR(0xF000, 0xFFFF) + 1 - ulBiosSize, sizeof(ULONG));
 
     /* Attempt to load the BIOS image file into memory */

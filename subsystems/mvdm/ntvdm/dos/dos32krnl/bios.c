@@ -254,7 +254,7 @@ BOOLEAN DosBIOSInitialize(VOID)
      * See extra information about this support in dos.h
      */
     // FIXME: Should be done by the DOS BIOS
-    BiosData->RomBiosInt13 = ((PULONG)BaseAddress)[0x13];
+    BiosData->RomBiosInt13 = ((PULONG)VdmBaseAddr)[0x13];
     BiosData->PrevInt13    = BiosData->RomBiosInt13;
 //  RegisterDosInt32(0x13, DosInt13h); // Unused at the moment!
 

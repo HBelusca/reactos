@@ -104,7 +104,7 @@ VOID BiosMouseEnable(VOID)
     MouseEnabled = TRUE;
 
     /* Get the old IRQ handler */
-    OldIrqHandler = ((PDWORD)BaseAddress)[MOUSE_IRQ_INT];
+    OldIrqHandler = ((PDWORD)VdmBaseAddr)[MOUSE_IRQ_INT];
 
     /* Set the IRQ handler */
     //RegisterInt32(MAKELONG(FIELD_OFFSET(MOUSE_DRIVER, MouseIrqInt16Stub), MouseDataSegment),
@@ -117,7 +117,7 @@ VOID BiosMouseDisable(VOID)
     if (!MouseEnabled) return;
 
     /* Restore the old IRQ handler */
-    // ((PDWORD)BaseAddress)[MOUSE_IRQ_INT] = OldIrqHandler;
+    // ((PDWORD)VdmBaseAddr)[MOUSE_IRQ_INT] = OldIrqHandler;
 
     MouseEnabled = FALSE;
 }

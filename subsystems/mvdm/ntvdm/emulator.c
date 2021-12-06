@@ -45,7 +45,8 @@
 
 /* PRIVATE VARIABLES **********************************************************/
 
-LPVOID  BaseAddress = NULL;
+PVOID   VdmBaseAddr = NULL;
+SIZE_T  VdmMemSize  = MAX_ADDRESS; // See: kernel32/client/vdm.c!BaseGetVdmConfigInfo
 BOOLEAN VdmRunning  = TRUE;
 
 HANDLE VdmTaskEvent = NULL;
@@ -309,7 +310,7 @@ DumpMemoryRaw(HANDLE hFile)
     /* Dump the VM memory */
     SetFilePointer(hFile, 0, NULL, FILE_BEGIN);
     Buffer = REAL_TO_PHYS(NULL);
-    Size   = MAX_ADDRESS - (ULONG_PTR)(NULL);
+    Size   = VdmMemSize - (ULONG_PTR)(NULL);
     WriteFile(hFile, Buffer, Size, &Size, NULL);
 }
 
@@ -326,7 +327,7 @@ DumpMemoryTxt(HANDLE hFile)
     /* Dump the VM memory */
     SetFilePointer(hFile, 0, NULL, FILE_BEGIN);
     Ptr1 = Ptr2 = REAL_TO_PHYS(NULL);
-    while (MAX_ADDRESS - (ULONG_PTR)PHYS_TO_REAL(Ptr1) > 0)
+    while (VdmMemSize - (ULONG_PTR)PHYS_TO_REAL(Ptr1) > 0)
     {
         Ptr1 = Ptr2;
         Line = LineBuffer;
@@ -338,7 +339,7 @@ DumpMemoryTxt(HANDLE hFile)
 
         /* ... in hexadecimal form first... */
         i = 0;
-        while (i++ <= 0x0F && (MAX_ADDRESS - (ULONG_PTR)PHYS_TO_REAL(Ptr1) > 0))
+        while (i++ <= 0x0F && (VdmMemSize - (ULONG_PTR)PHYS_TO_REAL(Ptr1) > 0))
         {
             Line += snprintf(Line, LINE_SIZE + LineBuffer - Line, " %02x", *Ptr1);
             ++Ptr1;
@@ -350,7 +351,7 @@ DumpMemoryTxt(HANDLE hFile)
 
         /* ... then in character form. */
         i = 0;
-        while (i++ <= 0x0F && (MAX_ADDRESS - (ULONG_PTR)PHYS_TO_REAL(Ptr2) > 0))
+        while (i++ <= 0x0F && (VdmMemSize - (ULONG_PTR)PHYS_TO_REAL(Ptr2) > 0))
         {
             *Line++ = ((*Ptr2 >= 0x20 && *Ptr2 <= 0x7E) || (*Ptr2 >= 0x80 && *Ptr2 < 0xFF) ? *Ptr2 : '.');
             ++Ptr2;

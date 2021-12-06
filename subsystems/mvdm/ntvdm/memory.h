@@ -11,8 +11,6 @@
 
 /* DEFINITIONS ****************************************************************/
 
-#define TOTAL_PAGES (MAX_ADDRESS / PAGE_SIZE)
-
 typedef VOID
 (FASTCALL *PMEMORY_READ_HANDLER)
 (

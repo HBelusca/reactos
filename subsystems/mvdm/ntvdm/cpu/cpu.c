@@ -133,8 +133,8 @@ LONG CpuExceptionFilter(IN PEXCEPTION_POINTERS ExceptionInfo)
              * Check whether the access exception was done inside the virtual memory space
              * (caused by an emulated app) or outside (casued by a bug in ourselves).
              */
-            if (Address <  (ULONG_PTR)BaseAddress ||
-                Address >= (ULONG_PTR)BaseAddress + MAX_ADDRESS)
+            if (Address <  (ULONG_PTR)VdmBaseAddr ||
+                Address >= (ULONG_PTR)VdmBaseAddr + VdmMemSize)
             {
                 DPRINT1("NTVDM: %s access violation at 0x%p outside the virtual memory space!\n",
                         (Writing ? "Write" : "Read"), Address);

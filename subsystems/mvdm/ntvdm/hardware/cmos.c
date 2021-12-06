@@ -549,9 +549,9 @@ VOID CmosInitialize(VOID)
     CmosMemory.BaseMemoryHigh = HIBYTE(0x0280);
 
     CmosMemory.ExtMemoryLow        =
-    CmosMemory.ActualExtMemoryLow  = LOBYTE((MAX_ADDRESS - 0x100000) / 1024);
+    CmosMemory.ActualExtMemoryLow  = LOBYTE((VdmMemSize - 0x100000) / 1024);
     CmosMemory.ExtMemoryHigh       =
-    CmosMemory.ActualExtMemoryHigh = HIBYTE((MAX_ADDRESS - 0x100000) / 1024);
+    CmosMemory.ActualExtMemoryHigh = HIBYTE((VdmMemSize - 0x100000) / 1024);
 
     /* Register the I/O Ports */
     RegisterIoPort(CMOS_ADDRESS_PORT,         NULL, CmosWriteAddress);

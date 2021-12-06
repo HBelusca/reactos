@@ -404,8 +404,8 @@ VOID WINAPI BiosDiskService(LPWORD Stack)
                 }
 
                 /* ES:DI points to the floppy parameter table */
-                setES(HIWORD(((PULONG)BaseAddress)[0x1E]));
-                setDI(LOWORD(((PULONG)BaseAddress)[0x1E]));
+                setES(HIWORD(((PULONG)VdmBaseAddr)[0x1E]));
+                setDI(LOWORD(((PULONG)VdmBaseAddr)[0x1E]));
             }
             setDL(PresentDrives);
 
@@ -652,14 +652,14 @@ VOID DiskBios32Post(VOID)
 
     /* Some vectors are in fact addresses to tables */
     // Diskette Parameters
-    ((PULONG)BaseAddress)[0x1E] = MAKELONG(0xEFC7, BIOS_SEGMENT);
+    ((PULONG)VdmBaseAddr)[0x1E] = MAKELONG(0xEFC7, BIOS_SEGMENT);
     // Hard Disk 0 Parameter Table Address
-    ((PULONG)BaseAddress)[0x41] = NULL32;
+    ((PULONG)VdmBaseAddr)[0x41] = NULL32;
     // Hard Disk 1 Drive Parameter Table Address
-    ((PULONG)BaseAddress)[0x46] = NULL32;
+    ((PULONG)VdmBaseAddr)[0x46] = NULL32;
 
     /* Relocated services by the BIOS (when needed) */
-    ((PULONG)BaseAddress)[0x40] = NULL32; // ROM BIOS Diskette Handler relocated by Hard Disk BIOS
+    ((PULONG)VdmBaseAddr)[0x40] = NULL32; // ROM BIOS Diskette Handler relocated by Hard Disk BIOS
     // RegisterBiosInt32(0x40, NULL); // ROM BIOS Diskette Handler relocated by Hard Disk BIOS
 
     /* Register the BIOS 32-bit Interrupts */

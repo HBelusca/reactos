@@ -12,6 +12,7 @@
 
 /* DEFINITIONS ****************************************************************/
 
+// FIXME: Make dynamic!
 #define XMS_ADDRESS     0x110000        // Just above HMA
 #define XMS_BLOCK_SIZE  1024
 #define XMS_BLOCKS      ((MAX_ADDRESS - XMS_ADDRESS) / XMS_BLOCK_SIZE)

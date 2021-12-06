@@ -1239,7 +1239,7 @@ VOID DosMouseEnable(VOID)
     DriverEnabled = TRUE;
 
     /* Get the old IRQ handler */
-    OldIrqHandler = ((PDWORD)BaseAddress)[MOUSE_IRQ_INT];
+    OldIrqHandler = ((PDWORD)VdmBaseAddr)[MOUSE_IRQ_INT];
 
     /* Set the IRQ handler */
     RegisterInt32(MAKELONG(FIELD_OFFSET(MOUSE_DRIVER, MouseIrqInt16Stub), MouseDataSegment),
@@ -1252,7 +1252,7 @@ VOID DosMouseDisable(VOID)
     if (!DriverEnabled) return;
 
     /* Restore the old IRQ handler */
-    ((PDWORD)BaseAddress)[MOUSE_IRQ_INT] = OldIrqHandler;
+    ((PDWORD)VdmBaseAddr)[MOUSE_IRQ_INT] = OldIrqHandler;
 
     DriverEnabled = FALSE;
 }
@@ -1277,7 +1277,7 @@ BOOLEAN DosMouseInitialize(VOID)
     MouseData->Version = MAKEWORD(MOUSE_VERSION/0x0100, MOUSE_VERSION%0x0100);
 
     /* Get the old mouse service interrupt handler */
-    OldIntHandler = ((PDWORD)BaseAddress)[DOS_MOUSE_INTERRUPT];
+    OldIntHandler = ((PDWORD)VdmBaseAddr)[DOS_MOUSE_INTERRUPT];
 
     /* Initialize the interrupt handler */
     RegisterInt32(MAKELONG(FIELD_OFFSET(MOUSE_DRIVER, MouseDosInt16Stub), MouseDataSegment),
@@ -1304,7 +1304,7 @@ VOID DosMouseCleanup(VOID)
     // setBH(BH);
 
     /* Restore the old mouse service interrupt handler */
-    ((PDWORD)BaseAddress)[DOS_MOUSE_INTERRUPT] = OldIntHandler;
+    ((PDWORD)VdmBaseAddr)[DOS_MOUSE_INTERRUPT] = OldIntHandler;
 
     DosFreeMemory(MouseDataSegment);
     MouseDataSegment = 0;

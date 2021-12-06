@@ -252,7 +252,7 @@ VOID DosClonePsp(WORD DestSegment, WORD SourceSegment)
 {
     PDOS_PSP DestPsp    = SEGMENT_TO_PSP(DestSegment);
     PDOS_PSP SourcePsp  = SEGMENT_TO_PSP(SourceSegment);
-    LPDWORD IntVecTable = (LPDWORD)((ULONG_PTR)BaseAddress);
+    LPDWORD IntVecTable = (LPDWORD)((ULONG_PTR)VdmBaseAddr);
 
     /* Literally copy the PSP first */
     RtlCopyMemory(DestPsp, SourcePsp, sizeof(*DestPsp));
@@ -278,7 +278,7 @@ VOID DosClonePsp(WORD DestSegment, WORD SourceSegment)
 VOID DosCreatePsp(WORD Segment, WORD ProgramSize)
 {
     PDOS_PSP PspBlock   = SEGMENT_TO_PSP(Segment);
-    LPDWORD IntVecTable = (LPDWORD)((ULONG_PTR)BaseAddress);
+    LPDWORD IntVecTable = (LPDWORD)((ULONG_PTR)VdmBaseAddr);
 
     RtlZeroMemory(PspBlock, sizeof(*PspBlock));
 
@@ -521,7 +521,7 @@ DWORD DosLoadExecutableInternal(IN DOS_EXEC_TYPE LoadType,
             DosChangeMemoryOwner(EnvBlock, Segment);
 
             /* Set INT 22h to the return address */
-            ((PULONG)BaseAddress)[0x22] = ReturnAddress;
+            ((PULONG)VdmBaseAddr)[0x22] = ReturnAddress;
 
             /* Create the PSP and initialize it */
             DosCreatePsp(Segment, (WORD)TotalSize);
@@ -598,7 +598,7 @@ DWORD DosLoadExecutableInternal(IN DOS_EXEC_TYPE LoadType,
             DosChangeMemoryOwner(EnvBlock, Segment);
 
             /* Set INT 22h to the return address */
-            ((PULONG)BaseAddress)[0x22] = ReturnAddress;
+            ((PULONG)VdmBaseAddr)[0x22] = ReturnAddress;
 
             /* Create the PSP and initialize it */
             DosCreatePsp(Segment, MaxAllocSize);
@@ -937,7 +937,7 @@ VOID DosTerminateProcess(WORD Psp, BYTE ReturnCode, WORD KeepResident)
 {
     WORD McbSegment = SysVars->FirstMcb;
     PDOS_MCB CurrentMcb;
-    LPDWORD IntVecTable = (LPDWORD)((ULONG_PTR)BaseAddress);
+    LPDWORD IntVecTable = (LPDWORD)((ULONG_PTR)VdmBaseAddr);
     PDOS_PSP PspBlock = SEGMENT_TO_PSP(Psp);
     LPWORD Stack;
     BYTE TerminationType;

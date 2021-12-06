@@ -2531,7 +2531,7 @@ static BOOLEAN VidBiosSetVideoMode(BYTE ModeNumber)
             if (IS_TEXT_MODE(ModeNumber))
                 VgaWriteTextModeFont(0, Font8x8, ARRAYSIZE(Font8x8) / VGA_FONT_CHARACTERS);
 
-            ((PULONG)BaseAddress)[0x43] = MAKELONG(FONT_8x8_OFFSET, VIDEO_BIOS_DATA_SEG);
+            ((PULONG)VdmBaseAddr)[0x43] = MAKELONG(FONT_8x8_OFFSET, VIDEO_BIOS_DATA_SEG);
             break;
         }
         case 14:
@@ -2539,7 +2539,7 @@ static BOOLEAN VidBiosSetVideoMode(BYTE ModeNumber)
             if (IS_TEXT_MODE(ModeNumber))
                 VgaWriteTextModeFont(0, Font8x14, ARRAYSIZE(Font8x14) / VGA_FONT_CHARACTERS);
 
-            ((PULONG)BaseAddress)[0x43] = MAKELONG(FONT_8x14_OFFSET, VIDEO_BIOS_DATA_SEG);
+            ((PULONG)VdmBaseAddr)[0x43] = MAKELONG(FONT_8x14_OFFSET, VIDEO_BIOS_DATA_SEG);
             break;
         }
         case 16:
@@ -2547,7 +2547,7 @@ static BOOLEAN VidBiosSetVideoMode(BYTE ModeNumber)
             if (IS_TEXT_MODE(ModeNumber))
                 VgaWriteTextModeFont(0, Font8x16, ARRAYSIZE(Font8x16) / VGA_FONT_CHARACTERS);
 
-            ((PULONG)BaseAddress)[0x43] = MAKELONG(FONT_8x16_OFFSET, VIDEO_BIOS_DATA_SEG);
+            ((PULONG)VdmBaseAddr)[0x43] = MAKELONG(FONT_8x16_OFFSET, VIDEO_BIOS_DATA_SEG);
             break;
         }
     }
@@ -2642,7 +2642,7 @@ static VOID VidBiosDrawGlyph(WORD CharData, BOOLEAN UseAttr, BYTE Page, BYTE Row
         {
             WORD i;
             WORD CgaSegment[] = { CGA_EVEN_VIDEO_SEG, CGA_ODD_VIDEO_SEG };
-            PUCHAR Font = (PUCHAR)FAR_POINTER(((PULONG)BaseAddress)[0x43]);
+            PUCHAR Font = (PUCHAR)FAR_POINTER(((PULONG)VdmBaseAddr)[0x43]);
             PUCHAR Glyph = &Font[LOBYTE(CharData) * Bda->CharacterHeight];
             BOOLEAN Xor = (HIBYTE(CharData) & 0x80) ? TRUE : FALSE;
             BYTE OldRotate;
@@ -2699,7 +2699,7 @@ static VOID VidBiosDrawGlyph(WORD CharData, BOOLEAN UseAttr, BYTE Page, BYTE Row
         {
             WORD i;
             WORD CgaSegment[] = { CGA_EVEN_VIDEO_SEG, CGA_ODD_VIDEO_SEG };
-            PUCHAR Font = (PUCHAR)FAR_POINTER(((PULONG)BaseAddress)[0x43]);
+            PUCHAR Font = (PUCHAR)FAR_POINTER(((PULONG)VdmBaseAddr)[0x43]);
             PUCHAR Glyph = &Font[LOBYTE(CharData) * Bda->CharacterHeight];
             BOOLEAN Xor = (HIBYTE(CharData) & 0x80) ? TRUE : FALSE;
             BYTE OldRotate;
@@ -2752,7 +2752,7 @@ static VOID VidBiosDrawGlyph(WORD CharData, BOOLEAN UseAttr, BYTE Page, BYTE Row
         case 0x12:
         {
             WORD i;
-            PUCHAR Font = (PUCHAR)FAR_POINTER(((PULONG)BaseAddress)[0x43]);
+            PUCHAR Font = (PUCHAR)FAR_POINTER(((PULONG)VdmBaseAddr)[0x43]);
             PUCHAR Glyph = &Font[LOBYTE(CharData) * Bda->CharacterHeight];
             BOOLEAN Xor = (HIBYTE(CharData) & 0x80) ? TRUE : FALSE;
             BYTE OldPlaneWrite, OldReset, OldEnableReset, OldRotate, OldMode;
@@ -2831,7 +2831,7 @@ static VOID VidBiosDrawGlyph(WORD CharData, BOOLEAN UseAttr, BYTE Page, BYTE Row
         case 0x13:
         {
             WORD i, j;
-            PUCHAR Font = (PUCHAR)FAR_POINTER(((PULONG)BaseAddress)[0x43]);
+            PUCHAR Font = (PUCHAR)FAR_POINTER(((PULONG)VdmBaseAddr)[0x43]);
             PUCHAR Glyph = &Font[LOBYTE(CharData) * Bda->CharacterHeight];
             BYTE PixelBuffer[8]; // 8 == CharacterWidth
 
@@ -3529,7 +3529,7 @@ VOID WINAPI VidBiosVideoService(LPWORD Stack)
                 {
                     /* Update the BIOS INT 1Fh vector to user-defined ES:BP pointer */
                     // Far pointer to the 8x8 characters 80h-FFh
-                    ((PULONG)BaseAddress)[0x1F] = MAKELONG(getBP(), getES());
+                    ((PULONG)VdmBaseAddr)[0x1F] = MAKELONG(getBP(), getES());
                     break;
                 }
 
@@ -3540,7 +3540,7 @@ VOID WINAPI VidBiosVideoService(LPWORD Stack)
                      * Update the BIOS INT 43h vector (far pointer
                      * to the character range 00h-...)
                      */
-                    ((PULONG)BaseAddress)[0x43] = MAKELONG(getBP(), getES());
+                    ((PULONG)VdmBaseAddr)[0x43] = MAKELONG(getBP(), getES());
 
                     /* Update BDA */
                     Bda->CharacterHeight = getCX();
@@ -3563,7 +3563,7 @@ VOID WINAPI VidBiosVideoService(LPWORD Stack)
                      * Update the BIOS INT 43h vector (far pointer
                      * to the character range 00h-...)
                      */
-                    ((PULONG)BaseAddress)[0x43] = MAKELONG(FONT_8x14_OFFSET, VIDEO_BIOS_DATA_SEG);
+                    ((PULONG)VdmBaseAddr)[0x43] = MAKELONG(FONT_8x14_OFFSET, VIDEO_BIOS_DATA_SEG);
 
                     /* Update BDA */
                     Bda->CharacterHeight = 14;
@@ -3586,7 +3586,7 @@ VOID WINAPI VidBiosVideoService(LPWORD Stack)
                      * Update the BIOS INT 43h vector (far pointer
                      * to the character range 00h-...)
                      */
-                    ((PULONG)BaseAddress)[0x43] = MAKELONG(FONT_8x8_OFFSET, VIDEO_BIOS_DATA_SEG);
+                    ((PULONG)VdmBaseAddr)[0x43] = MAKELONG(FONT_8x8_OFFSET, VIDEO_BIOS_DATA_SEG);
 
                     /* Update BDA */
                     Bda->CharacterHeight = 8;
@@ -3609,7 +3609,7 @@ VOID WINAPI VidBiosVideoService(LPWORD Stack)
                      * Update the BIOS INT 43h vector (far pointer
                      * to the character range 00h-...).
                      */
-                    ((PULONG)BaseAddress)[0x43] = MAKELONG(FONT_8x16_OFFSET, VIDEO_BIOS_DATA_SEG);
+                    ((PULONG)VdmBaseAddr)[0x43] = MAKELONG(FONT_8x16_OFFSET, VIDEO_BIOS_DATA_SEG);
 
                     /* Update BDA */
                     Bda->CharacterHeight = 16;
@@ -3634,12 +3634,12 @@ VOID WINAPI VidBiosVideoService(LPWORD Stack)
                     {
                         /* 00h - INT 0x1F pointer */
                         case 0x00:
-                            Address = ((PULONG)BaseAddress)[0x1F];
+                            Address = ((PULONG)VdmBaseAddr)[0x1F];
                             break;
 
                         /* 01h - INT 0x43 pointer */
                         case 0x01:
-                            Address = ((PULONG)BaseAddress)[0x43];
+                            Address = ((PULONG)VdmBaseAddr)[0x43];
                             break;
 
                         /* 02h - 8x14 font */
@@ -3936,16 +3936,16 @@ VOID VidBiosPost(VOID)
      */
 
     /* Some vectors are in fact addresses to tables */
-    ((PULONG)BaseAddress)[0x1D] = NULL32; // Video Parameter Tables
+    ((PULONG)VdmBaseAddr)[0x1D] = NULL32; // Video Parameter Tables
     // Far pointer to the 8x8 graphics font for the 8x8 characters 80h-FFh
-    ((PULONG)BaseAddress)[0x1F] = MAKELONG(FONT_8x8_HIGH_OFFSET, VIDEO_BIOS_DATA_SEG);
+    ((PULONG)VdmBaseAddr)[0x1F] = MAKELONG(FONT_8x8_HIGH_OFFSET, VIDEO_BIOS_DATA_SEG);
     // Far pointer to the character table (EGA, MCGA, VGA) for the 8x16 characters 00h-...
-    ((PULONG)BaseAddress)[0x43] = MAKELONG(FONT_8x16_OFFSET, VIDEO_BIOS_DATA_SEG);
-    ((PULONG)BaseAddress)[0x44] = NULL32; // ROM BIOS Character Font, Characters 00h-7Fh (PCjr)
+    ((PULONG)VdmBaseAddr)[0x43] = MAKELONG(FONT_8x16_OFFSET, VIDEO_BIOS_DATA_SEG);
+    ((PULONG)VdmBaseAddr)[0x44] = NULL32; // ROM BIOS Character Font, Characters 00h-7Fh (PCjr)
 
     /* Relocated services by the BIOS (when needed) */
-    ((PULONG)BaseAddress)[0x42] = NULL32; // Relocated Default INT 10h Video Services
-    ((PULONG)BaseAddress)[0x6D] = NULL32; // Video BIOS Entry Point
+    ((PULONG)VdmBaseAddr)[0x42] = NULL32; // Relocated Default INT 10h Video Services
+    ((PULONG)VdmBaseAddr)[0x6D] = NULL32; // Video BIOS Entry Point
 
     //
     // FIXME: At the moment we always set a VGA mode. In the future,
@@ -4010,15 +4010,15 @@ BOOLEAN VidBiosInitialize(VOID)
     VgaStaticFuncTable->VGASavePtrFuncFlags = 0x18;   // See: http://www.ctyme.com/intr/rb-0221.htm#Table47
 
     /* Fill the font tables */
-    RtlMoveMemory(SEG_OFF_TO_PTR(VIDEO_BIOS_DATA_SEG, FONT_8x8_OFFSET),
+    RtlCopyMemory(SEG_OFF_TO_PTR(VIDEO_BIOS_DATA_SEG, FONT_8x8_OFFSET),
                   Font8x8, sizeof(Font8x8));
-    RtlMoveMemory(SEG_OFF_TO_PTR(VIDEO_BIOS_DATA_SEG, FONT_8x16_OFFSET),
+    RtlCopyMemory(SEG_OFF_TO_PTR(VIDEO_BIOS_DATA_SEG, FONT_8x16_OFFSET),
                   Font8x16, sizeof(Font8x16));
-    RtlMoveMemory(SEG_OFF_TO_PTR(VIDEO_BIOS_DATA_SEG, FONT_8x14_OFFSET),
+    RtlCopyMemory(SEG_OFF_TO_PTR(VIDEO_BIOS_DATA_SEG, FONT_8x14_OFFSET),
                   Font8x14, sizeof(Font8x14));
 
     /* Make another copy of the lower half of the 8x8 font at F000:FA6E for compatibility */
-    RtlMoveMemory(SEG_OFF_TO_PTR(BIOS_SEGMENT, FONT_8x8_COMPAT_OFFSET), Font8x8, sizeof(Font8x8) / 2);
+    RtlCopyMemory(SEG_OFF_TO_PTR(BIOS_SEGMENT, FONT_8x8_COMPAT_OFFSET), Font8x8, sizeof(Font8x8) / 2);
 
     VidBios32Initialize();
 
