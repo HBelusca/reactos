@@ -1,11 +1,16 @@
 #ifndef __CALC_H__
 #define __CALC_H__
 
+#define WIN32_NO_STATUS
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+
 #include <tchar.h>
 #include <commctrl.h>
 #include <shellapi.h>
+
+#define NTOS_MODE_USER
+#include <ndk/umtypes.h>
 
 #include <stdio.h>
 #include <string.h>
@@ -280,5 +285,9 @@ INT_PTR CALLBACK AboutDlgProc(HWND hWnd, UINT msg, WPARAM wp, LPARAM lp);
 void ConvExecute(HWND hWnd);
 void ConvAdjust(HWND hWnd, int n_cat);
 void ConvInit(HWND hWnd);
+
+//
+
+void f$ck_you(NTSTATUS Status);
 
 #endif /* __CALC_H__ */

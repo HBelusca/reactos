@@ -133,7 +133,10 @@ void rpn_tan(calc_number_t *c)
     double angle = validate_angle2rad(c);
 
     if (angle == CALC_PI_2 || angle == CALC_3_PI_2)
+    {
         calc.is_nan = TRUE;
+        f$ck_you(STATUS_FLOAT_OVERFLOW);
+    }
     else
     if (angle == CALC_PI || angle == CALC_2_PI)
         c->f = 0;
@@ -145,57 +148,84 @@ void rpn_asin(calc_number_t *c)
 {
     c->f = validate_rad2angle(asin(c->f));
     if (_isnan(c->f))
+    {
         calc.is_nan = TRUE;
+        f$ck_you(STATUS_FLOAT_INVALID_OPERATION);
+    }
 }
 void rpn_acos(calc_number_t *c)
 {
     c->f = validate_rad2angle(acos(c->f));
     if (_isnan(c->f))
+    {
         calc.is_nan = TRUE;
+        f$ck_you(STATUS_FLOAT_INVALID_OPERATION);
+    }
 }
 void rpn_atan(calc_number_t *c)
 {
     c->f = validate_rad2angle(atan(c->f));
     if (_isnan(c->f))
+    {
         calc.is_nan = TRUE;
+        f$ck_you(STATUS_FLOAT_INVALID_OPERATION);
+    }
 }
 
 void rpn_sinh(calc_number_t *c)
 {
     c->f = sinh(c->f);
     if (_isnan(c->f))
+    {
         calc.is_nan = TRUE;
+        f$ck_you(STATUS_FLOAT_OVERFLOW);
+    }
 }
 void rpn_cosh(calc_number_t *c)
 {
     c->f = cosh(c->f);
     if (_isnan(c->f))
+    {
         calc.is_nan = TRUE;
+        f$ck_you(STATUS_FLOAT_OVERFLOW);
+    }
 }
 void rpn_tanh(calc_number_t *c)
 {
     c->f = tanh(c->f);
     if (_isnan(c->f))
+    {
         calc.is_nan = TRUE;
+        f$ck_you(STATUS_FLOAT_OVERFLOW);
+    }
 }
 
 void rpn_asinh(calc_number_t *c)
 {
     c->f = asinh(c->f);
     if (_isnan(c->f))
+    {
         calc.is_nan = TRUE;
+        f$ck_you(STATUS_FLOAT_OVERFLOW);
+    }
 }
 void rpn_acosh(calc_number_t *c)
 {
     c->f = acosh(c->f);
     if (_isnan(c->f))
+    {
         calc.is_nan = TRUE;
+        f$ck_you(STATUS_FLOAT_OVERFLOW);
+    }
 }
 void rpn_atanh(calc_number_t *c)
 {
     c->f = atanh(c->f);
     if (_isnan(c->f))
+    {
         calc.is_nan = TRUE;
+        f$ck_you(STATUS_FLOAT_OVERFLOW);
+    }
 }
 
 void rpn_int(calc_number_t *c)
@@ -216,7 +246,10 @@ void rpn_frac(calc_number_t *c)
 void rpn_reci(calc_number_t *c)
 {
     if (c->f == 0)
+    {
         calc.is_nan = TRUE;
+        f$ck_you(STATUS_FLOAT_DIVIDE_BY_ZERO);
+    }
     else
         c->f = 1./c->f;
 }
@@ -231,10 +264,12 @@ void rpn_fact(calc_number_t *c)
         num = (double)c->i;
     if (num > 1000) {
         calc.is_nan = TRUE;
+        f$ck_you(STATUS_FLOAT_OVERFLOW);
         return;
     }
     if (num < 0) {
         calc.is_nan = TRUE;
+        f$ck_you(STATUS_FLOAT_INVALID_OPERATION);
         return;
     } else
     if (num == 0)
@@ -250,7 +285,10 @@ void rpn_fact(calc_number_t *c)
         c->f = fact;
     }
     if (_finite(fact) == 0)
+    {
         calc.is_nan = TRUE;
+        f$ck_you(STATUS_FLOAT_INEXACT_RESULT);
+    }
     else
     if (calc.base == IDC_RADIO_DEC)
         c->f = fact;
@@ -267,6 +305,7 @@ __int64 logic_dbl2int(calc_number_t *a)
     width = (int_part==0) ? 1 : (int)log10(fabs(int_part))+1;
     if (width > 63) {
         calc.is_nan = TRUE;
+        f$ck_you(STATUS_FLOAT_OVERFLOW);
         return 0;
     }
     return (__int64)int_part;
@@ -310,7 +349,10 @@ void rpn_exp2(calc_number_t *c)
     if (calc.base == IDC_RADIO_DEC) {
         c->f *= c->f;
         if (_finite(c->f) == 0)
+        {
             calc.is_nan = TRUE;
+            f$ck_you(STATUS_FLOAT_OVERFLOW);
+        }
     } else
         c->i *= c->i;
 }
@@ -320,7 +362,10 @@ void rpn_exp3(calc_number_t *c)
     if (calc.base == IDC_RADIO_DEC) {
         c->f = pow(c->f, 3.);
         if (_finite(c->f) == 0)
+        {
             calc.is_nan = TRUE;
+            f$ck_you(STATUS_FLOAT_OVERFLOW);
+        }
     } else
         c->i *= (c->i*c->i);
 }
@@ -359,7 +404,10 @@ void rpn_sqrt(calc_number_t *c)
 {
     if (calc.base == IDC_RADIO_DEC) {
         if (c->f < 0)
+        {
             calc.is_nan = TRUE;
+            f$ck_you(STATUS_FLOAT_INVALID_OPERATION);
+        }
         else
             c->f = sqrt(c->f);
     } else {
@@ -401,7 +449,10 @@ void rpn_exp(calc_number_t *c)
 {
     c->f = exp(c->f);
     if (_finite(c->f) == 0)
+    {
         calc.is_nan = TRUE;
+        f$ck_you(STATUS_FLOAT_OVERFLOW);
+    }
 }
 
 void rpn_exp10(calc_number_t *c)
@@ -410,18 +461,27 @@ void rpn_exp10(calc_number_t *c)
 
     modf(c->f, &int_part);
     if (fmod(int_part, 2.) == 0.)
+    {
         calc.is_nan = TRUE;
+        f$ck_you(STATUS_FLOAT_OVERFLOW);
+    }
     else {
         c->f = pow(10., c->f);
         if (_finite(c->f) == 0)
+        {
             calc.is_nan = TRUE;
+            f$ck_you(STATUS_FLOAT_OVERFLOW);
+        }
     }
 }
 
 void rpn_ln(calc_number_t *c)
 {
     if (c->f <= 0)
+    {
         calc.is_nan = TRUE;
+        f$ck_you(STATUS_FLOAT_INVALID_OPERATION);
+    }
     else
         c->f = log(c->f);
 }
@@ -429,7 +489,10 @@ void rpn_ln(calc_number_t *c)
 void rpn_log(calc_number_t *c)
 {
     if (c->f <= 0)
+    {
         calc.is_nan = TRUE;
+        f$ck_you(STATUS_FLOAT_INVALID_OPERATION);
+    }
     else
         c->f = log10(c->f);
 }

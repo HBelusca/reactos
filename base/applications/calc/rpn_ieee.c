@@ -147,7 +147,10 @@ static void rpn_mul_f(calc_number_t *r, calc_number_t *a, calc_number_t *b)
 static void rpn_div_f(calc_number_t *r, calc_number_t *a, calc_number_t *b)
 {
     if (b->f == 0)
+    {
         calc.is_nan = TRUE;
+        f$ck_you(STATUS_FLOAT_DIVIDE_BY_ZERO);
+    }
     else
         r->f = a->f / b->f;
 }
@@ -157,7 +160,10 @@ static void rpn_mod_f(calc_number_t *r, calc_number_t *a, calc_number_t *b)
     double t;
 
     if (b->f == 0)
+    {
         calc.is_nan = TRUE;
+        f$ck_you(STATUS_FLOAT_DIVIDE_BY_ZERO);
+    }
     else {
         modf(a->f/b->f, &t);
         r->f = a->f - (t * b->f);
@@ -216,17 +222,26 @@ static void rpn_pow_f(calc_number_t *r, calc_number_t *a, calc_number_t *b)
 {
     r->f = pow(a->f, b->f);
     if (_finite(r->f) == 0 || _isnan(r->f))
+    {
         calc.is_nan = TRUE;
+        f$ck_you(STATUS_FLOAT_OVERFLOW);
+    }
 }
 
 static void rpn_sqr_f(calc_number_t *r, calc_number_t *a, calc_number_t *b)
 {
     if (b->f == 0)
+    {
         calc.is_nan = TRUE;
+        f$ck_you(STATUS_FLOAT_INVALID_OPERATION);
+    }
     else {
         r->f = pow(a->f, 1./b->f);
         if (_finite(r->f) == 0 || _isnan(r->f))
+        {
             calc.is_nan = TRUE;
+            f$ck_you(STATUS_FLOAT_OVERFLOW);
+        }
     }
 }
 
@@ -249,7 +264,10 @@ static void rpn_mul_i(calc_number_t *r, calc_number_t *a, calc_number_t *b)
 static void rpn_div_i(calc_number_t *r, calc_number_t *a, calc_number_t *b)
 {
     if (b->i == 0)
+    {
         calc.is_nan = TRUE;
+        f$ck_you(STATUS_INTEGER_DIVIDE_BY_ZERO);
+    }
     else
         r->i = a->i / b->i;
 }
@@ -257,7 +275,10 @@ static void rpn_div_i(calc_number_t *r, calc_number_t *a, calc_number_t *b)
 static void rpn_mod_i(calc_number_t *r, calc_number_t *a, calc_number_t *b)
 {
     if (b->i == 0)
+    {
         calc.is_nan = TRUE;
+        f$ck_you(STATUS_INTEGER_DIVIDE_BY_ZERO);
+    }
     else
         r->i = a->i % b->i;
 }
@@ -306,7 +327,10 @@ static void rpn_mul_p(calc_number_t *r, calc_number_t *a, calc_number_t *b)
 static void rpn_div_p(calc_number_t *r, calc_number_t *a, calc_number_t *b)
 {
     if (b->f == 0)
+    {
         calc.is_nan = TRUE;
+        f$ck_you(STATUS_FLOAT_DIVIDE_BY_ZERO);
+    }
     else
         r->f = a->f * 100. / b->f;
 }
@@ -337,7 +361,10 @@ void run_operator(calc_node_t *result,
         } else
             operator_list[operation].op_f(&dc, &da, &db);
         if (_finite(dc.f) == 0)
+        {
             calc.is_nan = TRUE;
+            f$ck_you(STATUS_FLOAT_OVERFLOW);
+        }
     } else {
         operator_list[operation].op_i(&dc, &da, &db);
         /* apply final limiter to result */

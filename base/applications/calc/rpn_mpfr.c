@@ -168,7 +168,10 @@ static void rpn_mul_f(calc_number_t *r, calc_number_t *a, calc_number_t *b)
 static void rpn_div_f(calc_number_t *r, calc_number_t *a, calc_number_t *b)
 {
     if (mpfr_sgn(b->mf) == 0)
+    {
         calc.is_nan = TRUE;
+        f$ck_you(STATUS_FLOAT_DIVIDE_BY_ZERO);
+    }
     else
         mpfr_div(r->mf, a->mf, b->mf, MPFR_DEFAULT_RND);
 }
@@ -194,7 +197,10 @@ static void rpn_shl_f(calc_number_t *r, calc_number_t *a, calc_number_t *b)
 
     mpfr_trunc(r->mf, b->mf);
     if (mpfr_fits_ulong_p(r->mf, MPFR_DEFAULT_RND) == 0)
+    {
         calc.is_nan = TRUE;
+        f$ck_you(STATUS_FLOAT_OVERFLOW);
+    }
     else {
         e = mpfr_get_ui(r->mf, MPFR_DEFAULT_RND);
         mpfr_mul_2exp(r->mf, a->mf, e, MPFR_DEFAULT_RND);
@@ -207,7 +213,10 @@ static void rpn_shr_f(calc_number_t *r, calc_number_t *a, calc_number_t *b)
 
     mpfr_trunc(r->mf, b->mf);
     if (mpfr_fits_ulong_p(r->mf, MPFR_DEFAULT_RND) == 0)
+    {
         calc.is_nan = TRUE;
+        f$ck_you(STATUS_FLOAT_UNDERFLOW);
+    }
     else {
         e = mpfr_get_ui(r->mf, MPFR_DEFAULT_RND);
         mpfr_div_2exp(r->mf, a->mf, e, MPFR_DEFAULT_RND);
@@ -222,7 +231,10 @@ static void rpn_pow_f(calc_number_t *r, calc_number_t *a, calc_number_t *b)
 static void rpn_sqr_f(calc_number_t *r, calc_number_t *a, calc_number_t *b)
 {
     if (mpfr_sgn(b->mf) == 0)
+    {
         calc.is_nan = TRUE;
+        f$ck_you(STATUS_FLOAT_INVALID_OPERATION);
+    }
     else {
         mpfr_t tmp;
 
@@ -253,7 +265,10 @@ static void rpn_mul_i(calc_number_t *r, calc_number_t *a, calc_number_t *b)
 static void rpn_div_i(calc_number_t *r, calc_number_t *a, calc_number_t *b)
 {
     if (mpfr_sgn(b->mf) == 0)
+    {
         calc.is_nan = TRUE;
+        f$ck_you(STATUS_INTEGER_DIVIDE_BY_ZERO);
+    }
     else
         rpn_exec_int(r, a, b, mpz_tdiv_q);
 }
@@ -261,7 +276,10 @@ static void rpn_div_i(calc_number_t *r, calc_number_t *a, calc_number_t *b)
 static void rpn_mod_i(calc_number_t *r, calc_number_t *a, calc_number_t *b)
 {
     if (mpfr_sgn(b->mf) == 0)
+    {
         calc.is_nan = TRUE;
+        f$ck_you(STATUS_INTEGER_DIVIDE_BY_ZERO);
+    }
     else
         rpn_exec_int(r, a, b, mpz_tdiv_r);
 }
@@ -300,7 +318,10 @@ static void rpn_mul_p(calc_number_t *r, calc_number_t *a, calc_number_t *b)
 static void rpn_div_p(calc_number_t *r, calc_number_t *a, calc_number_t *b)
 {
     if (mpfr_sgn(b->mf) == 0)
+    {
         calc.is_nan = TRUE;
+        f$ck_you(STATUS_FLOAT_DIVIDE_BY_ZERO);
+    }
     else {
         mpfr_mul_ui(r->mf, a->mf, 100, MPFR_DEFAULT_RND);
         mpfr_div(r->mf, r->mf, b->mf, MPFR_DEFAULT_RND);

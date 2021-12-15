@@ -84,6 +84,7 @@ static void validate_angle2rad(calc_number_t *r)
 
     if (!mpfr_number_p(r->mf)) {
         calc.is_nan = TRUE;
+        f$ck_you(STATUS_FLOAT_INVALID_OPERATION);
         return;
     }
     mpfr_init(mult);
@@ -143,7 +144,11 @@ void rpn_sin(calc_number_t *c)
         mpfr_set_si(c->mf, 1, MPFR_DEFAULT_RND);
     else {
         mpfr_sin(c->mf, c->mf, MPFR_DEFAULT_RND);
-        if (!mpfr_number_p(c->mf)) calc.is_nan = TRUE;
+        if (!mpfr_number_p(c->mf))
+        {
+            calc.is_nan = TRUE;
+            f$ck_you(STATUS_FLOAT_OVERFLOW);
+        }
     }
     mpfr_clear(mp_pi);
     mpfr_clear(mp_pi_2);
@@ -167,7 +172,11 @@ void rpn_cos(calc_number_t *c)
         mpfr_set_si(c->mf, 1, MPFR_DEFAULT_RND);
     else {
         mpfr_cos(c->mf, c->mf, MPFR_DEFAULT_RND);
-        if (!mpfr_number_p(c->mf)) calc.is_nan = TRUE;
+        if (!mpfr_number_p(c->mf))
+        {
+            calc.is_nan = TRUE;
+            f$ck_you(STATUS_FLOAT_OVERFLOW);
+        }
     }
     mpfr_clear(mp_pi);
     mpfr_clear(mp_pi_2);
@@ -182,13 +191,20 @@ void rpn_tan(calc_number_t *c)
     build_rad_const(&mp_pi, &mp_pi_2, &mp_3_pi_2, &mp_2_pi);
 
     if (!mpfr_cmp(c->mf, mp_pi_2) || !mpfr_cmp(c->mf, mp_3_pi_2))
+    {
         calc.is_nan = TRUE;
+        f$ck_you(STATUS_FLOAT_OVERFLOW);
+    }
     else
     if (!mpfr_cmp(c->mf, mp_pi) || !mpfr_cmp(c->mf, mp_2_pi))
         rpn_zero(c);
     else {
         mpfr_tan(c->mf, c->mf, MPFR_DEFAULT_RND);
-        if (!mpfr_number_p(c->mf)) calc.is_nan = TRUE;
+        if (!mpfr_number_p(c->mf))
+        {
+            calc.is_nan = TRUE;
+            f$ck_you(STATUS_FLOAT_OVERFLOW);
+        }
     }
     mpfr_clear(mp_pi);
     mpfr_clear(mp_pi_2);
@@ -215,33 +231,57 @@ void rpn_atan(calc_number_t *c)
 void rpn_sinh(calc_number_t *c)
 {
     mpfr_sinh(c->mf, c->mf, MPFR_DEFAULT_RND);
-    if (!mpfr_number_p(c->mf)) calc.is_nan = TRUE;
+    if (!mpfr_number_p(c->mf))
+    {
+        calc.is_nan = TRUE;
+        f$ck_you(STATUS_FLOAT_OVERFLOW);
+    }
 }
 void rpn_cosh(calc_number_t *c)
 {
     mpfr_cosh(c->mf, c->mf, MPFR_DEFAULT_RND);
-    if (!mpfr_number_p(c->mf)) calc.is_nan = TRUE;
+    if (!mpfr_number_p(c->mf))
+    {
+        calc.is_nan = TRUE;
+        f$ck_you(STATUS_FLOAT_OVERFLOW);
+    }
 }
 void rpn_tanh(calc_number_t *c)
 {
     mpfr_tanh(c->mf, c->mf, MPFR_DEFAULT_RND);
-    if (!mpfr_number_p(c->mf)) calc.is_nan = TRUE;
+    if (!mpfr_number_p(c->mf))
+    {
+        calc.is_nan = TRUE;
+        f$ck_you(STATUS_FLOAT_OVERFLOW);
+    }
 }
 
 void rpn_asinh(calc_number_t *c)
 {
     mpfr_asinh(c->mf, c->mf, MPFR_DEFAULT_RND);
-    if (!mpfr_number_p(c->mf)) calc.is_nan = TRUE;
+    if (!mpfr_number_p(c->mf))
+    {
+        calc.is_nan = TRUE;
+        f$ck_you(STATUS_FLOAT_OVERFLOW);
+    }
 }
 void rpn_acosh(calc_number_t *c)
 {
     mpfr_acosh(c->mf, c->mf, MPFR_DEFAULT_RND);
-    if (!mpfr_number_p(c->mf)) calc.is_nan = TRUE;
+    if (!mpfr_number_p(c->mf))
+    {
+        calc.is_nan = TRUE;
+        f$ck_you(STATUS_FLOAT_OVERFLOW);
+    }
 }
 void rpn_atanh(calc_number_t *c)
 {
     mpfr_atanh(c->mf, c->mf, MPFR_DEFAULT_RND);
-    if (!mpfr_number_p(c->mf)) calc.is_nan = TRUE;
+    if (!mpfr_number_p(c->mf))
+    {
+        calc.is_nan = TRUE;
+        f$ck_you(STATUS_FLOAT_OVERFLOW);
+    }
 }
 
 void rpn_int(calc_number_t *c)
@@ -257,7 +297,10 @@ void rpn_frac(calc_number_t *c)
 void rpn_reci(calc_number_t *c)
 {
     if (mpfr_sgn(c->mf) == 0)
+    {
         calc.is_nan = TRUE;
+        f$ck_you(STATUS_FLOAT_DIVIDE_BY_ZERO);
+    }
     else
         mpfr_ui_div(c->mf, 1, c->mf, MPFR_DEFAULT_RND);
 }
@@ -266,15 +309,23 @@ void rpn_fact(calc_number_t *c)
 {
     if (mpfr_sgn(c->mf) < 0) {
         calc.is_nan = TRUE;
+        f$ck_you(STATUS_FLOAT_INVALID_OPERATION);
         return;
     }
 
     mpfr_trunc(c->mf, c->mf);
     if (mpfr_fits_ulong_p(c->mf, MPFR_DEFAULT_RND) == 0)
+    {
         calc.is_nan = TRUE;
+        f$ck_you(STATUS_FLOAT_OVERFLOW);
+    }
     else {
         mpfr_fac_ui(c->mf, mpfr_get_ui(c->mf, MPFR_DEFAULT_RND), MPFR_DEFAULT_RND);
-        if (!mpfr_number_p(c->mf)) calc.is_nan = TRUE;
+        if (!mpfr_number_p(c->mf))
+        {
+            calc.is_nan = TRUE;
+            f$ck_you(STATUS_FLOAT_OVERFLOW);
+        }
     }
 }
 
@@ -308,49 +359,81 @@ void rpn_sign(calc_number_t *c)
 void rpn_exp2(calc_number_t *c)
 {
     mpfr_sqr(c->mf, c->mf, MPFR_DEFAULT_RND);
-    if (!mpfr_number_p(c->mf)) calc.is_nan = TRUE;
+    if (!mpfr_number_p(c->mf))
+    {
+        calc.is_nan = TRUE;
+        f$ck_you(STATUS_FLOAT_OVERFLOW);
+    }
 }
 
 void rpn_exp3(calc_number_t *c)
 {
     mpfr_pow_ui(c->mf, c->mf, 3, MPFR_DEFAULT_RND);
-    if (!mpfr_number_p(c->mf)) calc.is_nan = TRUE;
+    if (!mpfr_number_p(c->mf))
+    {
+        calc.is_nan = TRUE;
+        f$ck_you(STATUS_FLOAT_OVERFLOW);
+    }
 }
 
 void rpn_sqrt(calc_number_t *c)
 {
     mpfr_sqrt(c->mf, c->mf, MPFR_DEFAULT_RND);
-    if (!mpfr_number_p(c->mf)) calc.is_nan = TRUE;
+    if (!mpfr_number_p(c->mf))
+    {
+        calc.is_nan = TRUE;
+        f$ck_you(STATUS_FLOAT_OVERFLOW);
+    }
 }
 
 void rpn_cbrt(calc_number_t *c)
 {
     mpfr_cbrt(c->mf, c->mf, MPFR_DEFAULT_RND);
-    if (!mpfr_number_p(c->mf)) calc.is_nan = TRUE;
+    if (!mpfr_number_p(c->mf))
+    {
+        calc.is_nan = TRUE;
+        f$ck_you(STATUS_FLOAT_OVERFLOW);
+    }
 }
 
 void rpn_exp(calc_number_t *c)
 {
     mpfr_exp(c->mf, c->mf, MPFR_DEFAULT_RND);
-    if (!mpfr_number_p(c->mf)) calc.is_nan = TRUE;
+    if (!mpfr_number_p(c->mf))
+    {
+        calc.is_nan = TRUE;
+        f$ck_you(STATUS_FLOAT_OVERFLOW);
+    }
 }
 
 void rpn_exp10(calc_number_t *c)
 {
     mpfr_exp10(c->mf, c->mf, MPFR_DEFAULT_RND);
-    if (!mpfr_number_p(c->mf)) calc.is_nan = TRUE;
+    if (!mpfr_number_p(c->mf))
+    {
+        calc.is_nan = TRUE;
+        f$ck_you(STATUS_FLOAT_OVERFLOW);
+    }
 }
 
 void rpn_ln(calc_number_t *c)
 {
     mpfr_log(c->mf, c->mf, MPFR_DEFAULT_RND);
-    if (!mpfr_number_p(c->mf)) calc.is_nan = TRUE;
+    if (!mpfr_number_p(c->mf))
+    {
+        calc.is_nan = TRUE;
+        f$ck_you(STATUS_FLOAT_OVERFLOW);
+    }
 }
 
 void rpn_log(calc_number_t *c)
 {
     mpfr_log10(c->mf, c->mf, MPFR_DEFAULT_RND);
-    if (!mpfr_number_p(c->mf)) calc.is_nan = TRUE;
+    if (!mpfr_number_p(c->mf))
+    {
+        calc.is_nan = TRUE;
+        f$ck_you(STATUS_FLOAT_OVERFLOW);
+    }
 }
 
 static void stat_sum(mpfr_t sum)
