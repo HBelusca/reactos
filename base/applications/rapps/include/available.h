@@ -1,6 +1,5 @@
 #pragma once
 
-#include <windef.h>
 #include <atlstr.h>
 #include <atlsimpcoll.h>
 #include <atlcoll.h>

@@ -10,7 +10,6 @@
 
 #include "rapps.h"
 #include "installed.h"
-#include "misc.h"
 
 CInstalledApplicationInfo::CInstalledApplicationInfo(BOOL bIsUserKey, REGSAM RegWowKey, HKEY hKey, const CStringW& szKeyName)
     : m_IsUserKey(bIsUserKey)

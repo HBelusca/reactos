@@ -9,10 +9,7 @@
  */
 
 #include "rapps.h"
-
 #include "available.h"
-#include "misc.h"
-#include "dialogs.h"
 
 
 // CAvailableApplicationInfo
