@@ -120,7 +120,7 @@ public:
     // this function is called when search text is changed
     BOOL SearchTextChanged(ATL::CStringW &SearchText);
 
-    void HandleTabOrder(int direction);
+    void HandleTabOrder(INT direction);
 };
 
 

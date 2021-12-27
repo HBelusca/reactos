@@ -833,13 +833,12 @@ BOOL CMainWindow::SearchTextChanged(ATL::CStringW &SearchText)
     return TRUE;
 }
 
-void CMainWindow::HandleTabOrder(int direction)
+void CMainWindow::HandleTabOrder(INT direction)
 {
     ATL::CSimpleArray<HWND> TabOrderHwndList;
 
     m_TreeView->AppendTabOrderWindow(direction, TabOrderHwndList);
     m_ApplicationView->AppendTabOrderWindow(direction, TabOrderHwndList);
-
 
     if (TabOrderHwndList.GetSize() == 0)
     {
@@ -895,9 +894,8 @@ VOID MainWindowLoop(INT nShowCmd)
             if (Msg.message == WM_CHAR &&
                 Msg.wParam == VK_TAB)
             {
-                // Move backwards if shift is held down
-                int direction = (GetKeyState(VK_SHIFT) & 0x8000) ? -1 : 1;
-
+                /* Move backwards if shift is held down */
+                INT direction = (GetKeyState(VK_SHIFT) & 0x8000) ? -1 : 1;
                 wnd->HandleTabOrder(direction);
                 continue;
             }
