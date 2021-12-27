@@ -250,14 +250,9 @@ VOID CMainWindow::OnSize(HWND hwnd, WPARAM wParam, LPARAM lParam)
     INT count = m_ClientPanel->CountSizableChildren();
 
     hdwp = BeginDeferWindowPos(count);
+    hdwp = m_ClientPanel->OnParentSize(r, hdwp);
     if (hdwp)
-    {
-        hdwp = m_ClientPanel->OnParentSize(r, hdwp);
-        if (hdwp)
-        {
-            EndDeferWindowPos(hdwp);
-        }
-    }
+        EndDeferWindowPos(hdwp);
 }
 
 BOOL CMainWindow::RemoveSelectedAppFromRegistry()

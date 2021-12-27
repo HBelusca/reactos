@@ -954,39 +954,24 @@ VOID CAppInfoDisplay::ResizeChildren(int Width, int Height)
 
     DWORD dwError = ERROR_SUCCESS;
     HDWP hDwp = BeginDeferWindowPos(2);
+    if (!hDwp)
+        dwError = GetLastError();
+
+    hDwp = ::LayoutWindowPos(hDwp, ScrnshotPrev->m_hWnd, NULL,
+                             0, 0, ScrnshotWidth, Height, 0);
+    if (!hDwp)
+        dwError = GetLastError();
+
+    // hide the padding if screenshot window width == 0
+    int RicheditPosX = ScrnshotWidth ? (ScrnshotWidth + INFO_DISPLAY_PADDING) : 0;
+
+    hDwp = ::LayoutWindowPos(hDwp, RichEdit->m_hWnd, NULL,
+                             RicheditPosX, 0, Width - RicheditPosX, Height, 0);
+    if (!hDwp)
+        dwError = GetLastError();
 
     if (hDwp)
-    {
-        hDwp = ::DeferWindowPos(hDwp, ScrnshotPrev->m_hWnd, NULL,
-            0, 0, ScrnshotWidth, Height, 0);
-
-        if (hDwp)
-        {
-            // hide the padding if screenshot window width == 0
-            int RicheditPosX = ScrnshotWidth ? (ScrnshotWidth + INFO_DISPLAY_PADDING) : 0;
-
-            hDwp = ::DeferWindowPos(hDwp, RichEdit->m_hWnd, NULL,
-                RicheditPosX, 0, Width - RicheditPosX, Height, 0);
-
-            if (hDwp)
-            {
-                EndDeferWindowPos(hDwp);
-            }
-            else
-            {
-                dwError = GetLastError();
-            }
-        }
-        else
-        {
-            dwError = GetLastError();
-        }
-    }
-    else
-    {
-        dwError = GetLastError();
-    }
-
+        EndDeferWindowPos(hDwp);
 
 #if DBG
     ATLASSERT(dwError == ERROR_SUCCESS);
@@ -1771,41 +1756,27 @@ VOID CApplicationView::OnSize(HWND hwnd, WPARAM wParam, LPARAM lParam)
 
     RECT r = { 0, 0, LOWORD(lParam), HIWORD(lParam) };
     HDWP hdwp = NULL;
-    INT count = m_Panel->CountSizableChildren();
+    INT count;
 
+    count = m_Panel->CountSizableChildren();
     hdwp = BeginDeferWindowPos(count);
+    hdwp = m_Panel->OnParentSize(r, hdwp);
     if (hdwp)
-    {
-        hdwp = m_Panel->OnParentSize(r, hdwp);
-        if (hdwp)
-        {
-            EndDeferWindowPos(hdwp);
-        }
-    }
+        EndDeferWindowPos(hdwp);
 
     count = m_SearchBar->CountSizableChildren();
     hdwp = BeginDeferWindowPos(count);
+    hdwp = m_SearchBar->OnParentSize(r, hdwp);
     if (hdwp)
-    {
-        hdwp = m_SearchBar->OnParentSize(r, hdwp);
-        if (hdwp)
-        {
-            EndDeferWindowPos(hdwp);
-        }
-    }
+        EndDeferWindowPos(hdwp);
 
     m_ComboBox->m_Margin.right = m_SearchBar->m_Width + m_SearchBar->m_Margin.right + TOOLBAR_PADDING;
 
     count = m_ComboBox->CountSizableChildren();
     hdwp = BeginDeferWindowPos(count);
+    hdwp = m_ComboBox->OnParentSize(r, hdwp);
     if (hdwp)
-    {
-        hdwp = m_ComboBox->OnParentSize(r, hdwp);
-        if (hdwp)
-        {
-            EndDeferWindowPos(hdwp);
-        }
-    }
+        EndDeferWindowPos(hdwp);
 }
 
 VOID CApplicationView::OnCommand(WPARAM wParam, LPARAM lParam)

@@ -8,6 +8,7 @@
 #pragma once
 
 #include <atlwin.h>
+#include <ui/layout_core.h>
 
 //
 // "Basic" types / container(s)
@@ -322,7 +323,7 @@ public:
     }
 
     // Override in subclass
-    virtual HDWP OnParentSize(RECT parentRect, HDWP hDwp)
+    virtual _Ret_maybenull_ HDWP OnParentSize(RECT parentRect, _In_opt_ HDWP hDwp)
     {
         /* Pass hDwp down the call chain */
         return hDwp;
@@ -426,7 +427,7 @@ public:
         return count;
     }
 
-    virtual HDWP OnParentSize(RECT parentRect, HDWP hDwp)
+    virtual _Ret_maybenull_ HDWP OnParentSize(RECT parentRect, _In_opt_ HDWP hDwp)
     {
         SIZE content = {0};
         ComputeMinimalSize(&content);
@@ -478,7 +479,7 @@ public:
         return 1;
     }
 
-    virtual HDWP OnParentSize(RECT parentRect, HDWP hDwp)
+    virtual _Ret_maybenull_ HDWP OnParentSize(RECT parentRect, _In_opt_ HDWP hDwp)
     {
         // ATLASSERT(::IsWindow(m_hWnd));
         ATLASSERT(TBase::IsWindow());
@@ -487,15 +488,11 @@ public:
         TBase::GetWindowRect(&rect);
         ComputeRect(parentRect, rect, &rect);
 
-        if (hDwp)
-        {
-            return ::DeferWindowPos(hDwp, TBase::m_hWnd, NULL, rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top, SWP_NOACTIVATE | SWP_NOZORDER);
-        }
-        else
-        {
-            TBase::SetWindowPos(NULL, rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top, SWP_NOACTIVATE | SWP_NOZORDER | SWP_DEFERERASE);
-            return NULL;
-        }
+        return ::LayoutWindowPos(hDwp, TBase::m_hWnd, NULL,
+                                 rect.left, rect.top,
+                                 rect.right - rect.left,
+                                 rect.bottom - rect.top,
+                                 SWP_NOACTIVATE | SWP_NOZORDER /**/ | SWP_DEFERERASE /**/);
     }
 
     virtual VOID AppendTabOrderWindow(INT Direction, ATL::CSimpleArray<HWND>& TabOrderList)
@@ -600,7 +597,7 @@ public:
         return count;
     }
 
-    virtual HDWP OnParentSize(RECT parentRect, HDWP hDwp)
+    virtual _Ret_maybenull_ HDWP OnParentSize(RECT parentRect, _In_opt_ HDWP hDwp)
     {
         SIZE content = {0};
         ComputeMinimalSize(&content);
@@ -685,23 +682,12 @@ public:
         hDwp = m_Pane[0].OnParentSize(first, hDwp);
         hDwp = m_Pane[1].OnParentSize(second, hDwp);
 
-        if (hDwp)
-        {
-            return DeferWindowPos(hDwp, NULL,
-                                  splitter.left, splitter.top,
-                                  splitter.right - splitter.left,
-                                  splitter.bottom - splitter.top,
-                                  SWP_NOACTIVATE | SWP_NOZORDER);
-        }
-        else
-        {
-            SetWindowPos(NULL,
-                         splitter.left, splitter.top,
-                         splitter.right - splitter.left,
-                         splitter.bottom - splitter.top,
-                         SWP_NOACTIVATE | SWP_NOZORDER);
-            return NULL;
-        }
+        ATLASSERT(::IsWindow(m_hWnd)); // IsWindow()
+        return ::LayoutWindowPos(hDwp, m_hWnd, NULL,
+                                 splitter.left, splitter.top,
+                                 splitter.right - splitter.left,
+                                 splitter.bottom - splitter.top,
+                                 SWP_NOACTIVATE | SWP_NOZORDER | SWP_DEFERERASE);
     }
 
 private:
@@ -771,7 +757,7 @@ public:
         INT count = CountSizableChildren();
 
         HDWP hdwp = BeginDeferWindowPos(count);
-        if (hdwp) hdwp = OnParentSize(m_LastRect, hdwp);
+        hdwp = OnParentSize(m_LastRect, hdwp);
         if (hdwp) EndDeferWindowPos(hdwp);
     }
 
