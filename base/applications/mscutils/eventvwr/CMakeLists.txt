@@ -1,4 +1,6 @@
 
+PROJECT(eventvwr)
+
 list(APPEND SOURCE
     eventvwr.c
     evtdetctl.c

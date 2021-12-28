@@ -1,4 +1,6 @@
 
+PROJECT(sysdm)
+
 spec2def(sysdm.cpl sysdm.spec)
 
 include_directories(
