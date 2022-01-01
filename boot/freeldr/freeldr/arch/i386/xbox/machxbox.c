@@ -335,22 +335,22 @@ MachInit(const char *CmdLine)
 
     /* Setup vtbl */
     RtlZeroMemory(&MachVtbl, sizeof(MachVtbl));
-    MachVtbl.ConsPutChar = XboxConsPutChar;
-    MachVtbl.ConsKbHit = XboxConsKbHit;
-    MachVtbl.ConsGetCh = XboxConsGetCh;
-    MachVtbl.VideoClearScreen = XboxVideoClearScreen;
-    MachVtbl.VideoSetDisplayMode = XboxVideoSetDisplayMode;
-    MachVtbl.VideoGetDisplaySize = XboxVideoGetDisplaySize;
-    MachVtbl.VideoGetBufferSize = XboxVideoGetBufferSize;
-    MachVtbl.VideoGetFontsFromFirmware = XboxVideoGetFontsFromFirmware;
-    MachVtbl.VideoSetTextCursorPosition = XboxVideoSetTextCursorPosition;
-    MachVtbl.VideoHideShowTextCursor = XboxVideoHideShowTextCursor;
-    MachVtbl.VideoPutChar = XboxVideoPutChar;
-    MachVtbl.VideoCopyOffScreenBufferToVRAM = XboxVideoCopyOffScreenBufferToVRAM;
-    MachVtbl.VideoIsPaletteFixed = XboxVideoIsPaletteFixed;
-    MachVtbl.VideoSetPaletteColor = XboxVideoSetPaletteColor;
-    MachVtbl.VideoGetPaletteColor = XboxVideoGetPaletteColor;
-    MachVtbl.VideoSync = XboxVideoSync;
+    MachVtbl.Console.ConsKbHit = XboxConsKbHit;
+    MachVtbl.Console.ConsGetCh = XboxConsGetCh;
+    MachVtbl.Console.ConsPutChar = XboxConsPutChar;
+    MachVtbl.Console.VideoPutChar = XboxVideoPutChar;
+    MachVtbl.Console.VideoClearScreen = XboxVideoClearScreen;
+    MachVtbl.Console.VideoSetDisplayMode = XboxVideoSetDisplayMode;
+    MachVtbl.Console.VideoGetDisplaySize = XboxVideoGetDisplaySize;
+    MachVtbl.Console.VideoGetBufferSize = XboxVideoGetBufferSize;
+    MachVtbl.Console.VideoGetFontsFromFirmware = XboxVideoGetFontsFromFirmware;
+    MachVtbl.Console.VideoSetTextCursorPosition = XboxVideoSetTextCursorPosition;
+    MachVtbl.Console.VideoHideShowTextCursor = XboxVideoHideShowTextCursor;
+    MachVtbl.Console.VideoCopyOffScreenBufferToVRAM = XboxVideoCopyOffScreenBufferToVRAM;
+    MachVtbl.Console.VideoIsPaletteFixed = XboxVideoIsPaletteFixed;
+    MachVtbl.Console.VideoSetPaletteColor = XboxVideoSetPaletteColor;
+    MachVtbl.Console.VideoGetPaletteColor = XboxVideoGetPaletteColor;
+    MachVtbl.Console.VideoSync = XboxVideoSync;
     MachVtbl.Beep = PcBeep;
     MachVtbl.PrepareForReactOS = XboxPrepareForReactOS;
     MachVtbl.GetMemoryMap = XboxMemGetMemoryMap;

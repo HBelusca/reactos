@@ -70,13 +70,13 @@ LlbBuildArmBlock(VOID)
     ArmBlock.MemoryMap = MemoryMap;
 
     /* Write firmware callbacks */
-    ArmBlock.ConsPutChar = LlbFwPutChar;
     ArmBlock.ConsKbHit = LlbFwKbHit;
     ArmBlock.ConsGetCh = LlbFwGetCh;
+    ArmBlock.ConsPutChar = LlbFwPutChar;
+    ArmBlock.VideoPutChar = LlbFwVideoPutChar;
     ArmBlock.VideoClearScreen = LlbFwVideoClearScreen;
     ArmBlock.VideoSetDisplayMode = LlbFwVideoSetDisplayMode;
     ArmBlock.VideoGetDisplaySize = LlbFwVideoGetDisplaySize;
-    ArmBlock.VideoPutChar = LlbFwVideoPutChar;
     ArmBlock.GetTime = LlbFwGetTime;
 }
 

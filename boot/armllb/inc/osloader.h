@@ -52,16 +52,17 @@ typedef struct _ARM_BOARD_CONFIGURATION_BLOCK
     ULONG MemoryMapEntryCount;
     PBIOS_MEMORY_MAP MemoryMap;
     CHAR CommandLine[256];
-    PVOID ConsPutChar;
+
     PVOID ConsKbHit;
     PVOID ConsGetCh;
+    PVOID ConsPutChar;
+    PVOID VideoPutChar;
     PVOID VideoClearScreen;
     PVOID VideoSetDisplayMode;
     PVOID VideoGetDisplaySize;
     PVOID VideoGetBufferSize;
     PVOID VideoSetTextCursorPosition;
     PVOID VideoHideShowTextCursor;
-    PVOID VideoPutChar;
     PVOID VideoCopyOffScreenBufferToVRAM;
     PVOID VideoIsPaletteFixed;
     PVOID VideoSetPaletteColor;

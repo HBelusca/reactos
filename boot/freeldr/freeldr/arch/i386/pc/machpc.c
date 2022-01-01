@@ -1456,22 +1456,22 @@ MachInit(const char *CmdLine)
 {
     /* Setup vtbl */
     RtlZeroMemory(&MachVtbl, sizeof(MachVtbl));
-    MachVtbl.ConsPutChar = PcConsPutChar;
-    MachVtbl.ConsKbHit = PcConsKbHit;
-    MachVtbl.ConsGetCh = PcConsGetCh;
-    MachVtbl.VideoClearScreen = PcVideoClearScreen;
-    MachVtbl.VideoSetDisplayMode = PcVideoSetDisplayMode;
-    MachVtbl.VideoGetDisplaySize = PcVideoGetDisplaySize;
-    MachVtbl.VideoGetBufferSize = PcVideoGetBufferSize;
-    MachVtbl.VideoGetFontsFromFirmware = PcVideoGetFontsFromFirmware;
-    MachVtbl.VideoSetTextCursorPosition = PcVideoSetTextCursorPosition;
-    MachVtbl.VideoHideShowTextCursor = PcVideoHideShowTextCursor;
-    MachVtbl.VideoPutChar = PcVideoPutChar;
-    MachVtbl.VideoCopyOffScreenBufferToVRAM = PcVideoCopyOffScreenBufferToVRAM;
-    MachVtbl.VideoIsPaletteFixed = PcVideoIsPaletteFixed;
-    MachVtbl.VideoSetPaletteColor = PcVideoSetPaletteColor;
-    MachVtbl.VideoGetPaletteColor = PcVideoGetPaletteColor;
-    MachVtbl.VideoSync = PcVideoSync;
+    MachVtbl.Console.ConsKbHit = PcConsKbHit;
+    MachVtbl.Console.ConsGetCh = PcConsGetCh;
+    MachVtbl.Console.ConsPutChar = PcConsPutChar;
+    MachVtbl.Console.VideoPutChar = PcVideoPutChar;
+    MachVtbl.Console.VideoClearScreen = PcVideoClearScreen;
+    MachVtbl.Console.VideoSetDisplayMode = PcVideoSetDisplayMode;
+    MachVtbl.Console.VideoGetDisplaySize = PcVideoGetDisplaySize;
+    MachVtbl.Console.VideoGetBufferSize = PcVideoGetBufferSize;
+    MachVtbl.Console.VideoGetFontsFromFirmware = PcVideoGetFontsFromFirmware;
+    MachVtbl.Console.VideoSetTextCursorPosition = PcVideoSetTextCursorPosition;
+    MachVtbl.Console.VideoHideShowTextCursor = PcVideoHideShowTextCursor;
+    MachVtbl.Console.VideoCopyOffScreenBufferToVRAM = PcVideoCopyOffScreenBufferToVRAM;
+    MachVtbl.Console.VideoIsPaletteFixed = PcVideoIsPaletteFixed;
+    MachVtbl.Console.VideoSetPaletteColor = PcVideoSetPaletteColor;
+    MachVtbl.Console.VideoGetPaletteColor = PcVideoGetPaletteColor;
+    MachVtbl.Console.VideoSync = PcVideoSync;
     MachVtbl.Beep = PcBeep;
     MachVtbl.PrepareForReactOS = PcPrepareForReactOS;
     MachVtbl.GetMemoryMap = PcMemGetMemoryMap;

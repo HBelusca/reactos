@@ -26,35 +26,54 @@
 #include "mm.h"
 #endif
 
-#ifndef __FS_H
-#include "fs.h"
-#endif
-
-typedef enum tagVIDEODISPLAYMODE
+typedef enum _VIDEODISPLAYMODE
 {
     VideoTextMode,
     VideoGraphicsMode
 } VIDEODISPLAYMODE, *PVIDEODISPLAYMODE;
 
-typedef struct tagMACHVTBL
+typedef struct _CONSOLE_VTBL
 {
-    VOID (*ConsPutChar)(int Ch);
-    BOOLEAN (*ConsKbHit)(VOID);
-    int (*ConsGetCh)(VOID);
+    /* Input */
+    BOOLEAN (*ConsKbHit)(VOID); // GetReadStatus()
+    int (*ConsGetCh)(VOID);     // Read()
+
+    /* Output */
+    VOID (*ConsPutChar)(int Ch);    // Write()
+    VOID (*VideoPutChar)(int Ch, UCHAR Attr, unsigned X, unsigned Y); // == Seek() + Write()
+
+    VOID (*VideoSetTextCursorPosition)(UCHAR X, UCHAR Y);   // Seek(), or Write() ANSI escape
+    VOID (*VideoHideShowTextCursor)(BOOLEAN Show);
 
     VOID (*VideoClearScreen)(UCHAR Attr);
-    VIDEODISPLAYMODE (*VideoSetDisplayMode)(char *DisplayMode, BOOLEAN Init);
+    VIDEODISPLAYMODE (*VideoSetDisplayMode)(char *DisplayMode, BOOLEAN Init);   // SetFileInformation()
+
+    // Capability
     VOID (*VideoGetDisplaySize)(PULONG Width, PULONG Height, PULONG Depth);
     ULONG (*VideoGetBufferSize)(VOID);
-    VOID (*VideoGetFontsFromFirmware)(PULONG RomFontPointers);
-    VOID (*VideoSetTextCursorPosition)(UCHAR X, UCHAR Y);
-    VOID (*VideoHideShowTextCursor)(BOOLEAN Show);
-    VOID (*VideoPutChar)(int Ch, UCHAR Attr, unsigned X, unsigned Y);
-    VOID (*VideoCopyOffScreenBufferToVRAM)(PVOID Buffer);
+
+    // HW stuff
+    VOID (*VideoGetFontsFromFirmware)(PULONG RomFontPointers); // FIXME: Doubt
+
+    VOID (*VideoCopyOffScreenBufferToVRAM)(PVOID Buffer);   // Write()
+
+    // Capability
     BOOLEAN (*VideoIsPaletteFixed)(VOID);
+
+    // Ex functionality
     VOID (*VideoSetPaletteColor)(UCHAR Color, UCHAR Red, UCHAR Green, UCHAR Blue);
     VOID (*VideoGetPaletteColor)(UCHAR Color, UCHAR* Red, UCHAR* Green, UCHAR* Blue);
-    VOID (*VideoSync)(VOID);
+
+    VOID (*VideoSync)(VOID); // FIXME: Doubt
+
+    // VOID (*Beep)(VOID);
+    // VOID (*HwIdle)(VOID);
+} CONSOLE_VTBL, *PCONSOLE_VTBL;
+
+typedef struct tagMACHVTBL
+{
+    CONSOLE_VTBL Console;
+
     VOID (*Beep)(VOID);
     VOID (*PrepareForReactOS)(VOID);
 
@@ -83,38 +102,44 @@ extern MACHVTBL MachVtbl;
 /* NOTE: Implemented by each architecture */
 VOID MachInit(const char *CmdLine);
 
-#define MachConsPutChar(Ch) \
-    MachVtbl.ConsPutChar(Ch)
+/* Console support */
 #define MachConsKbHit()     \
-    MachVtbl.ConsKbHit()
+    MachVtbl.Console.ConsKbHit()
 #define MachConsGetCh()     \
-    MachVtbl.ConsGetCh()
-#define MachVideoClearScreen(Attr)  \
-    MachVtbl.VideoClearScreen(Attr)
-#define MachVideoSetDisplayMode(Mode, Init) \
-    MachVtbl.VideoSetDisplayMode((Mode), (Init))
-#define MachVideoGetDisplaySize(W, H, D)    \
-    MachVtbl.VideoGetDisplaySize((W), (H), (D))
-#define MachVideoGetBufferSize()    \
-    MachVtbl.VideoGetBufferSize()
-#define MachVideoGetFontsFromFirmware(RomFontPointers) \
-    MachVtbl.VideoGetFontsFromFirmware((RomFontPointers))
-#define MachVideoSetTextCursorPosition(X, Y)    \
-    MachVtbl.VideoSetTextCursorPosition((X), (Y))
-#define MachVideoHideShowTextCursor(Show)   \
-    MachVtbl.VideoHideShowTextCursor(Show)
+    MachVtbl.Console.ConsGetCh()
+
+#define MachConsPutChar(Ch) \
+    MachVtbl.Console.ConsPutChar(Ch)
+
 #define MachVideoPutChar(Ch, Attr, X, Y)    \
-    MachVtbl.VideoPutChar((Ch), (Attr), (X), (Y))
+    MachVtbl.Console.VideoPutChar((Ch), (Attr), (X), (Y))
+#define MachVideoSetTextCursorPosition(X, Y)    \
+    MachVtbl.Console.VideoSetTextCursorPosition((X), (Y))
+#define MachVideoHideShowTextCursor(Show)   \
+    MachVtbl.Console.VideoHideShowTextCursor(Show)
+
+#define MachVideoClearScreen(Attr)  \
+    MachVtbl.Console.VideoClearScreen(Attr)
+#define MachVideoSetDisplayMode(Mode, Init) \
+    MachVtbl.Console.VideoSetDisplayMode((Mode), (Init))
+#define MachVideoGetDisplaySize(W, H, D)    \
+    MachVtbl.Console.VideoGetDisplaySize((W), (H), (D))
+#define MachVideoGetBufferSize()    \
+    MachVtbl.Console.VideoGetBufferSize()
+#define MachVideoGetFontsFromFirmware(RomFontPointers) \
+    MachVtbl.Console.VideoGetFontsFromFirmware(RomFontPointers)
 #define MachVideoCopyOffScreenBufferToVRAM(Buf) \
-    MachVtbl.VideoCopyOffScreenBufferToVRAM(Buf)
+    MachVtbl.Console.VideoCopyOffScreenBufferToVRAM(Buf)
 #define MachVideoIsPaletteFixed()   \
-    MachVtbl.VideoIsPaletteFixed()
+    MachVtbl.Console.VideoIsPaletteFixed()
 #define MachVideoSetPaletteColor(Col, R, G, B)  \
-    MachVtbl.VideoSetPaletteColor((Col), (R), (G), (B))
+    MachVtbl.Console.VideoSetPaletteColor((Col), (R), (G), (B))
 #define MachVideoGetPaletteColor(Col, R, G, B)  \
-    MachVtbl.VideoGetPaletteColor((Col), (R), (G), (B))
+    MachVtbl.Console.VideoGetPaletteColor((Col), (R), (G), (B))
 #define MachVideoSync() \
-    MachVtbl.VideoSync()
+    MachVtbl.Console.VideoSync()
+
+/* Machine support */
 #define MachBeep()  \
     MachVtbl.Beep()
 #define MachPrepareForReactOS() \

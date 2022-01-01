@@ -130,22 +130,22 @@ MachInit(const char *CmdLine)
 
     /* Setup vtbl */
     RtlZeroMemory(&MachVtbl, sizeof(MachVtbl));
-    MachVtbl.ConsPutChar = Pc98ConsPutChar;
-    MachVtbl.ConsKbHit = Pc98ConsKbHit;
-    MachVtbl.ConsGetCh = Pc98ConsGetCh;
-    MachVtbl.VideoClearScreen = Pc98VideoClearScreen;
-    MachVtbl.VideoSetDisplayMode = Pc98VideoSetDisplayMode;
-    MachVtbl.VideoGetDisplaySize = Pc98VideoGetDisplaySize;
-    MachVtbl.VideoGetBufferSize = Pc98VideoGetBufferSize;
-    MachVtbl.VideoGetFontsFromFirmware = Pc98VideoGetFontsFromFirmware;
-    MachVtbl.VideoSetTextCursorPosition = Pc98VideoSetTextCursorPosition;
-    MachVtbl.VideoHideShowTextCursor = Pc98VideoHideShowTextCursor;
-    MachVtbl.VideoPutChar = Pc98VideoPutChar;
-    MachVtbl.VideoCopyOffScreenBufferToVRAM = Pc98VideoCopyOffScreenBufferToVRAM;
-    MachVtbl.VideoIsPaletteFixed = Pc98VideoIsPaletteFixed;
-    MachVtbl.VideoSetPaletteColor = Pc98VideoSetPaletteColor;
-    MachVtbl.VideoGetPaletteColor = Pc98VideoGetPaletteColor;
-    MachVtbl.VideoSync = Pc98VideoSync;
+    MachVtbl.Console.ConsKbHit = Pc98ConsKbHit;
+    MachVtbl.Console.ConsGetCh = Pc98ConsGetCh;
+    MachVtbl.Console.ConsPutChar = Pc98ConsPutChar;
+    MachVtbl.Console.VideoPutChar = Pc98VideoPutChar;
+    MachVtbl.Console.VideoClearScreen = Pc98VideoClearScreen;
+    MachVtbl.Console.VideoSetDisplayMode = Pc98VideoSetDisplayMode;
+    MachVtbl.Console.VideoGetDisplaySize = Pc98VideoGetDisplaySize;
+    MachVtbl.Console.VideoGetBufferSize = Pc98VideoGetBufferSize;
+    MachVtbl.Console.VideoGetFontsFromFirmware = Pc98VideoGetFontsFromFirmware;
+    MachVtbl.Console.VideoSetTextCursorPosition = Pc98VideoSetTextCursorPosition;
+    MachVtbl.Console.VideoHideShowTextCursor = Pc98VideoHideShowTextCursor;
+    MachVtbl.Console.VideoCopyOffScreenBufferToVRAM = Pc98VideoCopyOffScreenBufferToVRAM;
+    MachVtbl.Console.VideoIsPaletteFixed = Pc98VideoIsPaletteFixed;
+    MachVtbl.Console.VideoSetPaletteColor = Pc98VideoSetPaletteColor;
+    MachVtbl.Console.VideoGetPaletteColor = Pc98VideoGetPaletteColor;
+    MachVtbl.Console.VideoSync = Pc98VideoSync;
     MachVtbl.Beep = Pc98Beep;
     MachVtbl.PrepareForReactOS = Pc98PrepareForReactOS;
     MachVtbl.GetMemoryMap = Pc98MemGetMemoryMap;

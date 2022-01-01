@@ -178,13 +178,13 @@ VOID
 MachInit(IN PCCH CommandLine)
 {
     /* Copy Machine Routines from Firmware Table */
-    MachVtbl.ConsPutChar = ArmBoardBlock->ConsPutChar;
-    MachVtbl.ConsKbHit = ArmBoardBlock->ConsKbHit;
-    MachVtbl.ConsGetCh = ArmBoardBlock->ConsGetCh;
-    MachVtbl.VideoClearScreen = ArmBoardBlock->VideoClearScreen;
-    MachVtbl.VideoSetDisplayMode = ArmBoardBlock->VideoSetDisplayMode;
-    MachVtbl.VideoGetDisplaySize = ArmBoardBlock->VideoGetDisplaySize;
-    MachVtbl.VideoPutChar = ArmBoardBlock->VideoPutChar;
+    MachVtbl.Console.ConsKbHit = ArmBoardBlock->ConsKbHit;
+    MachVtbl.Console.ConsGetCh = ArmBoardBlock->ConsGetCh;
+    MachVtbl.Console.ConsPutChar = ArmBoardBlock->ConsPutChar;
+    MachVtbl.Console.VideoPutChar = ArmBoardBlock->VideoPutChar;
+    MachVtbl.Console.VideoClearScreen = ArmBoardBlock->VideoClearScreen;
+    MachVtbl.Console.VideoSetDisplayMode = ArmBoardBlock->VideoSetDisplayMode;
+    MachVtbl.Console.VideoGetDisplaySize = ArmBoardBlock->VideoGetDisplaySize;
     MachVtbl.GetTime = ArmBoardBlock->GetTime;
 
     /* Setup board-specific ARM routines */
