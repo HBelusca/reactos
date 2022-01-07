@@ -94,6 +94,9 @@ VOID DoOptionsMenu(IN OperatingSystemItem* OperatingSystem)
     ULONG SelectedMenuItem;
     CHAR  DebugChannelString[100];
 
+    // /* Clear the backdrop */
+    // UiDrawBackdrop();
+
     if (!UiDisplayMenu("Select an option:", NULL,
                        TRUE,
                        OptionsMenuList,
@@ -107,9 +110,6 @@ VOID DoOptionsMenu(IN OperatingSystemItem* OperatingSystem)
         /* The user pressed ESC */
         return;
     }
-
-    /* Clear the backdrop */
-    UiDrawBackdrop();
 
     switch (SelectedMenuItem)
     {

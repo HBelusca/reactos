@@ -62,6 +62,12 @@ VOID MiniTuiDrawBackdrop(VOID)
                 UiBackdropFillStyle,
                 ATTR(UiBackdropFgColor, UiBackdropBgColor));
 
+#if 1
+    TuiDrawText(0, 0,
+                VERSION, //FrLdrVersionString,
+                ATTR(UiTextColor, COLOR_BLACK)); // UiMenuBgColor
+#endif
+
     /* Update the screen buffer */
     VideoCopyOffScreenBufferToVRAM();
 }
