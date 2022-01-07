@@ -94,19 +94,22 @@ UiDrawStatusText(IN PCSTR StatusText)
 }
 
 VOID
-UiInfoBox(IN PCSTR MessageText)
+UiInfoBox(
+    _In_ PCSTR MessageText)
 {
     TuiPrintf(MessageText);
 }
 
 VOID
-UiMessageBox(IN PCSTR MessageText)
+UiMessageBox(
+    _In_ PCSTR MessageText)
 {
     TuiPrintf(MessageText);
 }
 
 VOID
-UiMessageBoxCritical(IN PCSTR MessageText)
+UiMessageBoxCritical(
+    _In_ PCSTR MessageText)
 {
     TuiPrintf(MessageText);
 }
@@ -158,6 +161,11 @@ UiDisplayMenu(
                           CanEscape,
                           KeyPressFilter,
                           Context);
+}
+
+BOOLEAN UiEditBox(PCSTR MessageText, PCHAR EditTextBuffer, ULONG Length)
+{
+    return FALSE;
 }
 
 #endif // _M_ARM

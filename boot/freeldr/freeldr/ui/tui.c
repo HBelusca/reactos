@@ -19,6 +19,18 @@
 
 #include <freeldr.h>
 
+typedef struct _SMALL_RECT
+{
+    SHORT Left;
+    SHORT Top;
+    SHORT Right;
+    SHORT Bottom;
+} SMALL_RECT, *PSMALL_RECT;
+
+#ifndef VGA_CHAR_SIZE // See PC98 where this is defined.
+#define VGA_CHAR_SIZE 2
+#endif
+
 #ifndef _M_ARM
 PVOID TextVideoBuffer = NULL;
 #endif
@@ -617,111 +629,246 @@ VOID TuiUpdateDateTime(VOID)
                 Buffer, ATTR(UiTitleBoxFgColor, UiTitleBoxBgColor));
 }
 
-VOID TuiSaveScreen(PUCHAR Buffer)
-{
-    PUCHAR    ScreenMemory = (PUCHAR)TextVideoBuffer;
-    ULONG    i;
 
-    for (i=0; i < (UiScreenWidth * UiScreenHeight * 2); i++)
+static
+_Ret_maybenull_
+PUCHAR
+TuiSaveScreen(
+    _In_ SMALL_RECT Rect)
+{
+    PUCHAR Buffer;
+    PUCHAR ScreenMemory;
+    ULONG X, Y;
+    ULONG i;
+
+    /* If no console back-buffer, we cannot save anything */
+    if (TextVideoBuffer == NULL)
+        return NULL;
+
+    /* Clip to screen */
+    Rect.Left  = min(Rect.Left , UiScreenWidth - 1);
+    Rect.Right = min(Rect.Right, UiScreenWidth - 1);
+    Rect.Top    = min(Rect.Top   , UiScreenHeight - 1);
+    Rect.Bottom = min(Rect.Bottom, UiScreenHeight - 1);
+
+    /* Do nothing if the rectangle is empty */
+    if ((Rect.Left > Rect.Right) || (Rect.Top > Rect.Bottom))
+        return NULL;
+
+    /* Allocate the buffer; reserve extra space for saving the status bar too */
+    Buffer = FrLdrTempAlloc((Rect.Right - Rect.Left + 1) * (Rect.Bottom - Rect.Top + 1) * 2
+                            + UiScreenWidth * 2,
+                            TAG_TUI_SCREENBUFFER);
+    if (!Buffer)
+        return NULL;
+
+    /* Loop through each line and column and fill it in */
+    ScreenMemory = (PUCHAR)TextVideoBuffer;
+    i = 0;
+    for (Y = Rect.Top; Y <= Rect.Bottom; ++Y)
     {
-        Buffer[i] = ScreenMemory[i];
+        for (X = Rect.Left; X <= Rect.Right; ++X)
+        {
+            Buffer[i]   = ScreenMemory[((Y*VGA_CHAR_SIZE)*UiScreenWidth)+(X*VGA_CHAR_SIZE)];
+            Buffer[i+1] = ScreenMemory[((Y*VGA_CHAR_SIZE)*UiScreenWidth)+(X*VGA_CHAR_SIZE)+1];
+            i += 2;
+        }
     }
-}
 
-VOID TuiRestoreScreen(PUCHAR Buffer)
-{
-    PUCHAR    ScreenMemory = (PUCHAR)TextVideoBuffer;
-    ULONG    i;
-
-    for (i=0; i < (UiScreenWidth * UiScreenHeight * 2); i++)
+    /* Do the status bar as well (last line of screen) */
+    Y = UiScreenHeight-1;
+    for (X = 0; X <= UiScreenWidth-1; ++X)
     {
-        ScreenMemory[i] = Buffer[i];
+        Buffer[i]   = 'X'; // ScreenMemory[((Y*VGA_CHAR_SIZE)*UiScreenWidth)+(X*VGA_CHAR_SIZE)];
+        Buffer[i+1] = 'X'; // ScreenMemory[((Y*VGA_CHAR_SIZE)*UiScreenWidth)+(X*VGA_CHAR_SIZE)+1];
+        i += 2;
     }
+
+    return Buffer;
 }
 
-VOID TuiMessageBox(PCSTR MessageText)
+static VOID
+TuiRestoreScreen(
+    _In_opt_ PUCHAR Buffer,
+    _In_ SMALL_RECT Rect)
 {
-    PVOID    ScreenBuffer;
+    PUCHAR ScreenMemory;
+    ULONG X, Y;
+    ULONG i;
 
-    // Save the screen contents
-    ScreenBuffer = FrLdrTempAlloc(UiScreenWidth * UiScreenHeight * 2,
-                                  TAG_TUI_SCREENBUFFER);
-    TuiSaveScreen(ScreenBuffer);
+    if (!Buffer)
+        return;
 
-    // Display the message box
-    TuiMessageBoxCritical(MessageText);
+    /* If no console back-buffer, we cannot restore anything */
+    if (TextVideoBuffer == NULL)
+        goto Cleanup;
 
-    // Restore the screen contents
-    TuiRestoreScreen(ScreenBuffer);
-    FrLdrTempFree(ScreenBuffer, TAG_TUI_SCREENBUFFER);
+    /* Clip to screen */
+    Rect.Left  = min(Rect.Left , UiScreenWidth - 1);
+    Rect.Right = min(Rect.Right, UiScreenWidth - 1);
+    Rect.Top    = min(Rect.Top   , UiScreenHeight - 1);
+    Rect.Bottom = min(Rect.Bottom, UiScreenHeight - 1);
+
+    /* Do nothing if the rectangle is empty */
+    if ((Rect.Left > Rect.Right) || (Rect.Top > Rect.Bottom))
+        goto Cleanup;
+
+    /* Loop through each line and column and fill it in */
+    ScreenMemory = (PUCHAR)TextVideoBuffer;
+    i = 0;
+    for (Y = Rect.Top; Y <= Rect.Bottom; ++Y)
+    {
+        for (X = Rect.Left; X <= Rect.Right; ++X)
+        {
+            ScreenMemory[((Y*VGA_CHAR_SIZE)*UiScreenWidth)+(X*VGA_CHAR_SIZE)]   = Buffer[i];
+            ScreenMemory[((Y*VGA_CHAR_SIZE)*UiScreenWidth)+(X*VGA_CHAR_SIZE)+1] = Buffer[i+1];
+            i += 2;
+        }
+    }
+
+    /* Do the status bar as well (last line of screen) */
+    Y = UiScreenHeight-1;
+    for (X = 0; X <= UiScreenWidth-1; ++X)
+    {
+        ScreenMemory[((Y*VGA_CHAR_SIZE)*UiScreenWidth)+(X*VGA_CHAR_SIZE)]   = Buffer[i];
+        ScreenMemory[((Y*VGA_CHAR_SIZE)*UiScreenWidth)+(X*VGA_CHAR_SIZE)+1] = Buffer[i+1];
+        i += 2;
+    }
+
+Cleanup:
+    FrLdrTempFree(Buffer, TAG_TUI_SCREENBUFFER);
 }
 
-VOID TuiMessageBoxCritical(PCSTR MessageText)
-{
-    int        width = 8;
-    unsigned int    height = 1;
-    int        curline = 0;
-    int        k;
-    size_t        i , j;
-    int        x1, x2, y1, y2;
-    char    temp[260];
-    char    key;
+static VOID
+TuiMessageBoxEx(
+    _In_ PCSTR MessageText,
+    _In_ BOOLEAN SaveScreen);
 
-    // Find the height
-    for (i=0; i<strlen(MessageText); i++)
+VOID
+TuiMessageBox(
+    _In_ PCSTR MessageText)
+{
+    /* Display the message box with screen caching */
+    TuiMessageBoxEx(MessageText, TRUE);
+}
+
+VOID
+TuiMessageBoxCritical(
+    _In_ PCSTR MessageText)
+{
+    /* Just display the message box without any screen caching */
+    TuiMessageBoxEx(MessageText, FALSE);
+}
+
+static VOID
+TuiMessageBoxCommon(
+    _In_ PCSTR MessageText,
+    _Out_ PSMALL_RECT MsgBoxRect,
+    _Outptr_opt_result_maybenull_ PVOID* ScreenBuffer)
+{
+    INT    width = 8;
+    ULONG  height = 1;
+    INT    curline = 0;
+    INT    k;
+    size_t i, j;
+    INT    x1, x2, y1, y2;
+    CHAR   temp[260];
+    SMALL_RECT BoxRect;
+
+    /*
+     * Calculate the size of the surrounding box.
+     */
+
+    /* Find the height */
+    for (i = 0; i < strlen(MessageText); ++i)
     {
         if (MessageText[i] == '\n')
-            height++;
+            ++height;
     }
 
-    // Find the width
-    for (i=0,j=0,k=0; i<height; i++)
+    /* Find the width */
+    for (i = 0, j = 0, k = 0; i < height; ++i)
     {
         while ((MessageText[j] != '\n') && (MessageText[j] != 0))
         {
-            j++;
-            k++;
+            ++j;
+            ++k;
         }
 
         if (k > width)
             width = k;
 
         k = 0;
-        j++;
+        ++j;
     }
 
-    // Calculate box area
+    /* Calculate box area */
     x1 = (UiScreenWidth - (width+2))/2;
     x2 = x1 + width + 3;
     y1 = ((UiScreenHeight - height - 2)/2) + 1;
     y2 = y1 + height + 4;
 
-    // Draw the box
-    TuiDrawBox(x1, y1, x2, y2, D_VERT, D_HORZ, TRUE, TRUE, ATTR(UiMessageBoxFgColor, UiMessageBoxBgColor));
+    BoxRect.Left = x1; BoxRect.Right  = x2;
+    BoxRect.Top  = y1; BoxRect.Bottom = y2;
+    *MsgBoxRect = BoxRect;
 
-    // Draw the text
-    for (i=0,j=0; i<strlen(MessageText)+1; i++)
+    /*
+     * Show the box with text.
+     */
+
+    /* Save the original screen contents if necessary */
+    if (ScreenBuffer)
+        *ScreenBuffer = TuiSaveScreen(BoxRect);
+
+    /* Draw the box */
+    TuiDrawBox(x1, y1, x2, y2, D_VERT, D_HORZ, TRUE, TRUE,
+               ATTR(UiMessageBoxFgColor, UiMessageBoxBgColor));
+
+    /* Draw the text */
+    for (i = 0, j = 0; i < strlen(MessageText) + 1; ++i)
     {
         if ((MessageText[i] == '\n') || (MessageText[i] == 0))
         {
             temp[j] = 0;
             j = 0;
-            UiDrawText(x1+2, y1+1+curline, temp, ATTR(UiMessageBoxFgColor, UiMessageBoxBgColor));
-            curline++;
+            UiDrawText(x1 + 2, y1 + 1 + curline, temp,
+                       ATTR(UiMessageBoxFgColor, UiMessageBoxBgColor));
+            ++curline;
         }
         else
+        {
             temp[j++] = MessageText[i];
+        }
     }
+}
 
-    // Draw OK button
+static VOID
+TuiMessageBoxEx(
+    _In_ PCSTR MessageText,
+    _In_ BOOLEAN SaveScreen)
+{
+    SMALL_RECT BoxRect;
+    PVOID ScreenBuffer = NULL;
+    CHAR key;
+    CHAR temp[sizeof("   OK   ")];
+
+    TuiMessageBoxCommon(MessageText, &BoxRect,
+                        SaveScreen ? &ScreenBuffer : NULL);
+
+    /* Draw centered OK button */
     strcpy(temp, "   OK   ");
-    UiDrawText(x1+((x2-x1)/2)-3, y2-2, temp, ATTR(COLOR_BLACK, COLOR_GRAY));
+    UiDrawText(BoxRect.Left + ((BoxRect.Right - BoxRect.Left)/2) - 3,
+               BoxRect.Bottom - 2,
+               temp, ATTR(COLOR_BLACK, COLOR_GRAY));
 
-    // Draw status text
+    /* Draw status text */
     UiDrawStatusText("Press ENTER to continue");
 
+#ifndef _M_ARM
     VideoCopyOffScreenBufferToVRAM();
+#endif
 
+    /* Wait for key presses */
     for (;;)
     {
         if (MachConsKbHit())
@@ -734,12 +881,22 @@ VOID TuiMessageBoxCritical(PCSTR MessageText)
                 break;
         }
 
+#ifndef _M_ARM
         TuiUpdateDateTime();
-
         VideoCopyOffScreenBufferToVRAM();
 
         MachHwIdle();
+#endif
     }
+
+    /* Restore the original screen contents if necessary */
+    if (ScreenBuffer)
+        TuiRestoreScreen(ScreenBuffer, BoxRect);
+
+/****/
+VideoCopyOffScreenBufferToVRAM();
+StallExecutionProcessor(1000000);
+/****/
 }
 
 static VOID
@@ -862,6 +1019,8 @@ TuiDrawProgressBar(
     UiInitProgressBar(Left, Top, Right, Bottom, ProgressText);
 }
 
+#ifndef _M_ARM
+
 UCHAR TuiTextToColor(PCSTR ColorText)
 {
     static const struct
@@ -981,102 +1140,56 @@ VOID TuiFadeOut(VOID)
 
 }
 
+#endif // _M_ARM
+
 BOOLEAN TuiEditBox(PCSTR MessageText, PCHAR EditTextBuffer, ULONG Length)
 {
-    INT        width = 8;
-    ULONG    height = 1;
-    INT        curline = 0;
-    INT        k;
-    size_t    i , j;
-    INT        x1, x2, y1, y2;
-    CHAR    temp[260];
+    SMALL_RECT BoxRect;
+    PVOID ScreenBuffer = NULL;
+
     CHAR    key;
-    BOOLEAN    Extended;
-    INT        EditBoxLine;
-    ULONG    EditBoxStartX, EditBoxEndX;
-    INT        EditBoxCursorX;
-    ULONG    EditBoxTextLength, EditBoxTextPosition;
-    INT        EditBoxTextDisplayIndex;
-    BOOLEAN    ReturnCode;
-    PVOID    ScreenBuffer;
+    BOOLEAN Extended;
+    INT     EditBoxLine;
+    ULONG   EditBoxStartX, EditBoxEndX;
+    INT     EditBoxCursorX;
+    ULONG   EditBoxTextLength, EditBoxTextPosition;
+    INT     EditBoxTextDisplayIndex;
+    BOOLEAN ReturnCode;
 
-    // Save the screen contents
-    ScreenBuffer = FrLdrTempAlloc(UiScreenWidth * UiScreenHeight * 2,
-                                  TAG_TUI_SCREENBUFFER);
-    TuiSaveScreen(ScreenBuffer);
-
-    // Find the height
-    for (i=0; i<strlen(MessageText); i++)
-    {
-        if (MessageText[i] == '\n')
-            height++;
-    }
-
-    // Find the width
-    for (i=0,j=0,k=0; i<height; i++)
-    {
-        while ((MessageText[j] != '\n') && (MessageText[j] != 0))
-        {
-            j++;
-            k++;
-        }
-
-        if (k > width)
-            width = k;
-
-        k = 0;
-        j++;
-    }
-
-    // Calculate box area
-    x1 = (UiScreenWidth - (width+2))/2;
-    x2 = x1 + width + 3;
-    y1 = ((UiScreenHeight - height - 2)/2) + 1;
-    y2 = y1 + height + 4;
-
-    // Draw the box
-    TuiDrawBox(x1, y1, x2, y2, D_VERT, D_HORZ, TRUE, TRUE, ATTR(UiMessageBoxFgColor, UiMessageBoxBgColor));
-
-    // Draw the text
-    for (i=0,j=0; i<strlen(MessageText)+1; i++)
-    {
-        if ((MessageText[i] == '\n') || (MessageText[i] == 0))
-        {
-            temp[j] = 0;
-            j = 0;
-            UiDrawText(x1+2, y1+1+curline, temp, ATTR(UiMessageBoxFgColor, UiMessageBoxBgColor));
-            curline++;
-        }
-        else
-            temp[j++] = MessageText[i];
-    }
+    /* Draw the common parts of the message box, and retrieve its
+     * dimensions and the original screen contents it is caching. */
+    TuiMessageBoxCommon(MessageText, &BoxRect, &ScreenBuffer);
 
     EditBoxTextLength = (ULONG)strlen(EditTextBuffer);
     EditBoxTextLength = min(EditBoxTextLength, Length - 1);
     EditBoxTextPosition = 0;
-    EditBoxLine = y2 - 2;
-    EditBoxStartX = x1 + 3;
-    EditBoxEndX = x2 - 3;
+    EditBoxLine = BoxRect.Bottom - 2;
+    EditBoxStartX = BoxRect.Left + 3;
+    EditBoxEndX = BoxRect.Right - 3;
 
-    // Draw the edit box background and the text
-    UiFillArea(EditBoxStartX, EditBoxLine, EditBoxEndX, EditBoxLine, ' ', ATTR(UiEditBoxTextColor, UiEditBoxBgColor));
-    UiDrawText2(EditBoxStartX, EditBoxLine, EditBoxEndX - EditBoxStartX + 1, EditTextBuffer, ATTR(UiEditBoxTextColor, UiEditBoxBgColor));
+    /* Draw the edit box background and the text */
+    UiFillArea(EditBoxStartX, EditBoxLine, EditBoxEndX, EditBoxLine,
+               ' ', ATTR(UiEditBoxTextColor, UiEditBoxBgColor));
+    UiDrawText2(EditBoxStartX, EditBoxLine, EditBoxEndX - EditBoxStartX + 1,
+                EditTextBuffer, ATTR(UiEditBoxTextColor, UiEditBoxBgColor));
 
-    // Show the cursor
+    /* Show the cursor */
     EditBoxCursorX = EditBoxStartX;
     MachVideoSetTextCursorPosition(EditBoxCursorX, EditBoxLine);
     MachVideoHideShowTextCursor(TRUE);
 
-    // Draw status text
+    /* Draw status text */
     UiDrawStatusText("Press ENTER to continue, or ESC to cancel");
 
+#ifndef _M_ARM
     VideoCopyOffScreenBufferToVRAM();
+#endif
 
-    //
-    // Enter the text. Please keep in mind that the default input mode
-    // of the edit boxes is in insertion mode, that is, you can insert
-    // text without erasing the existing one.
-    //
+    /*
+     * Enter the text. Please keep in mind that the default input mode
+     * of the edit boxes is in insertion mode, that is, you can insert
+     * text without erasing the existing one.
+     */
     for (;;)
     {
         if (MachConsKbHit())
@@ -1178,10 +1291,11 @@ BOOLEAN TuiEditBox(PCSTR MessageText, PCHAR EditTextBuffer, ULONG Length)
             }
         }
 
-        // Draw the edit box background
-        UiFillArea(EditBoxStartX, EditBoxLine, EditBoxEndX, EditBoxLine, ' ', ATTR(UiEditBoxTextColor, UiEditBoxBgColor));
+        /* Draw the edit box background */
+        UiFillArea(EditBoxStartX, EditBoxLine, EditBoxEndX, EditBoxLine,
+                   ' ', ATTR(UiEditBoxTextColor, UiEditBoxBgColor));
 
-        // Fill the text in
+        /* Fill the text in */
         if (EditBoxTextPosition > (EditBoxEndX - EditBoxStartX))
         {
             EditBoxTextDisplayIndex = EditBoxTextPosition - (EditBoxEndX - EditBoxStartX);
@@ -1192,25 +1306,31 @@ BOOLEAN TuiEditBox(PCSTR MessageText, PCHAR EditTextBuffer, ULONG Length)
             EditBoxTextDisplayIndex = 0;
             EditBoxCursorX = EditBoxStartX + EditBoxTextPosition;
         }
-        UiDrawText2(EditBoxStartX, EditBoxLine, EditBoxEndX - EditBoxStartX + 1, &EditTextBuffer[EditBoxTextDisplayIndex], ATTR(UiEditBoxTextColor, UiEditBoxBgColor));
+        UiDrawText2(EditBoxStartX, EditBoxLine, EditBoxEndX - EditBoxStartX + 1,
+                    &EditTextBuffer[EditBoxTextDisplayIndex], ATTR(UiEditBoxTextColor, UiEditBoxBgColor));
 
-        // Move the cursor
+        /* Move the cursor */
         MachVideoSetTextCursorPosition(EditBoxCursorX, EditBoxLine);
 
+#ifndef _M_ARM
         TuiUpdateDateTime();
-
         VideoCopyOffScreenBufferToVRAM();
 
         MachHwIdle();
+#endif
     }
 
-    // Hide the cursor again
+    /* Hide the cursor again */
     MachVideoHideShowTextCursor(FALSE);
 
-    // Restore the screen contents
-    TuiRestoreScreen(ScreenBuffer);
-    FrLdrTempFree(ScreenBuffer, TAG_TUI_SCREENBUFFER);
+    /* Restore the original screen contents if necessary */
+    if (ScreenBuffer)
+        TuiRestoreScreen(ScreenBuffer, BoxRect);
 
+/****/
+VideoCopyOffScreenBufferToVRAM();
+StallExecutionProcessor(1000000);
+/****/
     return ReturnCode;
 }
 

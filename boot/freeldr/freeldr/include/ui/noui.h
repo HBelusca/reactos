@@ -47,8 +47,16 @@ NoUiDrawCenteredText(
 
 VOID NoUiDrawStatusText(PCSTR StatusText);
 VOID NoUiUpdateDateTime(VOID);
-VOID NoUiMessageBox(PCSTR MessageText);
-VOID NoUiMessageBoxCritical(PCSTR MessageText);
+
+/* Displays a message box on the screen with an ok button */
+VOID
+NoUiMessageBox(
+    _In_ PCSTR MessageText);
+
+/* Displays a message box on the screen with an ok button using no system resources */
+VOID
+NoUiMessageBoxCritical(
+    _In_ PCSTR MessageText);
 
 /* Loading Progress-Bar Functions ********************************************/
 
