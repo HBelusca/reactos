@@ -97,7 +97,7 @@ NoUiMessageBoxCritical(
      */
     printf("%s\n", MessageText);
     printf("Press any key\n");
-    MachConsGetCh();
+    VideoConsole.GetCh();
 }
 
 /* Loading Progress-Bar Functions ********************************************/

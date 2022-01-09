@@ -53,9 +53,6 @@ const PCSTR UiMonthNames[12] = { "January", "February", "March", "April", "May",
 
 #define TAG_UI_TEXT 'xTiU'
 
-ULONG UiScreenWidth;    // Screen Width
-ULONG UiScreenHeight;   // Screen Height
-
 #endif // _M_ARM
 
 /*
@@ -100,7 +97,6 @@ BOOLEAN UiInitialize(BOOLEAN ShowUi)
     VIDEODISPLAYMODE UiDisplayMode; // Tells us if we are in text or graphics mode
     BOOLEAN UiMinimal = FALSE;      // Tells us if we are using a minimal console-like UI
     ULONG_PTR SectionId;
-    ULONG Depth;
     CHAR  SettingText[260];
 
     if (!ShowUi)
@@ -127,7 +123,7 @@ BOOLEAN UiInitialize(BOOLEAN ShowUi)
         SettingText[0] = '\0';
     }
     UiDisplayMode = MachVideoSetDisplayMode(SettingText, TRUE);
-    MachVideoGetDisplaySize(&UiScreenWidth, &UiScreenHeight, &Depth);
+    /*********/ InitVideoConsole(/* &VideoConsole, */ TRUE); /************/
 
     /* Select the UI */
     if ((SectionId != 0) && IniReadSettingByName(SectionId, "MinimalUI", SettingText, sizeof(SettingText)))
@@ -341,10 +337,10 @@ UiInfoBox(
     BoxHeight = LineBreakCount + 4;
 
     /* Calc the box coordinates */
-    Left = (UiScreenWidth - BoxWidth) / 2;
-    Top  = (UiScreenHeight - BoxHeight) / 2;
-    Right  = (UiScreenWidth + BoxWidth) / 2;   // == Left + BoxWidth;
-    Bottom = (UiScreenHeight + BoxHeight) / 2; // == Top + BoxHeight;
+    Left = (VideoConsole.ScreenWidth - BoxWidth) / 2;
+    Top  = (VideoConsole.ScreenHeight - BoxHeight) / 2;
+    Right  = (VideoConsole.ScreenWidth + BoxWidth) / 2;   // == Left + BoxWidth;
+    Bottom = (VideoConsole.ScreenHeight + BoxHeight) / 2; // == Top + BoxHeight;
 
     /* Draw the box */
     UiDrawBox(Left,

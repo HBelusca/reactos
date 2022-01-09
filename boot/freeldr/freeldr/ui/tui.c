@@ -31,9 +31,7 @@ typedef struct _SMALL_RECT
 #define VGA_CHAR_SIZE 2
 #endif
 
-#ifndef _M_ARM
-PVOID TextVideoBuffer = NULL;
-#endif
+extern UI_CONSOLE VideoConsole;
 
 /* GENERIC TUI UTILS *********************************************************/
 
@@ -45,7 +43,6 @@ INT
 TuiPrintf(
     _In_ PCSTR Format, ...)
 {
-    INT i;
     INT Length;
     va_list ap;
     CHAR Buffer[512];
@@ -57,12 +54,7 @@ TuiPrintf(
     if (Length == -1)
         Length = (INT)sizeof(Buffer);
 
-    for (i = 0; i < Length; i++)
-    {
-        MachConsPutChar(Buffer[i]);
-    }
-
-    return Length;
+    return (INT)VideoConsole.Write(Buffer, (SIZE_T)Length);
 }
 
 VOID
@@ -105,26 +97,29 @@ TuiDrawText2(
     _In_reads_or_z_(MaxNumChars) PCSTR Text,
     _In_ UCHAR Attr)
 {
-#ifndef _M_ARM
-    PUCHAR ScreenMemory = (PUCHAR)TextVideoBuffer;
-#endif
-    ULONG i, j;
-
-    /* Don't display anything if we are out of the screen */
-    if ((X >= UiScreenWidth) || (Y >= UiScreenHeight))
-        return;
+    ULONG Len;
 
     /* Draw the text, not exceeding the width */
-    for (i = X, j = 0; Text[j] && i < UiScreenWidth && (MaxNumChars > 0 ? j < MaxNumChars : TRUE); i++, j++)
-    {
-#ifndef _M_ARM
-        ScreenMemory[((Y*2)*UiScreenWidth)+(i*2)]   = (UCHAR)Text[j];
-        ScreenMemory[((Y*2)*UiScreenWidth)+(i*2)+1] = Attr;
-#else
-        /* Write the character */
-        MachVideoPutChar(Text[j], Attr, i, Y);
-#endif
-    }
+    Len = (ULONG)strlen(Text);
+    if (MaxNumChars == 0)
+        MaxNumChars = Len;
+    else
+        MaxNumChars = min(MaxNumChars, Len);
+
+    X = min(X, VideoConsole.ScreenWidth);
+    Y = min(Y, VideoConsole.ScreenHeight);
+
+    // TODO: Position cursor
+    VideoConsole.CursorX = X;
+    VideoConsole.CursorY = Y;
+
+    // TODO: Set new current attributes
+    VideoConsole.CurrAttr = Attr;
+
+    /* Clip to the maximal width, minus the starting X coordinate */
+    MaxNumChars = min(MaxNumChars, VideoConsole.ScreenWidth - X);
+    if (MaxNumChars > 0)
+        VideoConsole.VideoWrite(Text, MaxNumChars);
 }
 
 VOID
@@ -218,14 +213,12 @@ extern UCHAR MachDefaultTextColor;
 BOOLEAN TuiInitialize(VOID)
 {
     MachVideoHideShowTextCursor(FALSE);
-    MachVideoSetTextCursorPosition(0, 0);
+    VideoConsole.CursorX = 0;
+    VideoConsole.CursorY = 0;
     MachVideoClearScreen(ATTR(COLOR_GRAY, COLOR_BLACK));
 
-    TextVideoBuffer = VideoAllocateOffScreenBuffer();
-    if (TextVideoBuffer == NULL)
-    {
+    if (!InitVideoConsole(/* &VideoConsole, */ TRUE))
         return FALSE;
-    }
 
     /* Load default settings with "Full" TUI Theme */
 
@@ -280,7 +273,8 @@ VOID TuiUnInitialize(VOID)
     TextVideoBuffer = NULL;
 
     MachVideoClearScreen(ATTR(COLOR_GRAY, COLOR_BLACK));
-    MachVideoSetTextCursorPosition(0, 0);
+    VideoConsole.CursorX = 0;
+    VideoConsole.CursorY = 0;
     MachVideoHideShowTextCursor(TRUE);
 }
 
@@ -289,15 +283,15 @@ VOID TuiDrawBackdrop(VOID)
     /* Fill in the background (excluding title box & status bar) */
     TuiFillArea(0,
                 TUI_TITLE_BOX_CHAR_HEIGHT,
-                UiScreenWidth - 1,
-                UiScreenHeight - 2,
+                VideoConsole.ScreenWidth - 1,
+                VideoConsole.ScreenHeight - 2,
                 UiBackdropFillStyle,
                 ATTR(UiBackdropFgColor, UiBackdropBgColor));
 
     /* Draw the title box */
     TuiDrawBox(0,
                0,
-               UiScreenWidth - 1,
+               VideoConsole.ScreenWidth - 1,
                TUI_TITLE_BOX_CHAR_HEIGHT - 1,
                D_VERT,
                D_HORZ,
@@ -322,12 +316,12 @@ VOID TuiDrawBackdrop(VOID)
                 ATTR(UiTitleBoxFgColor, UiTitleBoxBgColor));
 
     /* Draw help text */
-    TuiDrawText(UiScreenWidth - 16, 3,
+    TuiDrawText(VideoConsole.ScreenWidth - 16, 3,
                 /*"F1 for Help"*/ "F8 for Options",
                 ATTR(UiTitleBoxFgColor, UiTitleBoxBgColor));
 
     /* Draw title text */
-    TuiDrawText((UiScreenWidth - (ULONG)strlen(UiTitleBoxTitleText)) / 2,
+    TuiDrawText((VideoConsole.ScreenWidth - (ULONG)strlen(UiTitleBoxTitleText)) / 2,
                 2,
                 UiTitleBoxTitleText,
                 ATTR(UiTitleBoxFgColor, UiTitleBoxBgColor));
@@ -343,26 +337,27 @@ VOID TuiDrawBackdrop(VOID)
  */
 VOID TuiFillArea(ULONG Left, ULONG Top, ULONG Right, ULONG Bottom, CHAR FillChar, UCHAR Attr /* Color Attributes */)
 {
-    PUCHAR ScreenMemory = (PUCHAR)TextVideoBuffer;
-    ULONG  i, j;
+    ULONG i, j;
 
     /* Clip the area to the screen */
-    if ((Left >= UiScreenWidth) || (Top >= UiScreenHeight))
+    if ((Left >= VideoConsole.ScreenWidth) || (Top >= VideoConsole.ScreenHeight))
     {
         return;
     }
-    if (Right >= UiScreenWidth)
-        Right = UiScreenWidth - 1;
-    if (Bottom >= UiScreenHeight)
-        Bottom = UiScreenHeight - 1;
+    if (Right >= VideoConsole.ScreenWidth)
+        Right = VideoConsole.ScreenWidth - 1;
+    if (Bottom >= VideoConsole.ScreenHeight)
+        Bottom = VideoConsole.ScreenHeight - 1;
 
     /* Loop through each line and column and fill it in */
+    VideoConsole.CurrAttr = Attr;
     for (i = Top; i <= Bottom; ++i)
     {
+        VideoConsole.CursorY = i;
         for (j = Left; j <= Right; ++j)
         {
-            ScreenMemory[((i*2)*UiScreenWidth)+(j*2)] = (UCHAR)FillChar;
-            ScreenMemory[((i*2)*UiScreenWidth)+(j*2)+1] = Attr;
+            VideoConsole.CursorX = j;
+            VideoConsole.VideoWrite(&FillChar, 1);
         }
     }
 }
@@ -373,52 +368,52 @@ VOID TuiFillArea(ULONG Left, ULONG Top, ULONG Right, ULONG Bottom, CHAR FillChar
  */
 VOID TuiDrawShadow(ULONG Left, ULONG Top, ULONG Right, ULONG Bottom)
 {
-    PUCHAR ScreenMemory = (PUCHAR)TextVideoBuffer;
+    PUCHAR ScreenMemory = (PUCHAR)VideoConsole.Context;
     ULONG  Idx;
 
     /* Shade the bottom of the area */
-    if (Bottom < (UiScreenHeight - 1))
+    if (Bottom < (VideoConsole.ScreenHeight - 1))
     {
-        if (UiScreenHeight < 34)
+        if (VideoConsole.ScreenHeight < 34)
             Idx = Left + 2;
         else
             Idx = Left + 1;
 
         for (; Idx <= Right; ++Idx)
         {
-            ScreenMemory[(((Bottom+1)*2)*UiScreenWidth)+(Idx*2)+1] = ATTR(COLOR_GRAY, COLOR_BLACK);
+            ScreenMemory[(((Bottom+1)*2)*VideoConsole.ScreenWidth)+(Idx*2)+1] = ATTR(COLOR_GRAY, COLOR_BLACK);
         }
     }
 
     /* Shade the right of the area */
-    if (Right < (UiScreenWidth - 1))
+    if (Right < (VideoConsole.ScreenWidth - 1))
     {
         for (Idx=Top+1; Idx<=Bottom; Idx++)
         {
-            ScreenMemory[((Idx*2)*UiScreenWidth)+((Right+1)*2)+1] = ATTR(COLOR_GRAY, COLOR_BLACK);
+            ScreenMemory[((Idx*2)*VideoConsole.ScreenWidth)+((Right+1)*2)+1] = ATTR(COLOR_GRAY, COLOR_BLACK);
         }
     }
-    if (UiScreenHeight < 34)
+    if (VideoConsole.ScreenHeight < 34)
     {
-        if ((Right + 1) < (UiScreenWidth - 1))
+        if ((Right + 1) < (VideoConsole.ScreenWidth - 1))
         {
             for (Idx=Top+1; Idx<=Bottom; Idx++)
             {
-                ScreenMemory[((Idx*2)*UiScreenWidth)+((Right+2)*2)+1] = ATTR(COLOR_GRAY, COLOR_BLACK);
+                ScreenMemory[((Idx*2)*VideoConsole.ScreenWidth)+((Right+2)*2)+1] = ATTR(COLOR_GRAY, COLOR_BLACK);
             }
         }
     }
 
     /* Shade the bottom right corner */
-    if ((Right < (UiScreenWidth - 1)) && (Bottom < (UiScreenHeight - 1)))
+    if ((Right < (VideoConsole.ScreenWidth - 1)) && (Bottom < (VideoConsole.ScreenHeight - 1)))
     {
-        ScreenMemory[(((Bottom+1)*2)*UiScreenWidth)+((Right+1)*2)+1] = ATTR(COLOR_GRAY, COLOR_BLACK);
+        ScreenMemory[(((Bottom+1)*2)*VideoConsole.ScreenWidth)+((Right+1)*2)+1] = ATTR(COLOR_GRAY, COLOR_BLACK);
     }
-    if (UiScreenHeight < 34)
+    if (VideoConsole.ScreenHeight < 34)
     {
-        if (((Right + 1) < (UiScreenWidth - 1)) && (Bottom < (UiScreenHeight - 1)))
+        if (((Right + 1) < (VideoConsole.ScreenWidth - 1)) && (Bottom < (VideoConsole.ScreenHeight - 1)))
         {
-            ScreenMemory[(((Bottom+1)*2)*UiScreenWidth)+((Right+2)*2)+1] = ATTR(COLOR_GRAY, COLOR_BLACK);
+            ScreenMemory[(((Bottom+1)*2)*VideoConsole.ScreenWidth)+((Right+2)*2)+1] = ATTR(COLOR_GRAY, COLOR_BLACK);
         }
     }
 }
@@ -548,14 +543,17 @@ TuiDrawBox(
 
 VOID TuiDrawStatusText(PCSTR StatusText)
 {
-    SIZE_T    i;
+    SIZE_T i;
 
-    TuiDrawText(0, UiScreenHeight-1, " ", ATTR(UiStatusBarFgColor, UiStatusBarBgColor));
-    TuiDrawText(1, UiScreenHeight-1, StatusText, ATTR(UiStatusBarFgColor, UiStatusBarBgColor));
+    TuiDrawText(0, VideoConsole.ScreenHeight-1, " ", ATTR(UiStatusBarFgColor, UiStatusBarBgColor));
+    TuiDrawText(1, VideoConsole.ScreenHeight-1, StatusText, ATTR(UiStatusBarFgColor, UiStatusBarBgColor));
 
-    for (i=strlen(StatusText)+1; i<UiScreenWidth; i++)
+    // TuiFillArea(strlen(StatusText)+1, VideoConsole.ScreenHeight-1,
+                // VideoConsole.ScreenWidth-1, VideoConsole.ScreenHeight-1,
+                // ' ', ATTR(UiStatusBarFgColor, UiStatusBarBgColor));
+    for (i = strlen(StatusText)+1; i < VideoConsole.ScreenWidth; i++)
     {
-        TuiDrawText((ULONG)i, UiScreenHeight-1, " ", ATTR(UiStatusBarFgColor, UiStatusBarBgColor));
+        TuiDrawText((ULONG)i, VideoConsole.ScreenHeight-1, " ", ATTR(UiStatusBarFgColor, UiStatusBarBgColor));
     }
 
     VideoCopyOffScreenBufferToVRAM();
@@ -602,7 +600,7 @@ VOID TuiUpdateDateTime(VOID)
                        TimeInfo->Year);
 
     /* Draw the date */
-    TuiDrawText(UiScreenWidth - (ULONG)strlen(Buffer) - 2, 1,
+    TuiDrawText(VideoConsole.ScreenWidth - (ULONG)strlen(Buffer) - 2, 1,
                 Buffer, ATTR(UiTitleBoxFgColor, UiTitleBoxBgColor));
 
     /* Get the hour and change from 24-hour mode to 12-hour */
@@ -625,7 +623,7 @@ VOID TuiUpdateDateTime(VOID)
                        PMHour ? "PM" : "AM");
 
     /* Draw the time */
-    TuiDrawText(UiScreenWidth - (ULONG)strlen(Buffer) - 2, 2,
+    TuiDrawText(VideoConsole.ScreenWidth - (ULONG)strlen(Buffer) - 2, 2,
                 Buffer, ATTR(UiTitleBoxFgColor, UiTitleBoxBgColor));
 }
 
@@ -642,14 +640,14 @@ TuiSaveScreen(
     ULONG i;
 
     /* If no console back-buffer, we cannot save anything */
-    if (TextVideoBuffer == NULL)
+    if (VideoConsole.Context == NULL)
         return NULL;
 
     /* Clip to screen */
-    Rect.Left  = min(Rect.Left , UiScreenWidth - 1);
-    Rect.Right = min(Rect.Right, UiScreenWidth - 1);
-    Rect.Top    = min(Rect.Top   , UiScreenHeight - 1);
-    Rect.Bottom = min(Rect.Bottom, UiScreenHeight - 1);
+    Rect.Left  = min(Rect.Left , VideoConsole.ScreenWidth - 1);
+    Rect.Right = min(Rect.Right, VideoConsole.ScreenWidth - 1);
+    Rect.Top    = min(Rect.Top   , VideoConsole.ScreenHeight - 1);
+    Rect.Bottom = min(Rect.Bottom, VideoConsole.ScreenHeight - 1);
 
     /* Do nothing if the rectangle is empty */
     if ((Rect.Left > Rect.Right) || (Rect.Top > Rect.Bottom))
@@ -657,30 +655,30 @@ TuiSaveScreen(
 
     /* Allocate the buffer; reserve extra space for saving the status bar too */
     Buffer = FrLdrTempAlloc((Rect.Right - Rect.Left + 1) * (Rect.Bottom - Rect.Top + 1) * 2
-                            + UiScreenWidth * 2,
+                            + VideoConsole.ScreenWidth * 2,
                             TAG_TUI_SCREENBUFFER);
     if (!Buffer)
         return NULL;
 
     /* Loop through each line and column and fill it in */
-    ScreenMemory = (PUCHAR)TextVideoBuffer;
+    ScreenMemory = (PUCHAR)VideoConsole.Context;
     i = 0;
     for (Y = Rect.Top; Y <= Rect.Bottom; ++Y)
     {
         for (X = Rect.Left; X <= Rect.Right; ++X)
         {
-            Buffer[i]   = ScreenMemory[((Y*VGA_CHAR_SIZE)*UiScreenWidth)+(X*VGA_CHAR_SIZE)];
-            Buffer[i+1] = ScreenMemory[((Y*VGA_CHAR_SIZE)*UiScreenWidth)+(X*VGA_CHAR_SIZE)+1];
+            Buffer[i]   = ScreenMemory[((Y*VGA_CHAR_SIZE)*VideoConsole.ScreenWidth)+(X*VGA_CHAR_SIZE)];
+            Buffer[i+1] = ScreenMemory[((Y*VGA_CHAR_SIZE)*VideoConsole.ScreenWidth)+(X*VGA_CHAR_SIZE)+1];
             i += 2;
         }
     }
 
     /* Do the status bar as well (last line of screen) */
-    Y = UiScreenHeight-1;
-    for (X = 0; X <= UiScreenWidth-1; ++X)
+    Y = VideoConsole.ScreenHeight-1;
+    for (X = 0; X <= VideoConsole.ScreenWidth-1; ++X)
     {
-        Buffer[i]   = 'X'; // ScreenMemory[((Y*VGA_CHAR_SIZE)*UiScreenWidth)+(X*VGA_CHAR_SIZE)];
-        Buffer[i+1] = 'X'; // ScreenMemory[((Y*VGA_CHAR_SIZE)*UiScreenWidth)+(X*VGA_CHAR_SIZE)+1];
+        Buffer[i]   = ScreenMemory[((Y*VGA_CHAR_SIZE)*VideoConsole.ScreenWidth)+(X*VGA_CHAR_SIZE)];
+        Buffer[i+1] = ScreenMemory[((Y*VGA_CHAR_SIZE)*VideoConsole.ScreenWidth)+(X*VGA_CHAR_SIZE)+1];
         i += 2;
     }
 
@@ -700,38 +698,38 @@ TuiRestoreScreen(
         return;
 
     /* If no console back-buffer, we cannot restore anything */
-    if (TextVideoBuffer == NULL)
+    if (VideoConsole.Context == NULL)
         goto Cleanup;
 
     /* Clip to screen */
-    Rect.Left  = min(Rect.Left , UiScreenWidth - 1);
-    Rect.Right = min(Rect.Right, UiScreenWidth - 1);
-    Rect.Top    = min(Rect.Top   , UiScreenHeight - 1);
-    Rect.Bottom = min(Rect.Bottom, UiScreenHeight - 1);
+    Rect.Left  = min(Rect.Left , VideoConsole.ScreenWidth - 1);
+    Rect.Right = min(Rect.Right, VideoConsole.ScreenWidth - 1);
+    Rect.Top    = min(Rect.Top   , VideoConsole.ScreenHeight - 1);
+    Rect.Bottom = min(Rect.Bottom, VideoConsole.ScreenHeight - 1);
 
     /* Do nothing if the rectangle is empty */
     if ((Rect.Left > Rect.Right) || (Rect.Top > Rect.Bottom))
         goto Cleanup;
 
     /* Loop through each line and column and fill it in */
-    ScreenMemory = (PUCHAR)TextVideoBuffer;
+    ScreenMemory = (PUCHAR)VideoConsole.Context;
     i = 0;
     for (Y = Rect.Top; Y <= Rect.Bottom; ++Y)
     {
         for (X = Rect.Left; X <= Rect.Right; ++X)
         {
-            ScreenMemory[((Y*VGA_CHAR_SIZE)*UiScreenWidth)+(X*VGA_CHAR_SIZE)]   = Buffer[i];
-            ScreenMemory[((Y*VGA_CHAR_SIZE)*UiScreenWidth)+(X*VGA_CHAR_SIZE)+1] = Buffer[i+1];
+            ScreenMemory[((Y*VGA_CHAR_SIZE)*VideoConsole.ScreenWidth)+(X*VGA_CHAR_SIZE)]   = Buffer[i];
+            ScreenMemory[((Y*VGA_CHAR_SIZE)*VideoConsole.ScreenWidth)+(X*VGA_CHAR_SIZE)+1] = Buffer[i+1];
             i += 2;
         }
     }
 
     /* Do the status bar as well (last line of screen) */
-    Y = UiScreenHeight-1;
-    for (X = 0; X <= UiScreenWidth-1; ++X)
+    Y = VideoConsole.ScreenHeight-1;
+    for (X = 0; X <= VideoConsole.ScreenWidth-1; ++X)
     {
-        ScreenMemory[((Y*VGA_CHAR_SIZE)*UiScreenWidth)+(X*VGA_CHAR_SIZE)]   = Buffer[i];
-        ScreenMemory[((Y*VGA_CHAR_SIZE)*UiScreenWidth)+(X*VGA_CHAR_SIZE)+1] = Buffer[i+1];
+        ScreenMemory[((Y*VGA_CHAR_SIZE)*VideoConsole.ScreenWidth)+(X*VGA_CHAR_SIZE)]   = Buffer[i];
+        ScreenMemory[((Y*VGA_CHAR_SIZE)*VideoConsole.ScreenWidth)+(X*VGA_CHAR_SIZE)+1] = Buffer[i+1];
         i += 2;
     }
 
@@ -803,9 +801,9 @@ TuiMessageBoxCommon(
     }
 
     /* Calculate box area */
-    x1 = (UiScreenWidth - (width+2))/2;
+    x1 = (VideoConsole.ScreenWidth - (width+2))/2;
     x2 = x1 + width + 3;
-    y1 = ((UiScreenHeight - height - 2)/2) + 1;
+    y1 = ((VideoConsole.ScreenHeight - height - 2)/2) + 1;
     y2 = y1 + height + 4;
 
     BoxRect.Left = x1; BoxRect.Right  = x2;
@@ -871,11 +869,11 @@ TuiMessageBoxEx(
     /* Wait for key presses */
     for (;;)
     {
-        if (MachConsKbHit())
+        if (VideoConsole.KbHit())
         {
-            key = MachConsGetCh();
+            key = VideoConsole.GetCh();
             if (key == KEY_EXTENDED)
-                key = MachConsGetCh();
+                key = VideoConsole.GetCh();
 
             if ((key == KEY_ENTER) || (key == KEY_SPACE) || (key == KEY_ESC))
                 break;
@@ -982,8 +980,8 @@ TuiDrawProgressBarCenter(
     /* Build the coordinates and sizes */
     Height = 2;
     Width  = 50; // Allow for 50 "bars"
-    Left = (UiScreenWidth - Width) / 2;
-    Top  = (UiScreenHeight - Height + 4) / 2;
+    Left = (VideoConsole.ScreenWidth - Width) / 2;
+    Top  = (VideoConsole.ScreenHeight - Height + 4) / 2;
     Right  = Left + Width - 1;
     Bottom = Top + Height - 1;
 
@@ -1175,7 +1173,8 @@ BOOLEAN TuiEditBox(PCSTR MessageText, PCHAR EditTextBuffer, ULONG Length)
 
     /* Show the cursor */
     EditBoxCursorX = EditBoxStartX;
-    MachVideoSetTextCursorPosition(EditBoxCursorX, EditBoxLine);
+    VideoConsole.CursorX = EditBoxCursorX;
+    VideoConsole.CursorY = EditBoxLine;
     MachVideoHideShowTextCursor(TRUE);
 
     /* Draw status text */
@@ -1192,14 +1191,14 @@ BOOLEAN TuiEditBox(PCSTR MessageText, PCHAR EditTextBuffer, ULONG Length)
      */
     for (;;)
     {
-        if (MachConsKbHit())
+        if (VideoConsole.KbHit())
         {
             Extended = FALSE;
-            key = MachConsGetCh();
+            key = VideoConsole.GetCh();
             if (key == KEY_EXTENDED)
             {
                 Extended = TRUE;
-                key = MachConsGetCh();
+                key = VideoConsole.GetCh();
             }
 
             if (key == KEY_ENTER)
@@ -1310,7 +1309,9 @@ BOOLEAN TuiEditBox(PCSTR MessageText, PCHAR EditTextBuffer, ULONG Length)
                     &EditTextBuffer[EditBoxTextDisplayIndex], ATTR(UiEditBoxTextColor, UiEditBoxBgColor));
 
         /* Move the cursor */
-        MachVideoSetTextCursorPosition(EditBoxCursorX, EditBoxLine);
+        VideoConsole.CursorX = EditBoxCursorX;
+        VideoConsole.CursorY = EditBoxLine;
+        // MachVideoSetTextCursorPosition(EditBoxCursorX, EditBoxLine);
 
 #ifndef _M_ARM
         TuiUpdateDateTime();

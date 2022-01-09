@@ -113,4 +113,5 @@ const UIVTBL GuiVtbl =
     NULL, NULL, NULL, NULL, NULL, NULL, NULL,
     NULL
 };
-#endif
+
+#endif // _M_ARM

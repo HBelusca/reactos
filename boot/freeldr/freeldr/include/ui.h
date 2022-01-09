@@ -19,9 +19,6 @@
 
 #pragma once
 
-extern ULONG UiScreenWidth;             // Screen Width
-extern ULONG UiScreenHeight;            // Screen Height
-
 extern UCHAR UiStatusBarFgColor;        // Status bar foreground color
 extern UCHAR UiStatusBarBgColor;        // Status bar background color
 extern UCHAR UiBackdropFgColor;         // Backdrop foreground color

@@ -58,7 +58,9 @@ BOOLEAN MiniTuiInitialize(VOID)
 VOID MiniTuiDrawBackdrop(VOID)
 {
     /* Fill in a black background */
-    TuiFillArea(0, 0, UiScreenWidth - 1, UiScreenHeight - 1,
+    TuiFillArea(0, 0,
+                VideoConsole.ScreenWidth - 1,
+                VideoConsole.ScreenHeight - 1,
                 UiBackdropFillStyle,
                 ATTR(UiBackdropFgColor, UiBackdropBgColor));
 
@@ -69,6 +71,10 @@ VOID MiniTuiDrawBackdrop(VOID)
 VOID MiniTuiDrawStatusText(PCSTR StatusText)
 {
     /* Minimal UI doesn't have a status bar */
+    // See TuiDrawStatusText().
+#ifndef _M_ARM
+    VideoCopyOffScreenBufferToVRAM();
+#endif
 }
 
 #endif // _M_ARM
@@ -158,14 +164,14 @@ MiniTuiDrawProgressBarCenter(
     /* Build the coordinates and sizes */
 #ifdef NTLDR_PROGRESSBAR
     Height = 2;
-    Width  = UiScreenWidth;
+    Width  = VideoConsole.ScreenWidth;
     Left = 0;
-    Top  = UiScreenHeight - Height - 2;
+    Top  = VideoConsole.ScreenHeight - Height - 2;
 #else // BTMGR_PROGRESSBAR
     Height = 3;
-    Width  = UiScreenWidth - 4;
+    Width  = VideoConsole.ScreenWidth - 4;
     Left = 2;
-    Top  = UiScreenHeight - Height - 3;
+    Top  = VideoConsole.ScreenHeight - Height - 3;
 #endif
     Right  = Left + Width - 1;
     Bottom = Top + Height - 1;
@@ -228,7 +234,7 @@ MiniTuiDrawMenu(
     if (MenuInfo->MenuFooter)
     {
         UiVtbl.DrawText(0,
-                        UiScreenHeight - 4,
+                        VideoConsole.ScreenHeight - 4,
                         MenuInfo->MenuFooter,
                         ATTR(UiMenuFgColor, UiMenuBgColor));
     }

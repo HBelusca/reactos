@@ -12,8 +12,6 @@
 
 /* GLOBALS ********************************************************************/
 
-ULONG UiScreenWidth;
-ULONG UiScreenHeight;
 UCHAR UiMenuFgColor = COLOR_GRAY;
 UCHAR UiMenuBgColor = COLOR_BLACK;
 UCHAR UiTextColor = COLOR_GRAY;
@@ -26,18 +24,14 @@ CHAR  UiTimeText[260] = "Seconds until highlighted choice will be started automa
 BOOLEAN
 UiInitialize(IN BOOLEAN ShowUi)
 {
-    ULONG Depth;
-
     /* Nothing to do */
     if (!ShowUi) return TRUE;
 
     /* Set mode and query size */
     MachVideoSetDisplayMode(NULL, TRUE);
-    MachVideoGetDisplaySize(&UiScreenWidth, &UiScreenHeight, &Depth);
-
-    /* Clear the screen */
-    UiDrawBackdrop();
-    return TRUE;
+    // /* Clear the screen */
+    // UiDrawBackdrop();
+    return InitVideoConsole(/* &VideoConsole, */ FALSE);
 }
 
 VOID

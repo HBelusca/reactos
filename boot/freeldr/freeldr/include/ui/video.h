@@ -16,9 +16,36 @@ typedef struct _PALETTE_ENTRY
 } PALETTE_ENTRY, *PPALETTE_ENTRY;
 #include <poppack.h>
 
-// extern PVOID VideoOffScreenBuffer;
 
-PVOID VideoAllocateOffScreenBuffer(VOID);   // Returns a pointer to an off-screen buffer sufficient for the current video mode
+/* Temporary console abstraction used by the UI code */
+typedef struct _UI_CONSOLE
+{
+    BOOLEAN (*KbHit)(VOID);
+    INT (*GetCh)(VOID); // Read
+
+    // VOID (*Reset)(VOID);
+    INT (*Write)(_In_ PCHAR Buffer, _In_ SIZE_T Length);
+    // VOID (*WriteRect)(_In_ PVOID Buffer, _Inout_ PSMALL_RECT Rect); // Kind of Blt for textmode.
+    // VOID (*ClearScreen)(VOID);
+
+    PVOID Context;
+
+/** Read-only data **/
+    ULONG ScreenWidth;  // Screen Width
+    ULONG ScreenHeight; // Screen Height
+    ULONG Depth; // FIXME: Useful only for GUIs.
+
+/** Read/Write data **/ // TODO: Should be changed with VideoSetTextCursorPosition()...
+    ULONG CursorX;
+    ULONG CursorY;
+    ULONG CurrAttr; // Current text attributes
+} UI_CONSOLE, *PUI_CONSOLE;
+
+
+BOOLEAN
+InitVideoConsole(
+    /* IN OUT PUI_CONSOLE Console, */
+    IN BOOLEAN CachedOutput);
 
 VOID VideoFreeOffScreenBuffer(VOID);
 VOID VideoCopyOffScreenBufferToVRAM(VOID);

@@ -51,12 +51,12 @@ TuiDisplayMenu(
      * may handle a specific user keypress. If it does, the
      * timeout is cancelled.
      */
-    if (!MenuTimeOut && KeyPressFilter && MachConsKbHit())
+    if (!MenuTimeOut && KeyPressFilter && VideoConsole.KbHit())
     {
         /* Get the key (get the extended key if needed) */
-        KeyPress = MachConsGetCh();
+        KeyPress = VideoConsole.GetCh();
         if (KeyPress == KEY_EXTENDED)
-            KeyPress = MachConsGetCh();
+            KeyPress = VideoConsole.GetCh();
 
         /*
          * Call the supplied key filter callback function to see
@@ -183,8 +183,8 @@ TuiCalcMenuBoxSize(
     if (UiCenterMenu)
     {
         /* Calculate the menu box area for a centered menu */
-        MenuInfo->Left = (UiScreenWidth - Width) / 2;
-        MenuInfo->Top = (((UiScreenHeight - TUI_TITLE_BOX_CHAR_HEIGHT) -
+        MenuInfo->Left = (VideoConsole.ScreenWidth - Width) / 2;
+        MenuInfo->Top = (((VideoConsole.ScreenHeight - TUI_TITLE_BOX_CHAR_HEIGHT) -
                           Height) / 2) + TUI_TITLE_BOX_CHAR_HEIGHT;
     }
     else
@@ -252,7 +252,7 @@ TuiDrawMenu(
     if (MenuInfo->MenuFooter)
     {
         UiDrawText(0,
-                   UiScreenHeight - 4,
+                   VideoConsole.ScreenHeight - 4,
                    MenuInfo->MenuFooter,
                    ATTR(UiMenuFgColor, UiMenuBgColor));
     }
@@ -532,7 +532,7 @@ TuiProcessMenuKeyboardEvent(
     ULONG Selected, Count;
 
     /* Check for a keypress */
-    if (!MachConsKbHit())
+    if (!VideoConsole.KbHit())
         return 0; // None, bail out
 
     /* Check if the timeout is not already complete */
@@ -544,9 +544,9 @@ TuiProcessMenuKeyboardEvent(
     }
 
     /* Get the key (get the extended key if needed) */
-    KeyEvent = MachConsGetCh();
+    KeyEvent = VideoConsole.GetCh();
     if (KeyEvent == KEY_EXTENDED)
-        KeyEvent = MachConsGetCh();
+        KeyEvent = VideoConsole.GetCh();
 
     /*
      * Call the supplied key filter callback function to see

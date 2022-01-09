@@ -38,6 +38,7 @@ static const CHAR *i386ExceptionDescriptionText[] =
 static ULONG i386_ScreenPosX = 0;
 static ULONG i386_ScreenPosY = 0;
 
+// See VideoWrite().
 static void
 i386PrintText(CHAR *pszText)
 {
