@@ -34,6 +34,9 @@ SINGLE_LIST_ENTRY TTFontCache = { NULL };
 // NOTE: Used to tag code that makes sense only with a font cache.
 // #define FONT_CACHE_PRESENT
 
+/* Console font cache */
+FONT_INFO_CACHE FontInfo = { 0, 0, NULL };
+
 
 /* FUNCTIONS ******************************************************************/
 
