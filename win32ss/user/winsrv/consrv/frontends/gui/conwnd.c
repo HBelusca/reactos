@@ -477,6 +477,9 @@ ResizeConWnd(PGUI_CONSOLE_DATA GuiData, DWORD WidthUnit, DWORD HeightUnit)
 }
 
 
+//
+// FIXME: Should be deprecated following the font cache.
+//
 VOID
 DeleteFonts(PGUI_CONSOLE_DATA GuiData)
 {
@@ -549,6 +552,16 @@ InitFonts(
      * to hold a possible fallback font face name. */
     StringCchCopyNW(NewFaceName, ARRAYSIZE(NewFaceName),
                     FaceName, LF_FACESIZE);
+
+    ULONG Index =
+        GetAddCachedFontInternal(
+            // Size, SizeWant,
+            NewFaceName,
+            FontWeight,
+            FontFamily,
+            CodePage);
+
+    hFont = FontCache.FontInfo[Index].hFont;
 
     /* NOTE: FontSize is always in cell height/width units (pixels) */
     hFont = CreateConsoleFontEx((LONG)(ULONG)FontSize.Y,

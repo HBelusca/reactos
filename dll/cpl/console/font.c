@@ -394,6 +394,10 @@ EnumFontSizesProc(
     }
 }
 
+//
+// Like FontListCreate(..., TRUE)
+// https://github.com/microsoft/terminal/blob/main/src/propsheet/fontdlg.cpp#L680
+//
 static VOID
 FaceNameList_Initialize(
     IN HWND hWndList,
@@ -414,8 +418,11 @@ FaceNameList_Initialize(
     lf.lfCharSet = DEFAULT_CHARSET; // CodePageToCharSet(CodePage);
     // lf.lfPitchAndFamily = FIXED_PITCH | FF_MODERN;
 
+    //
+    // All the other fonts get enumerated only "when needed"
+    //
     hDC = GetDC(NULL);
-    EnumFontFamiliesExW(hDC, &lf, (FONTENUMPROCW)EnumFaceNamesProc, (LPARAM)&Param, 0);
+    EnumFontFamiliesExW(hDC, &lf, EnumFaceNamesProc, (LPARAM)&Param, 0);
     ReleaseDC(NULL, hDC);
 
     idx = (INT)SendMessageW(hWndList, LB_GETCOUNT, 0, 0);
@@ -425,6 +432,11 @@ FaceNameList_Initialize(
         return;
     }
 
+    //
+    // In a way, the following ones (especially "Terminal") are
+    // the default one(s) that get enumerated and cached first,
+    // by the first single call to EnumerateFonts(EF_DEFFACE).
+    //
     /* No fonts were found. Manually add default ones into the list. */
     DPRINT1("The ideal console fonts were not found; manually add default ones.\n");
 
@@ -628,8 +640,17 @@ FontTypeChange(
             // lf.lfPitchAndFamily = FIXED_PITCH | FF_MODERN;
             StringCchCopyW(lf.lfFaceName, ARRAYSIZE(lf.lfFaceName), pConInfo->FaceName);
 
+            //
+            // Similar to AddFontSizesToList(): see call
+            // https://github.com/microsoft/terminal/blob/main/src/propsheet/fontdlg.cpp#L868
+            // and implementation
+            // https://github.com/microsoft/terminal/blob/main/src/propsheet/fontdlg.cpp#L528
+            // but instead of looping through the cache of all fonts (that has been
+            // pre-initialized before with all the sizes of a given font/face, for all faces...)
+            // here we do the enumeration ourselves for this given face only now.
+            //
             hDC = GetDC(NULL);
-            EnumFontFamiliesExW(hDC, &lf, (FONTENUMPROCW)EnumFontSizesProc, (LPARAM)SizeList, 0);
+            EnumFontFamiliesExW(hDC, &lf, EnumFontSizesProc, (LPARAM)SizeList, 0);
             ReleaseDC(NULL, hDC);
 
             /* Re-select the current font size */

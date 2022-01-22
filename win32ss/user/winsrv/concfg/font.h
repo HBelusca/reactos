@@ -79,38 +79,13 @@ typedef struct _TT_FONT_ENTRY
 } TT_FONT_ENTRY, *PTT_FONT_ENTRY;
 
 
-/*
- * Console font cache.
- * See https://github.com/microsoft/terminal/blob/main/src/propsheet/font.h
- * https://github.com/microsoft/terminal/blob/main/src/propsheet/globals.cpp
- * etc.
- */
-typedef struct _FONT_INFO
-{
-    HFONT hFont;    // By default set to NULL; gets initialized once the font is first used.
-    COORD Size;     // Obtained font size
-    COORD SizeWant; // Desired size; is {0;0} for Raster font
-    LONG Weight;
-    PWSTR FaceName;
-    BYTE Family;
-    BYTE tmCharSet;
-} FONT_INFO, *PFONT_INFO;
-
-typedef struct _FONT_INFO_CACHE
-{
-    ULONG NumberOfFonts;    // Actual number of entries in FontInfo.
-    ULONG FontInfoLength;   // Maximum number of entries allocated in FontInfo.
-    PFONT_INFO FontInfo;
-} FONT_INFO_CACHE, *PFONT_INFO_CACHE;
-
-
 /* FUNCTIONS ******************************************************************/
 
 BYTE
 CodePageToCharSet(
     _In_ UINT CodePage);
 
-// FIXME: Will be redefined once we support a font cache.
+#if 1 // FIXME: Will be redefined once we support a font cache.
 typedef struct _FONT_DATA
 {
     _Inout_updates_z_(LF_FACESIZE) PWSTR FaceName;
@@ -119,6 +94,7 @@ typedef struct _FONT_DATA
     COORD Size;
     BYTE  CharSet;
 } FONT_DATA, *PFONT_DATA;
+#endif
 
 HFONT
 CreateConsoleFontEx(

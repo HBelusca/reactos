@@ -34,8 +34,8 @@ SINGLE_LIST_ENTRY TTFontCache = { NULL };
 // NOTE: Used to tag code that makes sense only with a font cache.
 // #define FONT_CACHE_PRESENT
 
-/* Console font cache */
-FONT_INFO_CACHE FontInfo = { 0, 0, NULL };
+// /* Console font cache */
+// FONT_CACHE FontCache = { 0, 0, NULL };
 
 
 /* FUNCTIONS ******************************************************************/
@@ -557,6 +557,24 @@ CreateConsoleFontEx(
         if (!UseDefaultFallback)
             return NULL;
 
+#if 0
+        //
+        // TODO: Determine the default font
+        // in a slightly less hardcoded way...
+        //
+        HDC hDC = GetDC(NULL);
+        SelectObject(hDC, GetStockObject(OEM_FIXED_FONT));
+
+        GetTextMetricsW(hDC, &tmi);
+        FontSize.X = (SHORT)(tmi.tmMaxCharWidth);
+        FontSize.Y = (SHORT)(tmi.tmHeight+tmi.tmExternalLeading);
+        FontFamily = tmi.tmPitchAndFamily;
+        // NOTE: If (IS_ANY_DBCS_CHARSET(tmi.tmCharSet))
+        // then FontSize.X is == fullwidth.
+        GetTextFaceW(hDC, LF_FACESIZE, DefaultFaceName);
+        ReleaseDC(hDC);
+#endif
+
         //
         // FIXME: See also !*FaceName case in FindSuitableFont().
         //
@@ -992,7 +1010,7 @@ IsValidConsoleFont(
     StringCchCopyW(lf.lfFaceName, ARRAYSIZE(lf.lfFaceName), FaceName);
 
     hDC = GetDC(NULL);
-    EnumFontFamiliesExW(hDC, &lf, (FONTENUMPROCW)IsValidConsoleFontProc, (LPARAM)&Param, 0);
+    EnumFontFamiliesExW(hDC, &lf, IsValidConsoleFontProc, (LPARAM)&Param, 0);
     ReleaseDC(NULL, hDC);
 
     return Param.IsValidFont;
