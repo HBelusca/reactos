@@ -570,7 +570,12 @@ ConSrvInitConsole(OUT PHANDLE NewConsoleHandle,
 
     /* 2. Impersonate the caller in order to retrieve settings in its context */
     if (!CsrImpersonateClient(NULL))
-        return STATUS_BAD_IMPERSONATION_LEVEL;
+    {
+        /* We failed, use default settings and continue initialization */
+        DPRINT1("CONSRV: Failed to impersonate client, use default console settings.\n");
+        ConCfgInitDefaultSettings(ConsoleInfo);
+        goto DoConsoleInit; // return STATUS_BAD_IMPERSONATION_LEVEL;
+    }
 
     /* 3. Load the default settings */
     ConCfgGetDefaultSettings(ConsoleInfo);
@@ -644,8 +649,12 @@ ConSrvInitConsole(OUT PHANDLE NewConsoleHandle,
     /* 6. Revert impersonation */
     CsrRevertToSelf();
 
+DoConsoleInit:
+
     /* Set-up the code page */
-    ConsoleInfo->CodePage = GetOEMCP();
+    ConsoleInfo->CodePage = ConsoleInitInfo->ConsoleStartInfo->uCodePage;
+    if (!IsValidCodePage(ConsoleInfo->CodePage))
+        ConsoleInfo->CodePage = GetOEMCP();
 
     /*
      * Initialize the ConSrv terminal and give it a chance to load

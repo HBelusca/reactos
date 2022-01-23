@@ -115,11 +115,10 @@ ConDrvInitConsole(
     }
 
     /* Set-up the code page */
-    if (IsValidCodePage(ConsoleInfo->CodePage))
-    {
-        CON_SET_OUTPUT_CP(Console, ConsoleInfo->CodePage);
-        Console->InputCodePage = ConsoleInfo->CodePage;
-    }
+    if (!IsValidCodePage(ConsoleInfo->CodePage))
+        ConsoleInfo->CodePage = CP_USA;
+    CON_SET_OUTPUT_CP(Console, ConsoleInfo->CodePage);
+    Console->InputCodePage = ConsoleInfo->CodePage;
 
     /* Initialize a new text-mode screen buffer with default settings */
     ScreenBufferInfo.ScreenBufferSize = ConsoleInfo->ScreenBufferSize;
