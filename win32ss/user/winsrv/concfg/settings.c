@@ -133,7 +133,7 @@ ConCfgOpenUserSettings(
     TranslateConsoleName(szBuffer2, ConsoleTitle, ARRAYSIZE(szBuffer2));
 
     /* Create the registry path */
-    StringCchCatW(szBuffer, MAX_PATH - wcslen(szBuffer) - 1, szBuffer2);
+    StringCchCatW(szBuffer, ARRAYSIZE(szBuffer), szBuffer2);
 
     /* Create or open the registry key */
     if (Create)
@@ -223,8 +223,8 @@ ConCfgReadUserSettings(
         if (!wcsncmp(szValueName, L"ColorTable", wcslen(L"ColorTable")))
         {
             dwColorIndex = 0;
-            swscanf(szValueName, L"ColorTable%2d", &dwColorIndex);
-            if (dwColorIndex < ARRAYSIZE(ConsoleInfo->ColorTable))
+            if ((swscanf(szValueName, L"ColorTable%2d", &dwColorIndex) == 1) &&
+                (dwColorIndex < ARRAYSIZE(ConsoleInfo->ColorTable)))
             {
                 ConsoleInfo->ColorTable[dwColorIndex] = Value;
                 Success = TRUE;
