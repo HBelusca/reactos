@@ -170,15 +170,25 @@ ConCfgReadUserSettings(
 {
     BOOLEAN Success = FALSE;
     HKEY  hKey;
-    DWORD dwNumValues = 0;
-    DWORD dwIndex;
-    DWORD dwColorIndex = 0;
     DWORD dwType;
-    WCHAR szValueName[MAX_PATH];
-    DWORD dwValueName;
+    DWORD dwValue;
+
+#define GetConsoleSetting(SettingName, SettingType, SettingSize, Setting, DefaultValue)     \
+do {                                                                                        \
+    dwValue = (SettingSize);                                                                \
+    if ((RegQueryValueExW(hKey, (SettingName), NULL, &dwType, (PBYTE)(Setting), &dwValue) != ERROR_SUCCESS) || \
+        (dwType != (SettingType) || dwValue != (SettingSize)) ||                            \
+        (dwType == REG_SZ && dwValue <= (SettingSize)))                                     \
+    {                                                                                       \
+        *(Setting) = (DefaultValue);                                                        \
+    }                                                                                       \
+    Success = TRUE;                                                                         \
+} while (0)
+
+    WCHAR szValueName[15];
     WCHAR szValue[LF_FACESIZE] = L"";
     DWORD Value;
-    DWORD dwValue;
+    UINT i;
 
     if (!ConCfgOpenUserSettings(DefaultSettings ? L"" : ConsoleInfo->ConsoleTitle,
                                 &hKey, KEY_READ, FALSE))
@@ -187,154 +197,81 @@ ConCfgReadUserSettings(
         return FALSE;
     }
 
-    if (RegQueryInfoKeyW(hKey, NULL, NULL, NULL, NULL, NULL, NULL,
-                         &dwNumValues, NULL, NULL, NULL, NULL) != ERROR_SUCCESS)
+    for (i = 0; i < ARRAYSIZE(ConsoleInfo->ColorTable); ++i)
     {
-        DPRINT("ConCfgReadUserSettings: RegQueryInfoKeyW() failed\n");
-        RegCloseKey(hKey);
-        return FALSE;
+        // TODO: Default value or not (i.e. keep the current one)?
+        swprintf(szValueName, L"ColorTable%02u", i);
+        GetConsoleSetting(szValueName, REG_DWORD, sizeof(DWORD), &ConsoleInfo->ColorTable[i], s_Colors[i]);
     }
 
-    DPRINT("ConCfgReadUserSettings() entered, dwNumValues %d\n", dwNumValues);
+    // FIXME: Only if (IsValidCodePage(Value)).
+    GetConsoleSetting(L"CodePage", REG_DWORD, sizeof(DWORD), &ConsoleInfo->CodePage, CP_ACP /* CP_OEMCP */);
 
-    for (dwIndex = 0; dwIndex < dwNumValues; dwIndex++)
+    GetConsoleSetting(L"FaceName", REG_SZ, ARRAYSIZE(szValue), szValue, UNICODE_NULL);
+    /* A NULL value means that the defaults should be used instead */
+    if (*szValue)
     {
-        dwValue = sizeof(Value);
-        dwValueName = ARRAYSIZE(szValueName);
-
-        if (RegEnumValueW(hKey, dwIndex, szValueName, &dwValueName, NULL, &dwType, (BYTE*)&Value, &dwValue) != ERROR_SUCCESS)
-        {
-            if (dwType == REG_SZ)
-            {
-                /*
-                 * Retry in case of string value
-                 */
-                dwValue = sizeof(szValue);
-                dwValueName = ARRAYSIZE(szValueName);
-                if (RegEnumValueW(hKey, dwIndex, szValueName, &dwValueName, NULL, NULL, (BYTE*)szValue, &dwValue) != ERROR_SUCCESS)
-                    break;
-            }
-            else
-            {
-                break;
-            }
-        }
-
-        if (!wcsncmp(szValueName, L"ColorTable", wcslen(L"ColorTable")))
-        {
-            dwColorIndex = 0;
-            if ((swscanf(szValueName, L"ColorTable%2d", &dwColorIndex) == 1) &&
-                (dwColorIndex < ARRAYSIZE(ConsoleInfo->ColorTable)))
-            {
-                ConsoleInfo->ColorTable[dwColorIndex] = Value;
-                Success = TRUE;
-            }
-        }
-        if (!wcscmp(szValueName, L"CodePage"))
-        {
-            if (IsValidCodePage(Value))
-                ConsoleInfo->CodePage = Value;
-            Success = TRUE;
-        }
-        else if (!wcscmp(szValueName, L"FaceName"))
-        {
-            /* A NULL value means that the defaults should be used instead */
-            if (*szValue)
-            {
-                StringCchCopyNW(ConsoleInfo->FaceName, ARRAYSIZE(ConsoleInfo->FaceName),
-                                szValue, ARRAYSIZE(szValue));
-            }
-            Success = TRUE;
-        }
-        else if (!wcscmp(szValueName, L"FontFamily"))
-        {
-            /* A zero value means that the defaults should be used instead */
-            if (Value)
-                ConsoleInfo->FontFamily = Value;
-            Success = TRUE;
-        }
-        else if (!wcscmp(szValueName, L"FontSize"))
-        {
-            /* A zero value means that the defaults should be used instead */
-            if (Value)
-            {
-                ConsoleInfo->FontSize.X = LOWORD(Value); // Width
-                ConsoleInfo->FontSize.Y = HIWORD(Value); // Height
-            }
-            Success = TRUE;
-        }
-        else if (!wcscmp(szValueName, L"FontWeight"))
-        {
-            /* A zero value means that the defaults should be used instead */
-            if (Value)
-                ConsoleInfo->FontWeight = Value;
-            Success = TRUE;
-        }
-        else if (!wcscmp(szValueName, L"HistoryBufferSize"))
-        {
-            ConsoleInfo->HistoryBufferSize = Value;
-            Success = TRUE;
-        }
-        else if (!wcscmp(szValueName, L"NumberOfHistoryBuffers"))
-        {
-            ConsoleInfo->NumberOfHistoryBuffers = Value;
-            Success = TRUE;
-        }
-        else if (!wcscmp(szValueName, L"HistoryNoDup"))
-        {
-            ConsoleInfo->HistoryNoDup = !!Value;
-            Success = TRUE;
-        }
-        else if (!wcscmp(szValueName, L"QuickEdit"))
-        {
-            ConsoleInfo->QuickEdit = !!Value;
-            Success = TRUE;
-        }
-        else if (!wcscmp(szValueName, L"InsertMode"))
-        {
-            ConsoleInfo->InsertMode = !!Value;
-            Success = TRUE;
-        }
-        else if (!wcscmp(szValueName, L"ScreenBufferSize"))
-        {
-            ConsoleInfo->ScreenBufferSize.X = LOWORD(Value);
-            ConsoleInfo->ScreenBufferSize.Y = HIWORD(Value);
-            Success = TRUE;
-        }
-        else if (!wcscmp(szValueName, L"FullScreen"))
-        {
-            ConsoleInfo->FullScreen = Value;
-            Success = TRUE;
-        }
-        else if (!wcscmp(szValueName, L"WindowPosition"))
-        {
-            ConsoleInfo->AutoPosition     = FALSE;
-            ConsoleInfo->WindowPosition.x = LOWORD(Value);
-            ConsoleInfo->WindowPosition.y = HIWORD(Value);
-            Success = TRUE;
-        }
-        else if (!wcscmp(szValueName, L"WindowSize"))
-        {
-            ConsoleInfo->WindowSize.X = LOWORD(Value);
-            ConsoleInfo->WindowSize.Y = HIWORD(Value);
-            Success = TRUE;
-        }
-        else if (!wcscmp(szValueName, L"CursorSize"))
-        {
-            ConsoleInfo->CursorSize = min(max(Value, 0), 100);
-            Success = TRUE;
-        }
-        else if (!wcscmp(szValueName, L"ScreenColors"))
-        {
-            ConsoleInfo->ScreenAttributes = (USHORT)Value;
-            Success = TRUE;
-        }
-        else if (!wcscmp(szValueName, L"PopupColors"))
-        {
-            ConsoleInfo->PopupAttributes = (USHORT)Value;
-            Success = TRUE;
-        }
+        StringCchCopyNW(ConsoleInfo->FaceName, ARRAYSIZE(ConsoleInfo->FaceName),
+                        szValue, ARRAYSIZE(szValue));
     }
+
+    GetConsoleSetting(L"FontFamily", REG_DWORD, sizeof(DWORD), &ConsoleInfo->FontFamily, FF_DONTCARE);
+    ///* A zero value means that the defaults should be used instead */
+    //if (Value)
+    //    ConsoleInfo->FontFamily = Value;
+
+    GetConsoleSetting(L"FontSize", REG_DWORD, sizeof(DWORD), &Value, 0);
+    /* A zero value means that the defaults should be used instead */
+    if (Value)
+    {
+        ConsoleInfo->FontSize.X = LOWORD(Value); // Width
+        ConsoleInfo->FontSize.Y = HIWORD(Value); // Height
+    }
+
+    GetConsoleSetting(L"FontWeight", REG_DWORD, sizeof(DWORD), &Value, FW_DONTCARE);
+    /* A zero value means that the defaults should be used instead */
+    if (Value)
+        ConsoleInfo->FontWeight = Value;
+
+    GetConsoleSetting(L"HistoryBufferSize", REG_DWORD, sizeof(DWORD), &ConsoleInfo->HistoryBufferSize, 50);
+    GetConsoleSetting(L"NumberOfHistoryBuffers", REG_DWORD, sizeof(DWORD), &ConsoleInfo->NumberOfHistoryBuffers, 4);
+
+    GetConsoleSetting(L"HistoryNoDup", REG_DWORD, sizeof(DWORD), &Value, FALSE);
+    ConsoleInfo->HistoryNoDup = !!Value;
+
+    GetConsoleSetting(L"QuickEdit", REG_DWORD, sizeof(DWORD), &Value, FALSE);
+    ConsoleInfo->QuickEdit = !!Value;
+
+    GetConsoleSetting(L"InsertMode", REG_DWORD, sizeof(DWORD), &Value, TRUE);
+    ConsoleInfo->InsertMode = !!Value;
+
+    GetConsoleSetting(L"ScreenBufferSize", REG_DWORD, sizeof(DWORD), &Value, MAKELONG(80, 300));
+    ConsoleInfo->ScreenBufferSize.X = LOWORD(Value);
+    ConsoleInfo->ScreenBufferSize.Y = HIWORD(Value);
+
+    GetConsoleSetting(L"FullScreen", REG_DWORD, sizeof(DWORD), &Value, FALSE);
+    ConsoleInfo->FullScreen = !!Value;
+
+    GetConsoleSetting(L"WindowPosition", REG_DWORD, sizeof(DWORD), &Value, FALSE);
+    if (Value) // FIXME!!
+    {
+        ConsoleInfo->AutoPosition = FALSE;
+        ConsoleInfo->WindowPosition.x = LOWORD(Value);
+        ConsoleInfo->WindowPosition.y = HIWORD(Value);
+    }
+
+    GetConsoleSetting(L"WindowSize", REG_DWORD, sizeof(DWORD), &Value, MAKELONG(80, 25));
+    ConsoleInfo->WindowSize.X = LOWORD(Value);
+    ConsoleInfo->WindowSize.Y = HIWORD(Value);
+
+    GetConsoleSetting(L"CursorSize", REG_DWORD, sizeof(DWORD), &Value, CSR_DEFAULT_CURSOR_SIZE);
+    ConsoleInfo->CursorSize = min(max(Value, 0), 100);
+
+    GetConsoleSetting(L"ScreenColors", REG_DWORD, sizeof(DWORD), &Value, DEFAULT_SCREEN_ATTRIB);
+    ConsoleInfo->ScreenAttributes = (USHORT)Value;
+
+    GetConsoleSetting(L"PopupColors", REG_DWORD, sizeof(DWORD), &Value, DEFAULT_POPUP_ATTRIB);
+    ConsoleInfo->PopupAttributes = (USHORT)Value;
 
     RegCloseKey(hKey);
     return Success;
