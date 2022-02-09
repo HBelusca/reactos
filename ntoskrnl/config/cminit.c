@@ -281,7 +281,7 @@ CmpOpenHiveFiles(IN PCUNICODE_STRING BaseName,
     PWCHAR NameBuffer;
     USHORT Length;
     OBJECT_ATTRIBUTES ObjectAttributes;
-    IO_STATUS_BLOCK IoStatusBlock;
+    IO_STATUS_BLOCK IoStatusBlock, FsStatusBlock;
     ULONG AttributeFlags, ShareMode, DesiredAccess, CreateDisposition, IoFlags;
     USHORT CompressionState;
     FILE_STANDARD_INFORMATION FileInformation;
@@ -398,7 +398,7 @@ CmpOpenHiveFiles(IN PCUNICODE_STRING BaseName,
                                  EventHandle,
                                  NULL,
                                  NULL,
-                                 &IoStatusBlock,
+                                 &FsStatusBlock,
                                  FSCTL_MARK_AS_SYSTEM_HIVE,
                                  NULL,
                                  0,
@@ -412,7 +412,7 @@ CmpOpenHiveFiles(IN PCUNICODE_STRING BaseName,
                                   KernelMode,
                                   FALSE,
                                   NULL);
-            Status = IoStatusBlock.Status;
+            Status = FsStatusBlock.Status;
         }
 
         /* If we don't support it, ignore the failure */
@@ -436,7 +436,7 @@ CmpOpenHiveFiles(IN PCUNICODE_STRING BaseName,
                              EventHandle,
                              NULL,
                              NULL,
-                             &IoStatusBlock,
+                             &FsStatusBlock,
                              FSCTL_SET_COMPRESSION,
                              &CompressionState,
                              sizeof(CompressionState),
@@ -452,8 +452,9 @@ CmpOpenHiveFiles(IN PCUNICODE_STRING BaseName,
                               NULL);
     }
 
-    /* Get the disposition */
+    /* Return the disposition from the ZwCreateFile() call */
     *PrimaryDisposition = (ULONG)IoStatusBlock.Information;
+
     if (IoStatusBlock.Information != FILE_CREATED)
     {
         /* Check how large the file is */
@@ -514,7 +515,7 @@ CmpOpenHiveFiles(IN PCUNICODE_STRING BaseName,
         return STATUS_SUCCESS;
     }
 
-    /* Check if we can create the hive */
+    /* Check if we can create the log file */
     CreateDisposition = CmpShareSystemHives ? FILE_OPEN : FILE_OPEN_IF;
     if (*PrimaryDisposition == FILE_CREATED)
     {
@@ -562,7 +563,7 @@ CmpOpenHiveFiles(IN PCUNICODE_STRING BaseName,
                                  EventHandle,
                                  NULL,
                                  NULL,
-                                 &IoStatusBlock,
+                                 &FsStatusBlock,
                                  FSCTL_MARK_AS_SYSTEM_HIVE,
                                  NULL,
                                  0,
@@ -576,7 +577,7 @@ CmpOpenHiveFiles(IN PCUNICODE_STRING BaseName,
                                   KernelMode,
                                   FALSE,
                                   NULL);
-            Status = IoStatusBlock.Status;
+            Status = FsStatusBlock.Status;
         }
 
         /* If we don't support it, ignore the failure */
@@ -595,11 +596,12 @@ CmpOpenHiveFiles(IN PCUNICODE_STRING BaseName,
     else
     {
         /* Disable compression */
+        CompressionState = 0;
         Status = ZwFsControlFile(*Log,
                                  EventHandle,
                                  NULL,
                                  NULL,
-                                 &IoStatusBlock,
+                                 &FsStatusBlock,
                                  FSCTL_SET_COMPRESSION,
                                  &CompressionState,
                                  sizeof(CompressionState),
@@ -615,7 +617,7 @@ CmpOpenHiveFiles(IN PCUNICODE_STRING BaseName,
                                   NULL);
         }
 
-        /* Return the disposition */
+        /* Return the disposition from the ZwCreateFile() call */
         *LogDisposition = (ULONG)IoStatusBlock.Information;
     }
 
