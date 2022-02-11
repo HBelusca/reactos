@@ -634,11 +634,14 @@ LoadWindowsCore(IN USHORT OperatingSystemVersion,
     PCSTR Option;
     ULONG OptionLength;
     PVOID KernelBase, HalBase, KdDllBase = NULL;
+    PVOID BootVidBase = NULL;
     PLDR_DATA_TABLE_ENTRY HalDTE, KdDllDTE = NULL;
+    PLDR_DATA_TABLE_ENTRY BootVidDTE = NULL;
     CHAR DirPath[MAX_PATH];
     CHAR HalFileName[MAX_PATH];
     CHAR KernelFileName[MAX_PATH];
     CHAR KdDllName[MAX_PATH];
+    PCSTR BootVidName = NULL;
 
     if (!KernelDTE) return FALSE;
 
@@ -886,6 +889,38 @@ LoadWindowsCore(IN USHORT OperatingSystemVersion,
         }
     }
 
+#if 0
+    /* Load the correct Boot Video Driver (only for Setup; otherwise
+     * the correct version is already installed, and will be loaded
+     * automatically below through the import dependencies). */
+    if ((OperatingSystemVersion >= _WIN32_WINNT_WIN2K) &&
+        LoaderBlock->SetupLdrBlock)
+    {
+        INFCONTEXT InfContext;
+
+        // TODO: Find and use a correct computer_type.
+        PCSTR computer_type = NULL;
+
+        /* Get the optional loader prompt string */
+        if (InfFindFirstLine(InfHandle, "bootvid", computer_type, &InfContext) &&
+            InfGetDataField(&InfContext, 1, &BootVidName))
+        {
+            BootVidBase = LoadModule(&LoaderBlock->LoadOrderListHead,
+                                     DirPath, BootVidName,
+                                     "bootvid.dll", LoaderBootDriver,
+                                     &BootVidDTE, 50)
+            if (!BootVidBase)
+            {
+                ERR("LoadModule('%s') failed\n", BootVidName);
+                UiMessageBox("Could not load %s", BootVidName);
+                // PeLdrFreeDataTableEntry(*KernelDTE);
+                // MmFreeMemory(KernelBase);
+                // return FALSE;
+            }
+        }
+    }
+#endif
+
     /* Load all referenced DLLs for Kernel, HAL and Kernel Debugger Transport DLL */
     Success = PeLdrScanImportDescriptorTable(&LoaderBlock->LoadOrderListHead, DirPath, *KernelDTE);
     if (!Success)
@@ -908,11 +943,25 @@ LoadWindowsCore(IN USHORT OperatingSystemVersion,
             goto Quit;
         }
     }
+    if (BootVidDTE)
+    {
+        Success = PeLdrScanImportDescriptorTable(&LoaderBlock->LoadOrderListHead, DirPath, BootVidDTE);
+        if (!Success)
+        {
+            UiMessageBox("Could not load %s", BootVidName);
+            goto Quit;
+        }
+    }
 
 Quit:
     if (!Success)
     {
         /* Cleanup and bail out */
+        if (BootVidDTE)
+            PeLdrFreeDataTableEntry(BootVidDTE);
+        if (BootVidBase) // Optional
+            MmFreeMemory(BootVidBase);
+
         if (KdDllDTE)
             PeLdrFreeDataTableEntry(KdDllDTE);
         if (KdDllBase) // Optional
