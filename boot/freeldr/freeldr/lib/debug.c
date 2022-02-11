@@ -25,7 +25,6 @@
 // #define DEBUG_ALL
 // #define DEBUG_WARN
 // #define DEBUG_ERR
-// #define DEBUG_INIFILE
 // #define DEBUG_REACTOS
 // #define DEBUG_CUSTOM
 #define DEBUG_NONE
@@ -63,23 +62,20 @@ VOID DebugInit(IN ULONG_PTR FrLdrSectionId)
     /* Always reset the debugging channels */
 
 #if defined (DEBUG_ALL)
-    memset(DbgChannels, MAX_LEVEL, DBG_CHANNELS_COUNT);
+    memset(DbgChannels, MAX_LEVEL, sizeof(DbgChannels));
 #elif defined (DEBUG_WARN)
-    memset(DbgChannels, WARN_LEVEL|FIXME_LEVEL|ERR_LEVEL, DBG_CHANNELS_COUNT);
+    memset(DbgChannels, WARN_LEVEL|FIXME_LEVEL|ERR_LEVEL, sizeof(DbgChannels));
 #elif defined (DEBUG_ERR)
-    memset(DbgChannels, ERR_LEVEL, DBG_CHANNELS_COUNT);
+    memset(DbgChannels, ERR_LEVEL, sizeof(DbgChannels));
 #else
-    memset(DbgChannels, 0, DBG_CHANNELS_COUNT);
+    memset(DbgChannels, 0, sizeof(DbgChannels));
 #endif
 
-#if defined (DEBUG_INIFILE)
-    DbgChannels[DPRINT_INIFILE] = MAX_LEVEL;
-#elif defined (DEBUG_REACTOS)
-    DbgChannels[DPRINT_REACTOS] = MAX_LEVEL;
+#if defined (DEBUG_REACTOS)
+    DbgChannels[DPRINT_WINDOWS] = MAX_LEVEL;
     DbgChannels[DPRINT_REGISTRY] = MAX_LEVEL;
 #elif defined (DEBUG_CUSTOM)
     DbgChannels[DPRINT_WARNING] = MAX_LEVEL;
-    DbgChannels[DPRINT_WINDOWS] = MAX_LEVEL;
 #endif
 
     /* Check for pre- or main initialization phase */
@@ -196,6 +192,12 @@ Done:
     }
 }
 
+VOID
+DebugDisableScreenPort(VOID)
+{
+    DebugPort &= ~SCREEN;
+}
+
 VOID DebugPrintChar(UCHAR Character)
 {
     if (Character == '\n')
@@ -219,16 +221,25 @@ VOID DebugPrintChar(UCHAR Character)
 }
 
 ULONG
-DbgPrint(const char *Format, ...)
+vDbgPrintEx(
+    _In_ ULONG Mask,
+    _In_ ULONG Level,
+    _In_ PCCH Format,
+    _In_ va_list ap)
 {
-    va_list ap;
-    int Length;
-    char* ptr;
+    PCCH ptr;
+    SIZE_T Length;
     CHAR Buffer[512];
 
-    va_start(ap, Format);
+    /* Mask out unwanted debug messages */
+    if (!(DbgChannels[Mask] & Level) && !(Level & DBG_DEFAULT_LEVELS))
+    {
+        /* This message is masked */
+        return STATUS_SUCCESS;
+    }
+
+    /* Do the printf */
     Length = _vsnprintf(Buffer, sizeof(Buffer), Format, ap);
-    va_end(ap);
 
     /* Check if we went past the buffer */
     if (Length == -1)
@@ -244,15 +255,54 @@ DbgPrint(const char *Format, ...)
     while (Length--)
         DebugPrintChar(*ptr++);
 
-    return 0;
+    return STATUS_SUCCESS;
+}
+
+ULONG
+__cdecl
+DbgPrintEx(
+    _In_ ULONG Mask,
+    _In_ ULONG Level,
+    _In_ PCCH Format,
+    ...)
+{
+    ULONG Status;
+    va_list ap;
+
+    va_start(ap, Format);
+    Status = vDbgPrintEx(Mask, Level, Format, ap);
+    va_end(ap);
+
+    return Status;
+}
+
+ULONG
+__cdecl
+DbgPrint(
+    _In_ PCCH Format,
+    ...)
+{
+    ULONG Status;
+    va_list ap;
+
+    va_start(ap, Format);
+    Status = vDbgPrintEx(Mask, Level, Format, ap);
+    va_end(ap);
+
+    return Status;
 }
 
 VOID
-DbgPrint2(ULONG Mask, ULONG Level, const char *File, ULONG Line, char *Format, ...)
+__cdecl
+DbgPrint2(
+    _In_ ULONG Mask,
+    _In_ ULONG Level,
+    const char *File,
+    ULONG Line,
+    _In_ PCCH Format,
+    ...)
 {
     va_list ap;
-    char Buffer[2096];
-    char *ptr = Buffer;
 
     /* Mask out unwanted debug messages */
     if (!(DbgChannels[Mask] & Level) && !(Level & DBG_DEFAULT_LEVELS))
@@ -263,35 +313,32 @@ DbgPrint2(ULONG Mask, ULONG Level, const char *File, ULONG Line, char *Format, .
     /* Print the header if we have started a new line */
     if (DebugStartOfLine)
     {
-        DbgPrint("(%s:%lu) ", File, Line);
+        PCSTR pszLevel = "";
 
         switch (Level)
         {
             case ERR_LEVEL:
-                DbgPrint("err: ");
+                pszLevel = "err: ";
                 break;
             case FIXME_LEVEL:
-                DbgPrint("fixme: ");
+                pszLevel = "fixme: ";
                 break;
             case WARN_LEVEL:
-                DbgPrint("warn: ");
+                pszLevel = "warn: ";
                 break;
             case TRACE_LEVEL:
-                DbgPrint("trace: ");
+                pszLevel = "trace: ";
                 break;
         }
+
+        DbgPrintEx(Mask, Level, "(%s:%lu) %s", File, Line, pszLevel);
 
         DebugStartOfLine = FALSE;
     }
 
     va_start(ap, Format);
-    vsprintf(Buffer, Format, ap);
+    vDbgPrintEx(Mask, Level, Format);
     va_end(ap);
-
-    while (*ptr)
-    {
-        DebugPrintChar(*ptr++);
-    }
 }
 
 VOID
@@ -327,12 +374,6 @@ DebugDumpBuffer(ULONG Mask, PVOID Buffer, ULONG Length)
     }
 }
 
-VOID
-DebugDisableScreenPort(VOID)
-{
-    DebugPort &= ~SCREEN;
-}
-
 static BOOLEAN
 DbgAddDebugChannel(CHAR* channel, CHAR* level, CHAR op)
 {
@@ -354,24 +395,25 @@ DbgAddDebugChannel(CHAR* channel, CHAR* level, CHAR op)
     else
         return FALSE;
 
-         if (strcmp(channel, "memory"    ) == 0) iChannel = DPRINT_MEMORY;
+/* Not present: DPRINT_NONE, DPRINT_WARNING */
+         if (strcmp(channel, "freeldr"   ) == 0) iChannel = DPRINT_FREELDR;
+    else if (strcmp(channel, "memory"    ) == 0) iChannel = DPRINT_MEMORY;
+    else if (strcmp(channel, "heap"      ) == 0) iChannel = DPRINT_HEAP;
+    else if (strcmp(channel, "scsiport"  ) == 0) iChannel = DPRINT_SCSIPORT;
+    else if (strcmp(channel, "disk"      ) == 0) iChannel = DPRINT_DISK;
+    else if (strcmp(channel, "cache"     ) == 0) iChannel = DPRINT_CACHE;
     else if (strcmp(channel, "filesystem") == 0) iChannel = DPRINT_FILESYSTEM;
     else if (strcmp(channel, "inifile"   ) == 0) iChannel = DPRINT_INIFILE;
     else if (strcmp(channel, "ui"        ) == 0) iChannel = DPRINT_UI;
-    else if (strcmp(channel, "disk"      ) == 0) iChannel = DPRINT_DISK;
-    else if (strcmp(channel, "cache"     ) == 0) iChannel = DPRINT_CACHE;
-    else if (strcmp(channel, "registry"  ) == 0) iChannel = DPRINT_REGISTRY;
     else if (strcmp(channel, "linux"     ) == 0) iChannel = DPRINT_LINUX;
     else if (strcmp(channel, "hwdetect"  ) == 0) iChannel = DPRINT_HWDETECT;
+    else if (strcmp(channel, "registry"  ) == 0) iChannel = DPRINT_REGISTRY;
     else if (strcmp(channel, "windows"   ) == 0) iChannel = DPRINT_WINDOWS;
     else if (strcmp(channel, "peloader"  ) == 0) iChannel = DPRINT_PELOADER;
-    else if (strcmp(channel, "scsiport"  ) == 0) iChannel = DPRINT_SCSIPORT;
-    else if (strcmp(channel, "heap"      ) == 0) iChannel = DPRINT_HEAP;
     else if (strcmp(channel, "all"       ) == 0)
     {
-        int i;
-
-        for (i = 0; i < DBG_CHANNELS_COUNT; i++)
+        USHORT i;
+        for (i = 0; i < _countof(DbgChannels); i++)
         {
             if (op == '+')
                 DbgChannels[i] |= iLevel;
@@ -424,42 +466,15 @@ DbgParseDebugChannels(PCHAR Value)
 #else
 
 ULONG
-DbgPrint(PCCH Format, ...)
+__cdecl
+DbgPrint(
+    _In_ PCCH Format,
+    ...)
 {
-    return 0;
+    return STATUS_SUCCESS;
 }
 
 #endif // DBG
-
-ULONG
-MsgBoxPrint(const char *Format, ...)
-{
-    va_list ap;
-    CHAR Buffer[512];
-    ULONG Length;
-
-    va_start(ap, Format);
-
-    /* Construct a string */
-    Length = _vsnprintf(Buffer, 512, Format, ap);
-
-    /* Check if we went past the buffer */
-    if (Length == MAXULONG)
-    {
-        /* Terminate it if we went over-board */
-        Buffer[sizeof(Buffer) - 1] = '\n';
-
-        /* Put maximum */
-        Length = sizeof(Buffer);
-    }
-
-    /* Show it as a message box */
-    UiMessageBox(Buffer);
-
-    /* Cleanup and exit */
-    va_end(ap);
-    return 0;
-}
 
 DECLSPEC_NORETURN
 VOID

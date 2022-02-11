@@ -361,13 +361,28 @@ VOID
 UiMessageBox(
     _In_ PCSTR Format, ...)
 {
-    CHAR Buffer[256];
     va_list ap;
+    CHAR Buffer[256]; // 512
+    // SIZE_T Length;
 
+    /* Construct a string */
     va_start(ap, Format);
-    vsnprintf(Buffer, sizeof(Buffer) - sizeof(CHAR), Format, ap);
-    UiVtbl.MessageBox(Buffer);
+    /* Length = */ vsnprintf(Buffer, sizeof(Buffer) - sizeof(CHAR), Format, ap);
     va_end(ap);
+
+#if 0
+    /* Check if we went past the buffer */
+    if (Length == MAXULONG)
+    {
+        /* Terminate it if we went over-board */
+        Buffer[sizeof(Buffer) - 1] = '\n';
+
+        /* Put maximum */
+        Length = sizeof(Buffer);
+    }
+#endif
+
+    UiVtbl.MessageBox(Buffer);
 }
 
 VOID

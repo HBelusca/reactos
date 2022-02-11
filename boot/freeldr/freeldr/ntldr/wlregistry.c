@@ -539,7 +539,7 @@ WinLdrScanRegistry(IN OUT PLIST_ENTRY BootDriverListHead,
                     &hOrderKey);
     if (rc != ERROR_SUCCESS)
     {
-        TRACE_CH(REACTOS, "Failed to open the 'GroupOrderList' key (rc %d)\n", (int)rc);
+        TRACE("Failed to open the 'GroupOrderList' key (rc %d)\n", (int)rc);
         return;
     }
 
@@ -549,7 +549,7 @@ WinLdrScanRegistry(IN OUT PLIST_ENTRY BootDriverListHead,
                     &hServiceKey);
     if (rc != ERROR_SUCCESS)
     {
-        TRACE_CH(REACTOS, "Failed to open the 'Services' key (rc %d)\n", (int)rc);
+        TRACE("Failed to open the 'Services' key (rc %d)\n", (int)rc);
         RegCloseKey(hOrderKey);
         return;
     }
@@ -560,7 +560,7 @@ WinLdrScanRegistry(IN OUT PLIST_ENTRY BootDriverListHead,
                     &hGroupKey);
     if (rc != ERROR_SUCCESS)
     {
-        TRACE_CH(REACTOS, "Failed to open the 'ServiceGroupOrder' key (rc %d)\n", (int)rc);
+        TRACE("Failed to open the 'ServiceGroupOrder' key (rc %d)\n", (int)rc);
         goto Quit;
     }
 
@@ -569,7 +569,7 @@ WinLdrScanRegistry(IN OUT PLIST_ENTRY BootDriverListHead,
     GroupNameBuffer = FrLdrHeapAlloc(BufferSize, TAG_WLDR_NAME);
     if (!GroupNameBuffer)
     {
-        TRACE_CH(REACTOS, "Failed to allocate buffer\n");
+        TRACE("Failed to allocate buffer\n");
         RegCloseKey(hGroupKey);
         goto Quit;
     }
@@ -578,11 +578,11 @@ WinLdrScanRegistry(IN OUT PLIST_ENTRY BootDriverListHead,
 
     if (rc != ERROR_SUCCESS)
     {
-        TRACE_CH(REACTOS, "Failed to query the 'List' value (rc %d)\n", (int)rc);
+        TRACE("Failed to query the 'List' value (rc %d)\n", (int)rc);
         goto Quit;
     }
-    TRACE_CH(REACTOS, "BufferSize: %d\n", (int)BufferSize);
-    TRACE_CH(REACTOS, "GroupNameBuffer: '%S'\n", GroupNameBuffer);
+    TRACE("BufferSize: %d\n", (int)BufferSize);
+    TRACE("GroupNameBuffer: '%S'\n", GroupNameBuffer);
 
     /* Loop through each group */
     GroupName = GroupNameBuffer;
@@ -610,24 +610,24 @@ WinLdrScanRegistry(IN OUT PLIST_ENTRY BootDriverListHead,
                     break;
                 if (rc != ERROR_SUCCESS)
                     goto Quit;
-                //TRACE_CH(REACTOS, "Service %d: '%S'\n", (int)Index, ServiceName);
+                //TRACE("Service %d: '%S'\n", (int)Index, ServiceName);
 
                 /* Read the Start Value */
                 ValueSize = sizeof(ULONG);
                 rc = RegQueryValue(hDriverKey, L"Start", &ValueType, (PUCHAR)&StartValue, &ValueSize);
                 if (rc != ERROR_SUCCESS) StartValue = (ULONG)-1;
-                //TRACE_CH(REACTOS, "  Start: %x\n", (int)StartValue);
+                //TRACE("  Start: %x\n", (int)StartValue);
 
                 /* Read the Tag */
                 ValueSize = sizeof(ULONG);
                 rc = RegQueryValue(hDriverKey, L"Tag", &ValueType, (PUCHAR)&TagValue, &ValueSize);
                 if (rc != ERROR_SUCCESS) TagValue = (ULONG)-1;
-                //TRACE_CH(REACTOS, "  Tag:   %x\n", (int)TagValue);
+                //TRACE("  Tag:   %x\n", (int)TagValue);
 
                 /* Read the driver's group */
                 DriverGroupSize = sizeof(DriverGroup);
                 rc = RegQueryValue(hDriverKey, L"Group", NULL, (PUCHAR)DriverGroup, &DriverGroupSize);
-                //TRACE_CH(REACTOS, "  Group: '%S'\n", DriverGroup);
+                //TRACE("  Group: '%S'\n", DriverGroup);
 
                 /* Make sure it should be started */
                 if ((StartValue == 0) &&
@@ -641,7 +641,7 @@ WinLdrScanRegistry(IN OUT PLIST_ENTRY BootDriverListHead,
                     /* Write the whole path if it succeeded, else prepare to fail */
                     if (rc != ERROR_SUCCESS)
                     {
-                        TRACE_CH(REACTOS, "ImagePath: not found\n");
+                        TRACE("ImagePath: not found\n");
                         TempImagePath[0] = 0;
                         RtlStringCbPrintfA(ImagePath, sizeof(ImagePath), "%s\\system32\\drivers\\%S.sys", SystemRoot, ServiceName);
                     }
@@ -652,7 +652,7 @@ WinLdrScanRegistry(IN OUT PLIST_ENTRY BootDriverListHead,
                     else
                     {
                         RtlStringCbPrintfA(ImagePath, sizeof(ImagePath), "%S", TempImagePath);
-                        TRACE_CH(REACTOS, "ImagePath: '%s'\n", ImagePath);
+                        TRACE("ImagePath: '%s'\n", ImagePath);
                     }
 
                     TRACE("Adding boot driver: '%s'\n", ImagePath);
@@ -680,7 +680,7 @@ WinLdrScanRegistry(IN OUT PLIST_ENTRY BootDriverListHead,
             ValueSize = sizeof(ServiceName);
             rc = RegEnumKey(hServiceKey, Index, ServiceName, &ValueSize, &hDriverKey);
 
-            //TRACE_CH(REACTOS, "RegEnumKey(): rc %d\n", (int)rc);
+            //TRACE("RegEnumKey(): rc %d\n", (int)rc);
             if (rc == ERROR_NO_MORE_ITEMS)
                 break;
             if (rc != ERROR_SUCCESS)
@@ -691,18 +691,18 @@ WinLdrScanRegistry(IN OUT PLIST_ENTRY BootDriverListHead,
             ValueSize = sizeof(ULONG);
             rc = RegQueryValue(hDriverKey, L"Start", &ValueType, (PUCHAR)&StartValue, &ValueSize);
             if (rc != ERROR_SUCCESS) StartValue = (ULONG)-1;
-            //TRACE_CH(REACTOS, "  Start: %x\n", (int)StartValue);
+            //TRACE("  Start: %x\n", (int)StartValue);
 
             /* Read the Tag */
             ValueSize = sizeof(ULONG);
             rc = RegQueryValue(hDriverKey, L"Tag", &ValueType, (PUCHAR)&TagValue, &ValueSize);
             if (rc != ERROR_SUCCESS) TagValue = (ULONG)-1;
-            //TRACE_CH(REACTOS, "  Tag:   %x\n", (int)TagValue);
+            //TRACE("  Tag:   %x\n", (int)TagValue);
 
             /* Read the driver's group */
             DriverGroupSize = sizeof(DriverGroup);
             rc = RegQueryValue(hDriverKey, L"Group", NULL, (PUCHAR)DriverGroup, &DriverGroupSize);
-            //TRACE_CH(REACTOS, "  Group: '%S'\n", DriverGroup);
+            //TRACE("  Group: '%S'\n", DriverGroup);
 
             for (TagIndex = 1; TagIndex <= OrderList[0]; TagIndex++)
             {
@@ -717,7 +717,7 @@ WinLdrScanRegistry(IN OUT PLIST_ENTRY BootDriverListHead,
                 rc = RegQueryValue(hDriverKey, L"ImagePath", NULL, (PUCHAR)TempImagePath, &ValueSize);
                 if (rc != ERROR_SUCCESS)
                 {
-                    TRACE_CH(REACTOS, "ImagePath: not found\n");
+                    TRACE("ImagePath: not found\n");
                     TempImagePath[0] = 0;
                     RtlStringCbPrintfA(ImagePath, sizeof(ImagePath), "%ssystem32\\drivers\\%S.sys", SystemRoot, ServiceName);
                 }
@@ -728,7 +728,7 @@ WinLdrScanRegistry(IN OUT PLIST_ENTRY BootDriverListHead,
                 else
                 {
                     RtlStringCbPrintfA(ImagePath, sizeof(ImagePath), "%S", TempImagePath);
-                    TRACE_CH(REACTOS, "ImagePath: '%s'\n", ImagePath);
+                    TRACE("ImagePath: '%s'\n", ImagePath);
                 }
                 TRACE("  Adding boot driver: '%s'\n", ImagePath);
 

@@ -20,39 +20,80 @@
 #ifndef __DEBUG_H
 #define __DEBUG_H
 
-#define DPRINT_NONE         0   // No debug print
-#define DPRINT_WARNING      1   // debugger messages and other misc stuff
+// Note: the old DPRINT_NONE in a sense served to get an entry for a
+// "no-component" component, much like the separate Kd_WIN2000_Mask in KD64...
+// Called here... "Simple debug print"
+
+// Separately, Vista+ has this "default" component corresponding to
+// Kd_DEFAULT_Mask for any DbgPrint that will use a "valid" component ID
+// yet being not currently present in the mask table...
+
+#define DPRINT_WARNING      0   // debugger messages and other misc stuff
+
+// #define DPRINT_REACTOS      1   // ReactOS messages
+// TODO: Should replace one of those above.
+#define DPRINT_FREELDR      1   // General FreeLDR messages
+
 #define DPRINT_MEMORY       2   // memory management messages
-#define DPRINT_FILESYSTEM   3   // file system messages
-#define DPRINT_INIFILE      4   // .ini file messages
-#define DPRINT_UI           5   // user interface messages
-#define DPRINT_DISK         6   // disk messages
-#define DPRINT_CACHE        7   // cache messages
-#define DPRINT_REGISTRY     8   // registry messages
-#define DPRINT_REACTOS      9   // ReactOS messages
+#define DPRINT_HEAP         3   // messages in a bottle
+#define DPRINT_SCSIPORT     4   // messages from SCSI miniport
+#define DPRINT_DISK         5   // disk messages
+#define DPRINT_CACHE        6   // cache messages
+#define DPRINT_FILESYSTEM   7   // file system messages
+#define DPRINT_INIFILE      8   // .ini file messages
+#define DPRINT_UI           9   // user interface messages
 #define DPRINT_LINUX        10  // Linux messages
 #define DPRINT_HWDETECT     11  // hardware detection messages
-#define DPRINT_WINDOWS      12  // messages from Windows loader
-#define DPRINT_PELOADER     13  // messages from PE images loader
-#define DPRINT_SCSIPORT     14  // messages from SCSI miniport
-#define DPRINT_HEAP         15  // messages in a bottle
-#define DBG_CHANNELS_COUNT  16
+#define DPRINT_REGISTRY     12  // registry messages
+#define DPRINT_WINDOWS      13  // messages from Windows loader // TODO: Rename to NTLDR
+#define DPRINT_PELOADER     14  // messages from PE images loader
+#define DBG_CHANNELS_COUNT  15
 
 #if DBG && !defined(_M_ARM)
 
-    VOID    DebugInit(IN ULONG_PTR FrLdrSectionId);
-    ULONG   DbgPrint(const char *Format, ...);
-    VOID    DbgPrint2(ULONG Mask, ULONG Level, const char *File, ULONG Line, char *Format, ...);
-    VOID    DebugDumpBuffer(ULONG Mask, PVOID Buffer, ULONG Length);
-    VOID    DebugDisableScreenPort(VOID);
-    VOID    DbgParseDebugChannels(PCHAR Value);
+    VOID DebugInit(IN ULONG_PTR FrLdrSectionId);
+    VOID DebugDisableScreenPort(VOID);
+
+    ULONG
+    vDbgPrintEx(
+        _In_ ULONG Mask,
+        _In_ ULONG Level,
+        _In_ PCCH Format,
+        _In_ va_list ap);
+
+    ULONG
+    __cdecl
+    DbgPrintEx(
+        _In_ ULONG Mask,
+        _In_ ULONG Level,
+        _In_ PCCH Format,
+        ...);
+
+    ULONG
+    __cdecl
+    DbgPrint(
+        _In_ PCCH Format,
+        ...);
+
+    VOID
+    __cdecl
+    DbgPrint2(
+        _In_ ULONG Mask,
+        _In_ ULONG Level,
+        const char *File,
+        ULONG Line,
+        _In_ PCCH Format,
+        ...);
+
+    VOID DebugDumpBuffer(ULONG Mask, PVOID Buffer, ULONG Length);
+    VOID DbgParseDebugChannels(PCHAR Value);
 
     #define ERR_LEVEL      0x1
     #define FIXME_LEVEL    0x2
     #define WARN_LEVEL     0x4
     #define TRACE_LEVEL    0x8
 
-    #define MAX_LEVEL ERR_LEVEL | FIXME_LEVEL | WARN_LEVEL | TRACE_LEVEL
+    #define MAX_LEVEL (ERR_LEVEL | FIXME_LEVEL | WARN_LEVEL | TRACE_LEVEL)
 
     #define DBG_DEFAULT_CHANNEL(ch) static int DbgDefaultChannel = DPRINT_##ch
 
@@ -69,7 +110,7 @@
     #define UNIMPLEMENTED DbgPrint("(%s:%d) WARNING: %s is UNIMPLEMENTED!\n", __FILE__, __LINE__, __FUNCTION__);
 
     #define BugCheck(fmt, ...)              do { DbgPrint("(%s:%d) Fatal Error in %s: " fmt, __FILE__, __LINE__, __FUNCTION__, ##__VA_ARGS__); for (;;); } while (0)
-    #define DbgDumpBuffer(mask, buf, len)    DebugDumpBuffer(mask, buf, len)
+    #define DbgDumpBuffer(mask, buf, len)   DebugDumpBuffer(mask, buf, len)
 
 #ifdef __i386__
 
@@ -83,18 +124,18 @@
     // You may have as many BREAKPOINT()'s as you like but you may only
     // have up to four of any of the others.
 #define    BREAKPOINT()                __asm__ ("int $3");
-void    INSTRUCTION_BREAKPOINT1(unsigned long addr);
-void    MEMORY_READWRITE_BREAKPOINT1(unsigned long addr);
-void    MEMORY_WRITE_BREAKPOINT1(unsigned long addr);
-void    INSTRUCTION_BREAKPOINT2(unsigned long addr);
-void    MEMORY_READWRITE_BREAKPOINT2(unsigned long addr);
-void    MEMORY_WRITE_BREAKPOINT2(unsigned long addr);
-void    INSTRUCTION_BREAKPOINT3(unsigned long addr);
-void    MEMORY_READWRITE_BREAKPOINT3(unsigned long addr);
-void    MEMORY_WRITE_BREAKPOINT3(unsigned long addr);
-void    INSTRUCTION_BREAKPOINT4(unsigned long addr);
-void    MEMORY_READWRITE_BREAKPOINT4(unsigned long addr);
-void    MEMORY_WRITE_BREAKPOINT4(unsigned long addr);
+void INSTRUCTION_BREAKPOINT1(unsigned long addr);
+void MEMORY_READWRITE_BREAKPOINT1(unsigned long addr);
+void MEMORY_WRITE_BREAKPOINT1(unsigned long addr);
+void INSTRUCTION_BREAKPOINT2(unsigned long addr);
+void MEMORY_READWRITE_BREAKPOINT2(unsigned long addr);
+void MEMORY_WRITE_BREAKPOINT2(unsigned long addr);
+void INSTRUCTION_BREAKPOINT3(unsigned long addr);
+void MEMORY_READWRITE_BREAKPOINT3(unsigned long addr);
+void MEMORY_WRITE_BREAKPOINT3(unsigned long addr);
+void INSTRUCTION_BREAKPOINT4(unsigned long addr);
+void MEMORY_READWRITE_BREAKPOINT4(unsigned long addr);
+void MEMORY_WRITE_BREAKPOINT4(unsigned long addr);
 
 #endif // defined __i386__
 
@@ -115,9 +156,10 @@ void    MEMORY_WRITE_BREAKPOINT4(unsigned long addr);
     #define UNIMPLEMENTED
 
     #define DebugInit(FrLdrSectionId)
+    #define DebugDisableScreenPort()
+
     #define BugCheck(fmt, ...)
     #define DbgDumpBuffer(mask, buf, len)
-    #define DebugDisableScreenPort()
     #define DbgParseDebugChannels(val)
 
 #endif // DBG
