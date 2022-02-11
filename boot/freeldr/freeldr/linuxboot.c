@@ -99,12 +99,21 @@ LoadAndBootLinux(
     FILEINFORMATION FileInfo;
     CHAR ArcPath[MAX_PATH];
 
-    Description = GetArgumentValue(Argc, Argv, "LoadIdentifier");
-    if (Description && *Description)
-        RtlStringCbPrintfA(LinuxBootDescription, sizeof(LinuxBootDescription), "Loading %s...", Description);
-    else
-        strcpy(LinuxBootDescription, "Loading Linux...");
+    /* Retrieve the (mandatory) boot type */
+    ArgValue = GetArgumentValue(Argc, Argv, "BootType");
+    if (!ArgValue || !*ArgValue)
+        return EINVAL;
+    if (_stricmp(ArgValue, "Linux") != 0)
+        return EINVAL;
 
+    /* Construct a progress description from LoadIdentifier */
+    Description = GetArgumentValue(Argc, Argv, "LoadIdentifier");
+    if (!Description || !*Description)
+        Description = "Linux";
+    RtlStringCbPrintfA(LinuxBootDescription, sizeof(LinuxBootDescription),
+                       "Loading %s...", Description);
+
+    /* Let the user know we started loading */
     UiDrawBackdrop();
     UiDrawStatusText(LinuxBootDescription);
     UiDrawProgressBarCenter(LinuxBootDescription);

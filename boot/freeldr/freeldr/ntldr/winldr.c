@@ -41,6 +41,8 @@ BOOLEAN PaeModeOn = FALSE;
 #endif
 BOOLEAN NoExecuteEnabled = FALSE;
 
+PCSTR LoaderPrompt = NULL;
+
 /* Debugging helpers */
 #if DBG
 VOID DumpMemoryAllocMap(VOID);
@@ -524,11 +526,18 @@ LoadModule(
 {
     BOOLEAN Success;
     CHAR FullFileName[MAX_PATH];
-    CHAR ProgressString[256];
     PVOID BaseAddress;
 
-    RtlStringCbPrintfA(ProgressString, sizeof(ProgressString), "Loading %s...", File);
-    UiUpdateProgressBar(Percentage, ProgressString);
+    if (!LoaderPrompt)
+    {
+        CHAR ProgressString[256];
+        RtlStringCbPrintfA(ProgressString, sizeof(ProgressString), "Loading %s...", File);
+        UiUpdateProgressBar(Percentage, ProgressString);
+    }
+    else
+    {
+        UiUpdateProgressBar(Percentage, NULL);
+    }
 
     RtlStringCbCopyA(FullFileName, sizeof(FullFileName), Path);
     RtlStringCbCatA(FullFileName, sizeof(FullFileName), File);
@@ -1047,6 +1056,10 @@ LoadAndBootWindows(
 
     BOOLEAN IsNTSetup;
     HINF InfHandle = NULL;
+    INFCONTEXT InfContext;
+
+    PCSTR Product;
+    CHAR ProgressText[256];
 
     USHORT OperatingSystemVersion;
     PLOADER_PARAMETER_BLOCK LoaderBlock;
@@ -1103,18 +1116,31 @@ LoadAndBootWindows(
         return EINVAL;
     }
 
+    // TODO: Determine later whether it's "ReactOS", "NT" and which version...
+    Product = (IsNTSetup ? "ReactOS Setup" : "NT");
+#if 0
+    ArgValue = GetArgumentValue(Argc, Argv, "LoadIdentifier");
+    if (ArgValue && *ArgValue) Product = ArgValue;
+#endif
+
+    /*
+     * Retrieve the optional loader prompt string.
+     * In Setup Mode, it will override the "LoaderPrompt" option
+     * specified in TXTSETUP.SIF, otherwise retrieved below.
+     */
+    LoaderPrompt = GetArgumentValue(Argc, Argv, "LoaderPrompt");
+    if (!LoaderPrompt)
+    {
+        /* Construct a progress description from the Product */
+        RtlStringCbPrintfA(ProgressText, sizeof(ProgressText),
+                           "Loading %s...", Product);
+        /* Don't reset LoaderPrompt so as to keep default behaviour later on */
+    }
+
     /* Let the user know we started loading */
     UiDrawBackdrop();
-    if (IsNTSetup)
-    {
-        UiDrawStatusText("Setup is loading...");
-        UiDrawProgressBarCenter("Loading ReactOS Setup...");
-    }
-    else
-    {
-        UiDrawStatusText("Loading...");
-        UiDrawProgressBarCenter("Loading NT...");
-    }
+    UiDrawStatusText(IsNTSetup ? "Setup is loading..." : "Loading...");
+    UiDrawProgressBarCenter(LoaderPrompt ? LoaderPrompt : ProgressText);
 
     /*
      * Retrieve the system path, i.e. the "BootPath" for the operating system.
@@ -1192,6 +1218,24 @@ LoadAndBootWindows(
             return Status;
         }
         TRACE("Configuration source: '%s'\n", FilePath);
+
+        /*
+         * If we did not have any loader prompt set so far,
+         * retrieve it from the configuration source (TXTSETUP.SIF).
+         * NOTE: The LoaderPrompt pointer becomes invalid as soon
+         * as the INF file gets closed!
+         */
+        if (!LoaderPrompt &&
+            InfFindFirstLine(InfHandle, "SetupData", "LoaderPrompt", &InfContext))
+        {
+            PCSTR ptr;
+            if (InfGetData(&InfContext, NULL, &ptr))
+            {
+                ASSERT(ptr);
+                LoaderPrompt = ptr;
+                UiSetProgressBarText(LoaderPrompt);
+            }
+        }
     }
 
     /* Post-process the boot options */
@@ -1235,8 +1279,10 @@ LoadAndBootWindows(
 
     /* Load the regular (or the "setupreg.hiv" setup) system hive */
     UiUpdateProgressBar(15,
-                        IsNTSetup ? "Loading setup system hive..."
-                                  : "Loading system hive...");
+                        !LoaderPrompt ?
+                        (IsNTSetup ? "Loading setup system hive..."
+                                   : "Loading system hive...")
+                        : NULL);
     Success = WinLdrInitSystemHive(LoaderBlock, BootPath, IsNTSetup);
     TRACE("%s hive %s\n", (IsNTSetup ? "Setup SYSTEM" : "SYSTEM"),
           (Success ? "loaded" : "not loaded"));
@@ -1258,11 +1304,8 @@ LoadAndBootWindows(
      * Finish loading
      */
 
-    if (IsNTSetup)
-        UiDrawStatusText("The Setup program is starting...");
-
     /* Detect hardware */
-    UiUpdateProgressBar(20, "Detecting hardware...");
+    UiUpdateProgressBar(20, !LoaderPrompt ? "Detecting hardware..." : NULL);
     LoaderBlock->ConfigurationRoot = MachHwDetect();
 
 #ifdef _M_IX86
@@ -1327,10 +1370,6 @@ LoadAndBootWindows(
     /* Cleanup INI file */
     IniCleanup();
 
-    /* Close the INF file */
-    if (IsNTSetup)
-        InfCloseFile(InfHandle);
-
 /****
  **** WE HAVE NOW REACHED THE POINT OF NO RETURN !!
  ****/
@@ -1338,7 +1377,7 @@ LoadAndBootWindows(
     UiSetProgressBarSubset(40, 90); // NTOS goes from 25 to 75%
 
     /* Load boot drivers */
-    UiSetProgressBarText("Loading boot drivers...");
+    if (!LoaderPrompt) UiSetProgressBarText("Loading boot drivers...");
     Success = WinLdrLoadBootDrivers(LoaderBlock, BootPath);
     TRACE("Boot drivers loading %s\n", Success ? "successful" : "failed");
 
@@ -1354,7 +1393,31 @@ LoadAndBootWindows(
                            BootPath,
                            OperatingSystemVersion);
 
-    UiUpdateProgressBar(100, NULL);
+    /* Let the user know we are starting */
+    if (!LoaderPrompt)
+    {
+        // if (IsNTSetup)
+        // "Setup is starting..."
+        // "Starting ReactOS Setup..."
+        // "The Setup program is starting..."
+        RtlStringCbPrintfA(ProgressText, sizeof(ProgressText),
+                           "Starting %s...", Product);
+        LoaderPrompt = ProgressText;
+    }
+    if (SosEnabled)
+    {
+        printf("\n%s\n", LoaderPrompt);
+        TRACE("\n%s\n", LoaderPrompt);
+    }
+    else
+    {
+        UiDrawStatusText(LoaderPrompt);
+        UiUpdateProgressBar(100, LoaderPrompt);
+    }
+
+    /* Close the INF file */
+    if (IsNTSetup)
+        InfCloseFile(InfHandle);
 
     /* Save entry-point pointer and Loader block VAs */
     KiSystemStartup = (KERNEL_ENTRY_POINT)KernelDTE->EntryPoint;
