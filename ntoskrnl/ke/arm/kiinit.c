@@ -48,7 +48,7 @@ KiInitializeKernel(IN PKPROCESS InitProcess,
                    IN CCHAR Number,
                    IN PLOADER_PARAMETER_BLOCK LoaderBlock)
 {
-    PKIPCR Pcr = (PKIPCR)KeGetPcr();
+    PKPCR Pcr = KeGetPcr();
     ULONG PageDirectory[2];
     ULONG i;
 
@@ -169,14 +169,14 @@ KiInitializeKernel(IN PKPROCESS InitProcess,
     LoaderBlock->Prcb = 0;
 }
 
-//C_ASSERT((PKIPCR)KeGetPcr() == (PKIPCR)0xFFDFF000);
-//C_ASSERT((FIELD_OFFSET(KIPCR, FirstLevelDcacheSize) & 4) == 0);
-//C_ASSERT(sizeof(KIPCR) <= PAGE_SIZE);
+//C_ASSERT(KeGetPcr() == (PKPCR)0xFFDFF000);
+//C_ASSERT((FIELD_OFFSET(KPCR, FirstLevelDcacheSize) & 4) == 0);
+//C_ASSERT(sizeof(KPCR) <= PAGE_SIZE);
 
 VOID
 NTAPI
 KiInitializePcr(IN ULONG ProcessorNumber,
-                IN PKIPCR Pcr,
+                IN PKPCR Pcr,
                 IN PKTHREAD IdleThread,
                 IN PVOID PanicStack,
                 IN PVOID InterruptStack)
@@ -187,7 +187,7 @@ KiInitializePcr(IN ULONG ProcessorNumber,
     Pcr->Prcb.CurrentThread = IdleThread;
 
     /* Set pointers to ourselves */
-    Pcr->Self = (PKPCR)Pcr;
+    Pcr->Self = Pcr;
     Pcr->CurrentPrcb = &Pcr->Prcb;
 
     /* Set the PCR Version */
@@ -333,7 +333,7 @@ KiInitializeSystem(IN PLOADER_PARAMETER_BLOCK LoaderBlock)
     PKTHREAD InitialThread;
     PKPROCESS InitialProcess;
     ARM_CONTROL_REGISTER ControlRegister;
-    PKIPCR Pcr = (PKIPCR)KeGetPcr();
+    PKPCR Pcr = KeGetPcr();
     PKTHREAD Thread;
 
     /* Flush the TLB */

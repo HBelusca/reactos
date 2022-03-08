@@ -282,7 +282,7 @@ CODE_SEG("INIT")
 VOID
 NTAPI
 KiInitializePcr(IN ULONG ProcessorNumber,
-                IN PKIPCR Pcr,
+                IN PKPCR Pcr,
                 IN PKIDTENTRY Idt,
                 IN PKGDTENTRY Gdt,
                 IN PKTSS Tss,
@@ -299,7 +299,7 @@ KiInitializePcr(IN ULONG ProcessorNumber,
     Pcr->PrcbData.CurrentThread = IdleThread;
 
     /* Set pointers to ourselves */
-    Pcr->SelfPcr = (PKPCR)Pcr;
+    Pcr->SelfPcr = Pcr;
     Pcr->Prcb = &Pcr->PrcbData;
 
     /* Set the PCR Version */
@@ -625,7 +625,7 @@ VOID
 FASTCALL
 KiGetMachineBootPointers(IN PKGDTENTRY *Gdt,
                          IN PKIDTENTRY *Idt,
-                         IN PKIPCR *Pcr,
+                         IN PKPCR *Pcr,
                          IN PKTSS *Tss)
 {
     KDESCRIPTOR GdtDescriptor, IdtDescriptor;
@@ -648,9 +648,9 @@ KiGetMachineBootPointers(IN PKGDTENTRY *Gdt,
     PcrSelector = *(PKGDTENTRY)((ULONG_PTR)*Gdt + (Fs & ~RPL_MASK));
 
     /* Get the KPCR itself */
-    *Pcr = (PKIPCR)(ULONG_PTR)(PcrSelector.BaseLow |
-                               PcrSelector.HighWord.Bytes.BaseMid << 16 |
-                               PcrSelector.HighWord.Bytes.BaseHi << 24);
+    *Pcr = (PKPCR)(ULONG_PTR)(PcrSelector.BaseLow |
+                              PcrSelector.HighWord.Bytes.BaseMid << 16 |
+                              PcrSelector.HighWord.Bytes.BaseHi << 24);
 
     /* Get TSS Selector, mask it and get its GDT Entry */
     TssSelector = *(PKGDTENTRY)((ULONG_PTR)*Gdt + (Tr & ~RPL_MASK));
@@ -727,7 +727,7 @@ KiSystemStartup(IN PLOADER_PARAMETER_BLOCK LoaderBlock)
     PKIDTENTRY Idt;
     KIDTENTRY NmiEntry, DoubleFaultEntry;
     PKTSS Tss;
-    PKIPCR Pcr;
+    PKPCR Pcr;
     KIRQL DummyIrql;
 
     /* Boot cycles timestamp */

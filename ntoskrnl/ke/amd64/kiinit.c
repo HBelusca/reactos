@@ -26,7 +26,7 @@ ULONG (*FrLdrDbgPrint)(const char *Format, ...);
 KSPIN_LOCK KiFreezeExecutionLock;
 
 
-KIPCR KiInitialPcr;
+KPCR KiInitialPcr;
 
 /* Boot and double-fault/NMI/DPC stack */
 UCHAR DECLSPEC_ALIGN(16) P0BootStackData[KERNEL_STACK_SIZE] = {0};
@@ -87,7 +87,7 @@ KiInitMachineDependent(VOID)
 
 VOID
 NTAPI
-KiInitializePcr(IN PKIPCR Pcr,
+KiInitializePcr(IN PKPCR Pcr,
                 IN ULONG ProcessorNumber,
                 IN PKTHREAD IdleThread,
                 IN PVOID DpcStack)
@@ -97,10 +97,10 @@ KiInitializePcr(IN PKIPCR Pcr,
     USHORT Tr = 0;
 
     /* Zero out the PCR */
-    RtlZeroMemory(Pcr, sizeof(KIPCR));
+    RtlZeroMemory(Pcr, sizeof(KPCR));
 
     /* Set pointers to ourselves */
-    Pcr->Self = (PKPCR)Pcr;
+    Pcr->Self = Pcr;
     Pcr->CurrentPrcb = &Pcr->Prcb;
 
     /* Set the PCR Version */
@@ -162,7 +162,7 @@ KiInitializePcr(IN PKIPCR Pcr,
 
 VOID
 NTAPI
-KiInitializeCpu(PKIPCR Pcr)
+KiInitializeCpu(PKPCR Pcr)
 {
     ULONG64 Pat;
     ULONG FeatureBits;
@@ -374,7 +374,7 @@ KiSystemStartup(IN PLOADER_PARAMETER_BLOCK LoaderBlock)
     CCHAR Cpu;
     PKTHREAD InitialThread;
     ULONG64 InitialStack;
-    PKIPCR Pcr;
+    PKPCR Pcr;
 
     /* HACK */
     FrLdrDbgPrint = LoaderBlock->u.I386.CommonDataArea;
@@ -397,7 +397,7 @@ KiSystemStartup(IN PLOADER_PARAMETER_BLOCK LoaderBlock)
     }
 
     /* Get Pcr from loader block */
-    Pcr = CONTAINING_RECORD(LoaderBlock->Prcb, KIPCR, Prcb);
+    Pcr = CONTAINING_RECORD(LoaderBlock->Prcb, KPCR, Prcb);
 
     /* Set the PRCB for this Processor */
     KiProcessorBlock[Cpu] = &Pcr->Prcb;
