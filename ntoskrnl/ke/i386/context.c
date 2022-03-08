@@ -21,7 +21,7 @@ NTAPI
 KiSwapProcess(IN PKPROCESS NewProcess,
               IN PKPROCESS OldProcess)
 {
-    PKIPCR Pcr = (PKIPCR)KeGetPcr();
+    PKPCR Pcr = KeGetPcr();
 #ifdef CONFIG_SMP
     LONG SetMember;
 

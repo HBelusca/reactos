@@ -424,7 +424,7 @@ VOID
 NTAPI
 KiGetCacheInformation(VOID)
 {
-    PKIPCR Pcr = (PKIPCR)KeGetPcr();
+    PKPCR Pcr = KeGetPcr();
     CPU_INFO CpuInfo;
     ULONG CacheRequests = 0, i;
     ULONG CurrentRegister;
@@ -1027,7 +1027,7 @@ Ki386EnableXMMIExceptions(IN ULONG_PTR Context)
     PKIDTENTRY IdtEntry;
 
     /* Get the IDT Entry for Interrupt 0x13 */
-    IdtEntry = &((PKIPCR)KeGetPcr())->IDT[0x13];
+    IdtEntry = &KeGetPcr()->IDT[0x13];
 
     /* Set it up */
     IdtEntry->Selector = KGDT_R0_CODE;
@@ -1069,7 +1069,7 @@ KiI386PentiumLockErrataFixup(VOID)
 
     /* Set the new IDT */
     __lidt(&IdtDescriptor.Limit);
-    ((PKIPCR)KeGetPcr())->IDT = NewIdt2;
+    KeGetPcr()->IDT = NewIdt2;
 
     /* Restore interrupts */
     _enable();

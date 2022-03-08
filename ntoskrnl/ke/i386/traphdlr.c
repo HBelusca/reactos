@@ -478,7 +478,7 @@ KiTrap02Handler(VOID)
 
     /* Get the current TSS, thread, and process */
     Tss = KeGetPcr()->TSS;
-    Thread = ((PKIPCR)KeGetPcr())->PrcbData.CurrentThread;
+    Thread = KeGetCurrentThread();
     Process = Thread->ApcState.Process;
 
     /* Save data usually not present in the TSS */
@@ -487,7 +487,7 @@ KiTrap02Handler(VOID)
     Tss->LDT = Process->LdtDescriptor.LimitLow ? KGDT_LDT : 0;
 
     /* Now get the base address of the NMI TSS */
-    TssGdt = &((PKIPCR)KeGetPcr())->GDT[KGDT_NMI_TSS / sizeof(KGDTENTRY)];
+    TssGdt = &KeGetPcr()->GDT[KGDT_NMI_TSS / sizeof(KGDTENTRY)];
     NmiTss = (PKTSS)(ULONG_PTR)(TssGdt->BaseLow |
                                 TssGdt->HighWord.Bytes.BaseMid << 16 |
                                 TssGdt->HighWord.Bytes.BaseHi << 24);
@@ -840,7 +840,7 @@ KiTrap08Handler(VOID)
 
     /* Get the current TSS, thread, and process */
     Tss = KeGetPcr()->TSS;
-    Thread = ((PKIPCR)KeGetPcr())->PrcbData.CurrentThread;
+    Thread = KeGetCurrentThread();
     Process = Thread->ApcState.Process;
 
     /* Save data usually not present in the TSS */
@@ -849,7 +849,7 @@ KiTrap08Handler(VOID)
     Tss->LDT = Process->LdtDescriptor.LimitLow ? KGDT_LDT : 0;
 
     /* Now get the base address of the double-fault TSS */
-    TssGdt = &((PKIPCR)KeGetPcr())->GDT[KGDT_DF_TSS / sizeof(KGDTENTRY)];
+    TssGdt = &KeGetPcr()->GDT[KGDT_DF_TSS / sizeof(KGDTENTRY)];
     DfTss  = (PKTSS)(ULONG_PTR)(TssGdt->BaseLow |
                                 TssGdt->HighWord.Bytes.BaseMid << 16 |
                                 TssGdt->HighWord.Bytes.BaseHi << 24);

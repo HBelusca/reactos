@@ -209,7 +209,7 @@ FASTCALL
 KiSwapContextExit(IN PKTHREAD OldThread,
                   IN PKSWITCHFRAME SwitchFrame)
 {
-    PKIPCR Pcr = (PKIPCR)KeGetPcr();
+    PKPCR Pcr = KeGetPcr();
     PKPROCESS OldProcess, NewProcess;
     PKTHREAD NewThread;
     ARM_TTB_REGISTER TtbRegister;
@@ -262,7 +262,7 @@ FASTCALL
 KiSwapContextEntry(IN PKSWITCHFRAME SwitchFrame,
                    IN ULONG_PTR OldThreadAndApcFlag)
 {
-    PKIPCR Pcr = (PKIPCR)KeGetPcr();
+    PKPCR Pcr = KeGetPcr();
     PKTHREAD OldThread, NewThread;
 
     /* Save APC bypass disable */
@@ -294,7 +294,7 @@ VOID
 NTAPI
 KiDispatchInterrupt(VOID)
 {
-    PKIPCR Pcr = (PKIPCR)KeGetPcr();
+    PKPCR Pcr = KeGetPcr();
     PKPRCB Prcb = &Pcr->Prcb;
     PKTHREAD NewThread, OldThread;
 

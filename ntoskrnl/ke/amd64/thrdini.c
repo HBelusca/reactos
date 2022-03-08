@@ -142,7 +142,7 @@ KiSwapContextResume(
     _In_ PKTHREAD OldThread,
     _In_ PKTHREAD NewThread)
 {
-    PKIPCR Pcr = (PKIPCR)KeGetPcr();
+    PKPCR Pcr = KeGetPcr();
     PKPROCESS OldProcess, NewProcess;
 
     /* Setup ring 0 stack pointer */

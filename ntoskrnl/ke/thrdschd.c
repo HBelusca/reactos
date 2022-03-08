@@ -729,9 +729,9 @@ KiSetAffinityThread(IN PKTHREAD Thread,
 // because on x86 it's FS, and on x64 it's GS (not sure what it is on ARM/PPC).
 //
 #ifdef _M_IX86
-#define KiGetCurrentReadySummary() __readfsdword(FIELD_OFFSET(KIPCR, PrcbData.ReadySummary))
+#define KiGetCurrentReadySummary() __readfsdword(FIELD_OFFSET(KPCR, PrcbData.ReadySummary))
 #elif _M_AMD64
-#define KiGetCurrentReadySummary() __readgsdword(FIELD_OFFSET(KIPCR, Prcb.ReadySummary))
+#define KiGetCurrentReadySummary() __readgsdword(FIELD_OFFSET(KPCR, Prcb.ReadySummary))
 #else
 #define KiGetCurrentReadySummary() KeGetCurrentPrcb()->ReadySummary
 #endif

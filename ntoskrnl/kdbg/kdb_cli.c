@@ -2236,7 +2236,7 @@ KdbpCmdPcr(
     ULONG Argc,
     PCHAR Argv[])
 {
-    PKIPCR Pcr = (PKIPCR)KeGetPcr();
+    PKPCR Pcr = KeGetPcr();
 
     KdbpPrint("Current PCR is at 0x%p.\n", Pcr);
     KdbpPrint("  Tib.ExceptionList:         0x%08x\n"

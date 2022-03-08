@@ -316,7 +316,7 @@ FASTCALL
 KiSwapContextExit(IN PKTHREAD OldThread,
                   IN PKSWITCHFRAME SwitchFrame)
 {
-    PKIPCR Pcr = (PKIPCR)KeGetPcr();
+    PKPCR Pcr = KeGetPcr();
     PKPROCESS OldProcess, NewProcess;
     PKTHREAD NewThread;
 
@@ -352,7 +352,7 @@ KiSwapContextExit(IN PKTHREAD OldThread,
     Ke386SetGs(0);
 
     /* Set the TEB */
-    KiSetTebBase((PKPCR)Pcr, &NewThread->Teb->NtTib);
+    KiSetTebBase(Pcr, &NewThread->Teb->NtTib);
 
     /* Set new TSS fields */
     Pcr->TSS->Esp0 = (ULONG_PTR)NewThread->InitialStack;
@@ -403,7 +403,7 @@ FASTCALL
 KiSwapContextEntry(IN PKSWITCHFRAME SwitchFrame,
                    IN ULONG_PTR OldThreadAndApcFlag)
 {
-    PKIPCR Pcr = (PKIPCR)KeGetPcr();
+    PKPCR Pcr = KeGetPcr();
     PKTHREAD OldThread, NewThread;
     ULONG Cr0, NewCr0;
 
@@ -446,7 +446,7 @@ VOID
 NTAPI
 KiDispatchInterrupt(VOID)
 {
-    PKIPCR Pcr = (PKIPCR)KeGetPcr();
+    PKPCR Pcr = KeGetPcr();
     PKPRCB Prcb = &Pcr->PrcbData;
     PVOID OldHandler;
     PKTHREAD NewThread, OldThread;

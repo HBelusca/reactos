@@ -200,7 +200,7 @@ VOID
 NTAPI
 KiGetCacheInformation(VOID)
 {
-    PKIPCR Pcr = (PKIPCR)KeGetPcr();
+    PKPCR Pcr = KeGetPcr();
     ULONG Vendor;
     ULONG CacheRequests = 0, i;
     ULONG CurrentRegister;

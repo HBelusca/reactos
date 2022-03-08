@@ -114,7 +114,7 @@ KiSwitchKernelStack(PVOID StackBase, PVOID StackLimit)
     PVOID OldStackBase;
     LONG_PTR StackOffset;
     SIZE_T StackSize;
-    PKIPCR Pcr;
+    PKPCR Pcr;
 
     /* Get the current thread */
     CurrentThread = KeGetCurrentThread();
@@ -151,7 +151,7 @@ KiSwitchKernelStack(PVOID StackBase, PVOID StackLimit)
     CurrentThread->LargeStack = TRUE;
 
     /* Adjust RspBase in the PCR */
-    Pcr = (PKIPCR)KeGetPcr();
+    Pcr = KeGetPcr();
     Pcr->Prcb.RspBase += StackOffset;
 
     /* Adjust Rsp0 in the TSS */
@@ -227,7 +227,7 @@ NTAPI
 KiSwapProcess(IN PKPROCESS NewProcess,
               IN PKPROCESS OldProcess)
 {
-    PKIPCR Pcr = (PKIPCR)KeGetPcr();
+    PKPCR Pcr = KeGetPcr();
 
 #ifdef CONFIG_SMP
     /* Update active processor mask */
@@ -266,7 +266,7 @@ KiSystemCallHandler(
     TrapFrame = (PKTRAP_FRAME)((PULONG64)_AddressOfReturnAddress() + 1 + MAX_SYSCALL_PARAMS);
 
     /* Increase system call count */
-    __addgsdword(FIELD_OFFSET(KIPCR, Prcb.KeSystemCalls), 1);
+    __addgsdword(FIELD_OFFSET(KPCR, Prcb.KeSystemCalls), 1);
 
     /* Get the current thread */
     Thread = KeGetCurrentThread();
@@ -282,7 +282,7 @@ KiSystemCallHandler(
     TrapFrame->ExceptionFrame = 0;
 
     /* Before enabling interrupts get the user rsp from the KPCR */
-    UserRsp = __readgsqword(FIELD_OFFSET(KIPCR, UserRsp));
+    UserRsp = __readgsqword(FIELD_OFFSET(KPCR, UserRsp));
     TrapFrame->Rsp = UserRsp;
 
     /* Enable interrupts */

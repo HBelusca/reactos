@@ -19,7 +19,7 @@ DECLSPEC_NORETURN
 VOID
 KiIdleLoop(VOID)
 {
-    PKPCR Pcr = (PKPCR)KeGetPcr();
+    PKPCR Pcr = KeGetPcr();
     PKPRCB Prcb = Pcr->Prcb;
     PKTHREAD OldThread, NewThread;
 
@@ -123,7 +123,7 @@ BOOLEAN
 KiSwapContextInternal(IN PKTHREAD OldThread,
                       IN PKTHREAD NewThread)
 {
-    PKIPCR Pcr = (PKIPCR)KeGetPcr();
+    PKPCR Pcr = KeGetPcr();
     PKPRCB Prcb = Pcr->Prcb;
     PKPROCESS OldProcess, NewProcess;
 
@@ -270,7 +270,7 @@ KiApcInterrupt(VOID)
 VOID
 KiDispatchInterrupt(VOID)
 {
-    PKIPCR Pcr;
+    PKPCR Pcr;
     PKPRCB Prcb;
     PKTHREAD NewThread, OldThread;
 
@@ -280,7 +280,7 @@ KiDispatchInterrupt(VOID)
     //
     // Get the PCR and disable interrupts
     //
-    Pcr = (PKIPCR)KeGetPcr();
+    Pcr = KeGetPcr();
     Prcb = Pcr->Prcb;
     _disable();
 
@@ -356,14 +356,14 @@ KiInterruptHandler(IN PKTRAP_FRAME TrapFrame,
 {
     KIRQL OldIrql, Irql;
     ULONG InterruptCause;//, InterruptMask;
-    PKIPCR Pcr;
+    PKPCR Pcr;
     PKTRAP_FRAME OldTrapFrame;
     ASSERT(TrapFrame->Reserved == 0xBADB0D00);
 
     //
     // Increment interrupt count
     //
-    Pcr = (PKIPCR)KeGetPcr();
+    Pcr = KeGetPcr();
     Pcr->Prcb.InterruptCount++;
 
     //

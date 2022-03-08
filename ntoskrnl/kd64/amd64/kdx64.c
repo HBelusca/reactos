@@ -167,7 +167,7 @@ KdpSysReadControlSpace(IN ULONG Processor,
 {
     PVOID ControlStart;
     PKPRCB Prcb = KiProcessorBlock[Processor];
-    PKIPCR Pcr = CONTAINING_RECORD(Prcb, KIPCR, Prcb);
+    PKPCR Pcr = CONTAINING_RECORD(Prcb, KPCR, Prcb);
 
     switch (BaseAddress)
     {

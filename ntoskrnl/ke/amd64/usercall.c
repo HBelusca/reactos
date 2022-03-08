@@ -138,7 +138,7 @@ KiUserModeCallout(
     PKTHREAD CurrentThread;
     PKTRAP_FRAME TrapFrame;
     KTRAP_FRAME CallbackTrapFrame;
-    PKIPCR Pcr;
+    PKPCR Pcr;
     ULONG_PTR InitialStack;
     NTSTATUS Status;
 
@@ -186,7 +186,7 @@ KiUserModeCallout(
     CallbackTrapFrame = *TrapFrame;
 
     /* Get PCR */
-    Pcr = (PKIPCR)KeGetPcr();
+    Pcr = KeGetPcr();
 
     /* Set user-mode dispatcher address as EIP */
     Pcr->TssBase->Rsp0 = InitialStack;
@@ -319,7 +319,7 @@ KeUserModeCallback(
     /* Restore stack and return */
     *UserStackPointer = OldStack;
 #ifdef _M_AMD64 // could probably  move the update to TrapFrame->Rsp from the C handler to the asm code
-    __writegsqword(FIELD_OFFSET(KIPCR, UserRsp), OldStack);
+    __writegsqword(FIELD_OFFSET(KPCR, UserRsp), OldStack);
 #endif
     return CallbackStatus;
 }
@@ -334,7 +334,7 @@ NtCallbackReturn(
     PKTHREAD CurrentThread;
     PKCALLOUT_FRAME CalloutFrame;
     PKTRAP_FRAME CallbackTrapFrame, TrapFrame;
-    PKIPCR Pcr;
+    PKPCR Pcr;
 
     /* Get the current thread and make sure we have a callback stack */
     CurrentThread = KeGetCurrentThread();
@@ -355,7 +355,7 @@ NtCallbackReturn(
     _disable();
 
     /* Restore the exception list */
-    Pcr = (PKIPCR)KeGetPcr();
+    Pcr = KeGetPcr();
 
     /* Get the previous trap frame */
     TrapFrame = (PKTRAP_FRAME)CalloutFrame->TrapFrame;
