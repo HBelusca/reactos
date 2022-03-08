@@ -5,8 +5,7 @@
  * COPYRIGHT:   2020 Victor Perevertkin (victor.perevertkin@reactos.org)
  */
 
-#include <ntdef.h>
-#include <ntifs.h>
+#include "ntos_vista.h"
 
 NTKRNLVISTAAPI
 NTSTATUS

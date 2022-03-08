@@ -11,10 +11,12 @@ list(APPEND SOURCE
     io.c
     po.c
     ke.c
-    ${REACTOS_SOURCE_DIR}/sdk/lib/rtl/utf8.c)
+    ${REACTOS_SOURCE_DIR}/sdk/lib/rtl/utf8.c
+    ntos_vista.h)
 
 add_library(ntoskrnl_vista ${SOURCE})
-target_link_libraries(ntoskrnl_vista PRIVATE pseh) # rtl_vista)
+add_pch(ntoskrnl_vista ntos_vista.h SOURCE)
+target_link_libraries(ntoskrnl_vista PRIVATE pseh) # rtl_vista
 add_dependencies(ntoskrnl_vista bugcodes xdk)
 
 target_compile_definitions(ntoskrnl_vista PUBLIC NTKRNLVISTA)

@@ -6,8 +6,7 @@
  * PROGRAMMERS:     Pierre Schweitzer <pierre@reactos.org>
  */
 
-#include <ntdef.h>
-#include <ntifs.h>
+#include "ntos_vista.h"
 
 typedef struct _ECP_LIST
 {
