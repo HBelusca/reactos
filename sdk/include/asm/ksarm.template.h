@@ -308,32 +308,32 @@ OFFSET(MsReserved, KARM_MINI_STACK, Reserved), // 0x18
 SIZE(MiniStackLength, KARM_MINI_STACK), // 0x20
 
 HEADER("KPCR offsets"),
-OFFSET(PcSelf, KIPCR, Self), //  0xc
-OFFSET(PcCurrentPrcb, KIPCR, CurrentPrcb), // 0x10
-OFFSET(PcLockArray, KIPCR, LockArray), // 0x14
-OFFSET(PcTeb, KIPCR, Used_Self), // 0x18
-OFFSET(PcStallScaleFactor, KIPCR, StallScaleFactor), // 0x30
-OFFSET(PcHalReserved, KIPCR, HalReserved), // 0x84
-OFFSET(PcPrcb, KIPCR, Prcb), // 0x580
-OFFSET(PcIdleHalt, KIPCR, Prcb.IdleHalt), // 0x582
-OFFSET(PcCurrentThread, KIPCR, Prcb.CurrentThread), // 0x584
-OFFSET(PcNextThread, KIPCR, Prcb.NextThread), // 0x588
-OFFSET(PcIdleThread, KIPCR, Prcb.IdleThread), // 0x58c
-OFFSET(PcNestingLevel, KIPCR, Prcb.NestingLevel), // 0x590
-OFFSET(PcNumber, KIPCR, Prcb.Number), // 0x594
-OFFSET(PcPrcbLock, KIPCR, Prcb.PrcbLock), // 0x598
-OFFSET(PcGroupSetMember, KIPCR, Prcb.GroupSetMember), // 0x998
-OFFSET(PcFeatureBits, KIPCR, Prcb.FeatureBits), // 0xa8c
-OFFSET(PcDeferredReadyListHead, KIPCR, Prcb.DeferredReadyListHead), // 0xb84
-OFFSET(PcSystemCalls, KIPCR, Prcb.KeSystemCalls), // 0xbb0
-OFFSET(PcSpBase, KIPCR, Prcb.SpBase), // 0xc44
-OFFSET(PcDpcRoutineActive, KIPCR, Prcb.DpcRoutineActive), // 0xc5a
-OFFSET(PcInterruptCount, KIPCR, Prcb.InterruptCount), // 0xe80
-OFFSET(PcSkipTick, KIPCR, Prcb.SkipTick), // 0xe98
-OFFSET(PcDebuggerSavedIRQL, KIPCR, Prcb.DebuggerSavedIRQL), // 0xe99
-OFFSET(PcStartCycles, KIPCR, Prcb.StartCycles), // 0xec8
-OFFSET(PcCycleCounterHigh, KIPCR, Prcb.CycleCounterHigh), // 0xed8
-SIZE(ProcessorControlRegisterLength, KIPCR), // 0x5b80
+OFFSET(PcSelf, KPCR, Self), //  0xc
+OFFSET(PcCurrentPrcb, KPCR, CurrentPrcb), // 0x10
+OFFSET(PcLockArray, KPCR, LockArray), // 0x14
+OFFSET(PcTeb, KPCR, Used_Self), // 0x18
+OFFSET(PcStallScaleFactor, KPCR, StallScaleFactor), // 0x30
+OFFSET(PcHalReserved, KPCR, HalReserved), // 0x84
+OFFSET(PcPrcb, KPCR, Prcb), // 0x580
+OFFSET(PcIdleHalt, KPCR, Prcb.IdleHalt), // 0x582
+OFFSET(PcCurrentThread, KPCR, Prcb.CurrentThread), // 0x584
+OFFSET(PcNextThread, KPCR, Prcb.NextThread), // 0x588
+OFFSET(PcIdleThread, KPCR, Prcb.IdleThread), // 0x58c
+OFFSET(PcNestingLevel, KPCR, Prcb.NestingLevel), // 0x590
+OFFSET(PcNumber, KPCR, Prcb.Number), // 0x594
+OFFSET(PcPrcbLock, KPCR, Prcb.PrcbLock), // 0x598
+OFFSET(PcGroupSetMember, KPCR, Prcb.GroupSetMember), // 0x998
+OFFSET(PcFeatureBits, KPCR, Prcb.FeatureBits), // 0xa8c
+OFFSET(PcDeferredReadyListHead, KPCR, Prcb.DeferredReadyListHead), // 0xb84
+OFFSET(PcSystemCalls, KPCR, Prcb.KeSystemCalls), // 0xbb0
+OFFSET(PcSpBase, KPCR, Prcb.SpBase), // 0xc44
+OFFSET(PcDpcRoutineActive, KPCR, Prcb.DpcRoutineActive), // 0xc5a
+OFFSET(PcInterruptCount, KPCR, Prcb.InterruptCount), // 0xe80
+OFFSET(PcSkipTick, KPCR, Prcb.SkipTick), // 0xe98
+OFFSET(PcDebuggerSavedIRQL, KPCR, Prcb.DebuggerSavedIRQL), // 0xe99
+OFFSET(PcStartCycles, KPCR, Prcb.StartCycles), // 0xec8
+OFFSET(PcCycleCounterHigh, KPCR, Prcb.CycleCounterHigh), // 0xed8
+SIZE(ProcessorControlRegisterLength, KPCR), // 0x5b80
 
 HEADER("KPRCB offsets"),
 OFFSET(PbIdleHalt, KPRCB, IdleHalt), // 0x2
@@ -558,8 +558,4 @@ CONSTANT(PF_ARM_EXTERNAL_CACHE_AVAILABLE),
 #define KEXCEPTION_ACTIVE_INTERRUPT_FRAME 0x0
 #define KEXCEPTION_ACTIVE_EXCEPTION_FRAME 0x1
 #define KEXCEPTION_ACTIVE_SERVICE_FRAME 0x2
-
-
-
-
 
