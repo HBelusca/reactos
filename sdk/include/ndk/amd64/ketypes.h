@@ -30,7 +30,7 @@ Author:
 //#define K0IPCR                  ((ULONG_PTR)(KIP0PCRADDRESS))
 //#define PCR                     ((volatile KPCR * const)K0IPCR)
 #define PCR ((volatile KPCR * const)__readgsqword(FIELD_OFFSET(KPCR, Self)))
-//#if defined(CONFIG_SMP) || defined(NT_BUILD)
+//#if defined(CONFIG_SMP)
 //#undef  KeGetPcr
 //#define KeGetPcr()              ((volatile KPCR * const)__readfsdword(0x1C))
 //#endif
@@ -852,10 +852,11 @@ typedef struct _KPRCB
 #endif
 } KPRCB, *PKPRCB;
 
+#if defined(_NTSYSTEM_) && !defined(_NTHAL_)
 //
 // Processor Control Region
 //
-typedef struct _KIPCR
+typedef struct _KPCR
 {
     union
     {
@@ -890,13 +891,14 @@ typedef struct _KIPCR
     PVOID KdVersionBlock; // 0x108
     PVOID Unused3;
     ULONG PcrAlign1[24];
+
+    /* Private members, not in ntddk.h */
     ULONG Fill2[2]; // 0x178
     KPRCB Prcb; // 0x180
+} KPCR, *PKPCR;
 
-    // hack:
-    ULONG ContextSwitches;
+#endif /* defined(_NTSYSTEM_) && !defined(_NTHAL_) */
 
-} KIPCR, *PKIPCR;
 #pragma pack(pop)
 
 //
@@ -1079,7 +1081,7 @@ FORCEINLINE
 struct _KPRCB *
 KeGetCurrentPrcb(VOID)
 {
-    return (struct _KPRCB *)__readgsqword(FIELD_OFFSET(KIPCR, CurrentPrcb));
+    return (struct _KPRCB *)__readgsqword(FIELD_OFFSET(KPCR, CurrentPrcb));
 }
 
 #endif

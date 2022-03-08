@@ -508,10 +508,11 @@ typedef struct _KPRCB
 #endif
 } KPRCB, *PKPRCB;
 
+#if defined(_NTSYSTEM_) && !defined(_NTHAL_)
 //
 // Processor Control Region
 //
-typedef struct _KIPCR
+typedef struct _KPCR
 {
     USHORT MinorVersion;
     USHORT MajorVersion;
@@ -597,7 +598,10 @@ typedef struct _KIPCR
     ULONG PgDirRa;
     ULONG OnInterruptStack;
     ULONG SavedInitialStack;
-} KIPCR, *PKIPCR;
+} KPCR, *PKPCR;
+
+#endif /* defined(_NTSYSTEM_) && !defined(_NTHAL_) */
+
 #pragma pack(pop)
 
 //
@@ -655,7 +659,7 @@ FORCEINLINE
 struct _KPRCB *
 KeGetCurrentPrcb(VOID)
 {
-    return (struct _KPRCB *)(ULONG_PTR)__readfsdword(FIELD_OFFSET(KIPCR, PrcbData));
+    return (struct _KPRCB *)(ULONG_PTR)__readfsdword(FIELD_OFFSET(KPCR, PrcbData));
 }
 
 #endif

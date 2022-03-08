@@ -25,6 +25,7 @@ typedef struct _KFLOATING_SAVE {
   ULONG Dummy;
 } KFLOATING_SAVE, *PKFLOATING_SAVE;
 
+// NOTE: This is NT_TIB
 typedef struct _KPCR_TIB {
   PVOID ExceptionList;         /* 00 */
   PVOID StackBase;             /* 04 */

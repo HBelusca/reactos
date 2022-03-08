@@ -1022,8 +1022,8 @@ typedef struct _KPRCB
     KAFFINITY SetMember;
     CHAR VendorString[13];
 #endif
-
 } KPRCB, *PKPRCB;
+
 C_ASSERT(FIELD_OFFSET(KPRCB, ProcessorState) == 0x20);
 C_ASSERT(FIELD_OFFSET(KPRCB, ProcessorModel) == 0x3C0);
 C_ASSERT(FIELD_OFFSET(KPRCB, LockQueue) == 0x480);
@@ -1033,12 +1033,12 @@ C_ASSERT(FIELD_OFFSET(KPRCB, DpcData) == 0x690);
 C_ASSERT(FIELD_OFFSET(KPRCB, DpcStack) == 0x6c0);
 //C_ASSERT(FIELD_OFFSET(KPRCB, CallDpc) == 0x714);
 
-
+#if defined(_NTSYSTEM_) && !defined(_NTHAL_)
 //
 // Processor Control Region
 // Based on Windows RT 8.1 symbols
 //
-typedef struct _KIPCR
+typedef struct _KPCR
 {
     union
     {
@@ -1083,9 +1083,11 @@ typedef struct _KIPCR
     ULONG PcrAlign2[19];
     UCHAR _PADDING1_[0x4];
     KPRCB Prcb;
-} KIPCR, *PKIPCR;
+} KPCR, *PKPCR;
 
-C_ASSERT(FIELD_OFFSET(KIPCR, Prcb.LegacyNumber) == 0x580);
+C_ASSERT(FIELD_OFFSET(KPCR, Prcb.LegacyNumber) == 0x580);
+
+#endif /* defined(_NTSYSTEM_) && !defined(_NTHAL_) */
 
 //
 // Macro to get current KPRCB

@@ -28,7 +28,7 @@ Author:
 //
 #define K0IPCR                  ((ULONG_PTR)(KIP0PCRADDRESS))
 #define PCR                     ((KPCR *)K0IPCR)
-#if defined(CONFIG_SMP) || defined(NT_BUILD)
+#if defined(CONFIG_SMP)
 #undef  KeGetPcr
 #define KeGetPcr()              ((KPCR *)__readfsdword(FIELD_OFFSET(KPCR, SelfPcr)))
 #endif
@@ -399,16 +399,6 @@ typedef struct _DESCRIPTOR
 
 #ifndef NTOS_MODE_USER
 //
-// Macro to get current KPRCB
-//
-FORCEINLINE
-struct _KPRCB *
-KeGetCurrentPrcb(VOID)
-{
-    return (struct _KPRCB *)(ULONG_PTR)__readfsdword(FIELD_OFFSET(KPCR, Prcb));
-}
-
-//
 // FN/FX (FPU) Save Area Structures
 //
 typedef struct _FNSAVE_FORMAT
@@ -730,10 +720,11 @@ typedef struct _KPRCB
 #endif
 } KPRCB, *PKPRCB;
 
+#if defined(_NTSYSTEM_) && !defined(_NTHAL_)
 //
 // Processor Control Region
 //
-typedef struct _KIPCR
+typedef struct _KPCR
 {
     union
     {
@@ -771,12 +762,27 @@ typedef struct _KIPCR
     ULONG KernelReserved[14];
     ULONG SecondLevelCacheSize;
     ULONG HalReserved[16];
+
+    /* Private members, not in ntddk.h */
     ULONG InterruptMode;
     UCHAR Spare1;
     ULONG KernelReserved2[17];
     KPRCB PrcbData;
-} KIPCR, *PKIPCR;
+} KPCR, *PKPCR;
+
+#endif /* defined(_NTSYSTEM_) && !defined(_NTHAL_) */
+
 #pragma pack(pop)
+
+//
+// Macro to get current KPRCB
+//
+FORCEINLINE
+struct _KPRCB *
+KeGetCurrentPrcb(VOID)
+{
+    return (struct _KPRCB *)(ULONG_PTR)__readfsdword(FIELD_OFFSET(KPCR, Prcb));
+}
 
 //
 // TSS Definition
