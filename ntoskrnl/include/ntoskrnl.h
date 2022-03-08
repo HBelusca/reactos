@@ -31,7 +31,17 @@
 #define _REALLY_GET_CALLERS_CALLER
 #include <excpt.h>
 #include <ntdef.h>
+
+#define _KPCR _KEPCR
+#define KPCR  KEPCR
+#define PKPCR PKEPCR
+
 #include <ntifs.h>
+
+#undef _KPCR
+#undef KPCR
+#undef PKPCR
+
 #include <wdmguid.h>
 #include <diskguid.h>
 #include <arc/arc.h>

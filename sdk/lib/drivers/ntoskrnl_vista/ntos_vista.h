@@ -10,6 +10,15 @@
 #define _NTOS_VISTA_PCH
 
 #include <ntdef.h>
+
+#define _KPCR _KEPCR
+#define KPCR  KEPCR
+#define PKPCR PKEPCR
+
 #include <ntifs.h>
+
+#undef _KPCR
+#undef KPCR
+#undef PKPCR
 
 #endif /* _NTOS_VISTA_PCH */

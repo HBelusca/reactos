@@ -54,18 +54,22 @@
     (PKEXCEPTION_FRAME)((ULONG_PTR)KeGetTrapFrame(Thread) - \
                         sizeof(KEXCEPTION_FRAME))
 
+#ifndef _NTHAL_
+
 //
 // Macro to get context switches from the PRCB
-// All architectures but x86 have it in the PRCB's KeContextSwitches
+// All architectures but x86 (since NT 5.2) have it in PRCB::KeContextSwitches
 //
 #define KeGetContextSwitches(Prcb)  \
-    (Prcb)->KeContextSwitches
+    ((Prcb)->KeContextSwitches)
+
+#endif
 
 //
 // Macro to get the second level cache size field name which differs between
 // CISC and RISC architectures, as the former has unified I/D cache
 //
-#define KiGetSecondLevelDCacheSize() ((PKIPCR)KeGetPcr())->SecondLevelDcacheSize
+#define KiGetSecondLevelDCacheSize() KeGetPcr()->SecondLevelDcacheSize
 
 //
 // Returns the Interrupt State from a Trap Frame.

@@ -3,10 +3,21 @@
 
 /* DDK/IFS/NDK Headers */
 #define _NTSYSTEM_
+#define _NTOSKRNL_
 #include <excpt.h>
 #include <setjmp.h>
 #include <ntdef.h>
+
+#define _KPCR _KEPCR
+#define KPCR  KEPCR
+#define PKPCR PKEPCR
+
 #include <ntifs.h>
+
+#undef _KPCR
+#undef KPCR
+#undef PKPCR
+
 #include <arc/arc.h>
 #include <ntndk.h>
 #include <bugcodes.h>

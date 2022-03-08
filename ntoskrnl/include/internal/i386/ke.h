@@ -109,18 +109,22 @@ KeGetTrapFrameFrameRegister(PKTRAP_FRAME TrapFrame)
 #define KeGetExceptionFrame(Thread) \
     NULL
 
+#ifndef _NTHAL_
+
 //
 // Macro to get context switches from the PRCB
-// All architectures but x86 have it in the PRCB's KeContextSwitches
+// All architectures but x86 (since NT 5.2) have it in PRCB::KeContextSwitches
 //
 #define KeGetContextSwitches(Prcb)  \
-    CONTAINING_RECORD(Prcb, KIPCR, PrcbData)->ContextSwitches
+    CONTAINING_RECORD(Prcb, KPCR, PrcbData)->ContextSwitches
+
+#endif /* _NTHAL_ */
 
 //
 // Macro to get the second level cache size field name which differs between
 // CISC and RISC architectures, as the former has unified I/D cache
 //
-#define KiGetSecondLevelDCacheSize() ((PKIPCR)KeGetPcr())->SecondLevelCacheSize
+#define KiGetSecondLevelDCacheSize() KeGetPcr()->SecondLevelCacheSize
 
 //
 // Returns the Interrupt State from a Trap Frame.
@@ -270,7 +274,7 @@ KeRegisterInterruptHandler(IN ULONG Vector,
 {
     UCHAR Entry;
     ULONG_PTR Address;
-    PKIPCR Pcr = (PKIPCR)KeGetPcr();
+    PKPCR Pcr = KeGetPcr();
 
     //
     // Get the entry from the HAL
@@ -292,7 +296,7 @@ FORCEINLINE
 PVOID
 KeQueryInterruptHandler(IN ULONG Vector)
 {
-    PKIPCR Pcr = (PKIPCR)KeGetPcr();
+    PKPCR Pcr = KeGetPcr();
     UCHAR Entry;
 
     //
@@ -344,7 +348,7 @@ PRKTHREAD
 KeGetCurrentThread(VOID)
 {
     /* Return the current thread */
-    return ((PKIPCR)KeGetPcr())->PrcbData.CurrentThread;
+    return KeGetCurrentPrcb()->CurrentThread;
 }
 
 FORCEINLINE
@@ -888,6 +892,8 @@ KiEndInterrupt(IN KIRQL Irql,
     KiEoiHelper(TrapFrame);
 }
 
+#ifndef _NTHAL_
+
 //
 // PERF Code
 //
@@ -903,6 +909,8 @@ Ki386PerfEnd(VOID)
              KeGetCurrentPrcb()->KeSystemCalls,
              KeGetContextSwitches(KeGetCurrentPrcb()));
 }
+
+#endif /* _NTHAL_ */
 
 FORCEINLINE
 PULONG
