@@ -32,8 +32,9 @@ CHECK_PAGED_CODE_RTL(char *file, int line)
 
 PVOID
 NTAPI
-RtlpAllocateMemory(ULONG Bytes,
-                   ULONG Tag)
+RtlpAllocateMemory(
+    _In_ ULONG Bytes,
+    _In_ ULONG Tag)
 {
     return FrLdrHeapAllocateEx(FrLdrDefaultHeap, Bytes, Tag);
 }
@@ -41,8 +42,9 @@ RtlpAllocateMemory(ULONG Bytes,
 
 VOID
 NTAPI
-RtlpFreeMemory(PVOID Mem,
-               ULONG Tag)
+RtlpFreeMemory(
+    _In_ PVOID Mem,
+    _In_ ULONG Tag)
 {
     FrLdrHeapFreeEx(FrLdrDefaultHeap, Mem, Tag);
 }
@@ -50,9 +52,9 @@ RtlpFreeMemory(PVOID Mem,
 NTSTATUS
 NTAPI
 RtlpSafeCopyMemory(
-   _Out_writes_bytes_all_(Length) VOID UNALIGNED *Destination,
-   _In_reads_bytes_(Length) CONST VOID UNALIGNED *Source,
-   _In_ SIZE_T Length)
+    _Out_writes_bytes_all_(Length) VOID UNALIGNED *Destination,
+    _In_reads_bytes_(Length) CONST VOID UNALIGNED *Source,
+    _In_ SIZE_T Length)
 {
     RtlCopyMemory(Destination, Source, Length);
     return STATUS_SUCCESS;

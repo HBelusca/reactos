@@ -249,8 +249,8 @@ CmGetSystemControlValues(IN PVOID SystemHiveData,
     if (CmInstallUILanguageIdType == REG_SZ)
     {
         /* Read it */
-        PsInstallUILanguageId =  CmpConvertLangId(CmInstallUILanguageId,
-                                                  CmInstallUILanguageIdLength);
+        PsInstallUILanguageId = CmpConvertLangId(CmInstallUILanguageId,
+                                                 CmInstallUILanguageIdLength);
     }
     else
     {

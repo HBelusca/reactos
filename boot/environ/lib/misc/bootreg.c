@@ -56,12 +56,12 @@ HvIsInPlaceBaseBlockValid (
     Valid = FALSE;
 
     /* Check for incorrect signature, type, version, or format */
-    if ((BaseBlock->Signature == 'fger') &&
-        (BaseBlock->Type == 0) &&
-        (BaseBlock->Major <= 1) &&
-        (BaseBlock->Minor <= 5) &&
-        (BaseBlock->Minor >= 3) &&
-        (BaseBlock->Format == 1))
+    if ((BaseBlock->Signature == HV_HBLOCK_SIGNATURE) &&
+        (BaseBlock->Type == HFILE_TYPE_PRIMARY) &&
+        (BaseBlock->Major <= HSYS_MAJOR) &&
+        (BaseBlock->Minor <= HSYS_MINOR_SUPPORTED) &&
+        (BaseBlock->Minor >= HSYS_MINOR) &&
+        (BaseBlock->Format == HBASE_FORMAT_MEMORY))
     {
         /* Check for invalid hive size */
         HiveLength = BaseBlock->Length;
