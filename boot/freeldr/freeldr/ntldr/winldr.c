@@ -324,6 +324,32 @@ WinLdrLoadDeviceDriver(PLIST_ENTRY LoadOrderListHead,
     // It's not loaded, we have to load it
     RtlStringCbPrintfA(FullPath, sizeof(FullPath), "%s%wZ", BootPath, FilePath);
 
+#if 0
+    {
+    WCHAR ServiceName[256];
+    CHAR ImagePath[256];
+    WCHAR TempImagePath[256];
+
+    /* Write the whole path if it succeeded, else prepare to fail */
+    if (rc != ERROR_SUCCESS)
+    {
+        TRACE_CH(REACTOS, "ImagePath: not found\n");
+        TempImagePath[0] = 0;
+        RtlStringCbPrintfA(ImagePath, sizeof(ImagePath), "%s\\system32\\drivers\\%S.sys", SystemRoot, ServiceName);
+        // or RtlStringCbPrintfA(ImagePath, sizeof(ImagePath), "%ssystem32\\drivers\\%S.sys", SystemRoot, ServiceName);
+    }
+    else if (TempImagePath[0] != L'\\')
+    {
+        RtlStringCbPrintfA(ImagePath, sizeof(ImagePath), "%s%S", SystemRoot, TempImagePath);
+    }
+    else
+    {
+        RtlStringCbPrintfA(ImagePath, sizeof(ImagePath), "%S", TempImagePath);
+        TRACE_CH(REACTOS, "ImagePath: '%s'\n", ImagePath);
+    }
+    }
+#endif
+
     NtLdrOutputLoadMsg(FullPath, NULL);
     Success = PeLdrLoadImage(FullPath, LoaderBootDriver, &DriverBase);
     if (!Success)
