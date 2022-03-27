@@ -209,6 +209,9 @@ BOOLEAN WinLdrScanSystemHive(IN OUT PLOADER_PARAMETER_BLOCK LoaderBlock,
 /* PRIVATE FUNCTIONS ******************************************************/
 
 // Queries registry for those three file names
+//
+// CmpFindNLSData
+//
 static BOOLEAN
 WinLdrGetNLSNames(
     _In_ HKEY ControlSet,
@@ -512,6 +515,9 @@ WinLdrScanRegistry(
     IN OUT PLIST_ENTRY BootDriverListHead)
 {
     BOOLEAN Success;
+
+    // TODO: For Windows 7+ compatibility: Check the "BootDriverFlags"
+    // value in "CurrentControlSet\\Control"
 
     /* Find all boot drivers */
     Success = CmpFindDrivers(SystemHive,

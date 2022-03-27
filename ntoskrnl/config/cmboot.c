@@ -644,6 +644,8 @@ CmpIsLoadType(
     if (!Data) return FALSE;
     if (Length < sizeof(ULONG)) return FALSE;
 
+    // TODO: For Windows 7+ compatibility: Check the "BootFlags" value.
+
     /* Return if the type matches */
     return (*Data == LoadType);
 }

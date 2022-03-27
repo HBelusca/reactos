@@ -4,6 +4,9 @@ add_definitions(
     -D_BLDR_
     -D_NTSYSTEM_)
 
+## NTOS_KERNEL_RUNTIME see ndk/rtlfuncs.h
+## BLDR_KERNEL_RUNTIME see https://github.com/microsoft/Windows-Driver-Frameworks/blob/main/src/publicinc/wdf/umdf/2.17/wudfwdm.h#L963
+
 set(NTOS_RTL_SOURCE_DIR "${REACTOS_SOURCE_DIR}/sdk/lib/rtl")
 include_directories(${NTOS_RTL_SOURCE_DIR})
 
