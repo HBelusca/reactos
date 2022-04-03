@@ -49,12 +49,6 @@ LoadAndBootWindows(
     IN PCHAR Argv[],
     IN PCHAR Envp[]);
 
-ARC_STATUS
-LoadReactOSSetup(
-    IN ULONG Argc,
-    IN PCHAR Argv[],
-    IN PCHAR Envp[]);
-
 
 // conversion.c and conversion.h
 PVOID VaToPa(PVOID Va);
