@@ -52,7 +52,7 @@ static const struct
     ARC_ENTRY_POINT OsLoader;
 } OSLoadingMethods[] =
 {
-    {"ReactOSSetup", EditCustomBootReactOSSetup, LoadReactOSSetup},
+    {"ReactOSSetup", EditCustomBootReactOSSetup, LoadAndBootWindows},
 
 #if defined(_M_IX86) || defined(_M_AMD64)
     {"Drive"       , EditCustomBootDisk      , LoadAndBootDevice},

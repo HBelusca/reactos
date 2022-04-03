@@ -3,11 +3,14 @@
  * LICENSE:     GPL-2.0+ (https://spdx.org/licenses/GPL-2.0+)
  * PURPOSE:     Windows-compatible NT OS Loader.
  * COPYRIGHT:   Copyright 2006-2019 Aleksey Bragin <aleksey@reactos.org>
+ *              Copyright 2022 Hermès Bélusca-Maïto
  */
 
 #include <freeldr.h>
 #include <ndk/ldrtypes.h>
 #include "winldr.h"
+#include "inffile.h"
+#include "setupldr.h"
 #include "ntldropts.h"
 #include "registry.h"
 #include <internal/cmboot.h>
@@ -257,14 +260,6 @@ WinLdrInitializePhase1(PLOADER_PARAMETER_BLOCK LoaderBlock,
     /* FIXME! HACK value for docking profile */
     Extension->Profile.Status = 2;
 
-    /* Check if FreeLdr detected a ACPI table */
-    if (AcpiPresent)
-    {
-        /* Set the pointer to something for compatibility */
-        Extension->AcpiTable = (PVOID)1;
-        // FIXME: Extension->AcpiTableSize;
-    }
-
 #ifdef _M_IX86
     /* Set headless block pointer */
     if (WinLdrTerminalConnected)
@@ -276,12 +271,22 @@ WinLdrInitializePhase1(PLOADER_PARAMETER_BLOCK LoaderBlock,
         Extension->HeadlessLoaderBlock = PaToVa(Extension->HeadlessLoaderBlock);
     }
 #endif
+
     /* Load drivers database */
     RtlStringCbCopyA(MiscFiles, sizeof(MiscFiles), BootPath);
     RtlStringCbCatA(MiscFiles, sizeof(MiscFiles), "AppPatch\\drvmain.sdb");
     Extension->DrvDBImage = PaToVa(WinLdrLoadModule(MiscFiles,
                                                     &Extension->DrvDBSize,
                                                     LoaderRegistryData));
+
+    /* Check if FreeLdr detected a ACPI table */
+    if (AcpiPresent)
+    {
+        /* Set the pointer to something for compatibility */
+        // TODO: Load acpitabl.dat
+        Extension->AcpiTable = (PVOID)1;
+        // FIXME: Extension->AcpiTableSize;
+    }
 
     /* Convert the extension block pointer */
     LoaderBlock->Extension = PaToVa(LoaderBlock->Extension);
@@ -975,6 +980,58 @@ WinLdrInitErrataInf(
     return TRUE;
 }
 
+VOID
+WinLdrPostProcessBootOptions(
+    _Out_z_bytecap_(BootOptionsSize)
+         PSTR BootOptions,
+    _In_ SIZE_T BootOptionsSize,
+    _In_ PCSTR ArgsBootOptions,
+    _In_ ULONG Argc,
+    _In_ PCHAR Argv[])
+{
+    PCSTR ArgValue;
+
+    /* Initialize the boot options with those from the command line */
+    RtlStringCbCopyA(BootOptions, BootOptionsSize, ArgsBootOptions);
+
+    /* Append boot-time options */
+    AppendBootTimeOptions(BootOptions); // TODO: Add support for BootOptionsSize.
+
+    /*
+     * Set the "/HAL=" and "/KERNEL=" options if needed.
+     * If already present on the standard "Options=" option line, they take
+     * precedence over those passed via the separate "Hal=" and "Kernel="
+     * options.
+     */
+    if (!NtLdrGetOption(BootOptions, "HAL="))
+    {
+        /*
+         * Not found in the options, try to retrieve the
+         * separate value and append it to the options.
+         */
+        ArgValue = GetArgumentValue(Argc, Argv, "Hal");
+        if (ArgValue && *ArgValue)
+        {
+            RtlStringCbCatA(BootOptions, BootOptionsSize, " /HAL=");
+            RtlStringCbCatA(BootOptions, BootOptionsSize, ArgValue);
+        }
+    }
+    if (!NtLdrGetOption(BootOptions, "KERNEL="))
+    {
+        /*
+         * Not found in the options, try to retrieve the
+         * separate value and append it to the options.
+         */
+        ArgValue = GetArgumentValue(Argc, Argv, "Kernel");
+        if (ArgValue && *ArgValue)
+        {
+            RtlStringCbCatA(BootOptions, BootOptionsSize, " /KERNEL=");
+            RtlStringCbCatA(BootOptions, BootOptionsSize, ArgValue);
+        }
+    }
+}
+
+
 ARC_STATUS
 LoadAndBootWindows(
     IN ULONG Argc,
@@ -987,11 +1044,21 @@ LoadAndBootWindows(
     PCSTR FileName;
     ULONG FileNameLength;
     BOOLEAN Success;
+
+    BOOLEAN IsNTSetup;
+    HINF InfHandle = NULL;
+
     USHORT OperatingSystemVersion;
     PLOADER_PARAMETER_BLOCK LoaderBlock;
     CHAR BootPath[MAX_PATH];
     CHAR FilePath[MAX_PATH];
-    CHAR BootOptions[256];
+    CHAR UserBootOptions[256];
+    PCSTR BootOptions;
+
+    PLOADER_PARAMETER_BLOCK LoaderBlockVA;
+    PLDR_DATA_TABLE_ENTRY KernelDTE;
+    KERNEL_ENTRY_POINT KiSystemStartup;
+    PCSTR SystemRoot;
 
     /* Retrieve the (mandatory) boot type */
     ArgValue = GetArgumentValue(Argc, Argv, "BootType");
@@ -1001,20 +1068,31 @@ LoadAndBootWindows(
         return EINVAL;
     }
 
-    /* Convert it to an OS version */
-    if (_stricmp(ArgValue, "Windows") == 0 ||
-        _stricmp(ArgValue, "Windows2003") == 0)
+    /* Check whether this is a regular boot or NT setup */
+    if (_stricmp(ArgValue, "ReactOSSetup") == 0)
     {
+        IsNTSetup = TRUE;
         OperatingSystemVersion = _WIN32_WINNT_WS03;
-    }
-    else if (_stricmp(ArgValue, "WindowsNT40") == 0)
-    {
-        OperatingSystemVersion = _WIN32_WINNT_NT4;
     }
     else
     {
-        ERR("Unknown 'BootType' value '%s', aborting!\n", ArgValue);
-        return EINVAL;
+        IsNTSetup = FALSE;
+
+        /* Convert it to an OS version */
+        if (_stricmp(ArgValue, "Windows") == 0 ||
+            _stricmp(ArgValue, "Windows2003") == 0)
+        {
+            OperatingSystemVersion = _WIN32_WINNT_WS03;
+        }
+        else if (_stricmp(ArgValue, "WindowsNT40") == 0)
+        {
+            OperatingSystemVersion = _WIN32_WINNT_NT4;
+        }
+        else
+        {
+            ERR("Unknown 'BootType' value '%s', aborting!\n", ArgValue);
+            return EINVAL;
+        }
     }
 
     /* Retrieve the (mandatory) system partition */
@@ -1027,20 +1105,30 @@ LoadAndBootWindows(
 
     /* Let the user know we started loading */
     UiDrawBackdrop();
-    UiDrawStatusText("Loading...");
-    UiDrawProgressBarCenter("Loading NT...");
+    if (IsNTSetup)
+    {
+        UiDrawStatusText("Setup is loading...");
+        UiDrawProgressBarCenter("Loading ReactOS Setup...");
+    }
+    else
+    {
+        UiDrawStatusText("Loading...");
+        UiDrawProgressBarCenter("Loading NT...");
+    }
 
-    /* Retrieve the system path */
+    /*
+     * Retrieve the system path, i.e. the "BootPath" for the operating system.
+     * In case we have not obtained the SystemPath, we are going to construct
+     * a valid full path below based on the SystemPartition.
+     */
     *BootPath = ANSI_NULL;
     ArgValue = GetArgumentValue(Argc, Argv, "SystemPath");
     if (ArgValue)
         RtlStringCbCopyA(BootPath, sizeof(BootPath), ArgValue);
 
     /*
-     * Check whether BootPath is a full path
-     * and if not, create a full boot path.
-     *
-     * See FsOpenFile for the technique used.
+     * Check whether BootPath is a full path and if not, create
+     * a full boot path. See FsOpenFile for the technique used.
      */
     if (strrchr(BootPath, ')') == NULL)
     {
@@ -1064,49 +1152,16 @@ LoadAndBootWindows(
 
     TRACE("BootPath: '%s'\n", BootPath);
 
-    /* Retrieve the boot options */
-    *BootOptions = ANSI_NULL;
-    ArgValue = GetArgumentValue(Argc, Argv, "Options");
-    if (ArgValue && *ArgValue)
-        RtlStringCbCopyA(BootOptions, sizeof(BootOptions), ArgValue);
-
-    /* Append boot-time options */
-    AppendBootTimeOptions(BootOptions);
-
     /*
-     * Set the "/HAL=" and "/KERNEL=" options if needed.
-     * If already present on the standard "Options=" option line, they take
-     * precedence over those passed via the separate "Hal=" and "Kernel="
-     * options.
+     * Retrieve the command-line boot options.
+     * In Setup Mode, any options present here will supplement or override
+     * those that will be specified in TXTSETUP.SIF's "OsLoadOptions" during
+     * the boot options post-processing step below.
      */
-    if (!NtLdrGetOption(BootOptions, "HAL="))
-    {
-        /*
-         * Not found in the options, try to retrieve the
-         * separate value and append it to the options.
-         */
-        ArgValue = GetArgumentValue(Argc, Argv, "Hal");
-        if (ArgValue && *ArgValue)
-        {
-            RtlStringCbCatA(BootOptions, sizeof(BootOptions), " /HAL=");
-            RtlStringCbCatA(BootOptions, sizeof(BootOptions), ArgValue);
-        }
-    }
-    if (!NtLdrGetOption(BootOptions, "KERNEL="))
-    {
-        /*
-         * Not found in the options, try to retrieve the
-         * separate value and append it to the options.
-         */
-        ArgValue = GetArgumentValue(Argc, Argv, "Kernel");
-        if (ArgValue && *ArgValue)
-        {
-            RtlStringCbCatA(BootOptions, sizeof(BootOptions), " /KERNEL=");
-            RtlStringCbCatA(BootOptions, sizeof(BootOptions), ArgValue);
-        }
-    }
+    BootOptions = GetArgumentValue(Argc, Argv, "Options");
+    if (!BootOptions) BootOptions = "";
 
-    TRACE("BootOptions: '%s'\n", BootOptions);
+    TRACE("BootOptions(1): '%s'\n", BootOptions);
 
     /* Check if a RAM disk file was given */
     FileName = NtLdrGetOptionEx(BootOptions, "RDPATH=", &FileNameLength);
@@ -1123,6 +1178,40 @@ LoadAndBootWindows(
         }
     }
 
+    /* In Setup Mode, find the configuration source and adjust the BootPath */
+    if (IsNTSetup)
+    {
+        Status = SetupLdrFindConfigSource(&InfHandle,
+                                          BootPath,
+                                          sizeof(BootPath),
+                                          FilePath,
+                                          sizeof(FilePath));
+        if (Status != ESUCCESS)
+        {
+            UiMessageBox("Could not find a valid configuration source");
+            return Status;
+        }
+        TRACE("Configuration source: '%s'\n", FilePath);
+    }
+
+    /* Post-process the boot options */
+    if (IsNTSetup)
+    {
+        SetupLdrPostProcessBootOptions(UserBootOptions,
+                                       sizeof(UserBootOptions),
+                                       BootOptions,
+                                       InfHandle);
+    }
+    else
+    {
+        WinLdrPostProcessBootOptions(UserBootOptions,
+                                     sizeof(UserBootOptions),
+                                     BootOptions,
+                                     Argc, Argv);
+    }
+    BootOptions = UserBootOptions;
+    TRACE("BootOptions(2): '%s'\n", BootOptions);
+
     /* Handle the SOS option */
     SosEnabled = !!NtLdrGetOption(BootOptions, "SOS");
     if (SosEnabled)
@@ -1130,56 +1219,51 @@ LoadAndBootWindows(
 
     /* Allocate and minimally-initialize the Loader Parameter Block */
     AllocateAndInitLPB(OperatingSystemVersion, &LoaderBlock);
+    if (IsNTSetup)
+    {
+        PSETUP_LOADER_BLOCK SetupBlock;
 
-    /* Load the system hive */
-    UiUpdateProgressBar(15, "Loading system hive...");
-    Success = WinLdrInitSystemHive(LoaderBlock, BootPath, FALSE);
-    TRACE("SYSTEM hive %s\n", (Success ? "loaded" : "not loaded"));
+        ASSERT(OperatingSystemVersion == _WIN32_WINNT_WS03);
+
+        /* Allocate and initialize the setup loader block */
+        SetupBlock = &WinLdrSystemBlock->SetupBlock;
+        LoaderBlock->SetupLdrBlock = SetupBlock;
+
+        /* Set textmode setup flag */
+        SetupBlock->Flags = SETUPLDR_TEXT_MODE;
+    }
+
+    /* Load the regular (or the "setupreg.hiv" setup) system hive */
+    UiUpdateProgressBar(15,
+                        IsNTSetup ? "Loading setup system hive..."
+                                  : "Loading system hive...");
+    Success = WinLdrInitSystemHive(LoaderBlock, BootPath, IsNTSetup);
+    TRACE("%s hive %s\n", (IsNTSetup ? "Setup SYSTEM" : "SYSTEM"),
+          (Success ? "loaded" : "not loaded"));
     /* Bail out if failure */
     if (!Success)
         return ENOEXEC;
 
-    /* Fixup the version number using data from the registry */
-    if (OperatingSystemVersion == 0)
-        OperatingSystemVersion = WinLdrDetectVersion();
+    if (!IsNTSetup)
+    {
+        /* Fixup the version number using data from the registry */
+        if (OperatingSystemVersion == 0)
+            OperatingSystemVersion = WinLdrDetectVersion();
+    }
     LoaderBlock->Extension->MajorVersion = (OperatingSystemVersion & 0xFF00) >> 8;
     LoaderBlock->Extension->MinorVersion = (OperatingSystemVersion & 0xFF);
 
-    /* Load NLS data, OEM font, and prepare boot drivers list */
-    Success = WinLdrScanSystemHive(LoaderBlock, BootPath);
-    TRACE("SYSTEM hive %s\n", (Success ? "scanned" : "not scanned"));
-    /* Bail out if failure */
-    if (!Success)
-        return ENOEXEC;
 
-    /* Load the Firmware Errata file */
-    Success = WinLdrInitErrataInf(LoaderBlock, OperatingSystemVersion, BootPath);
-    TRACE("Firmware Errata file %s\n", (Success ? "loaded" : "not loaded"));
-    /* Not necessarily fatal if not found - carry on going */
+    /*
+     * Finish loading
+     */
 
-    /* Finish loading */
-    return LoadAndBootWindowsCommon(OperatingSystemVersion,
-                                    LoaderBlock,
-                                    BootOptions,
-                                    BootPath);
-}
+    if (IsNTSetup)
+        UiDrawStatusText("The Setup program is starting...");
 
-ARC_STATUS
-LoadAndBootWindowsCommon(
-    IN USHORT OperatingSystemVersion,
-    IN PLOADER_PARAMETER_BLOCK LoaderBlock,
-    IN PCSTR BootOptions,
-    IN PCSTR BootPath)
-{
-    PLOADER_PARAMETER_BLOCK LoaderBlockVA;
-    BOOLEAN Success;
-    PLDR_DATA_TABLE_ENTRY KernelDTE;
-    KERNEL_ENTRY_POINT KiSystemStartup;
-    PCSTR SystemRoot;
-
-    TRACE("LoadAndBootWindowsCommon()\n");
-
-    ASSERT(OperatingSystemVersion != 0);
+    /* Detect hardware */
+    UiUpdateProgressBar(20, "Detecting hardware...");
+    LoaderBlock->ConfigurationRoot = MachHwDetect();
 
 #ifdef _M_IX86
     /* Setup redirection support */
@@ -1188,10 +1272,6 @@ LoadAndBootWindowsCommon(
 
     /* Convert BootPath to SystemRoot */
     SystemRoot = strstr(BootPath, "\\");
-
-    /* Detect hardware */
-    UiUpdateProgressBar(20, "Detecting hardware...");
-    LoaderBlock->ConfigurationRoot = MachHwDetect();
 
     /* Initialize the PE loader import-DLL callback, so that we can obtain
      * feedback (for example during SOS) on the PE images that get loaded. */
@@ -1212,8 +1292,44 @@ LoadAndBootWindowsCommon(
         return ENOEXEC;
     }
 
+    if (IsNTSetup)
+    {
+        /* Load NLS data, they are in the System32 directory of the installation medium */
+        RtlStringCbCopyA(FilePath, sizeof(FilePath), BootPath);
+        RtlStringCbCatA(FilePath, sizeof(FilePath), "system32\\");
+        SetupLdrLoadNlsData(LoaderBlock, InfHandle, FilePath);
+
+        /* Load the Firmware Errata file from the installation medium */
+        Success = SetupLdrInitErrataInf(LoaderBlock, InfHandle, BootPath);
+        TRACE("Firmware Errata file %s\n", (Success ? "loaded" : "not loaded"));
+        /* Not necessarily fatal if not found - carry on going */
+
+        // UiDrawStatusText("Press F6 if you need to install a 3rd-party SCSI or RAID driver...");
+
+        /* Get a list of boot drivers */
+        SetupLdrScanBootDrivers(&LoaderBlock->BootDriverListHead, InfHandle, BootPath);
+    }
+    else
+    {
+        /* Load NLS data, OEM font, and prepare boot drivers list */
+        Success = WinLdrScanSystemHive(LoaderBlock, BootPath);
+        TRACE("SYSTEM hive %s\n", (Success ? "scanned" : "not scanned"));
+        /* Bail out if failure */
+        if (!Success)
+            return ENOEXEC;
+
+        /* Load the Firmware Errata file */
+        Success = WinLdrInitErrataInf(LoaderBlock, OperatingSystemVersion, BootPath);
+        TRACE("Firmware Errata file %s\n", (Success ? "loaded" : "not loaded"));
+        /* Not necessarily fatal if not found - carry on going */
+    }
+
     /* Cleanup INI file */
     IniCleanup();
+
+    /* Close the INF file */
+    if (IsNTSetup)
+        InfCloseFile(InfHandle);
 
 /****
  **** WE HAVE NOW REACHED THE POINT OF NO RETURN !!
@@ -1231,7 +1347,7 @@ LoadAndBootWindowsCommon(
     /* Reset the PE loader import-DLL callback */
     PeLdrImportDllLoadCallback = NULL;
 
-    /* Initialize Phase 1 - no drivers loading anymore */
+    /* Initialize Phase 1 */
     WinLdrInitializePhase1(LoaderBlock,
                            BootOptions,
                            SystemRoot,

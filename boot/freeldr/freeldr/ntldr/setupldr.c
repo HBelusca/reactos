@@ -3,6 +3,7 @@
  * LICENSE:     GPL-2.0+ (https://spdx.org/licenses/GPL-2.0+)
  * PURPOSE:     Windows-compatible NT OS Setup Loader.
  * COPYRIGHT:   Copyright 2009-2019 Aleksey Bragin <aleksey@reactos.org>
+ *              Copyright 2022 Hermès Bélusca-Maïto
  */
 
 #include <freeldr.h>
@@ -10,6 +11,7 @@
 #include <arc/setupblk.h>
 #include "winldr.h"
 #include "inffile.h"
+#include "setupldr.h"
 #include "ntldropts.h"
 
 #include <debug.h>
@@ -21,7 +23,7 @@ AllocateAndInitLPB(
     IN USHORT VersionToBoot,
     OUT PLOADER_PARAMETER_BLOCK* OutLoaderBlock);
 
-static VOID
+/*static*/ VOID
 SetupLdrLoadNlsData(
     _Inout_ PLOADER_PARAMETER_BLOCK LoaderBlock,
     _In_ HINF InfHandle,
@@ -92,7 +94,7 @@ Quit:
     RtlFreeUnicodeString(&AnsiFileName);
 }
 
-static
+/*static*/
 BOOLEAN
 SetupLdrInitErrataInf(
     IN OUT PLOADER_PARAMETER_BLOCK LoaderBlock,
@@ -134,7 +136,7 @@ SetupLdrInitErrataInf(
     return TRUE;
 }
 
-static VOID
+/*static*/ VOID
 SetupLdrScanBootDrivers(
     _Inout_ PLIST_ENTRY BootDriverListHead,
     _In_ HINF InfHandle,
@@ -470,188 +472,35 @@ NtLdrGetHigherPriorityOptions(
     }
 }
 
-
-ARC_STATUS
-LoadReactOSSetup(
-    IN ULONG Argc,
-    IN PCHAR Argv[],
-    IN PCHAR Envp[])
+VOID
+SetupLdrPostProcessBootOptions(
+    _Out_z_bytecap_(BootOptionsSize)
+         PSTR BootOptions,
+    _In_ SIZE_T BootOptionsSize,
+    _In_ PCSTR ArgsBootOptions,
+    // _In_ ULONG Argc,
+    // _In_ PCHAR Argv[],
+    _In_ HINF InfHandle)
 {
-    ARC_STATUS Status;
-    PCSTR ArgValue;
-    PCSTR SystemPartition;
-    PCSTR SystemPath;
-    PSTR FileName;
-    ULONG FileNameLength;
-    BOOLEAN BootFromFloppy;
-    BOOLEAN Success;
-    HINF InfHandle;
     INFCONTEXT InfContext;
-    ULONG i, ErrorLine;
-    PLOADER_PARAMETER_BLOCK LoaderBlock;
-    PSETUP_LOADER_BLOCK SetupBlock;
-    CHAR BootPath[MAX_PATH];
-    CHAR FilePath[MAX_PATH];
-    CHAR UserBootOptions[256];
-    PCSTR BootOptions;
 
-    static PCSTR SourcePaths[] =
-    {
-        "", /* Only for floppy boot */
-#if defined(_M_IX86)
-        "I386\\",
-#elif defined(_M_MPPC)
-        "PPC\\",
-#elif defined(_M_MRX000)
-        "MIPS\\",
-#endif
-        "reactos\\",
-        NULL
-    };
-
-    /* Retrieve the (mandatory) boot type */
-    ArgValue = GetArgumentValue(Argc, Argv, "BootType");
-    if (!ArgValue || !*ArgValue)
-    {
-        ERR("No 'BootType' value, aborting!\n");
-        return EINVAL;
-    }
-    if (_stricmp(ArgValue, "ReactOSSetup") != 0)
-    {
-        ERR("Unknown 'BootType' value '%s', aborting!\n", ArgValue);
-        return EINVAL;
-    }
-
-    /* Retrieve the (mandatory) system partition */
-    SystemPartition = GetArgumentValue(Argc, Argv, "SystemPartition");
-    if (!SystemPartition || !*SystemPartition)
-    {
-        ERR("No 'SystemPartition' specified, aborting!\n");
-        return EINVAL;
-    }
-
-    /* Let the user know we started loading */
-    UiDrawBackdrop();
-    UiDrawStatusText("Setup is loading...");
-    UiDrawProgressBarCenter("Loading ReactOS Setup...");
-
-    /* Retrieve the system path */
-    *BootPath = ANSI_NULL;
-    ArgValue = GetArgumentValue(Argc, Argv, "SystemPath");
-    if (ArgValue)
-    {
-        RtlStringCbCopyA(BootPath, sizeof(BootPath), ArgValue);
-    }
-    else
-    {
-        /*
-         * IMPROVE: I don't want to use the SystemPartition here as a
-         * default choice because I can do it after (see few lines below).
-         * Instead I reset BootPath here so that we can build the full path
-         * using the general code from below.
-         */
-        // RtlStringCbCopyA(BootPath, sizeof(BootPath), SystemPartition);
-        *BootPath = ANSI_NULL;
-    }
-
-    /*
-     * Check whether BootPath is a full path
-     * and if not, create a full boot path.
-     *
-     * See FsOpenFile for the technique used.
-     */
-    if (strrchr(BootPath, ')') == NULL)
-    {
-        /* Temporarily save the boot path */
-        RtlStringCbCopyA(FilePath, sizeof(FilePath), BootPath);
-
-        /* This is not a full path: prepend the SystemPartition */
-        RtlStringCbCopyA(BootPath, sizeof(BootPath), SystemPartition);
-
-        /* Append a path separator if needed */
-        if (*FilePath != '\\' && *FilePath != '/')
-            RtlStringCbCatA(BootPath, sizeof(BootPath), "\\");
-
-        /* Append the remaining path */
-        RtlStringCbCatA(BootPath, sizeof(BootPath), FilePath);
-    }
-
-    /* Append a path separator if needed */
-    if (!*BootPath || BootPath[strlen(BootPath) - 1] != '\\')
-        RtlStringCbCatA(BootPath, sizeof(BootPath), "\\");
-
-    TRACE("BootPath: '%s'\n", BootPath);
-
-    /*
-     * Retrieve the boot options. Any options present here will supplement or
-     * override those that will be specified in TXTSETUP.SIF's OsLoadOptions.
-     */
-    BootOptions = GetArgumentValue(Argc, Argv, "Options");
-    if (!BootOptions)
-        BootOptions = "";
-
-    TRACE("BootOptions: '%s'\n", BootOptions);
-
-    /* Check if a RAM disk file was given */
-    FileName = (PSTR)NtLdrGetOptionEx(BootOptions, "RDPATH=", &FileNameLength);
-    if (FileName && (FileNameLength > 7))
-    {
-        /* Load the RAM disk */
-        Status = RamDiskInitialize(FALSE, BootOptions, SystemPartition);
-        if (Status != ESUCCESS)
-        {
-            FileName += 7; FileNameLength -= 7;
-            UiMessageBox("Failed to load RAM disk file '%.*s'",
-                         FileNameLength, FileName);
-            return Status;
-        }
-    }
-
-    /* Check if we booted from floppy */
-    BootFromFloppy = strstr(BootPath, "fdisk") != NULL;
-
-    /* Open 'txtsetup.sif' from any of the source paths */
-    FileName = BootPath + strlen(BootPath);
-    for (i = BootFromFloppy ? 0 : 1; ; i++)
-    {
-        SystemPath = SourcePaths[i];
-        if (!SystemPath)
-        {
-            UiMessageBox("Failed to open txtsetup.sif");
-            return ENOENT;
-        }
-        FileNameLength = (ULONG)(sizeof(BootPath) - (FileName - BootPath)*sizeof(CHAR));
-        RtlStringCbCopyA(FileName, FileNameLength, SystemPath);
-        RtlStringCbCopyA(FilePath, sizeof(FilePath), BootPath);
-        RtlStringCbCatA(FilePath, sizeof(FilePath), "txtsetup.sif");
-        if (InfOpenFile(&InfHandle, FilePath, &ErrorLine))
-        {
-            break;
-        }
-    }
-
-    TRACE("BootPath: '%s', SystemPath: '%s'\n", BootPath, SystemPath);
-
-    // UseLocalSif = NtLdrGetOption(BootOptions, "USELOCALSIF");
-
-    if (NtLdrGetOption(BootOptions, "SIFOPTIONSOVERRIDE"))
+    // UseLocalSif = NtLdrGetOption(ArgsBootOptions, "USELOCALSIF");
+    if (NtLdrGetOption(ArgsBootOptions, "SIFOPTIONSOVERRIDE"))
     {
         PCSTR OptionsToRemove[2] = {"SIFOPTIONSOVERRIDE", NULL};
 
         /* Do not use any load options from TXTSETUP.SIF, but
          * use instead those passed from the command line. */
-        RtlStringCbCopyA(UserBootOptions, sizeof(UserBootOptions), BootOptions);
+        RtlStringCbCopyA(BootOptions, BootOptionsSize, ArgsBootOptions);
 
         /* Remove the private switch from the options */
-        NtLdrUpdateLoadOptions(UserBootOptions,
-                               sizeof(UserBootOptions),
+        NtLdrUpdateLoadOptions(BootOptions,
+                               BootOptionsSize,
                                FALSE,
                                NULL,
                                OptionsToRemove);
-
-        BootOptions = UserBootOptions;
     }
-    else // if (!*BootOptions || NtLdrGetOption(BootOptions, "SIFOPTIONSADD"))
+    else // if (!*ArgsBootOptions || NtLdrGetOption(ArgsBootOptions, "SIFOPTIONSADD"))
     {
         PCSTR LoadOptions = NULL;
         PCSTR DbgLoadOptions = NULL;
@@ -670,8 +519,8 @@ LoadReactOSSetup(
         /* Non-debug mode: get the debug load options only if /DEBUG was specified
          * in the Argv command-line options (was e.g. added to the options when
          * the user selected "Debugging Mode" in the advanced boot menu). */
-        if (NtLdrGetOption(BootOptions, "DEBUG") ||
-            NtLdrGetOption(BootOptions, "DEBUG="))
+        if (NtLdrGetOption(ArgsBootOptions, "DEBUG") ||
+            NtLdrGetOption(ArgsBootOptions, "DEBUG="))
         {
 #else
         /* Debug mode: always get the debug load options */
@@ -689,9 +538,9 @@ LoadReactOSSetup(
 #endif
 
         /* Initialize the load options with those from TXTSETUP.SIF */
-        *UserBootOptions = ANSI_NULL;
+        *BootOptions = ANSI_NULL;
         if (LoadOptions && *LoadOptions)
-            RtlStringCbCopyA(UserBootOptions, sizeof(UserBootOptions), LoadOptions);
+            RtlStringCbCopyA(BootOptions, BootOptionsSize, LoadOptions);
 
         /* Merge the debug load options if any */
         if (DbgLoadOptions)
@@ -721,8 +570,8 @@ LoadReactOSSetup(
              */
             OptionsToAdd[0] = (PSTR)DbgLoadOptions;
             OptionsToRemove[2] = (PSTR)DbgLoadOptions;
-            NtLdrUpdateLoadOptions(UserBootOptions,
-                                   sizeof(UserBootOptions),
+            NtLdrUpdateLoadOptions(BootOptions,
+                                   BootOptionsSize,
                                    FALSE,
                                    (PCSTR*)OptionsToAdd,
                                    (PCSTR*)OptionsToRemove);
@@ -741,7 +590,7 @@ LoadReactOSSetup(
          * SIF load options because they are of higher precedence than
          * those specified in the options to be added.
          */
-        NtLdrGetHigherPriorityOptions(BootOptions,
+        NtLdrGetHigherPriorityOptions(ArgsBootOptions,
                                       &ExtraOptions,
                                       &HigherPriorityOptions);
         OptionsToAdd[1] = (ExtraOptions ? ExtraOptions : "");
@@ -749,10 +598,10 @@ LoadReactOSSetup(
 
         /* Finally, prepend the user-specified options that
          * take precedence over those from TXTSETUP.SIF. */
-        OptionsToAdd[0] = (PSTR)BootOptions;
-        OptionsToRemove[1] = (PSTR)BootOptions;
-        NtLdrUpdateLoadOptions(UserBootOptions,
-                               sizeof(UserBootOptions),
+        OptionsToAdd[0] = (PSTR)ArgsBootOptions;
+        OptionsToRemove[1] = (PSTR)ArgsBootOptions;
+        NtLdrUpdateLoadOptions(BootOptions,
+                               BootOptionsSize,
                                FALSE,
                                (PCSTR*)OptionsToAdd,
                                (PCSTR*)OptionsToRemove);
@@ -761,58 +610,80 @@ LoadReactOSSetup(
             FrLdrHeapFree(ExtraOptions, TAG_BOOT_OPTIONS);
         if (HigherPriorityOptions)
             FrLdrHeapFree(HigherPriorityOptions, TAG_BOOT_OPTIONS);
+    }
+}
 
-        BootOptions = UserBootOptions;
+ARC_STATUS
+SetupLdrFindConfigSource(
+    _Out_ PHINF InfHandle,
+    _Inout_z_bytecap_(BootPathSize)
+         PSTR BootPath,
+    _In_ SIZE_T BootPathSize,
+    _Out_z_bytecap_(FilePathSize)
+         PSTR FilePath,
+    _In_ SIZE_T FilePathSize)
+{
+    PSTR FileName;
+    ULONG FileNameLength;
+    PCSTR SystemPath;
+    ULONG i, ErrorLine;
+    BOOLEAN BootFromFloppy;
+
+    static PCSTR SourcePaths[] =
+    {
+        "", /* Only for floppy boot */
+#if defined(_M_IX86)
+        "I386\\",
+#elif defined(_M_AMD64)
+        "AMD64\\",
+#elif defined(_M_ARM)
+        "ARM\\",
+#elif defined(_M_ARM64)
+        "ARM64\\",
+#elif defined(_M_MPPC)
+        "PPC\\",
+#elif defined(_M_MRX000)
+        "MIPS\\",
+#endif
+        "reactos\\",
+    };
+
+    /* Check if we booted from floppy */
+    BootFromFloppy = (strstr(BootPath, ")fdisk(") != NULL);
+
+    /* Open 'txtsetup.sif' from any of the source paths */
+    FileName = BootPath + strlen(BootPath);
+    for (i = BootFromFloppy ? 0 : 1; ; i++)
+    {
+        if (i >= RTL_NUMBER_OF(SourcePaths))
+        {
+            UiMessageBox("Failed to open txtsetup.sif");
+            return ENOENT;
+        }
+
+        SystemPath = SourcePaths[i];
+
+        /* Adjust the tentative BootPath */
+        FileNameLength = (ULONG)(BootPathSize - (FileName - BootPath)*sizeof(CHAR));
+        RtlStringCbCopyA(FileName, FileNameLength, SystemPath);
+
+        /* Try to open 'txtsetup.sif' from this boot path */
+        RtlStringCbCopyA(FilePath, FilePathSize, BootPath);
+        RtlStringCbCatA(FilePath, FilePathSize, "txtsetup.sif");
+        if (InfOpenFile(InfHandle, FilePath, &ErrorLine))
+        {
+            /* Found and opened it: txtsetup.sif is in the correct BootPath */
+            break;
+        }
+        else
+        {
+            if (ErrorLine != -1)
+                UiMessageBox("Error in %s at line %lu", FilePath, ErrorLine);
+        }
     }
 
-    TRACE("BootOptions: '%s'\n", BootOptions);
-
-    /* Handle the SOS option */
-    SosEnabled = !!NtLdrGetOption(BootOptions, "SOS");
-    if (SosEnabled)
-        UiResetForSOS();
-
-    /* Allocate and minimally-initialize the Loader Parameter Block */
-    AllocateAndInitLPB(_WIN32_WINNT_WS03, &LoaderBlock);
-
-    /* Allocate and initialize the setup loader block */
-    SetupBlock = &WinLdrSystemBlock->SetupBlock;
-    LoaderBlock->SetupLdrBlock = SetupBlock;
-
-    /* Set textmode setup flag */
-    SetupBlock->Flags = SETUPLDR_TEXT_MODE;
-
-    /* Load the "setupreg.hiv" setup system hive */
-    UiUpdateProgressBar(15, "Loading setup system hive...");
-    Success = WinLdrInitSystemHive(LoaderBlock, BootPath, TRUE);
-    TRACE("Setup SYSTEM hive %s\n", (Success ? "loaded" : "not loaded"));
-    /* Bail out if failure */
-    if (!Success)
-        return ENOEXEC;
-
-    /* Load NLS data, they are in the System32 directory of the installation medium */
-    RtlStringCbCopyA(FilePath, sizeof(FilePath), BootPath);
-    RtlStringCbCatA(FilePath, sizeof(FilePath), "system32\\");
-    SetupLdrLoadNlsData(LoaderBlock, InfHandle, FilePath);
-
-    /* Load the Firmware Errata file from the installation medium */
-    Success = SetupLdrInitErrataInf(LoaderBlock, InfHandle, BootPath);
-    TRACE("Firmware Errata file %s\n", (Success ? "loaded" : "not loaded"));
-    /* Not necessarily fatal if not found - carry on going */
-
-    // UiDrawStatusText("Press F6 if you need to install a 3rd-party SCSI or RAID driver...");
-
-    /* Get a list of boot drivers */
-    SetupLdrScanBootDrivers(&LoaderBlock->BootDriverListHead, InfHandle, BootPath);
-
-    /* Close the inf file */
-    InfCloseFile(InfHandle);
-
-    UiDrawStatusText("The Setup program is starting...");
-
-    /* Finish loading */
-    return LoadAndBootWindowsCommon(_WIN32_WINNT_WS03,
-                                    LoaderBlock,
-                                    BootOptions,
-                                    BootPath);
+    TRACE("BootPath: '%s', SystemPath: '%s'\n", BootPath, SystemPath);
+    return ESUCCESS;
 }
+
+/* EOF */

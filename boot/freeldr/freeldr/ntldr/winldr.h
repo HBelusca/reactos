@@ -145,13 +145,6 @@ WinLdrInitializePhase1(PLOADER_PARAMETER_BLOCK LoaderBlock,
                        PCSTR BootPath,
                        USHORT VersionToBoot);
 
-ARC_STATUS
-LoadAndBootWindowsCommon(
-    IN USHORT OperatingSystemVersion,
-    IN PLOADER_PARAMETER_BLOCK LoaderBlock,
-    IN PCSTR BootOptions,
-    IN PCSTR BootPath);
-
 VOID
 WinLdrSetupMachineDependent(PLOADER_PARAMETER_BLOCK LoaderBlock);
 
