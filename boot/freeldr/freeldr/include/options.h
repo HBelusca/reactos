@@ -21,4 +21,3 @@
 
 VOID DoOptionsMenu(IN OperatingSystemItem* OperatingSystem);
 VOID DisplayBootTimeOptions(VOID);
-VOID AppendBootTimeOptions(PCHAR BootOptions);

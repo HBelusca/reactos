@@ -492,7 +492,7 @@ LoadReactOSSetup(
     PSETUP_LOADER_BLOCK SetupBlock;
     CHAR BootPath[MAX_PATH];
     CHAR FilePath[MAX_PATH];
-    CHAR UserBootOptions[256];
+    CHAR UserBootOptions[MAX_OPTIONS_LENGTH+1];
     PCSTR BootOptions;
 
     static PCSTR SourcePaths[] =
@@ -589,8 +589,7 @@ LoadReactOSSetup(
     BootOptions = GetArgumentValue(Argc, Argv, "Options");
     if (!BootOptions)
         BootOptions = "";
-
-    TRACE("BootOptions: '%s'\n", BootOptions);
+    TRACE("BootOptions(1): '%s'\n", BootOptions);
 
     /* Check if a RAM disk file was given */
     FileName = (PSTR)NtLdrGetOptionEx(BootOptions, "RDPATH=", &FileNameLength);
@@ -633,7 +632,6 @@ LoadReactOSSetup(
     TRACE("BootPath: '%s', SystemPath: '%s'\n", BootPath, SystemPath);
 
     // UseLocalSif = NtLdrGetOption(BootOptions, "USELOCALSIF");
-
     if (NtLdrGetOption(BootOptions, "SIFOPTIONSOVERRIDE"))
     {
         PCSTR OptionsToRemove[2] = {"SIFOPTIONSOVERRIDE", NULL};
@@ -648,8 +646,6 @@ LoadReactOSSetup(
                                FALSE,
                                NULL,
                                OptionsToRemove);
-
-        BootOptions = UserBootOptions;
     }
     else // if (!*BootOptions || NtLdrGetOption(BootOptions, "SIFOPTIONSADD"))
     {
@@ -761,11 +757,15 @@ LoadReactOSSetup(
             FrLdrHeapFree(ExtraOptions, TAG_BOOT_OPTIONS);
         if (HigherPriorityOptions)
             FrLdrHeapFree(HigherPriorityOptions, TAG_BOOT_OPTIONS);
-
-        BootOptions = UserBootOptions;
     }
 
-    TRACE("BootOptions: '%s'\n", BootOptions);
+    /* Append boot-time options */
+    AppendBootTimeOptions(UserBootOptions, sizeof(UserBootOptions));
+
+    /* Post-process the boot options */
+    NtLdrNormalizeOptions(UserBootOptions, sizeof(UserBootOptions));
+    BootOptions = UserBootOptions;
+    TRACE("BootOptions(2): '%s'\n", BootOptions);
 
     /* Handle the SOS option */
     SosEnabled = !!NtLdrGetOption(BootOptions, "SOS");

@@ -26,10 +26,13 @@ DBG_DEFAULT_CHANNEL(WARNING);
 
 /* GLOBALS ********************************************************************/
 
-typedef
-VOID
+typedef VOID
 (*EDIT_OS_ENTRY_PROC)(
-    IN OUT OperatingSystemItem* OperatingSystem);
+    _Inout_ OperatingSystemItem* OperatingSystem);
+
+typedef VOID
+(*OS_MENU_PROC)(
+    _Inout_ OperatingSystemItem* OperatingSystem);
 
 static VOID
 EditCustomBootReactOSSetup(
@@ -45,31 +48,62 @@ EditCustomBootNTOS(
     EditCustomBootReactOS(OperatingSystem, FALSE);
 }
 
-static const struct
+typedef struct _OS_LOADING_METHOD
 {
     PCSTR BootType;
     EDIT_OS_ENTRY_PROC EditOsEntry;
+    OS_MENU_PROC OsMenu;
     ARC_ENTRY_POINT OsLoader;
-} OSLoadingMethods[] =
+} OS_LOADING_METHOD, *POS_LOADING_METHOD;
+
+static const
+OS_LOADING_METHOD OSLoadingMethods[] =
 {
-    {"ReactOSSetup", EditCustomBootReactOSSetup, LoadReactOSSetup},
+    {"ReactOSSetup", EditCustomBootReactOSSetup, DoNTOptionsMenu, LoadReactOSSetup},
 
 #if defined(_M_IX86) || defined(_M_AMD64)
 #ifndef UEFIBOOT
-    {"Drive"       , EditCustomBootDisk      , LoadAndBootDevice},
-    {"Partition"   , EditCustomBootPartition , LoadAndBootDevice},
-    {"BootSector"  , EditCustomBootSectorFile, LoadAndBootDevice},
-    {"Linux"       , EditCustomBootLinux, LoadAndBootLinux  },
+    {"Drive"       , EditCustomBootDisk      , NULL, LoadAndBootDevice},
+    {"Partition"   , EditCustomBootPartition , NULL, LoadAndBootDevice},
+    {"BootSector"  , EditCustomBootSectorFile, NULL, LoadAndBootDevice},
+    {"Linux"       , EditCustomBootLinux     , NULL, LoadAndBootLinux },
 #endif
 #endif
 #ifdef _M_IX86
-    {"WindowsNT40" , EditCustomBootNTOS , LoadAndBootWindows},
+    {"WindowsNT40" , EditCustomBootNTOS, NULL           , LoadAndBootWindows},
 #endif
-    {"Windows"     , EditCustomBootNTOS , LoadAndBootWindows},
-    {"Windows2003" , EditCustomBootNTOS , LoadAndBootWindows},
+    {"Windows"     , EditCustomBootNTOS, DoNTOptionsMenu, LoadAndBootWindows},
+    {"Windows2003" , EditCustomBootNTOS, DoNTOptionsMenu, LoadAndBootWindows},
 };
 
 /* FUNCTIONS ******************************************************************/
+
+static POS_LOADING_METHOD
+GetOSLoadingMethod(
+    _In_ ULONG_PTR SectionId)
+{
+    ULONG i;
+    CHAR BootType[80];
+
+    /* The operating system section has been opened by InitOperatingSystemList() */
+    ASSERT(SectionId != 0);
+
+    /* Try to read the boot type. We must have the value (it
+     * has been possibly added by InitOperatingSystemList()) */
+    *BootType = ANSI_NULL;
+    IniReadSettingByName(SectionId, "BootType", BootType, sizeof(BootType));
+    ASSERT(*BootType);
+
+    /* Find the suitable OS loading method */
+    for (i = 0; ; ++i)
+    {
+        if (i >= RTL_NUMBER_OF(OSLoadingMethods))
+            return NULL;
+        if (_stricmp(BootType, OSLoadingMethods[i].BootType) == 0)
+            return &OSLoadingMethods[i];
+    }
+    UNREACHABLE;
+}
 
 /*
  * This function converts the list of key=value options in the given operating
@@ -77,7 +111,7 @@ static const struct
  * the extra mandatory Software Loading Environment Variables, following the
  * ARC specification.
  */
-PCHAR*
+static PCHAR*
 BuildArgvForOsLoader(
     IN PCSTR LoadIdentifier,
     IN ULONG_PTR SectionId,
@@ -177,23 +211,19 @@ BuildArgvForOsLoader(
     return Argv;
 }
 
-VOID LoadOperatingSystem(IN OperatingSystemItem* OperatingSystem)
+VOID
+LoadOperatingSystem(
+    _In_ OperatingSystemItem* OperatingSystem)
 {
     ULONG_PTR SectionId = OperatingSystem->SectionId;
-    ULONG i;
+    POS_LOADING_METHOD OSLoadingMethod;
     ULONG Argc;
     PCHAR* Argv;
-    CHAR BootType[80];
 
-    /* The operating system section has been opened by InitOperatingSystemList() */
-    ASSERT(SectionId != 0);
-
-    /* Try to read the boot type */
-    *BootType = ANSI_NULL;
-    IniReadSettingByName(SectionId, "BootType", BootType, sizeof(BootType));
-
-    /* We must have the "BootType" value (it has been possibly added by InitOperatingSystemList()) */
-    ASSERT(*BootType);
+    /* Find the suitable OS loader to start */
+    OSLoadingMethod = GetOSLoadingMethod(SectionId);
+    if (!OSLoadingMethod)
+        return;
 
 #ifdef _M_IX86
 #ifndef UEFIBOOT
@@ -202,56 +232,27 @@ VOID LoadOperatingSystem(IN OperatingSystemItem* OperatingSystem)
 #endif
 #endif
 
-    /* Find the suitable OS loader to start */
-    for (i = 0; ; ++i)
-    {
-        if (i >= RTL_NUMBER_OF(OSLoadingMethods))
-            return;
-        if (_stricmp(BootType, OSLoadingMethods[i].BootType) == 0)
-            break;
-    }
-
     /* Build the ARC-compatible argument vector */
     Argv = BuildArgvForOsLoader(OperatingSystem->LoadIdentifier, SectionId, &Argc);
     if (!Argv)
         return; // Unexpected failure.
 
     /* Start the OS loader */
-    OSLoadingMethods[i].OsLoader(Argc, Argv, NULL);
+    OSLoadingMethod->OsLoader(Argc, Argv, NULL);
     FrLdrHeapFree(Argv, TAG_STRING);
 }
 
 #ifdef HAS_OPTION_MENU_EDIT_CMDLINE
-
-VOID EditOperatingSystemEntry(IN OperatingSystemItem* OperatingSystem)
+VOID
+EditOperatingSystemEntry(
+    _Inout_ OperatingSystemItem* OperatingSystem)
 {
-    ULONG_PTR SectionId = OperatingSystem->SectionId;
-    ULONG i;
-    CHAR BootType[80];
-
-    /* The operating system section has been opened by InitOperatingSystemList() */
-    ASSERT(SectionId != 0);
-
-    /* Try to read the boot type */
-    *BootType = ANSI_NULL;
-    IniReadSettingByName(SectionId, "BootType", BootType, sizeof(BootType));
-
-    /* We must have the "BootType" value (it has been possibly added by InitOperatingSystemList()) */
-    ASSERT(*BootType);
-
-    /* Find the suitable OS entry editor */
-    for (i = 0; ; ++i)
-    {
-        if (i >= RTL_NUMBER_OF(OSLoadingMethods))
-            return;
-        if (_stricmp(BootType, OSLoadingMethods[i].BootType) == 0)
-            break;
-    }
-
-    /* Run it */
-    OSLoadingMethods[i].EditOsEntry(OperatingSystem);
+    /* Find the suitable OS entry editor and open it */
+    POS_LOADING_METHOD OSLoadingMethod =
+        GetOSLoadingMethod(OperatingSystem->SectionId);
+    if (OSLoadingMethod)
+        OSLoadingMethod->EditOsEntry(OperatingSystem);
 }
-
 #endif // HAS_OPTION_MENU_EDIT_CMDLINE
 
 static LONG
@@ -282,15 +283,39 @@ MainBootMenuKeyPressFilter(
     IN ULONG SelectedMenuItem,
     IN PVOID Context OPTIONAL)
 {
+    OperatingSystemItem* OperatingSystem =
+        &((OperatingSystemItem*)Context)[SelectedMenuItem];
+
     switch (KeyPress)
     {
-    case KEY_F8:
-        DoOptionsMenu(&((OperatingSystemItem*)Context)[SelectedMenuItem]);
+#if 0
+    /* Help */
+    case KEY_F1:
+        DoHelp();
+        return TRUE;
+#endif
+
+    /* FreeLdr setup menu */
+    case KEY_F2:
+        DoOptionsMenu(OperatingSystem);
         return TRUE;
 
+    /* Boot entry-specific advanced boot menu */
+    case KEY_F5:
+    case KEY_F8:
+    {
+        /* Find the suitable OS menu procedure and display it */
+        POS_LOADING_METHOD OSLoadingMethod =
+            GetOSLoadingMethod(OperatingSystem->SectionId);
+        if (OSLoadingMethod)
+            OSLoadingMethod->OsMenu(OperatingSystem);
+        return TRUE;
+    }
+
 #ifdef HAS_OPTION_MENU_EDIT_CMDLINE
+    /* Boot entry editor */
     case KEY_F10:
-        EditOperatingSystemEntry(&((OperatingSystemItem*)Context)[SelectedMenuItem]);
+        EditOperatingSystemEntry(OperatingSystem);
         return TRUE;
 #endif
 

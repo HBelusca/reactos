@@ -128,7 +128,6 @@ WinLdrInitializePhase1(PLOADER_PARAMETER_BLOCK LoaderBlock,
      * CHAR ArcBoot[] = "multi(0)disk(0)rdisk(0)partition(1)";
      */
 
-    PSTR  LoadOptions, NewLoadOptions;
     CHAR  HalPath[] = "\\";
     CHAR  ArcBoot[MAX_PATH+1];
     CHAR  MiscFiles[MAX_PATH+1];
@@ -180,18 +179,9 @@ WinLdrInitializePhase1(PLOADER_PARAMETER_BLOCK LoaderBlock,
     RtlStringCbCopyA(LoaderBlock->NtHalPathName, sizeof(WinLdrSystemBlock->NtHalPathName), HalPath);
     LoaderBlock->NtHalPathName = PaToVa(LoaderBlock->NtHalPathName);
 
-    /* Fill LoadOptions and strip the '/' switch symbol in front of each option */
-    NewLoadOptions = LoadOptions = LoaderBlock->LoadOptions = WinLdrSystemBlock->LoadOptions;
+    /* Fill LoadOptions */
+    LoaderBlock->LoadOptions = WinLdrSystemBlock->LoadOptions;
     RtlStringCbCopyA(LoaderBlock->LoadOptions, sizeof(WinLdrSystemBlock->LoadOptions), Options);
-
-    do
-    {
-        while (*LoadOptions == '/')
-            ++LoadOptions;
-
-        *NewLoadOptions++ = *LoadOptions;
-    } while (*LoadOptions++);
-
     LoaderBlock->LoadOptions = PaToVa(LoaderBlock->LoadOptions);
 
     /* ARC devices */
@@ -957,6 +947,30 @@ WinLdrInitErrataInf(
     return TRUE;
 }
 
+
+static
+VOID
+NtLdrNormalizeOptions(
+    _Inout_z_bytecount_(OptionsSize) // BufferSize
+         PSTR Options, // LoadOptions
+    _In_ SIZE_T OptionsSize)
+{
+    PCHAR NewOptions;
+
+    // TODO: Use a better algorithm...
+
+    /* Strip the '/' switch symbol in front of each option */
+    NewOptions = Options;
+    do
+    {
+        while (*Options == '/')
+            ++Options;
+
+        *NewOptions++ = *Options;
+    } while (*Options++);
+}
+
+
 ARC_STATUS
 LoadAndBootWindows(
     IN ULONG Argc,
@@ -973,7 +987,7 @@ LoadAndBootWindows(
     PLOADER_PARAMETER_BLOCK LoaderBlock;
     CHAR BootPath[MAX_PATH];
     CHAR FilePath[MAX_PATH];
-    CHAR BootOptions[256];
+    CHAR BootOptions[MAX_OPTIONS_LENGTH+1];
 
     /* Retrieve the (mandatory) boot type */
     ArgValue = GetArgumentValue(Argc, Argv, "BootType");
@@ -1051,9 +1065,7 @@ LoadAndBootWindows(
     ArgValue = GetArgumentValue(Argc, Argv, "Options");
     if (ArgValue && *ArgValue)
         RtlStringCbCopyA(BootOptions, sizeof(BootOptions), ArgValue);
-
-    /* Append boot-time options */
-    AppendBootTimeOptions(BootOptions);
+    TRACE("BootOptions(1): '%s'\n", BootOptions);
 
     /*
      * Set the "/HAL=" and "/KERNEL=" options if needed.
@@ -1088,7 +1100,12 @@ LoadAndBootWindows(
         }
     }
 
-    TRACE("BootOptions: '%s'\n", BootOptions);
+    /* Append boot-time options */
+    AppendBootTimeOptions(BootOptions, sizeof(BootOptions));
+
+    /* Post-process the boot options */
+    NtLdrNormalizeOptions(BootOptions, sizeof(BootOptions));
+    TRACE("BootOptions(2): '%s'\n", BootOptions);
 
     /* Check if a RAM disk file was given */
     FileName = NtLdrGetOptionEx(BootOptions, "RDPATH=", &FileNameLength);
