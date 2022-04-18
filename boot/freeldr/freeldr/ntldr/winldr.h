@@ -64,12 +64,12 @@ extern PLOADER_SYSTEM_BLOCK WinLdrSystemBlock;
 /**/extern PCWSTR BootFileSystem;/**/
 
 
-// conversion.c
+// conversion.c and conversion.h
 #if 0
 PVOID VaToPa(PVOID Va);
 PVOID PaToVa(PVOID Pa);
-VOID List_PaToVa(_In_ LIST_ENTRY *ListEntry);
 #endif
+VOID List_PaToVa(_In_ PLIST_ENTRY ListHeadPa);
 VOID ConvertConfigToVA(PCONFIGURATION_COMPONENT_DATA Start);
 
 // winldr.c
@@ -105,7 +105,8 @@ PVOID WinLdrLoadModule(PCSTR ModuleName, PULONG Size,
 
 // wlmemory.c
 BOOLEAN
-WinLdrSetupMemoryLayout(IN OUT PLOADER_PARAMETER_BLOCK LoaderBlock);
+WinLdrSetupMemoryLayout(
+    _Inout_ PLOADER_PARAMETER_BLOCK LoaderBlock);
 
 // wlregistry.c
 BOOLEAN
@@ -144,15 +145,6 @@ WinLdrInitializePhase1(PLOADER_PARAMETER_BLOCK LoaderBlock,
                        PCSTR BootPath,
                        USHORT VersionToBoot);
 
-VOID
-WinLdrpDumpMemoryDescriptors(PLOADER_PARAMETER_BLOCK LoaderBlock);
-
-VOID
-WinLdrpDumpBootDriver(PLOADER_PARAMETER_BLOCK LoaderBlock);
-
-VOID
-WinLdrpDumpArcDisks(PLOADER_PARAMETER_BLOCK LoaderBlock);
-
 ARC_STATUS
 LoadAndBootWindowsCommon(
     IN USHORT OperatingSystemVersion,
@@ -175,5 +167,7 @@ MempSetupPaging(IN PFN_NUMBER StartPage,
 VOID
 MempUnmapPage(PFN_NUMBER Page);
 
+#if DBG
 VOID
 MempDump(VOID);
+#endif

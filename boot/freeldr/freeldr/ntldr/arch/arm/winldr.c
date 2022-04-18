@@ -94,11 +94,13 @@ MempUnmapPage(IN PFN_NUMBER Page)
     return;
 }
 
+#if DBG
 VOID
 MempDump(VOID)
 {
     return;
 }
+#endif /* DBG */
 
 static
 BOOLEAN
