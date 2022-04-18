@@ -43,6 +43,31 @@ typedef struct _ARC_DISK_SIGNATURE_EX
 //
 ////////////////////////////////////////////////////////////////////////////////
 
+//
+// NT-specific boot options
+//
+
+/* The boot options are mutually exclusive */
+enum BootOption
+{
+    NO_OPTION = 0,
+
+    SAFEBOOT,
+    SAFEBOOT_NETWORK,
+    SAFEBOOT_ALTSHELL,
+    SAFEBOOT_DSREPAIR,
+
+    LKG_CONFIG,
+};
+
+#define BOOT_LOGGING    (1 << 0)
+#define BOOT_VGA_MODE   (1 << 1)
+#define BOOT_DEBUGGING  (1 << 2)
+
+extern enum BootOption BootOptionChoice;
+extern LOGICAL BootFlags;
+
+
 ARC_STATUS
 LoadAndBootWindows(
     IN ULONG Argc,

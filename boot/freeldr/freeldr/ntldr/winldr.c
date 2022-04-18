@@ -29,6 +29,14 @@ extern HEADLESS_LOADER_BLOCK LoaderRedirectionInformation;
 extern BOOLEAN WinLdrTerminalConnected;
 extern VOID WinLdrSetupEms(IN PCSTR BootOptions);
 
+
+//
+// NT-specific boot options
+//
+enum BootOption BootOptionChoice = NO_OPTION;
+LOGICAL BootFlags = 0;
+
+
 PLOADER_SYSTEM_BLOCK WinLdrSystemBlock;
 /**/PCWSTR BootFileSystem = NULL;/**/
 
@@ -143,7 +151,6 @@ WinLdrInitializePhase1(PLOADER_PARAMETER_BLOCK LoaderBlock,
      * CHAR ArcBoot[] = "multi(0)disk(0)rdisk(0)partition(1)";
      */
 
-    PSTR  LoadOptions, NewLoadOptions;
     CHAR  HalPath[] = "\\";
     CHAR  ArcBoot[MAX_PATH+1];
     CHAR  MiscFiles[MAX_PATH+1];
@@ -195,18 +202,9 @@ WinLdrInitializePhase1(PLOADER_PARAMETER_BLOCK LoaderBlock,
     RtlStringCbCopyA(LoaderBlock->NtHalPathName, sizeof(WinLdrSystemBlock->NtHalPathName), HalPath);
     LoaderBlock->NtHalPathName = PaToVa(LoaderBlock->NtHalPathName);
 
-    /* Fill LoadOptions and strip the '/' switch symbol in front of each option */
-    NewLoadOptions = LoadOptions = LoaderBlock->LoadOptions = WinLdrSystemBlock->LoadOptions;
+    /* Fill LoadOptions */
+    LoaderBlock->LoadOptions = WinLdrSystemBlock->LoadOptions;
     RtlStringCbCopyA(LoaderBlock->LoadOptions, sizeof(WinLdrSystemBlock->LoadOptions), Options);
-
-    do
-    {
-        while (*LoadOptions == '/')
-            ++LoadOptions;
-
-        *NewLoadOptions++ = *LoadOptions;
-    } while (*LoadOptions++);
-
     LoaderBlock->LoadOptions = PaToVa(LoaderBlock->LoadOptions);
 
     /* ARC devices */
@@ -1038,6 +1036,85 @@ WinLdrInitErrataInf(
     return TRUE;
 }
 
+
+static
+VOID
+NtLdrNormalizeOptions(
+    _Inout_z_bytecount_(OptionsSize) // BufferSize
+         PSTR Options, // LoadOptions
+    _In_ SIZE_T OptionsSize)
+{
+    PCHAR NewOptions;
+
+    // TODO: Use a better algorithm...
+
+    /* Strip the '/' switch symbol in front of each option */
+    NewOptions = Options;
+    do
+    {
+        while (*Options == '/')
+            ++Options;
+
+        *NewOptions++ = *Options;
+    } while (*Options++);
+}
+
+static
+VOID
+AppendBootTimeOptions(
+    _Inout_z_bytecount_(BootOptionsSize)
+         PSTR BootOptions,
+    _In_ SIZE_T BootOptionsSize)
+{
+    /* NOTE: Keep in sync with the 'enum BootOption' in winldr.h */
+    static const PCSTR OptionsStr[] =
+    {
+        /* NO_OPTION         */ NULL,
+        /* SAFEBOOT          */ "SAFEBOOT:MINIMAL SOS NOGUIBOOT",
+        /* SAFEBOOT_NETWORK  */ "SAFEBOOT:NETWORK SOS NOGUIBOOT",
+        /* SAFEBOOT_ALTSHELL */ "SAFEBOOT:MINIMAL(ALTERNATESHELL) SOS NOGUIBOOT",
+        /* SAFEBOOT_DSREPAIR */ "SAFEBOOT:DSREPAIR SOS",
+        /* LKG_CONFIG        */ NULL,
+    };
+
+    if (BootOptionsSize == 0)
+        return;
+
+    switch (BootOptionChoice)
+    {
+        case SAFEBOOT:
+        case SAFEBOOT_NETWORK:
+        case SAFEBOOT_ALTSHELL:
+        case SAFEBOOT_DSREPAIR:
+        {
+            ASSERT(BootOptionChoice < RTL_NUMBER_OF(OptionsStr));
+            if (*BootOptions != ANSI_NULL)
+                RtlStringCbCatA(BootOptions, BootOptionsSize, " ");
+            RtlStringCbCatA(BootOptions, BootOptionsSize, OptionsStr[BootOptionChoice]);
+            // NtLdrAddOptions(BootOptions, BootOptionsSize, TRUE, OptionsStr[BootOptionChoice]);
+            break;
+        }
+
+        case LKG_CONFIG:
+            DbgPrint("Last known good configuration is not supported yet!\n");
+            break;
+
+        default:
+            break;
+    }
+
+    // NtLdrAddOptions(BootOptions, BootOptionsSize, TRUE, ...);
+    if (BootFlags & BOOT_LOGGING)
+        RtlStringCbCatA(BootOptions, BootOptionsSize, " BOOTLOG");
+
+    if (BootFlags & BOOT_VGA_MODE)
+        RtlStringCbCatA(BootOptions, BootOptionsSize, " BASEVIDEO");
+
+    if (BootFlags & BOOT_DEBUGGING)
+        RtlStringCbCatA(BootOptions, BootOptionsSize, " DEBUG");
+}
+
+static
 VOID
 WinLdrPostProcessBootOptions(
     _Out_z_bytecap_(BootOptionsSize)
@@ -1053,7 +1130,7 @@ WinLdrPostProcessBootOptions(
     RtlStringCbCopyA(BootOptions, BootOptionsSize, ArgsBootOptions);
 
     /* Append boot-time options */
-    AppendBootTimeOptions(BootOptions); // TODO: Add support for BootOptionsSize.
+    AppendBootTimeOptions(BootOptions, BootOptionsSize);
 
     /*
      * Set the "/HAL=" and "/KERNEL=" options if needed.
@@ -1114,7 +1191,7 @@ LoadAndBootWindows(
     PLOADER_PARAMETER_BLOCK LoaderBlock;
     CHAR BootPath[MAX_PATH];
     CHAR FilePath[MAX_PATH];
-    CHAR UserBootOptions[256];
+    CHAR UserBootOptions[MAX_OPTIONS_LENGTH+1];
     PCSTR BootOptions;
 
     PLOADER_PARAMETER_BLOCK LoaderBlockVA;
@@ -1302,6 +1379,7 @@ LoadAndBootWindows(
                                      BootOptions,
                                      Argc, Argv);
     }
+    NtLdrNormalizeOptions(UserBootOptions, sizeof(UserBootOptions));
     BootOptions = UserBootOptions;
     TRACE("BootOptions(2): '%s'\n", BootOptions);
 
