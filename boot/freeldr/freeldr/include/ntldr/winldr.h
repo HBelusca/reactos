@@ -59,4 +59,3 @@ LoadReactOSSetup(
 // conversion.c and conversion.h
 PVOID VaToPa(PVOID Va);
 PVOID PaToVa(PVOID Pa);
-VOID List_PaToVa(_In_ LIST_ENTRY *ListEntry);

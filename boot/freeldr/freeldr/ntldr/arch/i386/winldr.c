@@ -743,4 +743,4 @@ MempDump(VOID)
         TRACE("\n");
     }
 }
-#endif
+#endif /* DBG */

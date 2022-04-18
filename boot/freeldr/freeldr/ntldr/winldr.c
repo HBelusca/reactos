@@ -38,8 +38,18 @@ BOOLEAN PaeModeOn = FALSE;
 #endif
 BOOLEAN NoExecuteEnabled = FALSE;
 
-// debug stuff
+/* Debugging helpers */
+#if DBG
 VOID DumpMemoryAllocMap(VOID);
+
+static VOID
+WinLdrpDumpBootDrivers(
+    _In_ PLOADER_PARAMETER_BLOCK LoaderBlock);
+
+static VOID
+WinLdrpDumpArcDisks(
+    _In_ PLOADER_PARAMETER_BLOCK LoaderBlock);
+#endif /* DBG */
 
 /* PE loader import-DLL loading callback */
 static VOID
@@ -1237,8 +1247,9 @@ LoadAndBootWindowsCommon(
     /* "Stop all motors", change videomode */
     MachPrepareForReactOS();
 
-    /* Debugging... */
-    //DumpMemoryAllocMap();
+#if DBG
+    // DumpMemoryAllocMap();
+#endif
 
     /* Do the machine specific initialization */
     WinLdrSetupMachineDependent(LoaderBlock);
@@ -1258,10 +1269,12 @@ LoadAndBootWindowsCommon(
     /* Zero KI_USER_SHARED_DATA page */
     RtlZeroMemory((PVOID)KI_USER_SHARED_DATA, MM_PAGE_SIZE);
 
-    WinLdrpDumpMemoryDescriptors(LoaderBlockVA);
-    WinLdrpDumpBootDriver(LoaderBlockVA);
+#if DBG
+    // WinLdrpDumpMemoryDescriptors(LoaderBlockVA);
+    WinLdrpDumpBootDrivers(LoaderBlockVA);
 #ifndef _M_AMD64
     WinLdrpDumpArcDisks(LoaderBlockVA);
+#endif
 #endif
 
     /* Pass control */
@@ -1270,59 +1283,46 @@ LoadAndBootWindowsCommon(
     UNREACHABLE; // return ESUCCESS;
 }
 
-VOID
-WinLdrpDumpMemoryDescriptors(PLOADER_PARAMETER_BLOCK LoaderBlock)
+#if DBG
+
+static VOID
+WinLdrpDumpBootDrivers(
+    _In_ PLOADER_PARAMETER_BLOCK LoaderBlock)
 {
-    PLIST_ENTRY NextMd;
-    PMEMORY_ALLOCATION_DESCRIPTOR MemoryDescriptor;
-
-    NextMd = LoaderBlock->MemoryDescriptorListHead.Flink;
-
-    while (NextMd != &LoaderBlock->MemoryDescriptorListHead)
-    {
-        MemoryDescriptor = CONTAINING_RECORD(NextMd, MEMORY_ALLOCATION_DESCRIPTOR, ListEntry);
-
-        TRACE("BP %08X PC %04X MT %d\n", MemoryDescriptor->BasePage,
-            MemoryDescriptor->PageCount, MemoryDescriptor->MemoryType);
-
-        NextMd = MemoryDescriptor->ListEntry.Flink;
-    }
-}
-
-VOID
-WinLdrpDumpBootDriver(PLOADER_PARAMETER_BLOCK LoaderBlock)
-{
+    PLIST_ENTRY BootDriverListHead = &LoaderBlock->BootDriverListHead;
     PLIST_ENTRY NextBd;
     PBOOT_DRIVER_LIST_ENTRY BootDriver;
 
-    NextBd = LoaderBlock->BootDriverListHead.Flink;
-
-    while (NextBd != &LoaderBlock->BootDriverListHead)
+    for (NextBd = BootDriverListHead->Flink;
+         NextBd != BootDriverListHead;
+         NextBd = NextBd->Flink)
     {
         BootDriver = CONTAINING_RECORD(NextBd, BOOT_DRIVER_LIST_ENTRY, Link);
 
         TRACE("BootDriver %wZ DTE %08X RegPath: %wZ\n", &BootDriver->FilePath,
-            BootDriver->LdrEntry, &BootDriver->RegistryPath);
-
-        NextBd = BootDriver->Link.Flink;
+              BootDriver->LdrEntry, &BootDriver->RegistryPath);
     }
 }
 
-VOID
-WinLdrpDumpArcDisks(PLOADER_PARAMETER_BLOCK LoaderBlock)
+static VOID
+WinLdrpDumpArcDisks(
+    _In_ PLOADER_PARAMETER_BLOCK LoaderBlock)
 {
+    PLIST_ENTRY DiskSignatureListHead = &LoaderBlock->ArcDiskInformation->DiskSignatureListHead;
     PLIST_ENTRY NextBd;
     PARC_DISK_SIGNATURE ArcDisk;
 
-    NextBd = LoaderBlock->ArcDiskInformation->DiskSignatureListHead.Flink;
-
-    while (NextBd != &LoaderBlock->ArcDiskInformation->DiskSignatureListHead)
+    for (NextBd = DiskSignatureListHead->Flink;
+         NextBd != DiskSignatureListHead;
+         NextBd = NextBd->Flink)
     {
         ArcDisk = CONTAINING_RECORD(NextBd, ARC_DISK_SIGNATURE, ListEntry);
 
         TRACE("ArcDisk %s checksum: 0x%X, signature: 0x%X\n",
-            ArcDisk->ArcName, ArcDisk->CheckSum, ArcDisk->Signature);
-
-        NextBd = ArcDisk->ListEntry.Flink;
+              ArcDisk->ArcName, ArcDisk->CheckSum, ArcDisk->Signature);
     }
 }
+
+#endif /* DBG */
+
+/* EOF */

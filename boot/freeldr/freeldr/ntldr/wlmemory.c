@@ -44,8 +44,9 @@ static const PCSTR MemTypeDesc[] = {
     };
 
 static VOID
-WinLdrInsertDescriptor(IN OUT PLOADER_PARAMETER_BLOCK LoaderBlock,
-                       IN PMEMORY_ALLOCATION_DESCRIPTOR NewDescriptor);
+WinLdrInsertDescriptor(
+    _Inout_ PLIST_ENTRY MemoryDescriptorListHead,
+    _In_ PMEMORY_ALLOCATION_DESCRIPTOR NewDescriptor);
 
 extern PFREELDR_MEMORY_DESCRIPTOR BiosMemoryMap;
 extern ULONG BiosMemoryMapEntryCount;
@@ -61,11 +62,36 @@ ULONG MadCount = 0;
 
 /* FUNCTIONS **************************************************************/
 
-VOID
-MempAddMemoryBlock(IN OUT PLOADER_PARAMETER_BLOCK LoaderBlock,
-                   PFN_NUMBER BasePage,
-                   PFN_NUMBER PageCount,
-                   ULONG Type)
+#if DBG
+
+static VOID
+WinLdrpDumpMemoryDescriptors(
+    _In_ PLIST_ENTRY MemoryDescriptorListHead)
+{
+    PLIST_ENTRY NextMd;
+    PMEMORY_ALLOCATION_DESCRIPTOR MemoryDescriptor;
+
+    for (NextMd = MemoryDescriptorListHead->Flink;
+         NextMd != MemoryDescriptorListHead;
+         NextMd = NextMd->Flink)
+    {
+        MemoryDescriptor = CONTAINING_RECORD(NextMd,
+                                             MEMORY_ALLOCATION_DESCRIPTOR,
+                                             ListEntry);
+
+        TRACE("BP %08X PC %04X MT %d\n", MemoryDescriptor->BasePage,
+              MemoryDescriptor->PageCount, MemoryDescriptor->MemoryType);
+    }
+}
+
+#endif /* DBG */
+
+static VOID
+MempAddMemoryBlock(
+    _Inout_ PLIST_ENTRY MemoryDescriptorListHead,
+    _In_ PFN_NUMBER BasePage,
+    _In_ PFN_NUMBER PageCount,
+    _In_ ULONG Type)
 {
     TRACE("MempAddMemoryBlock(BasePage=0x%lx, PageCount=0x%lx, Type=%ld)\n",
           BasePage, PageCount, Type);
@@ -98,15 +124,15 @@ MempAddMemoryBlock(IN OUT PLOADER_PARAMETER_BLOCK LoaderBlock,
     Mad[MadCount].MemoryType = Type;
 
     /* Add descriptor */
-    WinLdrInsertDescriptor(LoaderBlock, &Mad[MadCount]);
+    WinLdrInsertDescriptor(MemoryDescriptorListHead, &Mad[MadCount]);
     MadCount++;
 }
 
-VOID
+static VOID
 MempSetupPagingForRegion(
-    PFN_NUMBER BasePage,
-    PFN_NUMBER PageCount,
-    ULONG Type)
+    _In_ PFN_NUMBER BasePage,
+    _In_ PFN_NUMBER PageCount,
+    _In_ ULONG Type)
 {
     BOOLEAN Status = TRUE;
 
@@ -178,7 +204,8 @@ MempSetupPagingForRegion(
 #endif
 
 BOOLEAN
-WinLdrSetupMemoryLayout(IN OUT PLOADER_PARAMETER_BLOCK LoaderBlock)
+WinLdrSetupMemoryLayout(
+    _Inout_ PLOADER_PARAMETER_BLOCK LoaderBlock)
 {
     PFN_NUMBER i, PagesCount, MemoryMapSizeInPages, NoEntries;
     PFN_NUMBER LastPageIndex, MemoryMapStartPage;
@@ -279,7 +306,8 @@ WinLdrSetupMemoryLayout(IN OUT PLOADER_PARAMETER_BLOCK LoaderBlock)
         else
         {
             // Add the resulting region
-            MempAddMemoryBlock(LoaderBlock, LastPageIndex, PagesCount, LastPageType);
+            MempAddMemoryBlock(&LoaderBlock->MemoryDescriptorListHead,
+                               LastPageIndex, PagesCount, LastPageType);
 
             // Reset our counter vars
             LastPageIndex = i;
@@ -295,19 +323,19 @@ WinLdrSetupMemoryLayout(IN OUT PLOADER_PARAMETER_BLOCK LoaderBlock)
         Mad[MadCount].BasePage = 0xfec00;
         Mad[MadCount].PageCount = 0x10;
         Mad[MadCount].MemoryType = LoaderSpecialMemory;
-        WinLdrInsertDescriptor(LoaderBlock, &Mad[MadCount]);
+        WinLdrInsertDescriptor(&LoaderBlock->MemoryDescriptorListHead, &Mad[MadCount]);
         MadCount++;
 
         Mad[MadCount].BasePage = 0xfee00;
         Mad[MadCount].PageCount = 0x1;
         Mad[MadCount].MemoryType = LoaderSpecialMemory;
-        WinLdrInsertDescriptor(LoaderBlock, &Mad[MadCount]);
+        WinLdrInsertDescriptor(&LoaderBlock->MemoryDescriptorListHead, &Mad[MadCount]);
         MadCount++;
 
         Mad[MadCount].BasePage = 0xfffe0;
         Mad[MadCount].PageCount = 0x20;
         Mad[MadCount].MemoryType = LoaderSpecialMemory;
-        WinLdrInsertDescriptor(LoaderBlock, &Mad[MadCount]);
+        WinLdrInsertDescriptor(&LoaderBlock->MemoryDescriptorListHead, &Mad[MadCount]);
         MadCount++;
     }
 #endif
@@ -319,7 +347,7 @@ WinLdrSetupMemoryLayout(IN OUT PLOADER_PARAMETER_BLOCK LoaderBlock)
         if (BiosMemoryMap->BasePage > MmHighestPhysicalPage)
         {
             /* Copy this descriptor */
-            MempAddMemoryBlock(LoaderBlock,
+            MempAddMemoryBlock(&LoaderBlock->MemoryDescriptorListHead,
                                BiosMemoryMap->BasePage,
                                BiosMemoryMap->PageCount,
                                BiosMemoryMap->MemoryType);
@@ -328,7 +356,7 @@ WinLdrSetupMemoryLayout(IN OUT PLOADER_PARAMETER_BLOCK LoaderBlock)
 
     TRACE("MadCount: %d\n", MadCount);
 
-    WinLdrpDumpMemoryDescriptors(LoaderBlock); //FIXME: Delete!
+    WinLdrpDumpMemoryDescriptors(&LoaderBlock->MemoryDescriptorListHead);
 
     // Map our loader image, so we can continue running
     /*Status = MempSetupPaging(OsLoaderBase >> MM_PAGE_SHIFT, OsLoaderSize >> MM_PAGE_SHIFT);
@@ -353,15 +381,16 @@ WinLdrSetupMemoryLayout(IN OUT PLOADER_PARAMETER_BLOCK LoaderBlock)
 // Two special things this func does: it sorts descriptors,
 // and it merges free ones
 static VOID
-WinLdrInsertDescriptor(IN OUT PLOADER_PARAMETER_BLOCK LoaderBlock,
-                       IN PMEMORY_ALLOCATION_DESCRIPTOR NewDescriptor)
+WinLdrInsertDescriptor(
+    _Inout_ PLIST_ENTRY MemoryDescriptorListHead,
+    _In_ PMEMORY_ALLOCATION_DESCRIPTOR NewDescriptor)
 {
-    PLIST_ENTRY ListHead = &LoaderBlock->MemoryDescriptorListHead;
+    PLIST_ENTRY ListHead = MemoryDescriptorListHead;
     PLIST_ENTRY PreviousEntry, NextEntry;
     PMEMORY_ALLOCATION_DESCRIPTOR PreviousDescriptor = NULL, NextDescriptor = NULL;
 
     TRACE("BP=0x%X PC=0x%X %s\n", NewDescriptor->BasePage,
-        NewDescriptor->PageCount, MemTypeDesc[NewDescriptor->MemoryType]);
+          NewDescriptor->PageCount, MemTypeDesc[NewDescriptor->MemoryType]);
 
     /* Find a place where to insert the new descriptor to */
     PreviousEntry = ListHead;
@@ -369,8 +398,8 @@ WinLdrInsertDescriptor(IN OUT PLOADER_PARAMETER_BLOCK LoaderBlock,
     while (NextEntry != ListHead)
     {
         NextDescriptor = CONTAINING_RECORD(NextEntry,
-            MEMORY_ALLOCATION_DESCRIPTOR,
-            ListEntry);
+                                           MEMORY_ALLOCATION_DESCRIPTOR,
+                                           ListEntry);
         if (NewDescriptor->BasePage < NextDescriptor->BasePage)
             break;
 
@@ -402,7 +431,7 @@ WinLdrInsertDescriptor(IN OUT PLOADER_PARAMETER_BLOCK LoaderBlock,
             InsertHeadList(PreviousEntry, &NewDescriptor->ListEntry);
         }
 
-        /* Next block is free ?*/
+        /* Next block is free? */
         if ((NextEntry != ListHead) &&
             (NextDescriptor->MemoryType == LoaderFree) &&
             ((NewDescriptor->BasePage + NewDescriptor->PageCount) == NextDescriptor->BasePage))

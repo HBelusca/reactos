@@ -424,8 +424,9 @@ void WinLdrSetupMachineDependent(PLOADER_PARAMETER_BLOCK LoaderBlock)
     WinLdrMapSpecialPages();
 }
 
-
+#if DBG
 VOID
 MempDump(VOID)
 {
 }
+#endif /* DBG */
