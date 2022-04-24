@@ -12,4 +12,5 @@
  * that are implemented in separate resource files.
  **/
 
-#include "btani2k3.rc"
+// #include "btani2k3.rc"
+#include "btani2k.rc"
