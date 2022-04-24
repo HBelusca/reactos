@@ -89,7 +89,8 @@ BootThemeDisplayShutdownMessage(
 
 /* BOOT THEMES ***************************************************************/
 
-#include "btani2k3.c"
+// #include "btani2k3.c"
+#include "btani2k.c"
 
 
 /* FUNCTIONS *****************************************************************/
