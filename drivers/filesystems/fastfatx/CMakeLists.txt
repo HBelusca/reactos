@@ -24,9 +24,9 @@ list(APPEND SOURCE
     volume.c
     vfat.h)
 
-add_library(fastfat MODULE ${SOURCE} vfatfs.rc)
-set_module_type(fastfat kernelmodedriver)
-target_link_libraries(fastfat ${PSEH_LIB})
-add_importlibs(fastfat ntoskrnl hal)
-add_pch(fastfat vfat.h SOURCE)
-add_cd_file(TARGET fastfat DESTINATION reactos/system32/drivers NO_CAB FOR all)
+add_library(fastfatx MODULE ${SOURCE} fastfatx.rc)
+set_module_type(fastfatx kernelmodedriver)
+target_link_libraries(fastfatx ${PSEH_LIB})
+add_importlibs(fastfatx ntoskrnl hal)
+add_pch(fastfatx vfat.h SOURCE)
+add_cd_file(TARGET fastfatx DESTINATION reactos/system32/drivers NO_CAB FOR all)
