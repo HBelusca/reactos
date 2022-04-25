@@ -129,63 +129,74 @@ FsRecFsControl(IN PDEVICE_OBJECT DeviceObject,
 {
     PDEVICE_EXTENSION DeviceExtension = DeviceObject->DeviceExtension;
     NTSTATUS Status;
+
     PAGED_CODE();
 
     /* Check the file system type */
     switch (DeviceExtension->FsType)
     {
         case FS_TYPE_VFAT:
-
+        case FS_TYPE_VFATX: // FIXME
+        {
             /* Send FAT command */
             Status = FsRecVfatFsControl(DeviceObject, Irp);
             break;
+        }
 
         case FS_TYPE_NTFS:
-
+        {
             /* Send NTFS command */
             Status = FsRecNtfsFsControl(DeviceObject, Irp);
             break;
+        }
 
         case FS_TYPE_CDFS:
-
+        {
             /* Send CDFS command */
             Status = FsRecCdfsFsControl(DeviceObject, Irp);
             break;
+        }
 
         case FS_TYPE_UDFS:
-
+        {
             /* Send UDFS command */
             Status = FsRecUdfsFsControl(DeviceObject, Irp);
             break;
+        }
 
         case FS_TYPE_EXT2:
-
+        {
             /* Send EXT2 command */
             Status = FsRecExt2FsControl(DeviceObject, Irp);
             break;
+        }
 
         case FS_TYPE_BTRFS:
-
+        {
             /* Send BTRFS command */
             Status = FsRecBtrfsFsControl(DeviceObject, Irp);
             break;
+        }
 
         case FS_TYPE_REISERFS:
-
+        {
             /* Send REISERFS command */
             Status = FsRecReiserfsFsControl(DeviceObject, Irp);
             break;
+        }
 
         case FS_TYPE_FFS:
-
+        {
             /* Send FFS command */
             Status = FsRecFfsFsControl(DeviceObject, Irp);
             break;
+        }
 
         default:
-
+        {
             /* Unrecognized FS */
             Status = STATUS_INVALID_DEVICE_REQUEST;
+        }
     }
 
     /* Complete the IRP */
@@ -410,6 +421,17 @@ DriverEntry(IN PDRIVER_OBJECT DriverObject,
                              L"\\FileSystem\\FatCdRomRecognizer",
                              FS_TYPE_VFAT,
                              FILE_DEVICE_CD_ROM_FILE_SYSTEM,
+                             0);
+    if (NT_SUCCESS(Status)) DeviceCount++;
+
+    /* Register FATX */
+    Status = FsRecRegisterFs(DriverObject,
+                             NULL,
+                             NULL,
+                             L"\\FatX",
+                             L"\\FileSystem\\FatXRecognizer",
+                             FS_TYPE_VFATX,
+                             FILE_DEVICE_DISK_FILE_SYSTEM,
                              0);
     if (NT_SUCCESS(Status)) DeviceCount++;
 
