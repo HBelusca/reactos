@@ -22,97 +22,10 @@ vfatDirEntryGetFirstCluster(
 {
     ULONG cluster;
 
-    if (pDeviceExt->FatInfo.FatType == FAT32)
-    {
-        cluster = pFatDirEntry->Fat.FirstCluster |
-                 (pFatDirEntry->Fat.FirstClusterHigh << 16);
-    }
-    else if (vfatVolumeIsFatX(pDeviceExt))
-    {
-        cluster = pFatDirEntry->FatX.FirstCluster;
-    }
-    else
-    {
-        cluster = pFatDirEntry->Fat.FirstCluster;
-    }
+    ASSERT(vfatVolumeIsFatX(pDeviceExt));
+    cluster = pFatDirEntry->FatX.FirstCluster;
 
-    return  cluster;
-}
-
-BOOLEAN
-FATIsDirectoryEmpty(
-    PDEVICE_EXTENSION DeviceExt,
-    PVFATFCB Fcb)
-{
-    LARGE_INTEGER FileOffset;
-    PVOID Context = NULL;
-    PFAT_DIR_ENTRY FatDirEntry;
-    ULONG Index, MaxIndex;
-    NTSTATUS Status;
-
-    if (vfatFCBIsRoot(Fcb))
-    {
-        Index = 0;
-    }
-    else
-    {
-        Index = 2;
-    }
-
-    FileOffset.QuadPart = 0;
-    MaxIndex = Fcb->RFCB.FileSize.u.LowPart / sizeof(FAT_DIR_ENTRY);
-
-    Status = vfatFCBInitializeCacheFromVolume(DeviceExt, Fcb);
-    if (!NT_SUCCESS(Status))
-    {
-        return FALSE;
-    }
-
-    while (Index < MaxIndex)
-    {
-        if (Context == NULL || (Index % FAT_ENTRIES_PER_PAGE) == 0)
-        {
-            if (Context != NULL)
-            {
-                CcUnpinData(Context);
-            }
-
-            _SEH2_TRY
-            {
-                CcMapData(Fcb->FileObject, &FileOffset, sizeof(FAT_DIR_ENTRY), MAP_WAIT, &Context, (PVOID*)&FatDirEntry);
-            }
-            _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
-            {
-                _SEH2_YIELD(return TRUE);
-            }
-            _SEH2_END;
-
-            FatDirEntry += Index % FAT_ENTRIES_PER_PAGE;
-            FileOffset.QuadPart += PAGE_SIZE;
-        }
-
-        if (FAT_ENTRY_END(FatDirEntry))
-        {
-            CcUnpinData(Context);
-            return TRUE;
-        }
-
-        if (!FAT_ENTRY_DELETED(FatDirEntry))
-        {
-            CcUnpinData(Context);
-            return FALSE;
-        }
-
-        Index++;
-        FatDirEntry++;
-    }
-
-    if (Context)
-    {
-        CcUnpinData(Context);
-    }
-
-    return TRUE;
+    return cluster;
 }
 
 BOOLEAN
@@ -182,6 +95,7 @@ FATXIsDirectoryEmpty(
     return TRUE;
 }
 
+#if 0
 NTSTATUS
 FATGetNextDirEntry(
     PVOID *pContext,
@@ -207,39 +121,9 @@ FATGetNextDirEntry(
     DirContext->LongNameU.Length = 0;
     DirContext->LongNameU.Buffer[0] = UNICODE_NULL;
 
-    FileOffset.u.HighPart = 0;
-    FileOffset.u.LowPart = ROUND_DOWN(DirContext->DirIndex * sizeof(FAT_DIR_ENTRY), PAGE_SIZE);
-
-    Status = vfatFCBInitializeCacheFromVolume(DirContext->DeviceExt, pDirFcb);
-    if (!NT_SUCCESS(Status))
-    {
-        return Status;
-    }
-
-    if (*pContext == NULL || (DirContext->DirIndex % FAT_ENTRIES_PER_PAGE) == 0)
-    {
-        if (*pContext != NULL)
-        {
-            CcUnpinData(*pContext);
-        }
-
-        if (FileOffset.u.LowPart >= pDirFcb->RFCB.FileSize.u.LowPart)
-        {
-            *pContext = NULL;
-            return STATUS_NO_MORE_ENTRIES;
-        }
-
-        _SEH2_TRY
-        {
-            CcMapData(pDirFcb->FileObject, &FileOffset, PAGE_SIZE, MAP_WAIT, pContext, pPage);
-        }
-        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
-        {
-            *pContext = NULL;
-            _SEH2_YIELD(return STATUS_NO_MORE_ENTRIES);
-        }
-        _SEH2_END;
-    }
+//
+// As in FATX...
+//
 
     fatDirEntry = (PFAT_DIR_ENTRY)(*pPage) + DirContext->DirIndex % FAT_ENTRIES_PER_PAGE;
     longNameEntry = (slot*) fatDirEntry;
@@ -472,6 +356,7 @@ FATGetNextDirEntry(
 
     return STATUS_SUCCESS;
 }
+#endif
 
 NTSTATUS
 FATXGetNextDirEntry(
@@ -529,13 +414,16 @@ FATXGetNextDirEntry(
         return Status;
     }
 
+    FileOffset.u.HighPart = 0;
+    FileOffset.u.LowPart = ROUND_DOWN(/*DirContext->*/DirIndex * sizeof(FATX_DIR_ENTRY), PAGE_SIZE);
+
     if (*pContext == NULL || (DirIndex % FATX_ENTRIES_PER_PAGE) == 0)
     {
         if (*pContext != NULL)
         {
             CcUnpinData(*pContext);
         }
-        FileOffset.u.LowPart = ROUND_DOWN(DirIndex * sizeof(FATX_DIR_ENTRY), PAGE_SIZE);
+
         if (FileOffset.u.LowPart >= pDirFcb->RFCB.FileSize.u.LowPart)
         {
             *pContext = NULL;

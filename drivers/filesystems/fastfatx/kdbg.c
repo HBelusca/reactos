@@ -30,19 +30,19 @@ vfatKdbgHandler(
     ULONG Len;
 
     Len = strlen(Command);
-    if (Len < sizeof("?fat."))
+    if (Len < sizeof("?fatx."))
     {
         return FALSE;
     }
 
     if (Command[0] != '?' || Command[1] != 'f' ||
         Command[2] != 'a' || Command[3] != 't' ||
-        Command[4] != '.')
+        Command[4] != 'x' || Command[5] != '.')
     {
         return FALSE;
     }
 
-    Command += (sizeof("?fat.") - sizeof(ANSI_NULL));
+    Command += (sizeof("?fatx.") - sizeof(ANSI_NULL));
     if (strcmp(Command, "vols") == 0)
     {
         ULONG Count = 0;

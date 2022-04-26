@@ -206,63 +206,33 @@ VfatSetBasicInformation(
         }
     }
 
-    if (vfatVolumeIsFatX(DeviceExt))
+    ASSERT(vfatVolumeIsFatX(DeviceExt));
+
+    if (BasicInfo->CreationTime.QuadPart != 0 && BasicInfo->CreationTime.QuadPart != -1)
     {
-        if (BasicInfo->CreationTime.QuadPart != 0 && BasicInfo->CreationTime.QuadPart != -1)
-        {
-            FsdSystemTimeToDosDateTime(DeviceExt,
-                                       &BasicInfo->CreationTime,
-                                       &FCB->entry.FatX.CreationDate,
-                                       &FCB->entry.FatX.CreationTime);
-            NotifyFilter |= FILE_NOTIFY_CHANGE_CREATION;
-        }
-
-        if (BasicInfo->LastAccessTime.QuadPart != 0 && BasicInfo->LastAccessTime.QuadPart != -1)
-        {
-            FsdSystemTimeToDosDateTime(DeviceExt,
-                                       &BasicInfo->LastAccessTime,
-                                       &FCB->entry.FatX.AccessDate,
-                                       &FCB->entry.FatX.AccessTime);
-            NotifyFilter |= FILE_NOTIFY_CHANGE_LAST_ACCESS;
-        }
-
-        if (BasicInfo->LastWriteTime.QuadPart != 0 && BasicInfo->LastWriteTime.QuadPart != -1)
-        {
-            FsdSystemTimeToDosDateTime(DeviceExt,
-                                       &BasicInfo->LastWriteTime,
-                                       &FCB->entry.FatX.UpdateDate,
-                                       &FCB->entry.FatX.UpdateTime);
-            NotifyFilter |= FILE_NOTIFY_CHANGE_LAST_WRITE;
-        }
+        FsdSystemTimeToDosDateTime(DeviceExt,
+                                   &BasicInfo->CreationTime,
+                                   &FCB->entry.FatX.CreationDate,
+                                   &FCB->entry.FatX.CreationTime);
+        NotifyFilter |= FILE_NOTIFY_CHANGE_CREATION;
     }
-    else
+
+    if (BasicInfo->LastAccessTime.QuadPart != 0 && BasicInfo->LastAccessTime.QuadPart != -1)
     {
-        if (BasicInfo->CreationTime.QuadPart != 0 && BasicInfo->CreationTime.QuadPart != -1)
-        {
-            FsdSystemTimeToDosDateTime(DeviceExt,
-                                       &BasicInfo->CreationTime,
-                                       &FCB->entry.Fat.CreationDate,
-                                       &FCB->entry.Fat.CreationTime);
-            NotifyFilter |= FILE_NOTIFY_CHANGE_CREATION;
-        }
+        FsdSystemTimeToDosDateTime(DeviceExt,
+                                   &BasicInfo->LastAccessTime,
+                                   &FCB->entry.FatX.AccessDate,
+                                   &FCB->entry.FatX.AccessTime);
+        NotifyFilter |= FILE_NOTIFY_CHANGE_LAST_ACCESS;
+    }
 
-        if (BasicInfo->LastAccessTime.QuadPart != 0 && BasicInfo->LastAccessTime.QuadPart != -1)
-        {
-            FsdSystemTimeToDosDateTime(DeviceExt,
-                                       &BasicInfo->LastAccessTime,
-                                       &FCB->entry.Fat.AccessDate,
-                                       NULL);
-            NotifyFilter |= FILE_NOTIFY_CHANGE_LAST_ACCESS;
-        }
-
-        if (BasicInfo->LastWriteTime.QuadPart != 0 && BasicInfo->LastWriteTime.QuadPart != -1)
-        {
-            FsdSystemTimeToDosDateTime(DeviceExt,
-                                       &BasicInfo->LastWriteTime,
-                                       &FCB->entry.Fat.UpdateDate,
-                                       &FCB->entry.Fat.UpdateTime);
-            NotifyFilter |= FILE_NOTIFY_CHANGE_LAST_WRITE;
-        }
+    if (BasicInfo->LastWriteTime.QuadPart != 0 && BasicInfo->LastWriteTime.QuadPart != -1)
+    {
+        FsdSystemTimeToDosDateTime(DeviceExt,
+                                   &BasicInfo->LastWriteTime,
+                                   &FCB->entry.FatX.UpdateDate,
+                                   &FCB->entry.FatX.UpdateTime);
+        NotifyFilter |= FILE_NOTIFY_CHANGE_LAST_WRITE;
     }
 
     VfatUpdateEntry(DeviceExt, FCB);
@@ -295,38 +265,21 @@ VfatGetBasicInformation(
 
     RtlZeroMemory(BasicInfo, sizeof(FILE_BASIC_INFORMATION));
 
-    if (vfatVolumeIsFatX(DeviceExt))
-    {
-        FsdDosDateTimeToSystemTime(DeviceExt,
-                                   FCB->entry.FatX.CreationDate,
-                                   FCB->entry.FatX.CreationTime,
-                                   &BasicInfo->CreationTime);
-        FsdDosDateTimeToSystemTime(DeviceExt,
-                                   FCB->entry.FatX.AccessDate,
-                                   FCB->entry.FatX.AccessTime,
-                                   &BasicInfo->LastAccessTime);
-        FsdDosDateTimeToSystemTime(DeviceExt,
-                                   FCB->entry.FatX.UpdateDate,
-                                   FCB->entry.FatX.UpdateTime,
-                                   &BasicInfo->LastWriteTime);
-        BasicInfo->ChangeTime = BasicInfo->LastWriteTime;
-    }
-    else
-    {
-        FsdDosDateTimeToSystemTime(DeviceExt,
-                                   FCB->entry.Fat.CreationDate,
-                                   FCB->entry.Fat.CreationTime,
-                                   &BasicInfo->CreationTime);
-        FsdDosDateTimeToSystemTime(DeviceExt,
-                                   FCB->entry.Fat.AccessDate,
-                                   0,
-                                   &BasicInfo->LastAccessTime);
-        FsdDosDateTimeToSystemTime(DeviceExt,
-                                   FCB->entry.Fat.UpdateDate,
-                                   FCB->entry.Fat.UpdateTime,
-                                   &BasicInfo->LastWriteTime);
-        BasicInfo->ChangeTime = BasicInfo->LastWriteTime;
-    }
+    ASSERT(vfatVolumeIsFatX(DeviceExt));
+
+    FsdDosDateTimeToSystemTime(DeviceExt,
+                               FCB->entry.FatX.CreationDate,
+                               FCB->entry.FatX.CreationTime,
+                               &BasicInfo->CreationTime);
+    FsdDosDateTimeToSystemTime(DeviceExt,
+                               FCB->entry.FatX.AccessDate,
+                               FCB->entry.FatX.AccessTime,
+                               &BasicInfo->LastAccessTime);
+    FsdDosDateTimeToSystemTime(DeviceExt,
+                               FCB->entry.FatX.UpdateDate,
+                               FCB->entry.FatX.UpdateTime,
+                               &BasicInfo->LastWriteTime);
+    BasicInfo->ChangeTime = BasicInfo->LastWriteTime;
 
     BasicInfo->FileAttributes = *FCB->Attributes & 0x3f;
     /* Synthesize FILE_ATTRIBUTE_NORMAL */
@@ -394,7 +347,7 @@ VfatSetDispositionInformation(
         return STATUS_CANNOT_DELETE;
     }
 
-    if (vfatFCBIsDirectory(FCB) && !VfatIsDirectoryEmpty(DeviceExt, FCB))
+    if (vfatFCBIsDirectory(FCB) && !FATXIsDirectoryEmpty(DeviceExt, FCB))
     {
         /* can't delete a non-empty directory */
 
@@ -471,7 +424,7 @@ vfatPrepareTargetForRename(
 
             /* Effectively delete old file to allow renaming */
             DPRINT("Effectively deleting the file.\n");
-            VfatDelEntry(DeviceExt, TargetFcb, NULL);
+            FATXDelEntry(DeviceExt, TargetFcb, NULL);
             vfatReleaseFCB(DeviceExt, TargetFcb);
             *Deleted = TRUE;
             return STATUS_SUCCESS;
@@ -1050,38 +1003,21 @@ VfatGetNetworkOpenInformation(
     if (*BufferLength < sizeof(FILE_NETWORK_OPEN_INFORMATION))
         return(STATUS_BUFFER_OVERFLOW);
 
-    if (vfatVolumeIsFatX(DeviceExt))
-    {
-        FsdDosDateTimeToSystemTime(DeviceExt,
-                                   Fcb->entry.FatX.CreationDate,
-                                   Fcb->entry.FatX.CreationTime,
-                                   &NetworkInfo->CreationTime);
-        FsdDosDateTimeToSystemTime(DeviceExt,
-                                   Fcb->entry.FatX.AccessDate,
-                                   Fcb->entry.FatX.AccessTime,
-                                   &NetworkInfo->LastAccessTime);
-        FsdDosDateTimeToSystemTime(DeviceExt,
-                                   Fcb->entry.FatX.UpdateDate,
-                                   Fcb->entry.FatX.UpdateTime,
-                                   &NetworkInfo->LastWriteTime);
-        NetworkInfo->ChangeTime.QuadPart = NetworkInfo->LastWriteTime.QuadPart;
-    }
-    else
-    {
-        FsdDosDateTimeToSystemTime(DeviceExt,
-                                   Fcb->entry.Fat.CreationDate,
-                                   Fcb->entry.Fat.CreationTime,
-                                   &NetworkInfo->CreationTime);
-        FsdDosDateTimeToSystemTime(DeviceExt,
-                                   Fcb->entry.Fat.AccessDate,
-                                   0,
-                                   &NetworkInfo->LastAccessTime);
-        FsdDosDateTimeToSystemTime(DeviceExt,
-                                   Fcb->entry.Fat.UpdateDate,
-                                   Fcb->entry.Fat.UpdateTime,
-                                   &NetworkInfo->LastWriteTime);
-        NetworkInfo->ChangeTime.QuadPart = NetworkInfo->LastWriteTime.QuadPart;
-    }
+    ASSERT(vfatVolumeIsFatX(DeviceExt));
+
+    FsdDosDateTimeToSystemTime(DeviceExt,
+                               Fcb->entry.FatX.CreationDate,
+                               Fcb->entry.FatX.CreationTime,
+                               &NetworkInfo->CreationTime);
+    FsdDosDateTimeToSystemTime(DeviceExt,
+                               Fcb->entry.FatX.AccessDate,
+                               Fcb->entry.FatX.AccessTime,
+                               &NetworkInfo->LastAccessTime);
+    FsdDosDateTimeToSystemTime(DeviceExt,
+                               Fcb->entry.FatX.UpdateDate,
+                               Fcb->entry.FatX.UpdateTime,
+                               &NetworkInfo->LastWriteTime);
+    NetworkInfo->ChangeTime.QuadPart = NetworkInfo->LastWriteTime.QuadPart;
 
     if (vfatFCBIsDirectory(Fcb))
     {
@@ -1126,8 +1062,7 @@ VfatGetEaInformation(
     /* FIXME - use SEH to access the buffer! */
     Info->EaSize = 0;
     *BufferLength -= sizeof(*Info);
-    if (DeviceExt->FatInfo.FatType == FAT12 ||
-        DeviceExt->FatInfo.FatType == FAT16)
+    if (DeviceExt->FatInfo.FatType == FAT16) // What about FATX ?
     {
         /* FIXME */
         DPRINT1("VFAT: FileEaInformation not implemented!\n");
@@ -1185,8 +1120,7 @@ UpdateFileSize(
     PFILE_OBJECT FileObject,
     PVFATFCB Fcb,
     ULONG Size,
-    ULONG ClusterSize,
-    BOOLEAN IsFatX)
+    ULONG ClusterSize)
 {
     if (Size > 0)
     {
@@ -1198,10 +1132,7 @@ UpdateFileSize(
     }
     if (!vfatFCBIsDirectory(Fcb))
     {
-        if (IsFatX)
-            Fcb->entry.FatX.FileSize = Size;
-        else
-            Fcb->entry.Fat.FileSize = Size;
+        Fcb->entry.FatX.FileSize = Size;
     }
     Fcb->RFCB.FileSize.QuadPart = Size;
     Fcb->RFCB.ValidDataLength.QuadPart = Size;
@@ -1223,15 +1154,14 @@ VfatSetAllocationSizeInformation(
     ULONG ClusterSize = DeviceExt->FatInfo.BytesPerCluster;
     ULONG NewSize = AllocationSize->u.LowPart;
     ULONG NCluster;
-    BOOLEAN AllocSizeChanged = FALSE, IsFatX = vfatVolumeIsFatX(DeviceExt);
+    BOOLEAN AllocSizeChanged = FALSE;
 
     DPRINT("VfatSetAllocationSizeInformation(File <%wZ>, AllocationSize %d %u)\n",
            &Fcb->PathNameU, AllocationSize->HighPart, AllocationSize->LowPart);
 
-    if (IsFatX)
-        OldSize = Fcb->entry.FatX.FileSize;
-    else
-        OldSize = Fcb->entry.Fat.FileSize;
+    ASSERT(vfatVolumeIsFatX(DeviceExt));
+
+    OldSize = Fcb->entry.FatX.FileSize;
 
     if (AllocationSize->u.HighPart > 0)
     {
@@ -1280,23 +1210,7 @@ VfatSetAllocationSizeInformation(
                 return STATUS_DISK_FULL;
             }
 
-            if (IsFatX)
-            {
-                Fcb->entry.FatX.FirstCluster = FirstCluster;
-            }
-            else
-            {
-                if (DeviceExt->FatInfo.FatType == FAT32)
-                {
-                    Fcb->entry.Fat.FirstCluster = (unsigned short)(FirstCluster & 0x0000FFFF);
-                    Fcb->entry.Fat.FirstClusterHigh = FirstCluster >> 16;
-                }
-                else
-                {
-                    ASSERT((FirstCluster >> 16) == 0);
-                    Fcb->entry.Fat.FirstCluster = (unsigned short)(FirstCluster & 0x0000FFFF);
-                }
-            }
+            Fcb->entry.FatX.FirstCluster = FirstCluster;
         }
         else
         {
@@ -1350,7 +1264,7 @@ VfatSetAllocationSizeInformation(
                 return STATUS_DISK_FULL;
             }
         }
-        UpdateFileSize(FileObject, Fcb, NewSize, ClusterSize, vfatVolumeIsFatX(DeviceExt));
+        UpdateFileSize(FileObject, Fcb, NewSize, ClusterSize);
     }
     else if (NewSize + ClusterSize <= Fcb->RFCB.AllocationSize.u.LowPart)
     {
@@ -1366,7 +1280,7 @@ VfatSetAllocationSizeInformation(
         AllocSizeChanged = TRUE;
         /* FIXME: Use the cached cluster/offset better way. */
         Fcb->LastCluster = Fcb->LastOffset = 0;
-        UpdateFileSize(FileObject, Fcb, NewSize, ClusterSize, vfatVolumeIsFatX(DeviceExt));
+        UpdateFileSize(FileObject, Fcb, NewSize, ClusterSize);
         if (NewSize > 0)
         {
             Status = OffsetToCluster(DeviceExt, FirstCluster,
@@ -1380,22 +1294,7 @@ VfatSetAllocationSizeInformation(
         }
         else
         {
-            if (IsFatX)
-            {
-                Fcb->entry.FatX.FirstCluster = 0;
-            }
-            else
-            {
-                if (DeviceExt->FatInfo.FatType == FAT32)
-                {
-                    Fcb->entry.Fat.FirstCluster = 0;
-                    Fcb->entry.Fat.FirstClusterHigh = 0;
-                }
-                else
-                {
-                    Fcb->entry.Fat.FirstCluster = 0;
-                }
-            }
+            Fcb->entry.FatX.FirstCluster = 0;
 
             NCluster = Cluster = FirstCluster;
             Status = STATUS_SUCCESS;
@@ -1415,7 +1314,7 @@ VfatSetAllocationSizeInformation(
     }
     else
     {
-        UpdateFileSize(FileObject, Fcb, NewSize, ClusterSize, vfatVolumeIsFatX(DeviceExt));
+        UpdateFileSize(FileObject, Fcb, NewSize, ClusterSize);
     }
 
     /* Update the on-disk directory entry */

@@ -119,56 +119,6 @@ FAT16GetNextCluster(
 }
 
 /*
- * FUNCTION: Retrieve the next FAT12 cluster from the FAT table
- */
-NTSTATUS
-FAT12GetNextCluster(
-    PDEVICE_EXTENSION DeviceExt,
-    ULONG CurrentCluster,
-    PULONG NextCluster)
-{
-    PUSHORT CBlock;
-    ULONG Entry;
-    PVOID BaseAddress;
-    PVOID Context;
-    LARGE_INTEGER Offset;
-
-    *NextCluster = 0;
-
-    Offset.QuadPart = 0;
-    _SEH2_TRY
-    {
-        CcMapData(DeviceExt->FATFileObject, &Offset, DeviceExt->FatInfo.FATSectors * DeviceExt->FatInfo.BytesPerSector, MAP_WAIT, &Context, &BaseAddress);
-    }
-    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
-    {
-        _SEH2_YIELD(return _SEH2_GetExceptionCode());
-    }
-    _SEH2_END;
-
-    CBlock = (PUSHORT)((char*)BaseAddress + (CurrentCluster * 12) / 8);
-    if ((CurrentCluster % 2) == 0)
-    {
-         Entry = *CBlock & 0x0fff;
-    }
-    else
-    {
-        Entry = *CBlock >> 4;
-    }
-
-//    DPRINT("Entry %x\n",Entry);
-    if (Entry >= 0xff8 && Entry <= 0xfff)
-        Entry = 0xffffffff;
-
-//    DPRINT("Returning %x\n",Entry);
-    ASSERT(Entry != 0);
-    *NextCluster = Entry;
-    CcUnpinData(Context);
-//    return Entry == 0xffffffff ? STATUS_END_OF_FILE : STATUS_SUCCESS;
-    return STATUS_SUCCESS;
-}
-
-/*
  * FUNCTION: Finds the first available cluster in a FAT16 table
  */
 NTSTATUS
@@ -240,74 +190,6 @@ FAT16FindAndMarkAvailableCluster(
 }
 
 /*
- * FUNCTION: Finds the first available cluster in a FAT12 table
- */
-NTSTATUS
-FAT12FindAndMarkAvailableCluster(
-    PDEVICE_EXTENSION DeviceExt,
-    PULONG Cluster)
-{
-    ULONG FatLength;
-    ULONG StartCluster;
-    ULONG Entry;
-    PUSHORT CBlock;
-    ULONG i, j;
-    PVOID BaseAddress;
-    PVOID Context;
-    LARGE_INTEGER Offset;
-
-    FatLength = DeviceExt->FatInfo.NumberOfClusters + 2;
-    *Cluster = 0;
-    StartCluster = DeviceExt->LastAvailableCluster;
-    Offset.QuadPart = 0;
-    _SEH2_TRY
-    {
-        CcPinRead(DeviceExt->FATFileObject, &Offset, DeviceExt->FatInfo.FATSectors * DeviceExt->FatInfo.BytesPerSector, PIN_WAIT, &Context, &BaseAddress);
-    }
-    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
-    {
-        DPRINT1("CcPinRead(Offset %x, Length %u) failed\n", (ULONG)Offset.QuadPart, DeviceExt->FatInfo.FATSectors * DeviceExt->FatInfo.BytesPerSector);
-        _SEH2_YIELD(return _SEH2_GetExceptionCode());
-    }
-    _SEH2_END;
-
-    for (j = 0; j < 2; j++)
-    {
-        for (i = StartCluster; i < FatLength; i++)
-        {
-            CBlock = (PUSHORT)((char*)BaseAddress + (i * 12) / 8);
-            if ((i % 2) == 0)
-            {
-                Entry = *CBlock & 0xfff;
-            }
-            else
-            {
-                Entry = *CBlock >> 4;
-            }
-
-            if (Entry == 0)
-            {
-                DPRINT("Found available cluster 0x%x\n", i);
-                DeviceExt->LastAvailableCluster = *Cluster = i;
-                if ((i % 2) == 0)
-                    *CBlock = (*CBlock & 0xf000) | 0xfff;
-                else
-                    *CBlock = (*CBlock & 0xf) | 0xfff0;
-                CcSetDirtyPinnedData(Context, NULL);
-                CcUnpinData(Context);
-                if (DeviceExt->AvailableClustersValid)
-                    InterlockedDecrement((PLONG)&DeviceExt->AvailableClusters);
-                return STATUS_SUCCESS;
-            }
-        }
-        FatLength = StartCluster;
-        StartCluster = 2;
-    }
-    CcUnpinData(Context);
-    return STATUS_DISK_FULL;
-}
-
-/*
  * FUNCTION: Finds the first available cluster in a FAT32 table
  */
 NTSTATUS
@@ -373,59 +255,6 @@ FAT32FindAndMarkAvailableCluster(
         StartCluster = 2;
     }
     return STATUS_DISK_FULL;
-}
-
-/*
- * FUNCTION: Counts free cluster in a FAT12 table
- */
-static
-NTSTATUS
-FAT12CountAvailableClusters(
-    PDEVICE_EXTENSION DeviceExt)
-{
-    ULONG Entry;
-    PVOID BaseAddress;
-    ULONG ulCount = 0;
-    ULONG i;
-    ULONG numberofclusters;
-    LARGE_INTEGER Offset;
-    PVOID Context;
-    PUSHORT CBlock;
-
-    Offset.QuadPart = 0;
-    _SEH2_TRY
-    {
-        CcMapData(DeviceExt->FATFileObject, &Offset, DeviceExt->FatInfo.FATSectors * DeviceExt->FatInfo.BytesPerSector, MAP_WAIT, &Context, &BaseAddress);
-    }
-    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
-    {
-        _SEH2_YIELD(return _SEH2_GetExceptionCode());
-    }
-    _SEH2_END;
-
-    numberofclusters = DeviceExt->FatInfo.NumberOfClusters + 2;
-
-    for (i = 2; i < numberofclusters; i++)
-    {
-        CBlock = (PUSHORT)((char*)BaseAddress + (i * 12) / 8);
-        if ((i % 2) == 0)
-        {
-            Entry = *CBlock & 0x0fff;
-        }
-        else
-        {
-            Entry = *CBlock >> 4;
-        }
-
-        if (Entry == 0)
-            ulCount++;
-    }
-
-    CcUnpinData(Context);
-    DeviceExt->AvailableClusters = ulCount;
-    DeviceExt->AvailableClustersValid = TRUE;
-
-    return STATUS_SUCCESS;
 }
 
 
@@ -548,11 +377,9 @@ CountAvailableClusters(
     ExAcquireResourceExclusiveLite (&DeviceExt->FatResource, TRUE);
     if (!DeviceExt->AvailableClustersValid)
     {
-        if (DeviceExt->FatInfo.FatType == FAT12)
-            Status = FAT12CountAvailableClusters(DeviceExt);
-        else if (DeviceExt->FatInfo.FatType == FAT16 || DeviceExt->FatInfo.FatType == FATX16)
+        if (DeviceExt->FatInfo.FatType == FATX16)
             Status = FAT16CountAvailableClusters(DeviceExt);
-        else
+        else // DeviceExt->FatInfo.FatType == FATX32
             Status = FAT32CountAvailableClusters(DeviceExt);
     }
     if (Clusters != NULL)
@@ -564,57 +391,6 @@ CountAvailableClusters(
     return Status;
 }
 
-
-/*
- * FUNCTION: Writes a cluster to the FAT12 physical and in-memory tables
- */
-NTSTATUS
-FAT12WriteCluster(
-    PDEVICE_EXTENSION DeviceExt,
-    ULONG ClusterToWrite,
-    ULONG NewValue,
-    PULONG OldValue)
-{
-    ULONG FATOffset;
-    PUCHAR CBlock;
-    PVOID BaseAddress;
-    PVOID Context;
-    LARGE_INTEGER Offset;
-
-    Offset.QuadPart = 0;
-    _SEH2_TRY
-    {
-        CcPinRead(DeviceExt->FATFileObject, &Offset, DeviceExt->FatInfo.FATSectors * DeviceExt->FatInfo.BytesPerSector, PIN_WAIT, &Context, &BaseAddress);
-    }
-    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
-    {
-        _SEH2_YIELD(return _SEH2_GetExceptionCode());
-    }
-    _SEH2_END;
-    CBlock = (PUCHAR)BaseAddress;
-
-    FATOffset = (ClusterToWrite * 12) / 8;
-    DPRINT("Writing 0x%x for 0x%x at 0x%x\n",
-           NewValue, ClusterToWrite, FATOffset);
-    if ((ClusterToWrite % 2) == 0)
-    {
-        *OldValue = CBlock[FATOffset] + ((CBlock[FATOffset + 1] & 0x0f) << 8);
-        CBlock[FATOffset] = (UCHAR)NewValue;
-        CBlock[FATOffset + 1] &= 0xf0;
-        CBlock[FATOffset + 1] |= (NewValue & 0xf00) >> 8;
-    }
-    else
-    {
-        *OldValue = (CBlock[FATOffset] >> 4) + (CBlock[FATOffset + 1] << 4);
-        CBlock[FATOffset] &= 0x0f;
-        CBlock[FATOffset] |= (NewValue & 0xf) << 4;
-        CBlock[FATOffset + 1] = (UCHAR)(NewValue >> 4);
-    }
-    /* Write the changed FAT sector(s) to disk */
-    CcSetDirtyPinnedData(Context, NULL);
-    CcUnpinData(Context);
-    return STATUS_SUCCESS;
-}
 
 /*
  * FUNCTION: Writes a cluster to the FAT16 physical and in-memory tables
@@ -838,13 +614,6 @@ GetDirtyStatus(
 
     DPRINT("GetDirtyStatus(DeviceExt %p)\n", DeviceExt);
 
-    /* FAT12 has no dirty bit */
-    if (DeviceExt->FatInfo.FatType == FAT12)
-    {
-        *DirtyStatus = FALSE;
-        return STATUS_SUCCESS;
-    }
-
     /* Not really in the FAT, but share the lock because
      * we're really low-level and shouldn't happent that often
      * And call the appropriate function
@@ -1023,12 +792,6 @@ SetDirtyStatus(
     NTSTATUS Status;
 
     DPRINT("SetDirtyStatus(DeviceExt %p, DirtyStatus %d)\n", DeviceExt, DirtyStatus);
-
-    /* FAT12 has no dirty bit */
-    if (DeviceExt->FatInfo.FatType == FAT12)
-    {
-        return STATUS_SUCCESS;
-    }
 
     /* Not really in the FAT, but share the lock because
      * we're really low-level and shouldn't happent that often

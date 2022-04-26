@@ -1173,22 +1173,15 @@ Metadata:
             ULONG Filter;
 
             // set dates and times
-            KeQuerySystemTime (&SystemTime);
-            if (vfatVolumeIsFatX(IrpContext->DeviceExt))
-            {
-                FsdSystemTimeToDosDateTime(IrpContext->DeviceExt,
-                                           &SystemTime, &Fcb->entry.FatX.UpdateDate,
-                                           &Fcb->entry.FatX.UpdateTime);
-                Fcb->entry.FatX.AccessDate = Fcb->entry.FatX.UpdateDate;
-                Fcb->entry.FatX.AccessTime = Fcb->entry.FatX.UpdateTime;
-            }
-            else
-            {
-                FsdSystemTimeToDosDateTime(IrpContext->DeviceExt,
-                                           &SystemTime, &Fcb->entry.Fat.UpdateDate,
-                                           &Fcb->entry.Fat.UpdateTime);
-                Fcb->entry.Fat.AccessDate = Fcb->entry.Fat.UpdateDate;
-            }
+            KeQuerySystemTime(&SystemTime);
+
+            ASSERT(vfatVolumeIsFatX(IrpContext->DeviceExt));
+            FsdSystemTimeToDosDateTime(IrpContext->DeviceExt,
+                                       &SystemTime, &Fcb->entry.FatX.UpdateDate,
+                                       &Fcb->entry.FatX.UpdateTime);
+            Fcb->entry.FatX.AccessDate = Fcb->entry.FatX.UpdateDate;
+            Fcb->entry.FatX.AccessTime = Fcb->entry.FatX.UpdateTime;
+
             /* set date and times to dirty */
             Fcb->Flags |= FCB_IS_DIRTY;
 

@@ -89,7 +89,7 @@ VfatCleanupFile(
             pFcb->OpenHandleCount == 0)
         {
             if (vfatFCBIsDirectory(pFcb) &&
-                !VfatIsDirectoryEmpty(DeviceExt, pFcb))
+                !FATXIsDirectoryEmpty(DeviceExt, pFcb))
             {
                 pFcb->Flags &= ~FCB_DELETE_PENDING;
             }
@@ -117,7 +117,7 @@ VfatCleanupFile(
         if (BooleanFlagOn(pFcb->Flags, FCB_DELETE_PENDING) &&
             pFcb->OpenHandleCount == 0)
         {
-            VfatDelEntry(DeviceExt, pFcb, NULL);
+            FATXDelEntry(DeviceExt, pFcb, NULL);
 
             vfatReportChange(DeviceExt,
                              pFcb,

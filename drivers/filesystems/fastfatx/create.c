@@ -115,7 +115,6 @@ FindFile(
     UNICODE_STRING PathNameU;
     UNICODE_STRING FileToFindUpcase;
     BOOLEAN WildCard;
-    BOOLEAN IsFatX = vfatVolumeIsFatX(DeviceExt);
 
     DPRINT("FindFile(Parent %p, FileToFind '%wZ', DirIndex: %u)\n",
            Parent, FileToFindU, DirContext->DirIndex);
@@ -152,11 +151,12 @@ FindFile(
         if (rcFcb)
         {
             ULONG startIndex = rcFcb->startIndex;
-            if (IsFatX && !vfatFCBIsRoot(Parent))
+            ASSERT(vfatVolumeIsFatX(DeviceExt));
+            if (!vfatFCBIsRoot(Parent))
             {
                 startIndex += 2;
             }
-            if(startIndex >= DirContext->DirIndex)
+            if (startIndex >= DirContext->DirIndex)
             {
                 RtlCopyUnicodeString(&DirContext->LongNameU, &rcFcb->LongNameU);
                 RtlCopyUnicodeString(&DirContext->ShortNameU, &rcFcb->ShortNameU);
@@ -189,13 +189,14 @@ FindFile(
 
     while (TRUE)
     {
-        Status = VfatGetNextDirEntry(DeviceExt, &Context, &Page, Parent, DirContext, First);
+        ASSERT(DeviceExt == DirContext->DeviceExt);
+        Status = FATXGetNextDirEntry(/*DeviceExt,*/ &Context, &Page, Parent, DirContext, First);
         First = FALSE;
         if (Status == STATUS_NO_MORE_ENTRIES)
         {
             break;
         }
-        if (ENTRY_VOLUME(IsFatX, &DirContext->DirEntry))
+        if (ENTRY_VOLUME(&DirContext->DirEntry))
         {
             DirContext->DirIndex++;
             continue;
@@ -215,12 +216,12 @@ FindFile(
         if (WildCard)
         {
             Found = FsRtlIsNameInExpression(&FileToFindUpcase, &DirContext->LongNameU, TRUE, NULL) ||
-                FsRtlIsNameInExpression(&FileToFindUpcase, &DirContext->ShortNameU, TRUE, NULL);
+                    FsRtlIsNameInExpression(&FileToFindUpcase, &DirContext->ShortNameU, TRUE, NULL);
         }
         else
         {
             Found = FsRtlAreNamesEqual(&DirContext->LongNameU, FileToFindU, TRUE, NULL) ||
-                FsRtlAreNamesEqual(&DirContext->ShortNameU, FileToFindU, TRUE, NULL);
+                    FsRtlAreNamesEqual(&DirContext->ShortNameU, FileToFindU, TRUE, NULL);
         }
 
         if (Found)
@@ -244,7 +245,7 @@ FindFile(
             }
             DPRINT("%u\n", DirContext->LongNameU.Length);
             DPRINT("FindFile: new Name %wZ, DirIndex %u\n",
-                &DirContext->LongNameU, DirContext->DirIndex);
+                   &DirContext->LongNameU, DirContext->DirIndex);
 
             if (Context)
             {
@@ -796,7 +797,7 @@ VfatCreateFile(
                 vfatAddToStat(DeviceExt, Fat.FailedCreates, 1);
                 return STATUS_OBJECT_NAME_INVALID;
             }
-            Status = VfatAddEntry(DeviceExt, &FileNameU, &pFcb, ParentFcb, RequestedOptions,
+            Status = FATXAddEntry(DeviceExt, &FileNameU, &pFcb, ParentFcb, RequestedOptions,
                                   Attributes, NULL);
             vfatReleaseFCB(DeviceExt, ParentFcb);
             if (NT_SUCCESS(Status))
@@ -981,18 +982,11 @@ VfatCreateFile(
                 *pFcb->Attributes |= FILE_ATTRIBUTE_ARCHIVE;
 
                 KeQuerySystemTime(&SystemTime);
-                if (vfatVolumeIsFatX(DeviceExt))
-                {
-                    FsdSystemTimeToDosDateTime(DeviceExt,
-                                               &SystemTime, &pFcb->entry.FatX.UpdateDate,
-                                               &pFcb->entry.FatX.UpdateTime);
-                }
-                else
-                {
-                    FsdSystemTimeToDosDateTime(DeviceExt,
-                                               &SystemTime, &pFcb->entry.Fat.UpdateDate,
-                                               &pFcb->entry.Fat.UpdateTime);
-                }
+
+                ASSERT(vfatVolumeIsFatX(DeviceExt));
+                FsdSystemTimeToDosDateTime(DeviceExt,
+                                           &SystemTime, &pFcb->entry.FatX.UpdateDate,
+                                           &pFcb->entry.FatX.UpdateTime);
 
                 VfatUpdateEntry(DeviceExt, pFcb);
             }
@@ -1003,7 +997,7 @@ VfatCreateFile(
                                                       DeviceExt,
                                                       &Irp->Overlay.AllocationSize);
             ExReleaseResourceLite(&(pFcb->MainResource));
-            if (!NT_SUCCESS (Status))
+            if (!NT_SUCCESS(Status))
             {
                 VfatCloseFile(DeviceExt, FileObject);
                 vfatAddToStat(DeviceExt, Fat.FailedCreates, 1);

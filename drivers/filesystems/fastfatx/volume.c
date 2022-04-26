@@ -58,20 +58,11 @@ FsdGetFsVolumeInformation(
         *BufferLength -= DeviceObject->Vpb->VolumeLabelLength;
     }
 
-    if (vfatVolumeIsFatX(DeviceExt))
-    {
-        FsdDosDateTimeToSystemTime(DeviceExt,
-                                   DeviceExt->VolumeFcb->entry.FatX.CreationDate,
-                                   DeviceExt->VolumeFcb->entry.FatX.CreationTime,
-                                   &FsVolumeInfo->VolumeCreationTime);
-    }
-    else
-    {
-        FsdDosDateTimeToSystemTime(DeviceExt,
-                                   DeviceExt->VolumeFcb->entry.Fat.CreationDate,
-                                   DeviceExt->VolumeFcb->entry.Fat.CreationTime,
-                                   &FsVolumeInfo->VolumeCreationTime);
-    }
+    ASSERT(vfatVolumeIsFatX(DeviceExt));
+    FsdDosDateTimeToSystemTime(DeviceExt,
+                               DeviceExt->VolumeFcb->entry.FatX.CreationDate,
+                               DeviceExt->VolumeFcb->entry.FatX.CreationTime,
+                               &FsVolumeInfo->VolumeCreationTime);
 
     FsVolumeInfo->SupportsObjects = FALSE;
 
@@ -89,8 +80,8 @@ FsdGetFsAttributeInformation(
     PFILE_FS_ATTRIBUTE_INFORMATION FsAttributeInfo,
     PULONG BufferLength)
 {
+    static const PCWSTR pName = L"FATX";
     NTSTATUS Status;
-    PCWSTR pName;
     ULONG Length;
 
     DPRINT("FsdGetFsAttributeInformation()\n");
@@ -99,15 +90,6 @@ FsdGetFsAttributeInformation(
 
     ASSERT(*BufferLength >= sizeof(FILE_FS_ATTRIBUTE_INFORMATION));
     *BufferLength -= FIELD_OFFSET(FILE_FS_ATTRIBUTE_INFORMATION, FileSystemName);
-
-    if (DeviceExt->FatInfo.FatType == FAT32)
-    {
-        pName = L"FAT32";
-    }
-    else
-    {
-        pName = L"FAT";
-    }
 
     Length = wcslen(pName) * sizeof(WCHAR);
     DPRINT("Required length %lu\n", (FIELD_OFFSET(FILE_FS_ATTRIBUTE_INFORMATION, FileSystemName) + Length));
@@ -249,67 +231,39 @@ FsdSetFsLabelInformation(
     CHAR cString[43];
     ULONG SizeDirEntry;
     ULONG EntriesPerPage;
-    BOOLEAN IsFatX;
 
     DPRINT("FsdSetFsLabelInformation()\n");
 
     DeviceExt = (PDEVICE_EXTENSION)DeviceObject->DeviceExtension;
-    IsFatX = vfatVolumeIsFatX(DeviceExt);
+    ASSERT(vfatVolumeIsFatX(DeviceExt));
 
     if (sizeof(DeviceObject->Vpb->VolumeLabel) < FsLabelInfo->VolumeLabelLength)
     {
         return STATUS_NAME_TOO_LONG;
     }
 
-    if (IsFatX)
-    {
-        if (FsLabelInfo->VolumeLabelLength / sizeof(WCHAR) > 42)
-            return STATUS_NAME_TOO_LONG;
+    LabelLen = FsLabelInfo->VolumeLabelLength / sizeof(WCHAR);
 
-        SizeDirEntry = sizeof(FATX_DIR_ENTRY);
-        EntriesPerPage = FATX_ENTRIES_PER_PAGE;
-    }
-    else
-    {
-        if (FsLabelInfo->VolumeLabelLength / sizeof(WCHAR) > 11)
-            return STATUS_NAME_TOO_LONG;
+    if (LabelLen > sizeof(VolumeLabelDirEntry.FatX.Filename))
+        return STATUS_NAME_TOO_LONG;
 
-        SizeDirEntry = sizeof(FAT_DIR_ENTRY);
-        EntriesPerPage = FAT_ENTRIES_PER_PAGE;
-    }
+    SizeDirEntry = sizeof(FATX_DIR_ENTRY);
+    EntriesPerPage = FATX_ENTRIES_PER_PAGE;
 
     /* Create Volume label dir entry */
-    LabelLen = FsLabelInfo->VolumeLabelLength / sizeof(WCHAR);
     RtlZeroMemory(&VolumeLabelDirEntry, SizeDirEntry);
     StringW.Buffer = FsLabelInfo->VolumeLabel;
     StringW.Length = StringW.MaximumLength = (USHORT)FsLabelInfo->VolumeLabelLength;
     StringO.Buffer = cString;
     StringO.Length = 0;
-    StringO.MaximumLength = 42;
+    StringO.MaximumLength = sizeof(VolumeLabelDirEntry.FatX.Filename);
     Status = RtlUnicodeStringToOemString(&StringO, &StringW, FALSE);
     if (!NT_SUCCESS(Status))
         return Status;
 
-    if (IsFatX)
-    {
-        RtlCopyMemory(VolumeLabelDirEntry.FatX.Filename, cString, LabelLen);
-        memset(&VolumeLabelDirEntry.FatX.Filename[LabelLen], ' ', 42 - LabelLen);
-        VolumeLabelDirEntry.FatX.Attrib = _A_VOLID;
-    }
-    else
-    {
-        RtlCopyMemory(VolumeLabelDirEntry.Fat.Filename, cString, max(sizeof(VolumeLabelDirEntry.Fat.Filename), LabelLen));
-        if (LabelLen > sizeof(VolumeLabelDirEntry.Fat.Filename))
-        {
-            memset(VolumeLabelDirEntry.Fat.Ext, ' ', sizeof(VolumeLabelDirEntry.Fat.Ext));
-            RtlCopyMemory(VolumeLabelDirEntry.Fat.Ext, cString + sizeof(VolumeLabelDirEntry.Fat.Filename), LabelLen - sizeof(VolumeLabelDirEntry.Fat.Filename));
-        }
-        else
-        {
-            memset(&VolumeLabelDirEntry.Fat.Filename[LabelLen], ' ', sizeof(VolumeLabelDirEntry.Fat.Filename) - LabelLen);
-        }
-        VolumeLabelDirEntry.Fat.Attrib = _A_VOLID;
-    }
+    RtlCopyMemory(VolumeLabelDirEntry.FatX.Filename, cString, LabelLen);
+    memset(&VolumeLabelDirEntry.FatX.Filename[LabelLen], ' ', sizeof(VolumeLabelDirEntry.FatX.Filename) - LabelLen);
+    VolumeLabelDirEntry.FatX.Attrib = _A_VOLID;
 
     pRootFcb = vfatOpenRootFCB(DeviceExt);
     Status = vfatFCBInitializeCacheFromVolume(DeviceExt, pRootFcb);
@@ -334,7 +288,7 @@ FsdSetFsLabelInformation(
     {
         while (TRUE)
         {
-            if (ENTRY_VOLUME(IsFatX, Entry))
+            if (ENTRY_VOLUME(Entry))
             {
                 /* Update entry */
                 LabelFound = TRUE;
@@ -344,7 +298,7 @@ FsdSetFsLabelInformation(
                 break;
             }
 
-            if (ENTRY_END(IsFatX, Entry))
+            if (ENTRY_END(Entry))
             {
                 break;
             }

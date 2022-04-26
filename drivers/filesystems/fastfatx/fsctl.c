@@ -30,9 +30,6 @@
 #define NDEBUG
 #include <debug.h>
 
-extern VFAT_DISPATCH FatXDispatch;
-extern VFAT_DISPATCH FatDispatch;
-
 /* FUNCTIONS ****************************************************************/
 
 #define  CACHEPAGESIZE(pDeviceExt) ((pDeviceExt)->FatInfo.BytesPerCluster > PAGE_SIZE ? \
@@ -361,7 +358,6 @@ NTSTATUS
 ReadVolumeLabel(
     PVOID Device,
     ULONG Start,
-    BOOLEAN IsFatX,
     PUNICODE_STRING VolumeLabel)
 {
     PDEVICE_EXTENSION DeviceExt;
@@ -378,16 +374,8 @@ ReadVolumeLabel(
     PVOID Buffer;
     NTSTATUS Status = STATUS_SUCCESS;
 
-    if (IsFatX)
-    {
-        SizeDirEntry = sizeof(FATX_DIR_ENTRY);
-        EntriesPerPage = FATX_ENTRIES_PER_PAGE;
-    }
-    else
-    {
-        SizeDirEntry = sizeof(FAT_DIR_ENTRY);
-        EntriesPerPage = FAT_ENTRIES_PER_PAGE;
-    }
+    SizeDirEntry = sizeof(FATX_DIR_ENTRY);
+    EntriesPerPage = FATX_ENTRIES_PER_PAGE;
 
     FileOffset.QuadPart = Start;
     if (!NoCache)
@@ -441,22 +429,16 @@ ReadVolumeLabel(
     {
         while (TRUE)
         {
-            if (ENTRY_VOLUME(IsFatX, Entry))
+            if (ENTRY_VOLUME(Entry))
             {
                 /* copy volume label */
-                if (IsFatX)
-                {
-                    StringO.Buffer = (PCHAR)Entry->FatX.Filename;
-                    StringO.MaximumLength = StringO.Length = Entry->FatX.FilenameLength;
-                    RtlOemStringToUnicodeString(VolumeLabel, &StringO, FALSE);
-                }
-                else
-                {
-                    vfat8Dot3ToString(&Entry->Fat, VolumeLabel);
-                }
+                // NOTE: Non-FATX: vfat8Dot3ToString(&Entry->Fat, VolumeLabel);
+                StringO.Buffer = (PCHAR)Entry->FatX.Filename;
+                StringO.MaximumLength = StringO.Length = Entry->FatX.FilenameLength;
+                RtlOemStringToUnicodeString(VolumeLabel, &StringO, FALSE);
                 break;
             }
-            if (ENTRY_END(IsFatX, Entry))
+            if (ENTRY_END(Entry))
             {
                 break;
             }
@@ -568,12 +550,7 @@ VfatMount(
     }
 
     /* Use prime numbers for the table size */
-    if (FatInfo.FatType == FAT12)
-    {
-        HashTableSize = 4099; // 4096 = 4 * 1024
-    }
-    else if (FatInfo.FatType == FAT16 ||
-             FatInfo.FatType == FATX16)
+    if (FatInfo.FatType == FATX16)
     {
         HashTableSize = 16411; // 16384 = 16 * 1024
     }
@@ -617,23 +594,13 @@ VfatMount(
     DPRINT("FATSectors:         %u\n", DeviceExt->FatInfo.FATSectors);
     DPRINT("RootStart:          %u\n", DeviceExt->FatInfo.rootStart);
     DPRINT("DataStart:          %u\n", DeviceExt->FatInfo.dataStart);
-    if (DeviceExt->FatInfo.FatType == FAT32)
-    {
-        DPRINT("RootCluster:        %u\n", DeviceExt->FatInfo.RootCluster);
-    }
+    // if (DeviceExt->FatInfo.FatType == FAT32)
+    // {
+        // DPRINT("RootCluster:        %u\n", DeviceExt->FatInfo.RootCluster);
+    // }
 
     switch (DeviceExt->FatInfo.FatType)
     {
-        case FAT12:
-            DeviceExt->GetNextCluster = FAT12GetNextCluster;
-            DeviceExt->FindAndMarkAvailableCluster = FAT12FindAndMarkAvailableCluster;
-            DeviceExt->WriteCluster = FAT12WriteCluster;
-            /* We don't define dirty bit functions here
-             * FAT12 doesn't have such bit and they won't get called
-             */
-            break;
-
-        case FAT16:
         case FATX16:
             DeviceExt->GetNextCluster = FAT16GetNextCluster;
             DeviceExt->FindAndMarkAvailableCluster = FAT16FindAndMarkAvailableCluster;
@@ -642,7 +609,6 @@ VfatMount(
             DeviceExt->SetDirtyStatus = FAT16SetDirtyStatus;
             break;
 
-        case FAT32:
         case FATX32:
             DeviceExt->GetNextCluster = FAT32GetNextCluster;
             DeviceExt->FindAndMarkAvailableCluster = FAT32FindAndMarkAvailableCluster;
@@ -652,18 +618,8 @@ VfatMount(
             break;
     }
 
-    if (DeviceExt->FatInfo.FatType == FATX16 ||
-        DeviceExt->FatInfo.FatType == FATX32)
-    {
-        DeviceExt->Flags |= VCB_IS_FATX;
-        DeviceExt->BaseDateYear = 2000;
-        RtlCopyMemory(&DeviceExt->Dispatch, &FatXDispatch, sizeof(VFAT_DISPATCH));
-    }
-    else
-    {
-        DeviceExt->BaseDateYear = 1980;
-        RtlCopyMemory(&DeviceExt->Dispatch, &FatDispatch, sizeof(VFAT_DISPATCH));
-    }
+    DeviceExt->Flags |= VCB_IS_FATX;
+    DeviceExt->BaseDateYear = 2000;
 
     DeviceExt->StorageDevice = DeviceToMount;
     DeviceExt->StorageDevice->Vpb->DeviceObject = DeviceObject;
@@ -767,7 +723,7 @@ VfatMount(
     VolumeLabelU.Buffer = DeviceObject->Vpb->VolumeLabel;
     VolumeLabelU.Length = 0;
     VolumeLabelU.MaximumLength = sizeof(DeviceObject->Vpb->VolumeLabel);
-    ReadVolumeLabel(DeviceExt, 0, vfatVolumeIsFatX(DeviceExt), &VolumeLabelU);
+    ReadVolumeLabel(DeviceExt, 0, &VolumeLabelU);
     Vpb->VolumeLabelLength = VolumeLabelU.Length;
 
     /* read dirty bit status */
@@ -899,7 +855,7 @@ VfatVerify(
             VolumeLabelU.Buffer = BufferU;
             VolumeLabelU.Length = 0;
             VolumeLabelU.MaximumLength = sizeof(BufferU);
-            Status = ReadVolumeLabel(DeviceExt->StorageDevice, FatInfo.rootStart * FatInfo.BytesPerSector, (FatInfo.FatType >= FATX16), &VolumeLabelU);
+            Status = ReadVolumeLabel(DeviceExt->StorageDevice, FatInfo.rootStart * FatInfo.BytesPerSector, &VolumeLabelU);
             if (!NT_SUCCESS(Status))
             {
                 if (AllowRaw)
