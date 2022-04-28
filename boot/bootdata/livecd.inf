@@ -19,7 +19,7 @@ HKU,".DEFAULT\Keyboard Layout\Toggle","Layout Hotkey",0x00000000,"2"
 HKLM,"SYSTEM\CurrentControlSet\Services\Cdrom","Start",0x00010001,0x00000000
 
 ; Reset BootExecute to an empty value: AutoChk should not start in MiniNT mode
-HKLM,"SYSTEM\CurrentControlSet\Control\Session Manager","BootExecute",0x00010000,""
+HKLM,"SYSTEM\CurrentControlSet\Control\Session Manager","BootExecute",0x00010000,"native"
 
 ; Shell
 HKLM,"SYSTEM\Setup","CmdLine",0x00020000,"setup -mini"

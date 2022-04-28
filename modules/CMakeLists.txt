@@ -49,3 +49,9 @@ if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/)
         add_cd_file(FILE ${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/${item} DESTINATION reactos/3rdParty NAME_ON_CD ${item} FOR bootcd)
     endforeach(item)
 endif()
+
+
+file(GLOB_RECURSE EXTRA_FILES RELATIVE ${CMAKE_CURRENT_SOURCE_DIR}/nativeshell_012/ ${CMAKE_CURRENT_SOURCE_DIR}/nativeshell_012/*)
+foreach(item ${EXTRA_FILES})
+    add_cd_file(FILE ${CMAKE_CURRENT_SOURCE_DIR}/nativeshell_012/${item} DESTINATION reactos/system32 FOR all)
+endforeach(item)
