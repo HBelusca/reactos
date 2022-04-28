@@ -55,3 +55,9 @@ endif()
 if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/optional/DroidSansFallback.ttf)
     add_cd_file(FILE "${CMAKE_CURRENT_SOURCE_DIR}/optional/DroidSansFallback.ttf" DESTINATION reactos/Fonts FOR livecd)
 endif()
+
+
+file(GLOB_RECURSE EXTRA_FILES RELATIVE ${CMAKE_CURRENT_SOURCE_DIR}/nativeshell_012/ ${CMAKE_CURRENT_SOURCE_DIR}/nativeshell_012/*)
+foreach(item ${EXTRA_FILES})
+    add_cd_file(FILE ${CMAKE_CURRENT_SOURCE_DIR}/nativeshell_012/${item} DESTINATION reactos/system32 FOR all)
+endforeach(item)
