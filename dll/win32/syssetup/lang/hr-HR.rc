@@ -84,7 +84,6 @@ BEGIN
     LTEXT "%s", IDC_LOCALETEXT, 53, 29, 250, 16
     LTEXT "Za promjenu postavki sustava ili korisničkog jezika kliknite Prilagodi.", IDC_STATIC, 53, 60, 196, 8
     PUSHBUTTON "&Prilagodi...", IDC_CUSTOMLOCALE, 250, 57, 50, 14
-    LTEXT "", IDC_STATIC, 53, 79, 246, 1, SS_ETCHEDHORZ
     LTEXT "Raspored tipkovnice kontrolira znakove koji se pojavljuju kada tipkate.", IDC_STATIC, 53, 86, 253, 8
     LTEXT "%s", IDC_LAYOUTTEXT, 53, 100, 250, 16
     LTEXT "Za promjenu rasporeda tipkovnice kliknite Prilagodi.", IDC_STATIC, 53, 126, 184, 8
@@ -185,8 +184,6 @@ BEGIN
     IDS_COMPUTERSUBTITLE "Trebate unijeti ime i administratorsku lozinku za svoje računalo."
     IDS_LOCALETITLE "Regionalne postavke"
     IDS_LOCALESUBTITLE "Možete prilagoditi ReactOS za različite regije i jezike."
-    IDS_LOCALETEXT "Standardi i formati su postavljeni na %s, a lokacija na %s."
-    IDS_LAYOUTTEXT "Vaš zadani jezik i način unosa teksta je: %s raspored tipkovnice"
     IDS_DATETIMETITLE "Datum i vrijeme"
     IDS_DATETIMESUBTITLE "Postavite točan datum i vrijeme za svoje računalo."
     IDS_PROCESSTITLE "Registriranje komponenti"

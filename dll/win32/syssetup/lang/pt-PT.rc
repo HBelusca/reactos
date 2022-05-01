@@ -77,7 +77,6 @@ BEGIN
     LTEXT "%s", IDC_LOCALETEXT, 50, 36, 250, 16
     LTEXT "Para alterar a localização do sistema, clique em Personalizar.", IDC_STATIC, 50, 60, 196, 8
     PUSHBUTTON "&Personalizar...", IDC_CUSTOMLOCALE, 245, 57, 55, 14
-    LTEXT "", IDC_STATIC, 50, 79, 249, 1, SS_ETCHEDHORZ
     LTEXT "O tipo de teclado controla os caracteres que aparecem quando digita.", IDC_STATIC, 50, 86, 253, 8
     LTEXT "%s", IDC_LAYOUTTEXT, 50, 100, 250, 16
     LTEXT "Para alterar o tipo do teclado, clique em Personalizar.", IDC_STATIC, 50, 126, 184, 8
@@ -178,8 +177,6 @@ BEGIN
     IDS_COMPUTERSUBTITLE "Deve fornecer um nome e palavra-passe de administrador para o seu computador."
     IDS_LOCALETITLE "Configurações Regionais"
     IDS_LOCALESUBTITLE "Pode personalizar o ReactOS para diferentes regiões e línguas."
-    IDS_LOCALETEXT "Os padrões e formatos são definidos como %s, e o local é definido como %s."
-    IDS_LAYOUTTEXT "O método e idioma de entrada de texto padrão é: Estilo de teclado %s"
     IDS_DATETIMETITLE "Data e Hora"
     IDS_DATETIMESUBTITLE "Definir a data e a hora correctas para o seu computador."
     IDS_PROCESSTITLE "Finalizando a instalação."
