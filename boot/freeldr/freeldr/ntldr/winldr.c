@@ -6,17 +6,23 @@
  *              Copyright 2022 Hermès Bélusca-Maïto
  */
 
+/* INCLUDES ******************************************************************/
+
 #include <freeldr.h>
 #include <ndk/ldrtypes.h>
-#include "winldr.h"
 #include "inffile.h"
+#include "registry.h"
+#include "winldr.h"
 #include "setupldr.h"
 #include "ntldropts.h"
-#include "registry.h"
+#include "arch.h"
 #include <internal/cmboot.h>
 
 #include <debug.h>
 DBG_DEFAULT_CHANNEL(WINDOWS);
+
+
+/* GLOBALS *******************************************************************/
 
 // FIXME: Find a better way to retrieve ARC disk information
 extern ULONG reactos_disk_count;
@@ -29,17 +35,90 @@ extern HEADLESS_LOADER_BLOCK LoaderRedirectionInformation;
 extern BOOLEAN WinLdrTerminalConnected;
 extern VOID WinLdrSetupEms(IN PCSTR BootOptions);
 
-PLOADER_SYSTEM_BLOCK WinLdrSystemBlock;
+PLOADER_SYSTEM_BLOCK WinLdrSystemBlock = NULL;
 /**/PCWSTR BootFileSystem = NULL;/**/
 
-BOOLEAN VirtualBias = FALSE;
-BOOLEAN SosEnabled = FALSE;
-BOOLEAN SafeBoot = FALSE;
-BOOLEAN BootLogo = FALSE;
+static BOOLEAN VirtualBias = FALSE;
+static BOOLEAN SosEnabled = FALSE;
+static BOOLEAN SafeBoot = FALSE;
+static BOOLEAN BootLogo = FALSE;
 #ifdef _M_IX86
-BOOLEAN PaeModeOn = FALSE;
+static BOOLEAN PaeModeOn = FALSE;
 #endif
-BOOLEAN NoExecuteEnabled = FALSE;
+static BOOLEAN NoExecuteEnabled = FALSE;
+
+
+/* FUNCTIONS *****************************************************************/
+
+typedef struct _NT_CONFIG_FUNCS
+{
+    VOID
+    (*PostProcessBootOptions)(
+        _Out_z_bytecap_(BootOptionsSize)
+             PSTR BootOptions,
+        _In_ SIZE_T BootOptionsSize,
+        _In_ PCSTR ArgsBootOptions,
+        _In_ PNT_CONFIG_SOURCES ConfigSources);
+
+    BOOLEAN
+    (*GetNLSNames)(
+        _In_ PNT_CONFIG_SOURCES ConfigSources,
+        _Out_ PUNICODE_STRING AnsiFileName,
+        _Out_ PUNICODE_STRING OemFileName,
+        _Out_ PUNICODE_STRING LangFileName, // CaseTable
+        _Out_ PUNICODE_STRING OemHalFileName);
+
+    BOOLEAN
+    (*GetErrataInf)(
+        _In_ USHORT OperatingSystemVersion,
+        _In_ PNT_CONFIG_SOURCES ConfigSources,
+        _In_ PCSTR SystemRoot,
+        _Out_z_bytecap_(FilePathSize)
+             PSTR FilePath,
+        _In_ SIZE_T FilePathSize);
+
+    BOOLEAN
+    (*ScanBootDrivers)(
+        _In_ PNT_CONFIG_SOURCES ConfigSources,
+        _Inout_ PLIST_ENTRY DriverListHead);
+
+} NT_CONFIG_FUNCS, *PNT_CONFIG_FUNCS;
+
+static const NT_CONFIG_FUNCS Setup =
+{
+    SetupLdrPostProcessBootOptions,
+    SetupLdrGetNLSNames,
+    SetupLdrGetErrataInf,
+    SetupLdrScanBootDrivers
+};
+
+static
+VOID
+WinLdrPostProcessBootOptions(
+    _Out_z_bytecap_(BootOptionsSize)
+         PSTR BootOptions,
+    _In_ SIZE_T BootOptionsSize,
+    _In_ PCSTR ArgsBootOptions,
+    _In_ PNT_CONFIG_SOURCES ConfigSources);
+
+static
+BOOLEAN
+WinLdrGetErrataInf(
+    _In_ USHORT OperatingSystemVersion,
+    _In_ PNT_CONFIG_SOURCES ConfigSources,
+    _In_ PCSTR SystemRoot,
+    _Out_z_bytecap_(FilePathSize)
+         PSTR FilePath,
+    _In_ SIZE_T FilePathSize);
+
+static const NT_CONFIG_FUNCS OsLdr =
+{
+    WinLdrPostProcessBootOptions,
+    WinLdrGetNLSNames,
+    WinLdrGetErrataInf,
+    WinLdrScanBootDrivers
+};
+
 
 /* Debugging helpers */
 #if DBG
@@ -53,6 +132,7 @@ static VOID
 WinLdrpDumpArcDisks(
     _In_ PLOADER_PARAMETER_BLOCK LoaderBlock);
 #endif /* DBG */
+
 
 /* PE loader import-DLL loading callback */
 static VOID
@@ -87,8 +167,26 @@ NtLdrOutputLoadMsg(
     }
 }
 
-// Init "phase 0"
+FORCEINLINE
 VOID
+UiResetForSOS(VOID)
+{
+#ifdef _M_ARM
+    /* Re-initialize the UI */
+    UiInitialize(TRUE);
+#else
+    /* Reset the UI and switch to MiniTui */
+    UiVtbl.UnInitialize();
+    UiVtbl = MiniTuiVtbl;
+    UiVtbl.Initialize();
+#endif
+    /* Disable the progress bar */
+    UiProgressBar.Show = FALSE;
+}
+
+
+// Init "phase 0"
+static BOOLEAN
 AllocateAndInitLPB(
     IN USHORT VersionToBoot,
     OUT PLOADER_PARAMETER_BLOCK* OutLoaderBlock)
@@ -102,7 +200,7 @@ AllocateAndInitLPB(
     if (WinLdrSystemBlock == NULL)
     {
         UiMessageBox("Failed to allocate memory for system block!");
-        return;
+        return FALSE;
     }
 
     RtlZeroMemory(WinLdrSystemBlock, sizeof(LOADER_SYSTEM_BLOCK));
@@ -123,10 +221,11 @@ AllocateAndInitLPB(
     InitializeListHead(&LoaderBlock->BootDriverListHead);
 
     *OutLoaderBlock = LoaderBlock;
+    return TRUE;
 }
 
 // Init "phase 1"
-VOID
+static VOID
 WinLdrInitializePhase1(PLOADER_PARAMETER_BLOCK LoaderBlock,
                        PCSTR Options,
                        PCSTR SystemRoot,
@@ -144,7 +243,6 @@ WinLdrInitializePhase1(PLOADER_PARAMETER_BLOCK LoaderBlock,
     PSTR  LoadOptions, NewLoadOptions;
     CHAR  HalPath[] = "\\";
     CHAR  ArcBoot[MAX_PATH+1];
-    CHAR  MiscFiles[MAX_PATH+1];
     ULONG i;
     ULONG_PTR PathSeparator;
     PLOADER_PARAMETER_EXTENSION Extension;
@@ -260,6 +358,9 @@ WinLdrInitializePhase1(PLOADER_PARAMETER_BLOCK LoaderBlock,
     /* FIXME! HACK value for docking profile */
     Extension->Profile.Status = 2;
 
+    if (Extension->EmInfFileImage)
+        Extension->EmInfFileImage = PaToVa(Extension->EmInfFileImage);
+
 #ifdef _M_IX86
     /* Set headless block pointer */
     if (WinLdrTerminalConnected)
@@ -272,21 +373,12 @@ WinLdrInitializePhase1(PLOADER_PARAMETER_BLOCK LoaderBlock,
     }
 #endif
 
-    /* Load drivers database */
-    RtlStringCbCopyA(MiscFiles, sizeof(MiscFiles), BootPath);
-    RtlStringCbCatA(MiscFiles, sizeof(MiscFiles), "AppPatch\\drvmain.sdb");
-    Extension->DrvDBImage = PaToVa(WinLdrLoadModule(MiscFiles,
-                                                    &Extension->DrvDBSize,
-                                                    LoaderRegistryData));
+    if (Extension->DrvDBImage)
+        Extension->DrvDBImage = PaToVa(Extension->DrvDBImage);
 
-    /* Check if FreeLdr detected a ACPI table */
-    if (AcpiPresent)
-    {
-        /* Set the pointer to something for compatibility */
-        // TODO: Load acpitabl.dat
-        Extension->AcpiTable = (PVOID)1;
-        // FIXME: Extension->AcpiTableSize;
-    }
+    /* Fixup if we have an ACPI table override */
+    if (AcpiPresent && Extension->AcpiTable)
+        Extension->AcpiTable = PaToVa(Extension->AcpiTable);
 
     /* Convert the extension block pointer */
     LoaderBlock->Extension = PaToVa(LoaderBlock->Extension);
@@ -485,6 +577,7 @@ WinLdrLoadModule(PCSTR ModuleName,
     if (Status != ESUCCESS)
     {
         WARN("Error while reading '%s', Status: %u\n", ModuleName, Status);
+        MmFreeMemory(PhysicalBase);
         return NULL;
     }
 
@@ -494,12 +587,12 @@ WinLdrLoadModule(PCSTR ModuleName,
 }
 
 USHORT
-WinLdrDetectVersion(VOID)
+WinLdrDetectVersion(_In_ HKEY ControlSet)
 {
     LONG rc;
     HKEY hKey;
 
-    rc = RegOpenKey(CurrentControlSetKey, L"Control\\Terminal Server", &hKey);
+    rc = RegOpenKey(ControlSet, L"Control\\Terminal Server", &hKey);
     if (rc != ERROR_SUCCESS)
     {
         /* Key doesn't exist; assume NT 4.0 */
@@ -921,27 +1014,27 @@ Quit:
 
 static
 BOOLEAN
-WinLdrInitErrataInf(
-    IN OUT PLOADER_PARAMETER_BLOCK LoaderBlock,
-    IN USHORT OperatingSystemVersion,
-    IN PCSTR SystemRoot)
+WinLdrGetErrataInf(
+    _In_ USHORT OperatingSystemVersion,
+    _In_ PNT_CONFIG_SOURCES ConfigSources,
+    _In_ PCSTR SystemRoot,
+    _Out_z_bytecap_(FilePathSize)
+         PSTR FilePath,
+    _In_ SIZE_T FilePathSize)
 {
     LONG rc;
     HKEY hKey;
     ULONG BufferSize;
-    ULONG FileSize;
-    PVOID PhysicalBase;
     WCHAR szFileName[80];
-    CHAR ErrataFilePath[MAX_PATH];
 
     /* Open either the 'BiosInfo' (Windows <= 2003) or the 'Errata' (Vista+) key */
     if (OperatingSystemVersion >= _WIN32_WINNT_VISTA)
     {
-        rc = RegOpenKey(CurrentControlSetKey, L"Control\\Errata", &hKey);
+        rc = RegOpenKey(ConfigSources->CurrentControlSet, L"Control\\Errata", &hKey);
     }
     else // (OperatingSystemVersion <= _WIN32_WINNT_WS03)
     {
-        rc = RegOpenKey(CurrentControlSetKey, L"Control\\BiosInfo", &hKey);
+        rc = RegOpenKey(ConfigSources->CurrentControlSet, L"Control\\BiosInfo", &hKey);
     }
     if (rc != ERROR_SUCCESS)
     {
@@ -963,31 +1056,20 @@ WinLdrInitErrataInf(
 
     RegCloseKey(hKey);
 
-    RtlStringCbPrintfA(ErrataFilePath, sizeof(ErrataFilePath), "%s%s%S",
+    RtlStringCbPrintfA(FilePath, FilePathSize, "%s%s%S",
                        SystemRoot, "inf\\", szFileName);
-
-    /* Load the INF file */
-    PhysicalBase = WinLdrLoadModule(ErrataFilePath, &FileSize, LoaderRegistryData);
-    if (!PhysicalBase)
-    {
-        WARN("Could not load '%s'\n", ErrataFilePath);
-        return FALSE;
-    }
-
-    LoaderBlock->Extension->EmInfFileImage = PaToVa(PhysicalBase);
-    LoaderBlock->Extension->EmInfFileSize  = FileSize;
 
     return TRUE;
 }
 
+static
 VOID
 WinLdrPostProcessBootOptions(
     _Out_z_bytecap_(BootOptionsSize)
          PSTR BootOptions,
     _In_ SIZE_T BootOptionsSize,
     _In_ PCSTR ArgsBootOptions,
-    _In_ ULONG Argc,
-    _In_ PCHAR Argv[])
+    _In_ PNT_CONFIG_SOURCES ConfigSources)
 {
     PCSTR ArgValue;
 
@@ -1009,7 +1091,7 @@ WinLdrPostProcessBootOptions(
          * Not found in the options, try to retrieve the
          * separate value and append it to the options.
          */
-        ArgValue = GetArgumentValue(Argc, Argv, "Hal");
+        ArgValue = GetArgumentValue(ConfigSources->Argc, ConfigSources->Argv, "Hal");
         if (ArgValue && *ArgValue)
         {
             RtlStringCbCatA(BootOptions, BootOptionsSize, " /HAL=");
@@ -1022,7 +1104,7 @@ WinLdrPostProcessBootOptions(
          * Not found in the options, try to retrieve the
          * separate value and append it to the options.
          */
-        ArgValue = GetArgumentValue(Argc, Argv, "Kernel");
+        ArgValue = GetArgumentValue(ConfigSources->Argc, ConfigSources->Argv, "Kernel");
         if (ArgValue && *ArgValue)
         {
             RtlStringCbCatA(BootOptions, BootOptionsSize, " /KERNEL=");
@@ -1031,6 +1113,35 @@ WinLdrPostProcessBootOptions(
     }
 }
 
+
+#if 0
+
+/* Hypothetical "boot" data struct */
+struct
+{
+    // This is basically the SystemRoot\System32 path.
+    CHAR SearchPath[1024]; // MAX_PATH
+
+    NT_CONFIG_SOURCES ConfigSources;
+
+    /* NLS Data Files */
+    UNICODE_STRING AnsiFileName;
+    UNICODE_STRING OemFileName;
+    UNICODE_STRING LangFileName; // CaseTable
+    UNICODE_STRING OemHalFileName;
+
+    /* BIOS Errata File */
+    CHAR ErrataFilePath[MAX_PATH];
+};
+
+/* Possible search paths, relative to the system root */
+PCSTR SearchPaths[] =
+{
+    "system32"
+    "",
+};
+
+#endif
 
 ARC_STATUS
 LoadAndBootWindows(
@@ -1046,7 +1157,12 @@ LoadAndBootWindows(
     BOOLEAN Success;
 
     BOOLEAN IsNTSetup;
-    HINF InfHandle = NULL;
+    NT_CONFIG_SOURCES ConfigSources = {0};
+    const NT_CONFIG_FUNCS* Config;
+    UNICODE_STRING AnsiFileName = {0};
+    UNICODE_STRING OemFileName = {0};
+    UNICODE_STRING LangFileName = {0}; // CaseTable
+    UNICODE_STRING OemHalFileName = {0};
 
     USHORT OperatingSystemVersion;
     PLOADER_PARAMETER_BLOCK LoaderBlock;
@@ -1054,6 +1170,8 @@ LoadAndBootWindows(
     CHAR FilePath[MAX_PATH];
     CHAR UserBootOptions[256];
     PCSTR BootOptions;
+
+    PVOID PhysicalBase;
 
     PLOADER_PARAMETER_BLOCK LoaderBlockVA;
     PLDR_DATA_TABLE_ENTRY KernelDTE;
@@ -1178,10 +1296,11 @@ LoadAndBootWindows(
         }
     }
 
-    /* In Setup Mode, find the configuration source and adjust the BootPath */
+    /* In Setup Mode, find the configuration source and adjust the BootPath.
+     * Otherwise, keep the arguments vector as the main source. */
     if (IsNTSetup)
     {
-        Status = SetupLdrFindConfigSource(&InfHandle,
+        Status = SetupLdrFindConfigSource(&ConfigSources.InfHandle,
                                           BootPath,
                                           sizeof(BootPath),
                                           FilePath,
@@ -1192,23 +1311,20 @@ LoadAndBootWindows(
             return Status;
         }
         TRACE("Configuration source: '%s'\n", FilePath);
-    }
-
-    /* Post-process the boot options */
-    if (IsNTSetup)
-    {
-        SetupLdrPostProcessBootOptions(UserBootOptions,
-                                       sizeof(UserBootOptions),
-                                       BootOptions,
-                                       InfHandle);
+        Config = &Setup;
     }
     else
     {
-        WinLdrPostProcessBootOptions(UserBootOptions,
-                                     sizeof(UserBootOptions),
-                                     BootOptions,
-                                     Argc, Argv);
+        ConfigSources.Argc = Argc;
+        ConfigSources.Argv = Argv;
+        Config = &OsLdr;
     }
+
+    /* Post-process the boot options */
+    Config->PostProcessBootOptions(UserBootOptions,
+                                   sizeof(UserBootOptions),
+                                   BootOptions,
+                                   &ConfigSources);
     BootOptions = UserBootOptions;
     TRACE("BootOptions(2): '%s'\n", BootOptions);
 
@@ -1218,7 +1334,9 @@ LoadAndBootWindows(
         UiResetForSOS();
 
     /* Allocate and minimally-initialize the Loader Parameter Block */
-    AllocateAndInitLPB(OperatingSystemVersion, &LoaderBlock);
+    Success = AllocateAndInitLPB(OperatingSystemVersion, &LoaderBlock);
+    if (!Success)
+        goto Failure;
     if (IsNTSetup)
     {
         PSETUP_LOADER_BLOCK SetupBlock;
@@ -1242,13 +1360,14 @@ LoadAndBootWindows(
           (Success ? "loaded" : "not loaded"));
     /* Bail out if failure */
     if (!Success)
-        return ENOEXEC;
+        goto Failure;
+    ConfigSources.CurrentControlSet = CurrentControlSetKey;
 
     if (!IsNTSetup)
     {
         /* Fixup the version number using data from the registry */
         if (OperatingSystemVersion == 0)
-            OperatingSystemVersion = WinLdrDetectVersion();
+            OperatingSystemVersion = WinLdrDetectVersion(CurrentControlSetKey);
     }
     LoaderBlock->Extension->MajorVersion = (OperatingSystemVersion & 0xFF00) >> 8;
     LoaderBlock->Extension->MinorVersion = (OperatingSystemVersion & 0xFF);
@@ -1289,47 +1408,107 @@ LoadAndBootWindows(
         PeLdrImportDllLoadCallback = NULL;
 
         UiMessageBox("Error loading NTOS core.");
-        return ENOEXEC;
+        goto Failure;
     }
 
-    if (IsNTSetup)
+
+    // Config->ScanConfiguration();
+    // Success = WinLdrScanSystemHive(LoaderBlock, BootPath);
+    // TRACE("SYSTEM hive %s\n", (Success ? "scanned" : "not scanned"));
+
+    /* Get names of NLS files */
+    Success = Config->GetNLSNames(&ConfigSources,
+                                  &AnsiFileName,
+                                  &OemFileName,
+                                  &LangFileName,
+                                  &OemHalFileName);
+    if (!Success)
     {
-        /* Load NLS data, they are in the System32 directory of the installation medium */
-        RtlStringCbCopyA(FilePath, sizeof(FilePath), BootPath);
-        RtlStringCbCatA(FilePath, sizeof(FilePath), "system32\\");
-        SetupLdrLoadNlsData(LoaderBlock, InfHandle, FilePath);
+        UiMessageBox("Getting NLS names from %s failed!",
+                     IsNTSetup ? "configuration file" : "registry");
+        goto cleanupNLS;
+    }
 
-        /* Load the Firmware Errata file from the installation medium */
-        Success = SetupLdrInitErrataInf(LoaderBlock, InfHandle, BootPath);
-        TRACE("Firmware Errata file %s\n", (Success ? "loaded" : "not loaded"));
-        /* Not necessarily fatal if not found - carry on going */
+    TRACE("NLS data: '%wZ' '%wZ' '%wZ' '%wZ'\n",
+          &AnsiFileName, &OemFileName, &LangFileName, &OemHalFileName);
 
+    /* Load NLS data and OEM font, they are in the
+     * System32 directory of the installation medium. */
+    RtlStringCbCopyA(FilePath, sizeof(FilePath), BootPath); // == SystemRoot
+    RtlStringCbCatA(FilePath, sizeof(FilePath), "system32\\");
+
+    Success = WinLdrLoadNLSData(LoaderBlock,
+                                FilePath, // SearchPath,
+                                &AnsiFileName,
+                                &OemFileName,
+                                &LangFileName,
+                                &OemHalFileName);
+    TRACE("NLS data loading %s\n", Success ? "successful" : "failed");
+
+cleanupNLS:
+    // if (IsNTSetup) // FIXME: For now, free memory in all cases.
+    {
+        /* Free memory allocated by SetupLdrGetNLSNames() */
+        RtlFreeUnicodeString(&OemHalFileName);
+        RtlFreeUnicodeString(&LangFileName);
+        RtlFreeUnicodeString(&OemFileName);
+        RtlFreeUnicodeString(&AnsiFileName);
+    }
+
+    if (!Success)
+    {
+        UiMessageBox("Failed to load NLS data!");
+        goto Continue;
+    }
+
+    /* Load the Firmware Errata file, from the installation medium or SystemRoot */
+    Success = Config->GetErrataInf(OperatingSystemVersion,
+                                   &ConfigSources,
+                                   BootPath,
+                                   FilePath,
+                                   sizeof(FilePath));
+    if (Success)
+    {
+        PhysicalBase = WinLdrLoadModule(FilePath,
+                                        &LoaderBlock->Extension->EmInfFileSize,
+                                        LoaderRegistryData);
+        // if (!PhysicalBase)
+            // WARN("Could not load '%s'\n", FilePath);
+        LoaderBlock->Extension->EmInfFileImage = PhysicalBase;
+        Success = (PhysicalBase != NULL);
+    }
+
+    TRACE("Firmware Errata file %s\n", (Success ? "loaded" : "not loaded"));
+    /* Not necessarily fatal if not found - carry on going */
+
+    /* Prepare the boot drivers list */
+    // if (IsNTSetup)
         // UiDrawStatusText("Press F6 if you need to install a 3rd-party SCSI or RAID driver...");
-
-        /* Get a list of boot drivers */
-        SetupLdrScanBootDrivers(&LoaderBlock->BootDriverListHead, InfHandle, BootPath);
-    }
-    else
+    Success = Config->ScanBootDrivers(&ConfigSources, &LoaderBlock->BootDriverListHead);
+    if (!Success)
     {
-        /* Load NLS data, OEM font, and prepare boot drivers list */
-        Success = WinLdrScanSystemHive(LoaderBlock, BootPath);
-        TRACE("SYSTEM hive %s\n", (Success ? "scanned" : "not scanned"));
-        /* Bail out if failure */
-        if (!Success)
-            return ENOEXEC;
-
-        /* Load the Firmware Errata file */
-        Success = WinLdrInitErrataInf(LoaderBlock, OperatingSystemVersion, BootPath);
-        TRACE("Firmware Errata file %s\n", (Success ? "loaded" : "not loaded"));
-        /* Not necessarily fatal if not found - carry on going */
+        UiMessageBox("Failed to find boot drivers!");
+        goto Continue;
     }
+
+Continue:
+    /* Bail out if failure */
+    if (!Success)
+    {
+        /* Reset the PE loader import-DLL callback */
+        PeLdrImportDllLoadCallback = NULL;
+
+        goto Failure;
+    }
+
 
     /* Cleanup INI file */
     IniCleanup();
 
     /* Close the INF file */
     if (IsNTSetup)
-        InfCloseFile(InfHandle);
+        InfCloseFile(ConfigSources.InfHandle);
+    ConfigSources.InfHandle = NULL;
 
 /****
  **** WE HAVE NOW REACHED THE POINT OF NO RETURN !!
@@ -1343,6 +1522,36 @@ LoadAndBootWindows(
     TRACE("Boot drivers loading %s\n", Success ? "successful" : "failed");
 
     UiSetProgressBarSubset(0, 100);
+
+    /* Load drivers database */
+    RtlStringCbCopyA(FilePath, sizeof(FilePath), BootPath);
+    RtlStringCbCatA(FilePath, sizeof(FilePath), "AppPatch\\drvmain.sdb");
+    PhysicalBase = WinLdrLoadModule(FilePath,
+                                    &LoaderBlock->Extension->DrvDBSize,
+                                    LoaderRegistryData);
+    LoaderBlock->Extension->DrvDBImage = PhysicalBase;
+    Success = (PhysicalBase != NULL);
+
+    TRACE("Driver Database file %s\n", (Success ? "loaded" : "not loaded"));
+    /* Not necessarily fatal if not found - carry on going */
+
+    UiUpdateProgressBar(95, NULL);
+
+    /* Check whether ACPI is supported */
+    if (AcpiPresent)
+    {
+        /* Load ACPI table override */
+        RtlStringCbCopyA(FilePath, sizeof(FilePath), BootPath);
+        RtlStringCbCatA(FilePath, sizeof(FilePath), "system32\\acpitabl.dat");
+        PhysicalBase = WinLdrLoadModule(FilePath,
+                                        &LoaderBlock->Extension->AcpiTableSize,
+                                        LoaderRegistryData);
+        LoaderBlock->Extension->AcpiTable = PhysicalBase;
+        Success = (PhysicalBase != NULL);
+
+        TRACE("ACPI Table override file %s\n", (Success ? "loaded" : "not loaded"));
+        /* Not necessarily fatal if not found - carry on going */
+    }
 
     /* Reset the PE loader import-DLL callback */
     PeLdrImportDllLoadCallback = NULL;
@@ -1397,6 +1606,14 @@ LoadAndBootWindows(
     (*KiSystemStartup)(LoaderBlockVA);
 
     UNREACHABLE; // return ESUCCESS;
+
+Failure:
+    MmFreeMemory(VaToPa(LoaderBlock->RegistryBase));
+    MmFreeMemory(WinLdrSystemBlock);
+    WinLdrSystemBlock = NULL;
+    if (IsNTSetup && ConfigSources.InfHandle)
+        InfCloseFile(ConfigSources.InfHandle);
+    return ENOEXEC;
 }
 
 #if DBG

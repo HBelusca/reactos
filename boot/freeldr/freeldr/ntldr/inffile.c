@@ -6,7 +6,7 @@
  *              Copyright 2003-2019 Eric Kohl
  */
 
-/* INCLUDES *****************************************************************/
+/* INCLUDES ******************************************************************/
 
 #include <freeldr.h>
 #include "inffile.h"
@@ -128,7 +128,7 @@ parser_funcs[NB_PARSER_STATES] =
 };
 
 
-/* PRIVATE FUNCTIONS ********************************************************/
+/* PRIVATE FUNCTIONS *********************************************************/
 
 static
 PINFCACHELINE
@@ -912,7 +912,7 @@ InfpParseBuffer (
     return TRUE;
 }
 
-/* PUBLIC FUNCTIONS *********************************************************/
+/* PUBLIC FUNCTIONS **********************************************************/
 
 BOOLEAN
 InfOpenFile(

@@ -9,24 +9,27 @@
 
 // #include <arc/setupblk.h>
 
-/*static*/ VOID
-SetupLdrLoadNlsData(
-    _Inout_ PLOADER_PARAMETER_BLOCK LoaderBlock,
-    _In_ HINF InfHandle,
-    _In_ PCSTR SearchPath);
-
-/*static*/
 BOOLEAN
-SetupLdrInitErrataInf(
-    IN OUT PLOADER_PARAMETER_BLOCK LoaderBlock,
-    IN HINF InfHandle,
-    IN PCSTR SystemRoot);
+SetupLdrGetNLSNames(
+    _In_ PNT_CONFIG_SOURCES ConfigSources,
+    _Out_ PUNICODE_STRING AnsiFileName,
+    _Out_ PUNICODE_STRING OemFileName,
+    _Out_ PUNICODE_STRING LangFileName, // CaseTable
+    _Out_ PUNICODE_STRING OemHalFileName);
 
-/*static*/ VOID
+BOOLEAN
+SetupLdrGetErrataInf(
+    _In_ USHORT OperatingSystemVersion,
+    _In_ PNT_CONFIG_SOURCES ConfigSources,
+    _In_ PCSTR SystemRoot,
+    _Out_z_bytecap_(FilePathSize)
+         PSTR FilePath,
+    _In_ SIZE_T FilePathSize);
+
+BOOLEAN
 SetupLdrScanBootDrivers(
-    _Inout_ PLIST_ENTRY BootDriverListHead,
-    _In_ HINF InfHandle,
-    _In_ PCSTR SearchPath);
+    _In_ PNT_CONFIG_SOURCES ConfigSources,
+    _Inout_ PLIST_ENTRY DriverListHead);
 
 VOID
 SetupLdrPostProcessBootOptions(
@@ -34,9 +37,7 @@ SetupLdrPostProcessBootOptions(
          PSTR BootOptions,
     _In_ SIZE_T BootOptionsSize,
     _In_ PCSTR ArgsBootOptions,
-    // _In_ ULONG Argc,
-    // _In_ PCHAR Argv[],
-    _In_ HINF InfHandle);
+    _In_ PNT_CONFIG_SOURCES ConfigSources);
 
 ARC_STATUS
 SetupLdrFindConfigSource(

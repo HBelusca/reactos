@@ -6,10 +6,11 @@
  * PROGRAMMERS:     Aleksey Bragin (aleksey@reactos.org)
  */
 
-/* INCLUDES ***************************************************************/
+/* INCLUDES ******************************************************************/
 
 #include <freeldr.h>
-#include "winldr.h"
+#include "arch.h"
+#include "conversion.h"
 
 #include <debug.h>
 DBG_DEFAULT_CHANNEL(WINDOWS);
@@ -53,14 +54,14 @@ extern ULONG BiosMemoryMapEntryCount;
 extern PFN_NUMBER MmLowestPhysicalPage;
 extern PFN_NUMBER MmHighestPhysicalPage;
 
-/* GLOBALS ***************************************************************/
+/* GLOBALS *******************************************************************/
 
 MEMORY_ALLOCATION_DESCRIPTOR *Mad;
 ULONG MadCount = 0;
 /* 200 MADs fit into 1 page, that should really be enough! */
 #define MAX_MAD_COUNT 200
 
-/* FUNCTIONS **************************************************************/
+/* FUNCTIONS *****************************************************************/
 
 #if DBG
 
@@ -444,3 +445,5 @@ WinLdrInsertDescriptor(
 
     return;
 }
+
+/* EOF */

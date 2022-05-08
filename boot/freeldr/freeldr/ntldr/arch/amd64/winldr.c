@@ -6,18 +6,18 @@
  * PROGRAMMERS:     Timo Kreuzer (timo.kreuzer@reactos.org)
  */
 
-/* INCLUDES ***************************************************************/
+/* INCLUDES ******************************************************************/
 
 #include <freeldr.h>
 #include <ndk/asm.h>
-#include "../../winldr.h"
+#include "../../arch.h"
 
 #include <debug.h>
 DBG_DEFAULT_CHANNEL(WINDOWS);
 
 //extern ULONG LoaderPagesSpanned;
 
-/* GLOBALS ***************************************************************/
+/* GLOBALS *******************************************************************/
 
 PHARDWARE_PTE PxeBase;
 //PHARDWARE_PTE HalPageTable;
@@ -26,7 +26,7 @@ PVOID GdtIdt;
 ULONG_PTR PcrBasePage;
 ULONG_PTR TssBasePage;
 
-/* FUNCTIONS **************************************************************/
+/* FUNCTIONS *****************************************************************/
 
 static
 BOOLEAN
@@ -376,7 +376,7 @@ WinLdrSetProcessorContext(void)
     TRACE("leave WinLdrSetProcessorContext\n");
 }
 
-void WinLdrSetupMachineDependent(PLOADER_PARAMETER_BLOCK LoaderBlock)
+VOID WinLdrSetupMachineDependent(PLOADER_PARAMETER_BLOCK LoaderBlock)
 {
     ULONG_PTR Pcr = 0;
     ULONG_PTR Tss = 0;

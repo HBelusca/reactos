@@ -6,7 +6,7 @@
  * PROGRAMMERS:     ReactOS Portable Systems Group
  */
 
-/* INCLUDES *******************************************************************/
+/* INCLUDES ******************************************************************/
 
 #include <freeldr.h>
 #include <cportlib/cportlib.h>
@@ -25,7 +25,7 @@ typedef struct _SYSID_UUID_ENTRY
 } SYSID_UUID_ENTRY, *PSYSID_UUID_ENTRY;
 #include <poppack.h>
 
-/* GLOBALS ********************************************************************/
+/* GLOBALS *******************************************************************/
 
 HEADLESS_LOADER_BLOCK LoaderRedirectionInformation;
 BOOLEAN WinLdrTerminalConnected;
@@ -40,7 +40,7 @@ CPPORT Port[4] =
     {NULL, 0, TRUE}
 };
 
-/* FUNCTIONS ******************************************************************/
+/* FUNCTIONS *****************************************************************/
 
 VOID
 WinLdrLoadGUID(OUT PGUID SystemGuid)

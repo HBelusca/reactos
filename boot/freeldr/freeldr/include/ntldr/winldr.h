@@ -7,8 +7,6 @@
 
 #pragma once
 
-#include <arc/setupblk.h>
-
 // See freeldr/ntldr/winldr.h
 #define TAG_WLDR_DTE 'eDlW'
 #define TAG_WLDR_BDE 'dBlW'

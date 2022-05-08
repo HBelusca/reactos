@@ -26,7 +26,7 @@ typedef struct _INFCONTEXT
 } INFCONTEXT, *PINFCONTEXT;
 
 
-/* FUNCTIONS ****************************************************************/
+/* FUNCTIONS *****************************************************************/
 
 BOOLEAN
 InfOpenFile (PHINF InfHandle,

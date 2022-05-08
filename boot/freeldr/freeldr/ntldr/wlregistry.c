@@ -6,33 +6,19 @@
  * PROGRAMMERS:     Aleksey Bragin (aleksey@reactos.org)
  */
 
-/* INCLUDES ***************************************************************/
+/* INCLUDES ******************************************************************/
 
 #include <freeldr.h>
-#include "winldr.h"
+#include "inffile.h"
 #include "registry.h"
+#include "winldr.h"
 #include <internal/cmboot.h>
 
 #include <debug.h>
 DBG_DEFAULT_CHANNEL(WINDOWS);
 
-// The only global var here, used to mark mem pages as NLS in WinLdrSetupMemoryLayout()
-ULONG TotalNLSSize = 0;
 
-static BOOLEAN
-WinLdrGetNLSNames(
-    _In_ HKEY ControlSet,
-    _Inout_ PUNICODE_STRING AnsiFileName,
-    _Inout_ PUNICODE_STRING OemFileName,
-    _Inout_ PUNICODE_STRING LangFileName, // CaseTable
-    _Inout_ PUNICODE_STRING OemHalFileName);
-
-static BOOLEAN
-WinLdrScanRegistry(
-    IN OUT PLIST_ENTRY BootDriverListHead);
-
-
-/* FUNCTIONS **************************************************************/
+/* FUNCTIONS *****************************************************************/
 
 static BOOLEAN
 WinLdrLoadSystemHive(
@@ -158,72 +144,39 @@ WinLdrInitSystemHive(
     return TRUE;
 }
 
-BOOLEAN WinLdrScanSystemHive(IN OUT PLOADER_PARAMETER_BLOCK LoaderBlock,
-                             IN PCSTR SystemRoot)
+//
+// Idea:
+// xxxLdrScanWhatever --> Gathers data (incl boot drivers list) from either registry or INF file.
+// xxxLdrLoadNLSData / xxxLdrLoadYYY --> Separately loads actual binary data.
+//
+BOOLEAN
+WinLdrScanSystemHive(
+    IN OUT PLOADER_PARAMETER_BLOCK LoaderBlock,
+    IN PCSTR SystemRoot)
 {
-    BOOLEAN Success;
-    DECLARE_UNICODE_STRING_SIZE(AnsiFileName, MAX_PATH);
-    DECLARE_UNICODE_STRING_SIZE(OemFileName, MAX_PATH);
-    DECLARE_UNICODE_STRING_SIZE(LangFileName, MAX_PATH); // CaseTable
-    DECLARE_UNICODE_STRING_SIZE(OemHalFileName, MAX_PATH);
-    CHAR SearchPath[1024];
-
-    /* Scan registry and prepare boot drivers list */
-    Success = WinLdrScanRegistry(&LoaderBlock->BootDriverListHead);
-    if (!Success)
-    {
-        UiMessageBox("Failed to load boot drivers!");
-        return FALSE;
-    }
-
-    /* Get names of NLS files */
-    Success = WinLdrGetNLSNames(CurrentControlSetKey,
-                                &AnsiFileName,
-                                &OemFileName,
-                                &LangFileName,
-                                &OemHalFileName);
-    if (!Success)
-    {
-        UiMessageBox("Getting NLS names from registry failed!");
-        return FALSE;
-    }
-
-    TRACE("NLS data: '%wZ' '%wZ' '%wZ' '%wZ'\n",
-          &AnsiFileName, &OemFileName, &LangFileName, &OemHalFileName);
-
-    /* Load NLS data */
-    RtlStringCbCopyA(SearchPath, sizeof(SearchPath), SystemRoot);
-    RtlStringCbCatA(SearchPath, sizeof(SearchPath), "system32\\");
-    Success = WinLdrLoadNLSData(LoaderBlock,
-                                SearchPath,
-                                &AnsiFileName,
-                                &OemFileName,
-                                &LangFileName,
-                                &OemHalFileName);
-    TRACE("NLS data loading %s\n", Success ? "successful" : "failed");
-
     return TRUE;
 }
 
 
-/* PRIVATE FUNCTIONS ******************************************************/
+/* PRIVATE FUNCTIONS *********************************************************/
 
 // Queries registry for those three file names
-static BOOLEAN
+BOOLEAN
 WinLdrGetNLSNames(
-    _In_ HKEY ControlSet,
-    _Inout_ PUNICODE_STRING AnsiFileName,
-    _Inout_ PUNICODE_STRING OemFileName,
-    _Inout_ PUNICODE_STRING LangFileName, // CaseTable
-    _Inout_ PUNICODE_STRING OemHalFileName)
+    _In_ PNT_CONFIG_SOURCES ConfigSources,
+    _Out_ PUNICODE_STRING AnsiFileName,
+    _Out_ PUNICODE_STRING OemFileName,
+    _Out_ PUNICODE_STRING LangFileName, // CaseTable
+    _Out_ PUNICODE_STRING OemHalFileName)
 {
     LONG rc;
     HKEY hKey;
     ULONG BufferSize;
     WCHAR szIdBuffer[80];
+    WCHAR FileName[MAX_PATH];
 
     /* Open the CodePage key */
-    rc = RegOpenKey(ControlSet, L"Control\\NLS\\CodePage", &hKey);
+    rc = RegOpenKey(ConfigSources->CurrentControlSet, L"Control\\NLS\\CodePage", &hKey);
     if (rc != ERROR_SUCCESS)
     {
         //TRACE("Couldn't open CodePage registry key\n");
@@ -239,20 +192,15 @@ WinLdrGetNLSNames(
         goto Quit;
     }
 
-    BufferSize = AnsiFileName->MaximumLength;
-    rc = RegQueryValue(hKey, szIdBuffer, NULL,
-                       (PUCHAR)AnsiFileName->Buffer, &BufferSize);
+    BufferSize = sizeof(FileName);
+    rc = RegQueryValue(hKey, szIdBuffer, NULL, (PUCHAR)FileName, &BufferSize);
     if (rc != ERROR_SUCCESS)
     {
         //TRACE("ACP NLS Setting exists, but isn't readable\n");
         //goto Quit;
-        AnsiFileName->Length = 0;
-        RtlAppendUnicodeToString(AnsiFileName, L"c_1252.nls"); // HACK: ReactOS bug CORE-6105
+        RtlStringCbCopyW(FileName, sizeof(FileName), L"c_1252.nls"); // HACK: ReactOS bug CORE-6105
     }
-    else
-    {
-        AnsiFileName->Length = (USHORT)BufferSize - sizeof(UNICODE_NULL);
-    }
+    RtlCreateUnicodeString(AnsiFileName, FileName);
 
     /* Get OEM codepage file */
     BufferSize = sizeof(szIdBuffer);
@@ -263,25 +211,19 @@ WinLdrGetNLSNames(
         goto Quit;
     }
 
-    BufferSize = OemFileName->MaximumLength;
-    rc = RegQueryValue(hKey, szIdBuffer, NULL,
-                       (PUCHAR)OemFileName->Buffer, &BufferSize);
+    BufferSize = sizeof(FileName);
+    rc = RegQueryValue(hKey, szIdBuffer, NULL, (PUCHAR)FileName, &BufferSize);
     if (rc != ERROR_SUCCESS)
     {
         //TRACE("OEMCP NLS setting exists, but isn't readable\n");
         //goto Quit;
-        OemFileName->Length = 0;
-        RtlAppendUnicodeToString(OemFileName, L"c_437.nls"); // HACK: ReactOS bug CORE-6105
+        RtlStringCbCopyW(FileName, sizeof(FileName), L"c_437.nls"); // HACK: ReactOS bug CORE-6105
     }
-    else
-    {
-        OemFileName->Length = (USHORT)BufferSize - sizeof(UNICODE_NULL);
-    }
+    RtlCreateUnicodeString(OemFileName, FileName);
 
     /* Get OEM HAL font file */
-    BufferSize = OemHalFileName->MaximumLength;
-    rc = RegQueryValue(hKey, L"OEMHAL", NULL,
-                       (PUCHAR)OemHalFileName->Buffer, &BufferSize);
+    BufferSize = sizeof(FileName);
+    rc = RegQueryValue(hKey, L"OEMHAL", NULL, (PUCHAR)FileName, &BufferSize);
     if (rc != ERROR_SUCCESS)
     {
         //TRACE("Couldn't get OEMHAL NLS setting\n");
@@ -290,13 +232,13 @@ WinLdrGetNLSNames(
     }
     else
     {
-        OemHalFileName->Length = (USHORT)BufferSize - sizeof(UNICODE_NULL);
+        RtlCreateUnicodeString(OemHalFileName, FileName);
     }
 
     RegCloseKey(hKey);
 
     /* Open the Language key */
-    rc = RegOpenKey(ControlSet, L"Control\\NLS\\Language", &hKey);
+    rc = RegOpenKey(ConfigSources->CurrentControlSet, L"Control\\NLS\\Language", &hKey);
     if (rc != ERROR_SUCCESS)
     {
         //TRACE("Couldn't open Language registry key\n");
@@ -312,20 +254,15 @@ WinLdrGetNLSNames(
         goto Quit;
     }
 
-    BufferSize = LangFileName->MaximumLength;
-    rc = RegQueryValue(hKey, szIdBuffer, NULL,
-                       (PUCHAR)LangFileName->Buffer, &BufferSize);
+    BufferSize = sizeof(FileName);
+    rc = RegQueryValue(hKey, szIdBuffer, NULL, (PUCHAR)FileName, &BufferSize);
     if (rc != ERROR_SUCCESS)
     {
         //TRACE("Language Default setting exists, but isn't readable\n");
         //goto Quit;
-        LangFileName->Length = 0;
-        RtlAppendUnicodeToString(LangFileName, L"l_intl.nls");
+        RtlStringCbCopyW(FileName, sizeof(FileName), L"l_intl.nls");
     }
-    else
-    {
-        LangFileName->Length = (USHORT)BufferSize - sizeof(UNICODE_NULL);
-    }
+    RtlCreateUnicodeString(LangFileName, FileName);
 
 Quit:
     RegCloseKey(hKey);
@@ -420,9 +357,6 @@ WinLdrLoadNLSData(
                 MM_SIZE_TO_PAGES(OemFileSize)  +
                 MM_SIZE_TO_PAGES(LangFileSize);
 
-    /* Store it for later marking the pages as NlsData type */
-    TotalNLSSize = TotalSize;
-
     NlsDataBase = MmAllocateMemoryWithType(TotalSize*MM_PAGE_SIZE, LoaderNlsData);
     if (NlsDataBase == NULL)
         goto Quit;
@@ -488,7 +422,7 @@ WinLdrLoadNLSData(
     //
     // THIS IS a HACK and should be replaced by actually loading the OEMHAL file!
     //
-    LoaderBlock->OemFontFile = VaToPa(LoaderBlock->NlsData->UnicodeCodePageData);
+    LoaderBlock->OemFontFile = LoaderBlock->NlsData->UnicodeCodePageData;
 
     /* Convert NlsTables address to VA */
     LoaderBlock->NlsData = PaToVa(LoaderBlock->NlsData);
@@ -507,37 +441,38 @@ Quit:
     return (Status == ESUCCESS);
 }
 
-static BOOLEAN
-WinLdrScanRegistry(
-    IN OUT PLIST_ENTRY BootDriverListHead)
+BOOLEAN
+WinLdrScanBootDrivers(
+    _In_ PNT_CONFIG_SOURCES ConfigSources,
+    _Inout_ PLIST_ENTRY DriverListHead)
 {
     BOOLEAN Success;
 
     /* Find all boot drivers */
     Success = CmpFindDrivers(SystemHive,
-                             HKEY_TO_HCI(CurrentControlSetKey),
+                             HKEY_TO_HCI(ConfigSources->CurrentControlSet),
                              BootLoad,
                              BootFileSystem,
-                             BootDriverListHead);
+                             DriverListHead);
     if (!Success)
         goto Quit;
 
     /* Sort by group/tag */
     Success = CmpSortDriverList(SystemHive,
-                                HKEY_TO_HCI(CurrentControlSetKey),
-                                BootDriverListHead);
+                                HKEY_TO_HCI(ConfigSources->CurrentControlSet),
+                                DriverListHead);
     if (!Success)
         goto Quit;
 
     /* Remove circular dependencies (cycles) and sort */
-    Success = CmpResolveDriverDependencies(BootDriverListHead);
+    Success = CmpResolveDriverDependencies(DriverListHead);
     if (!Success)
         goto Quit;
 
 Quit:
     /* In case of failure, free the boot driver list */
     if (!Success)
-        CmpFreeDriverList(SystemHive, BootDriverListHead);
+        CmpFreeDriverList(SystemHive, DriverListHead);
 
     return Success;
 }

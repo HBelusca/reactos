@@ -6,109 +6,89 @@
  *              Copyright 2022 Hermès Bélusca-Maïto
  */
 
+/* INCLUDES ******************************************************************/
+
 #include <freeldr.h>
-#include <ndk/ldrtypes.h>
-#include <arc/setupblk.h>
-#include "winldr.h"
+// #include <arc/setupblk.h>
 #include "inffile.h"
+#include "registry.h"
+#include "winldr.h"
 #include "setupldr.h"
 #include "ntldropts.h"
 
 #include <debug.h>
 DBG_DEFAULT_CHANNEL(WINDOWS);
 
-// TODO: Move to .h
-VOID
-AllocateAndInitLPB(
-    IN USHORT VersionToBoot,
-    OUT PLOADER_PARAMETER_BLOCK* OutLoaderBlock);
 
-/*static*/ VOID
-SetupLdrLoadNlsData(
-    _Inout_ PLOADER_PARAMETER_BLOCK LoaderBlock,
-    _In_ HINF InfHandle,
-    _In_ PCSTR SearchPath)
+/* FUNCTIONS *****************************************************************/
+
+BOOLEAN
+SetupLdrGetNLSNames(
+    _In_ PNT_CONFIG_SOURCES ConfigSources,
+    _Out_ PUNICODE_STRING AnsiFileName,
+    _Out_ PUNICODE_STRING OemFileName,
+    _Out_ PUNICODE_STRING LangFileName, // CaseTable
+    _Out_ PUNICODE_STRING OemHalFileName)
 {
-    BOOLEAN Success;
     INFCONTEXT InfContext;
     PCSTR AnsiData;
-    UNICODE_STRING AnsiFileName = {0};
-    UNICODE_STRING OemFileName = {0};
-    UNICODE_STRING LangFileName = {0}; // CaseTable
-    UNICODE_STRING OemHalFileName = {0};
 
     /* Get ANSI codepage file */
-    if (!InfFindFirstLine(InfHandle, "NLS", "AnsiCodepage", &InfContext) ||
+    if (!InfFindFirstLine(ConfigSources->InfHandle, "NLS", "AnsiCodepage", &InfContext) ||
         !InfGetDataField(&InfContext, 1, &AnsiData) ||
-        !RtlCreateUnicodeStringFromAsciiz(&AnsiFileName, AnsiData))
+        !RtlCreateUnicodeStringFromAsciiz(AnsiFileName, AnsiData))
     {
         ERR("Failed to find or get 'NLS/AnsiCodepage'\n");
-        return;
+        return FALSE;
     }
 
     /* Get OEM codepage file */
-    if (!InfFindFirstLine(InfHandle, "NLS", "OemCodepage", &InfContext) ||
+    if (!InfFindFirstLine(ConfigSources->InfHandle, "NLS", "OemCodepage", &InfContext) ||
         !InfGetDataField(&InfContext, 1, &AnsiData) ||
-        !RtlCreateUnicodeStringFromAsciiz(&OemFileName, AnsiData))
+        !RtlCreateUnicodeStringFromAsciiz(OemFileName, AnsiData))
     {
         ERR("Failed to find or get 'NLS/OemCodepage'\n");
-        goto Quit;
+        return FALSE;
     }
 
     /* Get the Unicode case table file */
-    if (!InfFindFirstLine(InfHandle, "NLS", "UnicodeCasetable", &InfContext) ||
+    if (!InfFindFirstLine(ConfigSources->InfHandle, "NLS", "UnicodeCasetable", &InfContext) ||
         !InfGetDataField(&InfContext, 1, &AnsiData) ||
-        !RtlCreateUnicodeStringFromAsciiz(&LangFileName, AnsiData))
+        !RtlCreateUnicodeStringFromAsciiz(LangFileName, AnsiData))
     {
         ERR("Failed to find or get 'NLS/UnicodeCasetable'\n");
-        goto Quit;
+        return FALSE;
     }
 
     /* Get OEM HAL font file */
-    if (!InfFindFirstLine(InfHandle, "NLS", "OemHalFont", &InfContext) ||
+    if (!InfFindFirstLine(ConfigSources->InfHandle, "NLS", "OemHalFont", &InfContext) ||
         !InfGetData(&InfContext, NULL, &AnsiData) ||
-        !RtlCreateUnicodeStringFromAsciiz(&OemHalFileName, AnsiData))
+        !RtlCreateUnicodeStringFromAsciiz(OemHalFileName, AnsiData))
     {
         WARN("Failed to find or get 'NLS/OemHalFont'\n");
         /* Ignore, this is an optional file */
-        RtlInitEmptyUnicodeString(&OemHalFileName, NULL, 0);
+        RtlInitEmptyUnicodeString(OemHalFileName, NULL, 0);
     }
 
-    TRACE("NLS data: '%wZ' '%wZ' '%wZ' '%wZ'\n",
-          &AnsiFileName, &OemFileName, &LangFileName, &OemHalFileName);
-
-    /* Load NLS data */
-    Success = WinLdrLoadNLSData(LoaderBlock,
-                                SearchPath,
-                                &AnsiFileName,
-                                &OemFileName,
-                                &LangFileName,
-                                &OemHalFileName);
-    TRACE("NLS data loading %s\n", Success ? "successful" : "failed");
-    (VOID)Success;
-
-Quit:
-    RtlFreeUnicodeString(&OemHalFileName);
-    RtlFreeUnicodeString(&LangFileName);
-    RtlFreeUnicodeString(&OemFileName);
-    RtlFreeUnicodeString(&AnsiFileName);
+    return TRUE;
 }
 
-/*static*/
 BOOLEAN
-SetupLdrInitErrataInf(
-    IN OUT PLOADER_PARAMETER_BLOCK LoaderBlock,
-    IN HINF InfHandle,
-    IN PCSTR SystemRoot)
+SetupLdrGetErrataInf(
+    _In_ USHORT OperatingSystemVersion,
+    _In_ PNT_CONFIG_SOURCES ConfigSources,
+    _In_ PCSTR SystemRoot,
+    _Out_z_bytecap_(FilePathSize)
+         PSTR FilePath,
+    _In_ SIZE_T FilePathSize)
 {
     INFCONTEXT InfContext;
     PCSTR FileName;
-    ULONG FileSize;
-    PVOID PhysicalBase;
-    CHAR ErrataFilePath[MAX_PATH];
+
+    UNREFERENCED_PARAMETER(OperatingSystemVersion);
 
     /* Retrieve the INF file name value */
-    if (!InfFindFirstLine(InfHandle, "BiosInfo", "InfName", &InfContext))
+    if (!InfFindFirstLine(ConfigSources->InfHandle, "BiosInfo", "InfName", &InfContext))
     {
         WARN("Failed to find 'BiosInfo/InfName'\n");
         return FALSE;
@@ -119,28 +99,16 @@ SetupLdrInitErrataInf(
         return FALSE;
     }
 
-    RtlStringCbCopyA(ErrataFilePath, sizeof(ErrataFilePath), SystemRoot);
-    RtlStringCbCatA(ErrataFilePath, sizeof(ErrataFilePath), FileName);
-
-    /* Load the INF file */
-    PhysicalBase = WinLdrLoadModule(ErrataFilePath, &FileSize, LoaderRegistryData);
-    if (!PhysicalBase)
-    {
-        WARN("Could not load '%s'\n", ErrataFilePath);
-        return FALSE;
-    }
-
-    LoaderBlock->Extension->EmInfFileImage = PaToVa(PhysicalBase);
-    LoaderBlock->Extension->EmInfFileSize  = FileSize;
+    RtlStringCbCopyA(FilePath, FilePathSize, SystemRoot);
+    RtlStringCbCatA(FilePath, FilePathSize, FileName);
 
     return TRUE;
 }
 
-/*static*/ VOID
+BOOLEAN
 SetupLdrScanBootDrivers(
-    _Inout_ PLIST_ENTRY BootDriverListHead,
-    _In_ HINF InfHandle,
-    _In_ PCSTR SearchPath)
+    _In_ PNT_CONFIG_SOURCES ConfigSources,
+    _Inout_ PLIST_ENTRY DriverListHead)
 {
     INFCONTEXT InfContext, dirContext;
     PCSTR Media, DriverName, dirIndex, ImagePath;
@@ -148,10 +116,8 @@ SetupLdrScanBootDrivers(
     WCHAR ImagePathW[MAX_PATH];
     WCHAR DriverNameW[256];
 
-    UNREFERENCED_PARAMETER(SearchPath);
-
     /* Open INF section */
-    if (!InfFindFirstLine(InfHandle, "SourceDisksFiles", NULL, &InfContext))
+    if (!InfFindFirstLine(ConfigSources->InfHandle, "SourceDisksFiles", NULL, &InfContext))
         goto Quit;
 
     /* Load all listed boot drivers */
@@ -162,7 +128,7 @@ SetupLdrScanBootDrivers(
             InfGetDataField(&InfContext, 13, &dirIndex))
         {
             if ((strcmp(Media, "x") == 0) &&
-                InfFindFirstLine(InfHandle, "Directories", dirIndex, &dirContext) &&
+                InfFindFirstLine(ConfigSources->InfHandle, "Directories", dirIndex, &dirContext) &&
                 InfGetDataField(&dirContext, 1, &ImagePath))
             {
                 /* Prepare image path */
@@ -175,7 +141,7 @@ SetupLdrScanBootDrivers(
                 DriverNameW[wcslen(DriverNameW) - 4] = UNICODE_NULL;
 
                 /* Add it to the list */
-                Success = WinLdrAddDriverToList(BootDriverListHead,
+                Success = WinLdrAddDriverToList(DriverListHead,
                                                 FALSE,
                                                 DriverNameW,
                                                 ImagePathW,
@@ -196,7 +162,7 @@ Quit:
     if (BootFileSystem)
     {
         TRACE("Adding filesystem driver %S\n", BootFileSystem);
-        Success = WinLdrAddDriverToList(BootDriverListHead,
+        Success = WinLdrAddDriverToList(DriverListHead,
                                         FALSE,
                                         BootFileSystem,
                                         NULL,
@@ -210,10 +176,10 @@ Quit:
     {
         TRACE("No required filesystem driver\n");
     }
+
+    return Success;
 }
 
-
-/* SETUP STARTER **************************************************************/
 
 /*
  * Update the options in the buffer pointed by LoadOptions, of maximum size
@@ -478,9 +444,7 @@ SetupLdrPostProcessBootOptions(
          PSTR BootOptions,
     _In_ SIZE_T BootOptionsSize,
     _In_ PCSTR ArgsBootOptions,
-    // _In_ ULONG Argc,
-    // _In_ PCHAR Argv[],
-    _In_ HINF InfHandle)
+    _In_ PNT_CONFIG_SOURCES ConfigSources)
 {
     INFCONTEXT InfContext;
 
@@ -509,7 +473,7 @@ SetupLdrPostProcessBootOptions(
         PSTR OptionsToRemove[4];
 
         /* Load the options from TXTSETUP.SIF */
-        if (InfFindFirstLine(InfHandle, "SetupData", "OsLoadOptions", &InfContext))
+        if (InfFindFirstLine(ConfigSources->InfHandle, "SetupData", "OsLoadOptions", &InfContext))
         {
             if (!InfGetDataField(&InfContext, 1, &LoadOptions))
                 WARN("Failed to get load options\n");
@@ -525,7 +489,7 @@ SetupLdrPostProcessBootOptions(
 #else
         /* Debug mode: always get the debug load options */
 #endif
-        if (InfFindFirstLine(InfHandle, "SetupData", "SetupDebugOptions", &InfContext))
+        if (InfFindFirstLine(ConfigSources->InfHandle, "SetupData", "SetupDebugOptions", &InfContext))
         {
             if (!InfGetDataField(&InfContext, 1, &DbgLoadOptions))
                 WARN("Failed to get debug load options\n");

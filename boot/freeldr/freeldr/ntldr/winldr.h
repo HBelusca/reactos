@@ -8,13 +8,10 @@
 #pragma once
 
 #include <arc/setupblk.h>
+#include "conversion.h"
 
 /* Entry-point to kernel */
 typedef VOID (NTAPI *KERNEL_ENTRY_POINT) (PLOADER_PARAMETER_BLOCK LoaderBlock);
-
-/* Descriptors */
-#define NUM_GDT 128     // Must be 128
-#define NUM_IDT 0x100   // Only 16 are used though. Must be 0x100
 
 #if 0
 
@@ -63,38 +60,23 @@ typedef struct _LOADER_SYSTEM_BLOCK
 extern PLOADER_SYSTEM_BLOCK WinLdrSystemBlock;
 /**/extern PCWSTR BootFileSystem;/**/
 
+typedef struct _NT_CONFIG_SOURCES
+{
+    union
+    {
+        HINF InfHandle;
+        struct
+        {
+            ULONG Argc;
+            PCHAR* Argv;
+        };
+    };
+    // SystemHive;
+    HKEY CurrentControlSet; //< Current control set in the regular, or the setup system hive.
+} NT_CONFIG_SOURCES, *PNT_CONFIG_SOURCES;
 
-// conversion.c and conversion.h
-#if 0
-PVOID VaToPa(PVOID Va);
-PVOID PaToVa(PVOID Pa);
-#endif
-VOID List_PaToVa(_In_ PLIST_ENTRY ListHeadPa);
-VOID ConvertConfigToVA(PCONFIGURATION_COMPONENT_DATA Start);
 
 // winldr.c
-extern BOOLEAN SosEnabled;
-#ifdef _M_IX86
-extern BOOLEAN PaeModeOn;
-#endif
-
-FORCEINLINE
-VOID
-UiResetForSOS(VOID)
-{
-#ifdef _M_ARM
-    /* Re-initialize the UI */
-    UiInitialize(TRUE);
-#else
-    /* Reset the UI and switch to MiniTui */
-    UiVtbl.UnInitialize();
-    UiVtbl = MiniTuiVtbl;
-    UiVtbl.Initialize();
-#endif
-    /* Disable the progress bar */
-    UiProgressBar.Show = FALSE;
-}
-
 VOID
 NtLdrOutputLoadMsg(
     _In_ PCSTR FileName,
@@ -115,8 +97,18 @@ WinLdrInitSystemHive(
     IN PCSTR SystemRoot,
     IN BOOLEAN Setup);
 
-BOOLEAN WinLdrScanSystemHive(IN OUT PLOADER_PARAMETER_BLOCK LoaderBlock,
-                             IN PCSTR SystemRoot);
+BOOLEAN
+WinLdrScanSystemHive(
+    IN OUT PLOADER_PARAMETER_BLOCK LoaderBlock,
+    IN PCSTR SystemRoot);
+
+BOOLEAN
+WinLdrGetNLSNames(
+    _In_ PNT_CONFIG_SOURCES ConfigSources,
+    _Out_ PUNICODE_STRING AnsiFileName,
+    _Out_ PUNICODE_STRING OemFileName,
+    _Out_ PUNICODE_STRING LangFileName, // CaseTable
+    _Out_ PUNICODE_STRING OemHalFileName);
 
 BOOLEAN
 WinLdrLoadNLSData(
@@ -128,6 +120,11 @@ WinLdrLoadNLSData(
     _In_ PCUNICODE_STRING OemHalFileName);
 
 BOOLEAN
+WinLdrScanBootDrivers(
+    _In_ PNT_CONFIG_SOURCES ConfigSources,
+    _Inout_ PLIST_ENTRY DriverListHead);
+
+BOOLEAN
 WinLdrAddDriverToList(
     _Inout_ PLIST_ENTRY DriverListHead,
     _In_ BOOLEAN InsertAtHead,
@@ -136,31 +133,3 @@ WinLdrAddDriverToList(
     _In_opt_ PCWSTR GroupName,
     _In_ ULONG ErrorControl,
     _In_ ULONG Tag);
-
-// winldr.c
-VOID
-WinLdrInitializePhase1(PLOADER_PARAMETER_BLOCK LoaderBlock,
-                       PCSTR Options,
-                       PCSTR SystemPath,
-                       PCSTR BootPath,
-                       USHORT VersionToBoot);
-
-VOID
-WinLdrSetupMachineDependent(PLOADER_PARAMETER_BLOCK LoaderBlock);
-
-VOID
-WinLdrSetProcessorContext(VOID);
-
-// arch/xxx/winldr.c
-BOOLEAN
-MempSetupPaging(IN PFN_NUMBER StartPage,
-                IN PFN_NUMBER NumberOfPages,
-                IN BOOLEAN KernelMapping);
-
-VOID
-MempUnmapPage(PFN_NUMBER Page);
-
-#if DBG
-VOID
-MempDump(VOID);
-#endif

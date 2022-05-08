@@ -6,13 +6,13 @@
  * PROGRAMMERS:     ReactOS Portable Systems Group
  */
 
-/* INCLUDES ***************************************************************/
+/* INCLUDES ******************************************************************/
 
 #include <freeldr.h>
 #include <debug.h>
 #include <internal/arm/mm.h>
 #include <internal/arm/intrin_i.h>
-#include "../../winldr.h"
+#include "../../arch.h"
 
 #define PFN_SHIFT                   12
 #define LARGE_PFN_SHIFT             20
@@ -78,7 +78,7 @@ HARDWARE_LARGE_PTE_ARMV6 TempLargePte;
 HARDWARE_PDE_ARMV6 TempPde;
 PKPDR_PAGE PdrPage;
 
-/* FUNCTIONS **************************************************************/
+/* FUNCTIONS *****************************************************************/
 
 BOOLEAN
 MempSetupPaging(IN PFN_NUMBER StartPage,

@@ -10,7 +10,7 @@
 
 #include <freeldr.h>
 #include <ndk/asm.h>
-#include "../../winldr.h"
+#include "../../arch.h"
 
 #include <debug.h>
 DBG_DEFAULT_CHANNEL(WINDOWS);
@@ -442,7 +442,7 @@ void WinLdrSetupSpecialDataPointers(VOID)
     }
 }
 
-void WinLdrSetupMachineDependent(PLOADER_PARAMETER_BLOCK LoaderBlock)
+VOID WinLdrSetupMachineDependent(PLOADER_PARAMETER_BLOCK LoaderBlock)
 {
     ULONG TssSize;
     //ULONG TssPages;

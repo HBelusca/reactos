@@ -36,3 +36,5 @@ NtLdrAddOptions(
     IN ULONG BufferSize,
     IN BOOLEAN Append,
     IN PCSTR NewOptions OPTIONAL);
+
+/* EOF */

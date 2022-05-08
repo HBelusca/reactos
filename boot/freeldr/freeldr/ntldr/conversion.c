@@ -6,16 +6,14 @@
  * PROGRAMMERS:     Aleksey Bragin (aleksey@reactos.org)
  */
 
-/* INCLUDES ***************************************************************/
+/* INCLUDES ******************************************************************/
 
 #include <freeldr.h>
 
-//#include <ndk/ldrtypes.h>
 #include <debug.h>
-
 DBG_DEFAULT_CHANNEL(WINDOWS);
 
-/* FUNCTIONS **************************************************************/
+/* FUNCTIONS *****************************************************************/
 
 VOID
 List_PaToVa(_In_ PLIST_ENTRY ListHeadPa)
@@ -109,3 +107,5 @@ ConvertConfigToVA(PCONFIGURATION_COMPONENT_DATA Start)
         Child = VaToPa(Child->Child);
     }
 }
+
+/* EOF */

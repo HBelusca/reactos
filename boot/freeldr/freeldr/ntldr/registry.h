@@ -21,6 +21,8 @@
 #ifndef __REGISTRY_H
 #define __REGISTRY_H
 
+#pragma once
+
 #include <cmlib.h>
 
 typedef HANDLE HKEY, *PHKEY;
