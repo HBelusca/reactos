@@ -12,7 +12,8 @@
 
 /* DATA VARIABLES ************************************************************/
 
-LIST_ENTRY BfiDeferredListHead;
+/* Declared in io/display/display.c */
+extern LIST_ENTRY BfiDeferredListHead;
 
 /* FUNCTIONS *****************************************************************/
 
