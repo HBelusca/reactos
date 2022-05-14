@@ -217,7 +217,7 @@ extern "C" {
 #else
   extern "C++" {
     template <typename _CountofType,size_t _SizeOfArray>
-       char (*__countof_helper(/*UNALIGNED*/ _CountofType (&_Array)[_SizeOfArray]))[_SizeOfArray];
+       char (*__countof_helper(_UNALIGNED _CountofType (&_Array)[_SizeOfArray]))[_SizeOfArray];
 #define _countof(_Array) sizeof(*__countof_helper(_Array))
   }
 #endif

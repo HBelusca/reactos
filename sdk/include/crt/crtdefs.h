@@ -137,11 +137,11 @@
  #define _CONST_RETURN
 #endif
 
-#ifndef UNALIGNED
+#ifndef _UNALIGNED
 #if defined(__ia64__) || defined(__x86_64) || defined(__arm__) || defined(__arm64__)
-#define UNALIGNED __unaligned
+#define _UNALIGNED __unaligned
 #else
-#define UNALIGNED
+#define _UNALIGNED
 #endif
 #endif
 
