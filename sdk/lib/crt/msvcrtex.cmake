@@ -28,6 +28,15 @@ if(ARCH STREQUAL "i386")
         math/i386/alldiv_asm.s
         math/i386/aulldiv_asm.s
         )
+    # And MSVC needs the other _a(u)ll* functions too
+    list(APPEND MSVCRTEX_ASM_SOURCE
+        math/i386/allmul_asm.s
+        math/i386/allrem_asm.s
+        math/i386/allshl_asm.s
+        math/i386/allshr_asm.s
+        math/i386/aullrem_asm.s
+        math/i386/aullshr_asm.s
+        )
     if (CMAKE_C_COMPILER_ID STREQUAL "Clang" AND NOT MSVC)
         list(APPEND MSVCRTEX_ASM_SOURCE
             math/i386/ceilf.S

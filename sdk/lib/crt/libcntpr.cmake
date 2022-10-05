@@ -26,8 +26,8 @@ set_source_files_properties(${LIBCNTPR_ASM_SOURCE} PROPERTIES COMPILE_DEFINITION
 add_asm_files(libcntpr_asm ${LIBCNTPR_ASM_SOURCE})
 
 add_library(libcntpr STATIC ${LIBCNTPR_SOURCE} ${libcntpr_asm})
-target_compile_definitions(libcntpr
- PRIVATE    NO_RTL_INLINES
+target_compile_definitions(libcntpr PRIVATE
+    NO_RTL_INLINES
     _NTSYSTEM_
     _NTDLLBUILD_
     _LIBCNT_

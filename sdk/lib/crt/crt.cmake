@@ -38,8 +38,8 @@ add_asm_files(crt_asm ${CRT_ASM_SOURCE})
 
 add_library(crt ${CRT_SOURCE} ${crt_asm})
 target_link_libraries(crt chkstk ${PSEH_LIB})
-target_compile_definitions(crt
- PRIVATE    __MINGW_IMPORT=extern
+target_compile_definitions(crt PRIVATE
+    __MINGW_IMPORT=extern
     USE_MSVCRT_PREFIX
     _MSVCRT_LIB_
     _MSVCRT_
