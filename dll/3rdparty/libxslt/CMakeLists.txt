@@ -39,10 +39,6 @@ set_module_type(libxslt win32dll)
 target_link_libraries(libxslt libxml2 iconv-static zlib)
 add_importlibs(libxslt msvcrt ws2_32 kernel32)
 
-if(MSVC)
-    add_importlibs(libxslt ntdll)
-endif()
-
 if(NOT MSVC)
     target_compile_options(libxslt PRIVATE -Wno-misleading-indentation -Wno-pointer-sign -Wno-unused-function)
 endif()

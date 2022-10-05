@@ -30,6 +30,6 @@ list(APPEND SOURCE
 add_library(libpng MODULE ${SOURCE})
 set_module_type(libpng win32dll)
 target_link_libraries(libpng zlib)
-add_importlibs(libpng msvcrt kernel32 ntdll)
+add_importlibs(libpng msvcrt kernel32)
 add_pch(libpng pngpriv.h SOURCE)
 add_cd_file(TARGET libpng DESTINATION reactos/system32 FOR all)

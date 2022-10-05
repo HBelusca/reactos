@@ -58,7 +58,7 @@ add_library(libtiff MODULE ${SOURCE} libtiff.def)
 
 set_module_type(libtiff win32dll)
 target_link_libraries(libtiff zlib getopt)
-add_importlibs(libtiff user32 msvcrt kernel32 ntdll)
+add_importlibs(libtiff user32 msvcrt kernel32)
 add_pch(libtiff precomp.h SOURCE)
 add_cd_file(TARGET libtiff DESTINATION reactos/system32 FOR all)
 

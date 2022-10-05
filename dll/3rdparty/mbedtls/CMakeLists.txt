@@ -92,7 +92,7 @@ add_library(mbedtls MODULE
     ${CMAKE_CURRENT_BINARY_DIR}/mbedtls.def)
 
 set_module_type(mbedtls win32dll)
-add_importlibs(mbedtls advapi32 msvcrt kernel32 ntdll)
+add_importlibs(mbedtls advapi32 msvcrt kernel32)
 
 # to use `_vsnprintf_s` looks like we have to define MINGW_HAS_SECURE_API
 # and explicitly export it from msvcrt for it to work... what on earth?!

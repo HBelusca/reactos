@@ -9,5 +9,5 @@ add_library(joy MODULE
 
 set_module_type(joy cpl UNICODE)
 target_link_libraries(joy uuid)
-add_importlibs(joy user32 comctl32 ole32 shell32 msvcrt kernel32 ntdll)
+add_importlibs(joy user32 comctl32 ole32 shell32 msvcrt kernel32)
 add_cd_file(TARGET joy DESTINATION reactos/system32 FOR all)

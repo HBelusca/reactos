@@ -10,6 +10,6 @@ add_executable(eventvwr ${SOURCE} eventvwr.rc)
 add_pch(eventvwr eventvwr.h SOURCE)
 set_module_type(eventvwr win32gui UNICODE)
 target_link_libraries(eventvwr ${PSEH_LIB})
-add_importlibs(eventvwr user32 gdi32 comctl32 comdlg32 advapi32 shell32 shlwapi msvcrt kernel32 ntdll)
+add_importlibs(eventvwr user32 gdi32 comctl32 comdlg32 advapi32 shell32 shlwapi msvcrt kernel32)
 
 add_cd_file(TARGET eventvwr DESTINATION reactos/system32 FOR all)

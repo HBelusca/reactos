@@ -8,5 +8,5 @@ add_library(getuname MODULE
     ${CMAKE_CURRENT_BINARY_DIR}/getuname.def)
 
 set_module_type(getuname win32dll UNICODE)
-add_importlibs(getuname user32 msvcrt kernel32 ntdll)
+add_importlibs(getuname user32 msvcrt kernel32)
 add_cd_file(TARGET getuname DESTINATION reactos/system32 FOR all)

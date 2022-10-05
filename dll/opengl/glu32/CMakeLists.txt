@@ -133,6 +133,6 @@ if(CMAKE_C_COMPILER_ID STREQUAL "Clang")
     target_compile_options(glu32 PRIVATE -Wno-deprecated-register -Wno-tautological-undefined-compare)
 endif()
 
-add_importlibs(glu32 opengl32 gdi32 msvcrt kernel32 ntdll)
+add_importlibs(glu32 opengl32 gdi32 msvcrt kernel32)
 add_pch(glu32 precomp.h "${PCH_SKIP_SOURCE}")
 add_cd_file(TARGET glu32 DESTINATION reactos/system32 FOR all)
