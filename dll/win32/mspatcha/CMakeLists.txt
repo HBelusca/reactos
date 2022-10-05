@@ -13,5 +13,5 @@ list(APPEND SOURCE
 add_library(mspatcha MODULE ${SOURCE} version.rc)
 set_module_type(mspatcha win32dll)
 target_link_libraries(mspatcha wine)
-add_importlibs(mspatcha msvcrt kernel32 ntdll)
+add_importlibs(mspatcha msvcrt kernel32)
 add_cd_file(TARGET mspatcha DESTINATION reactos/system32 FOR all)

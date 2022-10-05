@@ -7,5 +7,5 @@ add_library(bthci MODULE
     ${CMAKE_CURRENT_BINARY_DIR}/bthci.def)
 
 set_module_type(bthci win32dll UNICODE)
-add_importlibs(bthci msvcrt kernel32 ntdll)
+add_importlibs(bthci msvcrt kernel32)
 add_cd_file(TARGET bthci DESTINATION reactos/system32 FOR all)

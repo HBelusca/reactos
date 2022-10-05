@@ -17,6 +17,6 @@ add_library(advpack MODULE
 
 set_module_type(advpack win32dll)
 target_link_libraries(advpack wine)
-add_importlibs(advpack ole32 setupapi version advapi32 msvcrt kernel32 ntdll)
+add_importlibs(advpack ole32 setupapi version advapi32 msvcrt kernel32)
 add_pch(advpack precomp.h SOURCE)
 add_cd_file(TARGET advpack DESTINATION reactos/system32 FOR all)
