@@ -10,5 +10,5 @@ add_library(umandlg MODULE
     ${CMAKE_CURRENT_BINARY_DIR}/umandlg.def)
 
 set_module_type(umandlg win32dll UNICODE)
-add_importlibs(umandlg comdlg32 user32 gdi32 advapi32 shell32 comctl32 msvcrt kernel32 ntdll)
+add_importlibs(umandlg comdlg32 user32 gdi32 advapi32 shell32 comctl32 msvcrt kernel32)
 add_cd_file(TARGET umandlg DESTINATION reactos/system32 FOR all)

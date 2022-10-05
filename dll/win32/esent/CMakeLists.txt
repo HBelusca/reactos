@@ -9,5 +9,5 @@ add_library(esent MODULE
     ${CMAKE_CURRENT_BINARY_DIR}/esent.def)
 
 set_module_type(esent win32dll)
-add_importlibs(esent msvcrt kernel32 ntdll)
+add_importlibs(esent msvcrt kernel32)
 add_cd_file(TARGET esent DESTINATION reactos/system32 FOR all)

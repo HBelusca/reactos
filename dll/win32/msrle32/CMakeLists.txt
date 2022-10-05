@@ -16,5 +16,5 @@ endif()
 
 set_module_type(msrle32 win32dll)
 target_link_libraries(msrle32 wine)
-add_importlibs(msrle32 winmm user32 msvcrt kernel32 ntdll)
+add_importlibs(msrle32 winmm user32 msvcrt kernel32)
 add_cd_file(TARGET msrle32 DESTINATION reactos/system32 FOR all)

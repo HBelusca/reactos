@@ -13,6 +13,6 @@ add_library(cryptext MODULE
 
 set_module_type(cryptext win32dll UNICODE)
 target_link_libraries(cryptext uuid)
-add_importlibs(cryptext cryptui crypt32 user32 msvcrt kernel32 ntdll)
+add_importlibs(cryptext cryptui crypt32 user32 msvcrt kernel32)
 add_pch(cryptext precomp.h SOURCE)
 add_cd_file(TARGET cryptext DESTINATION reactos/system32 FOR all)

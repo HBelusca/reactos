@@ -34,7 +34,7 @@ list(APPEND hhctrl_rc_deps
 set_source_files_properties(hhctrl.rc PROPERTIES OBJECT_DEPENDS "${hhctrl_rc_deps}")
 set_module_type(hhctrl win32ocx)
 target_link_libraries(hhctrl uuid wine)
-add_importlibs(hhctrl advapi32 comctl32 shlwapi ole32 oleaut32 user32 gdi32 msvcrt kernel32 ntdll)
+add_importlibs(hhctrl advapi32 comctl32 shlwapi ole32 oleaut32 user32 gdi32 msvcrt kernel32)
 add_dependencies(hhctrl stdole2 wineheaders)
 add_pch(hhctrl precomp.h "${PCH_SKIP_SOURCE}")
 add_cd_file(TARGET hhctrl DESTINATION reactos/system32 FOR all)

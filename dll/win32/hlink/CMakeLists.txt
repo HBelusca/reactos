@@ -21,6 +21,6 @@ add_library(hlink MODULE
 set_module_type(hlink win32dll)
 target_link_libraries(hlink uuid wine)
 add_delay_importlibs(hlink urlmon)
-add_importlibs(hlink shell32 ole32 advapi32 msvcrt kernel32 ntdll)
+add_importlibs(hlink shell32 ole32 advapi32 msvcrt kernel32)
 add_pch(hlink precomp.h "${PCH_SKIP_SOURCE}")
 add_cd_file(TARGET hlink DESTINATION reactos/system32 FOR all)

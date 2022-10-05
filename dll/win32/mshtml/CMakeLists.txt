@@ -109,7 +109,7 @@ set_source_files_properties(rsrc.rc PROPERTIES OBJECT_DEPENDS "${mshtml_rc_deps}
 set_module_type(mshtml win32dll)
 target_link_libraries(mshtml uuid wine strmiids oldnames)
 add_delay_importlibs(mshtml wininet)
-add_importlibs(mshtml urlmon shlwapi shell32 ole32 oleaut32 user32 gdi32 advapi32 msvcrt kernel32 ntdll)
+add_importlibs(mshtml urlmon shlwapi shell32 ole32 oleaut32 user32 gdi32 advapi32 msvcrt kernel32)
 add_dependencies(mshtml mshtml_nsiface_header)
 add_pch(mshtml mshtml_private.h "${PCH_SKIP_SOURCE}")
 add_cd_file(TARGET mshtml DESTINATION reactos/system32 FOR all)

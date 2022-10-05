@@ -36,8 +36,7 @@ add_importlibs(stobject
     msvcrt
     gdi32
     user32
-    kernel32
-    ntdll)
+    kernel32)
 
 add_pch(stobject precomp.h SOURCE)
 add_cd_file(TARGET stobject DESTINATION reactos/system32 FOR all)

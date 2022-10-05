@@ -25,6 +25,6 @@ add_library(cabinet MODULE
 
 set_module_type(cabinet win32dll)
 target_link_libraries(cabinet wine zlib)
-add_importlibs(cabinet msvcrt kernel32 ntdll)
+add_importlibs(cabinet msvcrt kernel32)
 add_pch(cabinet precomp.h "${PCH_SKIP_SOURCE}")
 add_cd_file(TARGET cabinet DESTINATION reactos/system32 FOR all)

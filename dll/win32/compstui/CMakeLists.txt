@@ -10,5 +10,5 @@ list(APPEND SOURCE
 add_library(compstui MODULE ${SOURCE})
 set_module_type(compstui win32dll)
 target_link_libraries(compstui wine)
-add_importlibs(compstui msvcrt kernel32 ntdll)
+add_importlibs(compstui msvcrt kernel32)
 add_cd_file(TARGET compstui DESTINATION reactos/system32 FOR all)

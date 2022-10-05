@@ -14,6 +14,6 @@ add_library(liccpa MODULE
     ${CMAKE_CURRENT_BINARY_DIR}/liccpa.def)
 
 set_module_type(liccpa cpl UNICODE)
-add_importlibs(liccpa advapi32 user32 gdi32 msvcrt kernel32 ntdll)
+add_importlibs(liccpa advapi32 user32 gdi32 msvcrt kernel32)
 add_pch(liccpa liccpa.h SOURCE)
 add_cd_file(TARGET liccpa DESTINATION reactos/system32 FOR all)

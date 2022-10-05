@@ -10,7 +10,7 @@ list(APPEND SOURCE
 add_library(mciseq MODULE ${SOURCE})
 set_module_type(mciseq win32dll)
 target_link_libraries(mciseq wine)
-add_importlibs(mciseq winmm user32 msvcrt kernel32 ntdll)
+add_importlibs(mciseq winmm user32 msvcrt kernel32)
 add_cd_file(TARGET mciseq DESTINATION reactos/system32 FOR all)
 
 if(MSVC)

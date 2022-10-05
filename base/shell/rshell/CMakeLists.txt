@@ -31,8 +31,7 @@ add_importlibs(rshell
     ole32
     user32
     msvcrt
-    kernel32
-    ntdll)
+    kernel32)
 
 add_custom_command(TARGET rshell POST_BUILD
   COMMAND "${CMAKE_COMMAND}" -E copy
