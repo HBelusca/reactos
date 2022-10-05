@@ -24,5 +24,5 @@ add_library(dsound MODULE
 
 set_module_type(dsound win32dll)
 target_link_libraries(dsound dxguid uuid wine)
-add_importlibs(dsound winmm advapi32 msvcrt kernel32 ntdll)
+add_importlibs(dsound winmm advapi32 msvcrt kernel32)
 add_cd_file(TARGET dsound DESTINATION reactos/system32 FOR all)

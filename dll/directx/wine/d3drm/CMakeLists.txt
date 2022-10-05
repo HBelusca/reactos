@@ -25,6 +25,6 @@ add_library(d3drm MODULE
 
 set_module_type(d3drm win32dll UNICODE)
 target_link_libraries(d3drm dxguid uuid wine)
-add_importlibs(d3drm ddraw d3dxof msvcrt kernel32 ntdll)
+add_importlibs(d3drm ddraw d3dxof msvcrt kernel32)
 add_pch(d3drm precomp.h SOURCE)
 add_cd_file(TARGET d3drm DESTINATION reactos/system32 FOR all)

@@ -19,6 +19,6 @@ add_library(d3dxof MODULE
 
 set_module_type(d3dxof win32dll)
 target_link_libraries(d3dxof dxguid uuid wine)
-add_importlibs(d3dxof msvcrt kernel32 ntdll)
+add_importlibs(d3dxof msvcrt kernel32)
 add_pch(d3dxof precomp.h "${PCH_SKIP_SOURCE}")
 add_cd_file(TARGET d3dxof DESTINATION reactos/system32 FOR all)
