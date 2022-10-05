@@ -28,5 +28,5 @@ if(MSVC)
     target_link_options(msvcrt20 PRIVATE /ignore:4102)
 endif()
 
-add_importlibs(msvcrt20 kernel32 ntdll)
+add_importlibs(msvcrt20 kernel32)
 add_cd_file(TARGET msvcrt20 DESTINATION reactos/system32 FOR all)

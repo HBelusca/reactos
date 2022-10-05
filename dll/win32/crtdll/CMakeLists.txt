@@ -21,5 +21,5 @@ add_library(crtdll MODULE ${SOURCE})
 set_module_type(crtdll win32dll ENTRYPOINT DllMain 12)
 target_link_libraries(crtdll crt wine ${PSEH_LIB})
 
-add_importlibs(crtdll kernel32 ntdll)
+add_importlibs(crtdll kernel32)
 add_cd_file(TARGET crtdll DESTINATION reactos/system32 FOR all)
