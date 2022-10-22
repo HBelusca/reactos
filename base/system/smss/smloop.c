@@ -255,7 +255,7 @@ SmpStopCsr(IN PSM_API_MSG SmApiMsg,
     return STATUS_NOT_IMPLEMENTED;
 }
 
-PSM_API_HANDLER SmpApiDispatch[SmpMaxApiNumber - SmpCreateForeignSessionApi] =
+const PSM_API_HANDLER SmpApiDispatch[SmpMaxApiNumber - SmpCreateForeignSessionApi] =
 {
     SmpCreateForeignSession,
     SmpSessionComplete,
@@ -265,6 +265,20 @@ PSM_API_HANDLER SmpApiDispatch[SmpMaxApiNumber - SmpCreateForeignSessionApi] =
     SmpStartCsr,
     SmpStopCsr
 };
+
+#ifdef DBG
+const PCSTR SmpApiName[SmpMaxApiNumber - SmpCreateForeignSessionApi] =
+{
+    "SmCreateForeignSession",
+    "SmSessionComplete",
+    "SmTerminateForeignSession",
+    "SmExecPgm",
+    "SmLoadDeferedSubsystem",
+    "SmStartCsr",
+    "SmStopCsr",
+    // "Unknown Sm Api Number"
+};
+#endif
 
 /* FUNCTIONS ******************************************************************/
 
@@ -481,6 +495,7 @@ SmpApiLoop(IN PVOID Parameter)
 
             /* An actual API message */
             default:
+            {
                 if (!ClientContext)
                 {
                     ReplyMsg = NULL;
@@ -488,6 +503,17 @@ SmpApiLoop(IN PVOID Parameter)
                 }
 
                 RequestMsg.ReturnValue = STATUS_PENDING;
+
+#if DBG && 0
+                if (RequestMsg.ApiNumber >= SmpMaxApiNumber)
+                {
+                    RequestMsg.ApiNumber = SmpMaxApiNumber; // SmMaxApiNumber;
+                }
+                DPRINT1("SMSS: %s Api Request received from %lx.%lx\n",
+                        SmpApiName[RequestMsg.ApiNumber],
+                        RequestMsg.h.ClientId.UniqueProcess,
+                        RequestMsg.h.ClientId.UniqueThread);
+#endif
 
                 /* Check if the API is valid */
                 if (RequestMsg.ApiNumber >= SmpMaxApiNumber)
@@ -524,6 +550,7 @@ SmpApiLoop(IN PVOID Parameter)
                 RequestMsg.ReturnValue = Status;
                 ReplyMsg = &RequestMsg;
                 break;
+            }
         }
     }
 
