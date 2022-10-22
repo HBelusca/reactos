@@ -83,9 +83,9 @@ CsrCallServerFromServer(IN PCSR_API_MESSAGE ReceiveMsg,
         {
             /* We are beyond the Maximum API ID, or it doesn't exist */
 #ifdef CSR_DBG
-            DPRINT1("API: %d\n", ApiId);
             DPRINT1("CSRSS: %lx (%s) is invalid ApiTableIndex for %Z or is an "
                     "invalid API to call from the server.\n",
+                    // CSR_API_NUMBER_TO_API_ID(ReceiveMsg->ApiNumber)
                     ApiId,
                     ((ServerDll->NameTable) && (ServerDll->NameTable[ApiId])) ?
                     ServerDll->NameTable[ApiId] : "*** UNKNOWN ***",

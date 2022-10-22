@@ -31,7 +31,8 @@ PCHAR CsrServerSbApiName[SbpMaxApiNumber - SbpCreateSession] =
     "SbCreateSession",
     "SbTerminateSession",
     "SbForeignSessionComplete",
-    "SbCreateProcess"
+    "SbCreateProcess",
+    // "Unknown CSR Sb Api Number"
 };
 
 /* PRIVATE FUNCTIONS **********************************************************/
