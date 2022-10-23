@@ -23,6 +23,9 @@ BOOLEAN SmpDebug, SmpEnableDots;
 HANDLE SmApiPort;
 HANDLE SmpInitialCommandProcessId;
 
+#define DEFAULT_SUBSYSTEM_DESC          L"Windows SubSystem"
+#define DEFAULT_INITIAL_COMMAND_DESC    L"Windows Logon Process"
+
 /* FUNCTIONS ******************************************************************/
 
 NTSTATUS
@@ -227,7 +230,7 @@ SmpExecuteCommand(IN PUNICODE_STRING CommandLine,
     if (!NT_SUCCESS(Status))
     {
         /* Fail if we couldn't do that */
-        DPRINT1("SMSS: SmpParseCommandLine( %wZ ) failed - Status == %lx\n",
+        DPRINT1("SMSS: SmpParseCommandLine(%wZ) failed - Status == %lx\n",
                 CommandLine, Status);
         return Status;
     }
@@ -319,7 +322,7 @@ SmpExecuteInitialCommand(IN ULONG MuSessionId,
     /* And fail if any other reason is also true */
     if (!NT_SUCCESS(Status))
     {
-        DPRINT1("SMSS: SmpParseCommandLine( %wZ ) failed - Status == %lx\n",
+        DPRINT1("SMSS: SmpParseCommandLine(%wZ) failed - Status == %lx\n",
                 InitialCommand, Status);
         return Status;
     }
@@ -514,7 +517,7 @@ _main(IN INT argc,
         }
         SmpReleasePrivilege(State);
 
-        /* Wait on either CSRSS or Winlogon to die */
+        /* Wait on either CSRSS or the initial command to die */
         Status = NtWaitForMultipleObjects(RTL_NUMBER_OF(Handles),
                                           Handles,
                                           WaitAny,
@@ -522,22 +525,23 @@ _main(IN INT argc,
                                           NULL);
         if (Status == STATUS_WAIT_0)
         {
-            /* CSRSS is dead, get exit code and prepare for the hard error */
-            RtlInitUnicodeString(&DbgString, L"Windows SubSystem");
+            /* CSRSS is dead, get its exit code */
+            RtlInitUnicodeString(&DbgString, DEFAULT_SUBSYSTEM_DESC);
             Status = NtQueryInformationProcess(Handles[0],
                                                ProcessBasicInformation,
                                                &ProcessInfo,
                                                sizeof(ProcessInfo),
                                                NULL);
-            DPRINT1("SMSS: Windows subsystem terminated when it wasn't supposed to.\n");
+            DPRINT1("SMSS: %S terminated when it wasn't supposed to.\n",
+                    DEFAULT_SUBSYSTEM_DESC);
         }
         else
         {
             /* The initial command is dead or we have another failure */
-            RtlInitUnicodeString(&DbgString, L"Windows Logon Process");
+            RtlInitUnicodeString(&DbgString, DEFAULT_INITIAL_COMMAND_DESC);
             if (Status == STATUS_WAIT_1)
             {
-                /* Winlogon.exe got terminated, get its exit code */
+                /* The initial command got terminated, get its exit code */
                 Status = NtQueryInformationProcess(Handles[1],
                                                    ProcessBasicInformation,
                                                    &ProcessInfo,
