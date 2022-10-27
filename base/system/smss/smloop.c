@@ -418,7 +418,7 @@ SmpHandleConnectionRequest(IN HANDLE SmApiPort,
     return Status;
 }
 
-ULONG
+NTSTATUS
 NTAPI
 SmpApiLoop(IN PVOID Parameter)
 {
@@ -506,9 +506,18 @@ SmpApiLoop(IN PVOID Parameter)
                 else
                 {
                     /* It's totally okay, so call the dispatcher for it */
-                    Status = SmpApiDispatch[RequestMsg.ApiNumber](&RequestMsg,
-                                                                  ClientContext,
-                                                                  SmApiPort);
+                    _SEH2_TRY
+                    {
+                        Status = SmpApiDispatch[RequestMsg.ApiNumber](&RequestMsg,
+                                                                      ClientContext,
+                                                                      SmApiPort);
+                    }
+                    _SEH2_EXCEPT(SmpUnhandledExceptionFilter(_SEH2_GetExceptionInformation()))
+                    {
+                        ReplyMsg = NULL;
+                        _SEH2_YIELD(break);
+                    }
+                    _SEH2_END;
                 }
 
                 /* Write the result value and return the message back */
@@ -517,5 +526,6 @@ SmpApiLoop(IN PVOID Parameter)
                 break;
         }
     }
-    return STATUS_SUCCESS;
+
+    return STATUS_UNSUCCESSFUL;
 }

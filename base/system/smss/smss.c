@@ -10,8 +10,6 @@
 
 #include "smss.h"
 
-#include <pseh/pseh2.h>
-
 #define NDEBUG
 #include <debug.h>
 
@@ -400,7 +398,9 @@ SmpTerminate(IN PULONG_PTR Parameters,
 }
 
 LONG
-SmpUnhandledExceptionFilter(IN PEXCEPTION_POINTERS ExceptionInfo)
+NTAPI
+SmpUnhandledExceptionFilter(
+    _In_ PEXCEPTION_POINTERS ExceptionInfo)
 {
     ULONG_PTR Parameters[4];
     UNICODE_STRING ErrorString;

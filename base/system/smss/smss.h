@@ -36,6 +36,9 @@
 
 #include <ntstrsafe.h>
 
+/* PSEH for SEH Support */
+#include <pseh/pseh2.h>
+
 /* SM Protocol Header */
 #include <sm/smmsg.h>
 
@@ -154,7 +157,7 @@ SmpInit(
 
 /* smloop.c */
 
-ULONG
+NTSTATUS
 NTAPI
 SmpApiLoop(
     IN PVOID Parameter
@@ -243,6 +246,11 @@ SmpTerminate(
     IN ULONG ParameterMask,
     IN ULONG ParameterCount
 );
+
+LONG
+NTAPI
+SmpUnhandledExceptionFilter(
+    _In_ PEXCEPTION_POINTERS ExceptionInfo);
 
 /* smsubsys.c */
 
