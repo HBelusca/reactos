@@ -529,7 +529,7 @@
 @ stub -version=0x600+ GetNamedPipeServerSessionId
 @ stdcall GetNativeSystemInfo(ptr)
 @ stdcall GetNextVDMCommand(long)
-@ stdcall -version=0x500-0x502 GetNlsSectionName(long long long str str long)
+@ stdcall -version=0x500-0x502 GetNlsSectionName(long long long wstr wstr long)
 @ stdcall GetNumaAvailableMemoryNode(long ptr)
 @ stdcall GetNumaHighestNodeNumber(ptr)
 @ stdcall GetNumaNodeProcessorMask(long ptr)
@@ -828,7 +828,7 @@
 @ stub -version=0x600+ NormalizeString
 @ stub -version=0x600+ NotifyUILanguageChange
 @ stdcall OpenConsoleW(wstr long long long)
-@ stdcall -version=0x500-0x502 OpenDataFile(long long)
+@ stdcall -version=0x500-0x502 OpenDataFile(ptr str)
 @ stdcall OpenEventA(long long str)
 @ stdcall OpenEventW(long long wstr)
 @ stdcall OpenFile(str ptr long)

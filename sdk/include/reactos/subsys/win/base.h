@@ -31,6 +31,8 @@ BaseSetProcessCreateNotify(IN BASE_PROCESS_CREATE_NOTIFY_ROUTINE ProcessCreateNo
 #define NLS_SECTION_SECURITY_DESCRIPTOR_SIZE \
     (sizeof(SECURITY_DESCRIPTOR) + sizeof(ACL) + NLS_SIZEOF_ACE_AND_SIDS(1))
 
+#define NLS_SECTION_CP_PFX  L"\\NLS\\NlsSectionCP"
+
 typedef struct _NLS_USER_INFO
 {
     WCHAR sLanguage[80];

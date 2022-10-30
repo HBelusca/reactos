@@ -8,8 +8,23 @@
  *                  Gunnar Andre Dalsnes
  *                  Thomas Weidenmueller
  *                  Katayama Hirofumi MZ
- * UPDATE HISTORY:
- *                  Created 24/08/2004
+ */
+
+/*
+ * How it's done in Windows Vista+:
+ *
+KernelBase calls helper SetupMainNlsFiles()
+that in turns calls NTDLL!RtlGetLocaleFileMappingAddress() and caches
+all the NLS-specific info.
+
+RtlGetLocaleFileMappingAddress() in turn calls nt!NtInitializeNlsFiles().
+
+This is equivalent to the NlsServerInitialize + NlsProcessInitialize calls
+and the corresponding CSR BasepNlsCreateSection calls, but done all at once.
+
+"Static" data is initialized by nt!ExInitializeNls() (and called by Phase1Initialization()
+just after initializing the MININT registry key and before calling PoInitSystem(1)).
+
  */
 
 /* INCLUDES *******************************************************************/
@@ -47,14 +62,37 @@ static CODEPAGE_ENTRY AnsiCodePage;
 static CODEPAGE_ENTRY OemCodePage;
 static RTL_CRITICAL_SECTION CodePageListLock;
 
+/* Default code pages for CP_OEMCP and CP_ACP */
+#define CP_USA  437  // United States (OEM)
+#define CP_ANSI 1252 // ANSI
+
 /* FORWARD DECLARATIONS *******************************************************/
 
-BOOL WINAPI
-GetNlsSectionName(UINT CodePage, UINT Base, ULONG Unknown,
-                  LPSTR BaseName, LPSTR Result, ULONG ResultSize);
+NTSTATUS
+WINAPI
+GetNlsSectionName(
+    _In_ ULONG CodePage,
+    _In_ ULONG Base,
+    _In_ ULONG MinWidth,
+    _In_ PCWSTR BaseName,
+    _Out_ PWSTR SectionName,
+    _In_ ULONG ResultLength);
 
-BOOL WINAPI
-GetCPFileNameFromRegistry(UINT CodePage, LPWSTR FileName, ULONG FileNameSize);
+NTSTATUS
+WINAPI
+NlsConvertIntegerToString(
+    _In_ ULONG Value,
+    _In_ ULONG Base,
+    _In_opt_ ULONG MinWidth,
+    _Out_ PWSTR Result,
+    _In_ ULONG ResultLength);
+
+BOOL
+WINAPI
+GetCPFileNameFromRegistry(
+    _In_ UINT CodePage,
+    _In_opt_ LPWSTR FileName,
+    _In_ ULONG FileNameSize);
 
 NTSTATUS
 WINAPI
@@ -64,6 +102,37 @@ CreateNlsSecurityDescriptor(
     _In_ ULONG AccessMask);
 
 /* PRIVATE FUNCTIONS **********************************************************/
+
+#if 0
+/**
+ * @brief
+ * Calls BASESRV to create and retrieve a handle to an NLS section.
+ **/
+NTSTATUS
+NlsCreateSection(
+    _Out_ PHANDLE SectionHandle,
+    _In_ ULONG Type,
+    _In_opt_ ULONG LocaleId)
+{
+    BASE_API_MESSAGE ApiMessage;
+    PBASE_NLS_CREATE_SECTION NlsCreateSection = &ApiMessage.Data.NlsCreateSection;
+
+    NlsCreateSection->Type = Type;
+    NlsCreateSection->LocaleId = LocaleId;
+
+    /* Call BASESRV to retrieve a handle to the section */
+    CsrClientCallServer((PCSR_API_MESSAGE)&ApiMessage,
+                        NULL,
+                        CSR_CREATE_API_NUMBER(BASESRV_SERVERDLL_INDEX, BasepNlsCreateSection),
+                        sizeof(*NlsCreateSection));
+
+    if (NT_SUCCESS(ApiMessage.Status))
+        *SectionHandle = NlsCreateSection->SectionHandle;
+
+    /* Return the status from CSRSS */
+    return ApiMessage.Status;
+}
+#endif
 
 /**
  * @brief
@@ -94,7 +163,7 @@ CreateNlsDirectorySecurity(
                                          DIRECTORY_TRAVERSE | DIRECTORY_CREATE_OBJECT);
     if (!NT_SUCCESS(Status))
     {
-        DPRINT1("Failed to create basic NLS SD (Status 0x%08x)\n", Status);
+        DPRINT1("NLSAPI: Failed to create basic NLS SD - 0x%08x\n", Status);
         return Status;
     }
 
@@ -108,7 +177,7 @@ CreateNlsDirectorySecurity(
                                          &AdminsSid);
     if (!NT_SUCCESS(Status))
     {
-        DPRINT1("Failed to create Admins SID (Status 0x%08x)\n", Status);
+        DPRINT1("NLSAPI: Failed to create Admins SID - 0x%08x\n", Status);
         goto Quit;
     }
 
@@ -119,7 +188,7 @@ CreateNlsDirectorySecurity(
                                           &DaclDefaulted);
     if (!NT_SUCCESS(Status) || !DaclPresent || !Dacl)
     {
-        DPRINT1("Failed to get DACL from descriptor (Status 0x%08x)\n", Status);
+        DPRINT1("NLSAPI: Failed to get DACL from descriptor - 0x%08x\n", Status);
         goto Quit;
     }
 
@@ -131,7 +200,7 @@ CreateNlsDirectorySecurity(
                                     AdminsSid);
     if (!NT_SUCCESS(Status))
     {
-        DPRINT1("Failed to add allowed access ACE for Admins SID (Status 0x%08x)\n", Status);
+        DPRINT1("NLSAPI: Failed to add allowed access ACE for Admins SID - 0x%08x\n", Status);
         goto Quit;
     }
 
@@ -141,41 +210,50 @@ Quit:
 }
 
 /**
- * @name NlsInit
- *
- * Internal NLS related stuff initialization.
- */
-
-BOOL
-FASTCALL
-NlsInit(VOID)
+ * @brief
+ * Performs BASESRV server-side NLS initialization.
+ **/
+static NTSTATUS
+NlsServerInitialize(VOID)
 {
+#if 0
+    /* Retrieve the current Session ID */
+    PPEB Peb = NtCurrentPeb();
+    ULONG SessionId = Peb->SessionId;
+#else
+    extern ULONG SessionId;
+#endif
+
     NTSTATUS Status;
     UNICODE_STRING DirName;
     OBJECT_ATTRIBUTES ObjectAttributes;
-    HANDLE Handle;
     UCHAR SecurityDescriptor[NLS_SECTION_SECURITY_DESCRIPTOR_SIZE +
                              NLS_SIZEOF_ACE_AND_SIDS(2)];
+    HANDLE Handle;
 
-    InitializeListHead(&CodePageListHead);
-    RtlInitializeCriticalSection(&CodePageListLock);
+#if 0
+    BASE_API_MESSAGE ApiMessage;
+    PBASE_NLS_CREATE_SECTION NlsCreateSection = &ApiMessage.Data.NlsCreateSection;
+#endif
+
+    /* Initialize NLS only if we run in the first Session 0 NLS Server process (CSR) */
+    if (!BaseRunningInServerProcess || (SessionId != 0))
+        return STATUS_SUCCESS;
 
     /*
-     * FIXME: Eventually this should be done only for the NLS Server
-     * process, but since we don't have anything like that (yet?) we
-     * always try to create the "\NLS" directory here.
+     * CreateNlsObjectDirectory
      */
-    RtlInitUnicodeString(&DirName, L"\\NLS");
 
     /* Create a security descriptor for the NLS directory */
     Status = CreateNlsDirectorySecurity(&SecurityDescriptor,
                                         sizeof(SecurityDescriptor));
     if (!NT_SUCCESS(Status))
     {
-        DPRINT1("Failed to create NLS directory security (Status 0x%08x)\n", Status);
-        return FALSE;
+        DPRINT1("NLSAPI: Failed to create NLS directory security - 0x%08x\n", Status);
+        return Status;
     }
 
+    RtlInitUnicodeString(&DirName, L"\\NLS");
     InitializeObjectAttributes(&ObjectAttributes,
                                &DirName,
                                OBJ_CASE_INSENSITIVE | OBJ_PERMANENT,
@@ -185,22 +263,95 @@ NlsInit(VOID)
     Status = NtCreateDirectoryObject(&Handle,
                                      DIRECTORY_TRAVERSE | DIRECTORY_CREATE_OBJECT,
                                      &ObjectAttributes);
-    if (NT_SUCCESS(Status))
+    if (!NT_SUCCESS(Status))
     {
-        NtClose(Handle);
+        DPRINT1("NLSAPI: Failed to create Object Directory %wZ - 0x%08x\n", Status);
+        return Status;
     }
 
-    /* Setup ANSI code page. */
+    NtClose(Handle);
+
+    // TODO: Call BASESRV to finish initialization.
+
+#if 0
+    NlsCreateSection->LocaleId = 0;
+
+    /* Note that the tables for ACP and OEMCP are already loaded by the kernel */
+
+    /* Create "\\NLS\\NlsSectionUnicode" */
+    NlsCreateSection->Type = 1;
+    CsrClientCallServer((PCSR_API_MESSAGE)&ApiMessage,
+                        NULL,
+                        CSR_CREATE_API_NUMBER(BASESRV_SERVERDLL_INDEX, BasepNlsCreateSection),
+                        sizeof(*NlsCreateSection));
+    if (!NT_SUCCESS(ApiMessage.Status))
+        return ApiMessage.Status;
+    // NtClose(NlsCreateSection->SectionHandle);
+
+    /* Create "\\NLS\\NlsSectionLocale" */
+    NlsCreateSection->Type = 2;
+    CsrClientCallServer((PCSR_API_MESSAGE)&ApiMessage,
+                        NULL,
+                        CSR_CREATE_API_NUMBER(BASESRV_SERVERDLL_INDEX, BasepNlsCreateSection),
+                        sizeof(*NlsCreateSection));
+    if (!NT_SUCCESS(ApiMessage.Status))
+        return ApiMessage.Status;
+    // NtClose(NlsCreateSection->SectionHandle);
+
+    /* Create "\\NLS\\NlsSectionCType" */
+    NlsCreateSection->Type = 3;
+    CsrClientCallServer((PCSR_API_MESSAGE)&ApiMessage,
+                        NULL,
+                        CSR_CREATE_API_NUMBER(BASESRV_SERVERDLL_INDEX, BasepNlsCreateSection),
+                        sizeof(*NlsCreateSection));
+    if (!NT_SUCCESS(ApiMessage.Status))
+        return ApiMessage.Status;
+    // NtClose(NlsCreateSection->SectionHandle);
+
+    /* Create "\\NLS\\NlsSectionSortkey" */
+    NlsCreateSection->Type = 4;
+    CsrClientCallServer((PCSR_API_MESSAGE)&ApiMessage,
+                        NULL,
+                        CSR_CREATE_API_NUMBER(BASESRV_SERVERDLL_INDEX, BasepNlsCreateSection),
+                        sizeof(*NlsCreateSection));
+    if (!NT_SUCCESS(ApiMessage.Status))
+        return ApiMessage.Status;
+    // NtClose(NlsCreateSection->SectionHandle);
+
+    /* Create "\\NLS\\NlsSectionSortTbls" */
+    NlsCreateSection->Type = 5;
+    CsrClientCallServer((PCSR_API_MESSAGE)&ApiMessage,
+                        NULL,
+                        CSR_CREATE_API_NUMBER(BASESRV_SERVERDLL_INDEX, BasepNlsCreateSection),
+                        sizeof(*NlsCreateSection));
+    if (!NT_SUCCESS(ApiMessage.Status))
+        return ApiMessage.Status;
+    // NtClose(NlsCreateSection->SectionHandle);
+#endif
+
+    return Status;
+}
+
+/**
+ * @brief
+ * Per-process NLS initialization.
+ **/
+static NTSTATUS
+NlsProcessInitialize(VOID)
+{
+    InitializeListHead(&CodePageListHead);
+    RtlInitializeCriticalSection(&CodePageListLock);
+
+    /* Setup ANSI code page */
     AnsiCodePage.SectionHandle = NULL;
     AnsiCodePage.SectionMapping = NtCurrentTeb()->ProcessEnvironmentBlock->AnsiCodePageData;
 
     RtlInitCodePageTable((PUSHORT)AnsiCodePage.SectionMapping,
                          &AnsiCodePage.CodePageTable);
     AnsiCodePage.CodePage = AnsiCodePage.CodePageTable.CodePage;
-
     InsertTailList(&CodePageListHead, &AnsiCodePage.Entry);
 
-    /* Setup OEM code page. */
+    /* Setup OEM code page */
     OemCodePage.SectionHandle = NULL;
     OemCodePage.SectionMapping = NtCurrentTeb()->ProcessEnvironmentBlock->OemCodePageData;
 
@@ -209,22 +360,49 @@ NlsInit(VOID)
     OemCodePage.CodePage = OemCodePage.CodePageTable.CodePage;
     InsertTailList(&CodePageListHead, &OemCodePage.Entry);
 
+    // TODO: More initialization
+
+    return STATUS_SUCCESS;
+}
+
+/**
+ * @brief
+ * Internal NLS state initialization.
+ **/
+BOOL
+FASTCALL
+NlsInit(VOID)
+{
+    NTSTATUS Status;
+
+    Status = NlsServerInitialize();
+    if (!NT_SUCCESS(Status))
+    {
+        DPRINT1("NLSAPI: Could NOT initialize Server - 0x%08x\n", Status);
+        return FALSE;
+    }
+
+    Status = NlsProcessInitialize();
+    if (!NT_SUCCESS(Status))
+    {
+        DPRINT1("NLSAPI: Could NOT initialize Process - 0x%08x\n", Status);
+        return FALSE;
+    }
+
     return TRUE;
 }
 
 /**
- * @name NlsUninit
- *
- * Internal NLS related stuff uninitialization.
- */
-
+ * @brief
+ * Internal NLS state cleanup.
+ **/
 VOID
 FASTCALL
 NlsUninit(VOID)
 {
     PCODEPAGE_ENTRY Current;
 
-    /* Delete the code page list. */
+    /* Delete the code page list */
     while (!IsListEmpty(&CodePageListHead))
     {
         Current = CONTAINING_RECORD(CodePageListHead.Flink, CODEPAGE_ENTRY, Entry);
@@ -251,7 +429,6 @@ NlsUninit(VOID)
  * @return Code page entry or NULL if the specified code page hasn't
  *         been loaded yet.
  */
-
 PCODEPAGE_ENTRY
 FASTCALL
 IntGetLoadedCodePageEntry(UINT CodePage)
@@ -293,16 +470,15 @@ FASTCALL
 IntGetCodePageEntry(UINT CodePage)
 {
     NTSTATUS Status;
-    CHAR SectionName[40];
-    HANDLE SectionHandle = INVALID_HANDLE_VALUE, FileHandle;
-    PBYTE SectionMapping;
-    OBJECT_ATTRIBUTES ObjectAttributes;
-    UCHAR SecurityDescriptor[NLS_SECTION_SECURITY_DESCRIPTOR_SIZE];
-    ANSI_STRING AnsiName;
+    WCHAR SectionName[40];
     UNICODE_STRING UnicodeName;
-    WCHAR FileName[MAX_PATH + 1];
-    UINT FileNamePos;
+    OBJECT_ATTRIBUTES ObjectAttributes;
+    HANDLE SectionHandle = INVALID_HANDLE_VALUE;
+    PBYTE SectionMapping;
     PCODEPAGE_ENTRY CodePageEntry;
+
+    BASE_API_MESSAGE ApiMessage;
+    PBASE_NLS_CREATE_SECTION NlsCreateSection = &ApiMessage.Data.NlsCreateSection;
 
     if (CodePage == CP_ACP)
     {
@@ -316,10 +492,10 @@ IntGetCodePageEntry(UINT CodePage)
     {
         if (!GetLocaleInfoW(GetThreadLocale(),
                             LOCALE_IDEFAULTANSICODEPAGE | LOCALE_RETURN_NUMBER,
-                            (WCHAR *)&CodePage,
+                            (PWCHAR)&CodePage,
                             sizeof(CodePage) / sizeof(WCHAR)))
         {
-            /* Last error is set by GetLocaleInfoW. */
+            /* Last error is set by GetLocaleInfoW */
             return NULL;
         }
         if (CodePage == 0)
@@ -329,20 +505,32 @@ IntGetCodePageEntry(UINT CodePage)
     {
         if (!GetLocaleInfoW(LOCALE_SYSTEM_DEFAULT,
                             LOCALE_IDEFAULTMACCODEPAGE | LOCALE_RETURN_NUMBER,
-                            (WCHAR *)&CodePage,
+                            (PWCHAR)&CodePage,
                             sizeof(CodePage) / sizeof(WCHAR)))
         {
-            /* Last error is set by GetLocaleInfoW. */
+            /* Last error is set by GetLocaleInfoW */
             return NULL;
         }
     }
 
-    /* Try searching for loaded page first. */
+    /* Try searching for loaded page first */
     CodePageEntry = IntGetLoadedCodePageEntry(CodePage);
     if (CodePageEntry != NULL)
     {
         return CodePageEntry;
     }
+
+    /* Generate the section name */
+    if (!GetNlsSectionName(CodePage,
+                           10,
+                           0,
+                           NLS_SECTION_CP_PFX,
+                           SectionName,
+                           RTL_NUMBER_OF(SectionName)))
+    {
+        return NULL;
+    }
+    RtlInitUnicodeString(&UnicodeName, SectionName);
 
     /*
      * Yes, we really want to lock here. Otherwise it can happen that
@@ -351,127 +539,106 @@ IntGetCodePageEntry(UINT CodePage)
      */
     RtlEnterCriticalSection(&CodePageListLock);
 
-    /* Generate the section name. */
-    if (!GetNlsSectionName(CodePage,
-                           10,
-                           0,
-                           "\\Nls\\NlsSectionCP",
-                           SectionName,
-                           sizeof(SectionName)))
-    {
-        RtlLeaveCriticalSection(&CodePageListLock);
-        return NULL;
-    }
-
-    RtlInitAnsiString(&AnsiName, SectionName);
-    RtlAnsiStringToUnicodeString(&UnicodeName, &AnsiName, TRUE);
-
-    /*
-     * FIXME: IntGetCodePageEntry should not create any security
-     * descriptor here but instead this responsibility should be
-     * assigned to Base Server API (aka basesrv.dll). That is,
-     * kernel32 must instruct basesrv.dll on creating NLS section
-     * names that do not exist through API message communication.
-     * However since we do not do that, let the kernel32 do the job
-     * by assigning security to NLS section names for the time being...
-     */
-    Status = CreateNlsSecurityDescriptor(&SecurityDescriptor,
-                                         sizeof(SecurityDescriptor),
-                                         SECTION_MAP_READ);
-    if (!NT_SUCCESS(Status))
-    {
-        DPRINT1("CreateNlsSecurityDescriptor FAILED! (Status 0x%08x)\n", Status);
-        RtlLeaveCriticalSection(&CodePageListLock);
-        return NULL;
-    }
-
     InitializeObjectAttributes(&ObjectAttributes,
                                &UnicodeName,
                                OBJ_CASE_INSENSITIVE,
-                               NULL,
-                               SecurityDescriptor);
+                               NULL, NULL);
 
     /* Try to open the section first */
     Status = NtOpenSection(&SectionHandle,
                            SECTION_MAP_READ,
                            &ObjectAttributes);
 
-    /* If the section doesn't exist, try to create it. */
+    /* Bug 3626 resolved now https://jira.reactos.org/browse/CORE-3328 */
+
+    /* If the section doesn't exist, try to create it */
     if (Status == STATUS_UNSUCCESSFUL ||
         Status == STATUS_OBJECT_NAME_NOT_FOUND ||
         Status == STATUS_OBJECT_PATH_NOT_FOUND)
     {
-        FileNamePos = GetSystemDirectoryW(FileName, MAX_PATH);
-        if (GetCPFileNameFromRegistry(CodePage,
-                                      FileName + FileNamePos + 1,
-                                      MAX_PATH - FileNamePos - 1))
+        NlsCreateSection->Type = 11;
+        NlsCreateSection->LocaleId = CodePage;
+
+        /* Call BASESRV to retrieve a handle to the section */
+        CsrClientCallServer((PCSR_API_MESSAGE)&ApiMessage,
+                            NULL,
+                            CSR_CREATE_API_NUMBER(BASESRV_SERVERDLL_INDEX, BasepNlsCreateSection),
+                            sizeof(*NlsCreateSection));
+
+        /* Return the status from CSRSS */
+        Status = ApiMessage.Status;
+
+        if (NT_SUCCESS(Status))
+            SectionHandle = NlsCreateSection->SectionHandle;
+    }
+
+    if (NT_SUCCESS(Status))
+    {
+        SectionMapping = MapViewOfFile(SectionHandle, FILE_MAP_READ, 0, 0, 0);
+        if (!SectionMapping)
         {
-            FileName[FileNamePos] = L'\\';
-            FileName[MAX_PATH] = 0;
-            FileHandle = CreateFileW(FileName,
-                                     FILE_GENERIC_READ,
-                                     FILE_SHARE_READ,
-                                     NULL,
-                                     OPEN_EXISTING,
-                                     0,
-                                     NULL);
-
-            Status = NtCreateSection(&SectionHandle,
-                                     SECTION_MAP_READ,
-                                     &ObjectAttributes,
-                                     NULL,
-                                     PAGE_READONLY,
-                                     SEC_COMMIT,
-                                     FileHandle);
-
-            /* HACK: Check if another process was faster
-             * and already created this section. See bug 3626 for details */
-            if (Status == STATUS_OBJECT_NAME_COLLISION)
-            {
-                /* Close the file then */
-                NtClose(FileHandle);
-
-                /* And open the section */
-                Status = NtOpenSection(&SectionHandle,
-                                       SECTION_MAP_READ,
-                                       &ObjectAttributes);
-            }
+            Status = NtCurrentTeb()->LastStatusValue;
+            NtClose(SectionHandle);
         }
     }
-    RtlFreeUnicodeString(&UnicodeName);
 
+    /* If we failed, retry only if we looked at CP437 or CP1252 */
     if (!NT_SUCCESS(Status))
     {
-        RtlLeaveCriticalSection(&CodePageListLock);
-        return NULL;
+        if (CodePage == CP_USA)
+            NlsCreateSection->Type = 6; // Looks for NlsSectionCP437
+        else if (CodePage == CP_ANSI)
+            NlsCreateSection->Type = 7; // Looks for NlsSectionCP1252
+        else
+            goto Quit; // Bummer...
+
+        NlsCreateSection->LocaleId = 0;
+
+        /* Call BASESRV to retrieve a handle to the section */
+        CsrClientCallServer((PCSR_API_MESSAGE)&ApiMessage,
+                            NULL,
+                            CSR_CREATE_API_NUMBER(BASESRV_SERVERDLL_INDEX, BasepNlsCreateSection),
+                            sizeof(*NlsCreateSection));
+
+        /* Return the status from CSRSS */
+        Status = ApiMessage.Status;
+
+        if (NT_SUCCESS(Status))
+            SectionHandle = NlsCreateSection->SectionHandle;
     }
+
+    if (!NT_SUCCESS(Status))
+        goto Quit;
 
     SectionMapping = MapViewOfFile(SectionHandle, FILE_MAP_READ, 0, 0, 0);
-    if (SectionMapping == NULL)
+    if (!SectionMapping)
     {
+        // Status = NtCurrentTeb()->LastStatusValue;
         NtClose(SectionHandle);
-        RtlLeaveCriticalSection(&CodePageListLock);
-        return NULL;
+        goto Quit;
     }
 
+    /* Allocate an entry for the cache */
     CodePageEntry = HeapAlloc(GetProcessHeap(), 0, sizeof(CODEPAGE_ENTRY));
-    if (CodePageEntry == NULL)
+    if (!CodePageEntry)
     {
         NtClose(SectionHandle);
-        RtlLeaveCriticalSection(&CodePageListLock);
-        return NULL;
+        goto Quit;
     }
 
     CodePageEntry->CodePage = CodePage;
     CodePageEntry->SectionHandle = SectionHandle;
     CodePageEntry->SectionMapping = SectionMapping;
 
-    RtlInitCodePageTable((PUSHORT)SectionMapping, &CodePageEntry->CodePageTable);
+    RtlInitCodePageTable((PUSHORT)SectionMapping,
+                         &CodePageEntry->CodePageTable);
 
-    /* Insert the new entry to list and unlock. Uff. */
+    /* Insert the new entry into the list */
     InsertTailList(&CodePageListHead, &CodePageEntry->Entry);
-    RtlLeaveCriticalSection(&CodePageListLock);
 
+Quit:
+    /* Unlock and return the new entry, if any */
+    RtlLeaveCriticalSection(&CodePageListLock);
     return CodePageEntry;
 }
 
@@ -1452,80 +1619,138 @@ IntIsLeadByte(PCPTABLEINFO TableInfo, BYTE Byte)
 /* PUBLIC FUNCTIONS ***********************************************************/
 
 /**
- * @name GetNlsSectionName
- *
- * Construct a name of NLS section.
- *
- * @param CodePage
- *        Code page number.
- * @param Base
- *        Integer base used for converting to string. Usually set to 10.
- * @param Unknown
- *        As the name suggests the meaning of this parameter is unknown.
- *        The native version of Kernel32 passes it as the third parameter
- *        to NlsConvertIntegerToString function, which is used for the
- *        actual conversion of the code page number.
- * @param BaseName
- *        Base name of the section. (ex. "\\Nls\\NlsSectionCP")
- * @param Result
- *        Buffer that will hold the constructed name.
- * @param ResultSize
- *        Size of the buffer for the result.
- *
- * @return TRUE if the buffer was large enough and was filled with
- *         the requested information, FALSE otherwise.
- *
- * @implemented
- */
-
-BOOL
+ * @brief
+ * Wrapper around (Nt)CreateFile and friends.
+ * Called by BASESRV to open an NLS data file.
+ **/
+NTSTATUS
 WINAPI
-GetNlsSectionName(UINT CodePage,
-                  UINT Base,
-                  ULONG Unknown,
-                  LPSTR BaseName,
-                  LPSTR Result,
-                  ULONG ResultSize)
+OpenDataFile(
+    _Out_ PHANDLE FileHandle,
+    _In_ PCWSTR FileName)
 {
-    CHAR Integer[11];
+    NTSTATUS Status;
+    WCHAR FilePath[MAX_PATH];
 
-    if (!NT_SUCCESS(RtlIntegerToChar(CodePage, Base, sizeof(Integer), Integer)))
-        return FALSE;
+    if (GetSystemDirectoryW(FilePath, RTL_NUMBER_OF(FilePath)) == 0)
+        return STATUS_UNSUCCESSFUL;
+    if (*FilePath && FilePath[wcslen(FilePath) - 1] != L'\\')
+    {
+        Status = RtlStringCbCatW(FilePath, sizeof(FilePath), L"\\");
+        if (!NT_SUCCESS(Status))
+            return Status;
+    }
+    Status = RtlStringCbCatW(FilePath, sizeof(FilePath), FileName);
+    if (!NT_SUCCESS(Status))
+        return Status;
 
+    /* Directly use the Win32 API */
+    BaseSetLastNTError(STATUS_SUCCESS);
+    *FileHandle = CreateFileW(FilePath,
+                              FILE_GENERIC_READ,
+                              FILE_SHARE_READ,
+                              NULL,
+                              OPEN_EXISTING,
+                              0,
+                              NULL);
+    return NtCurrentTeb()->LastStatusValue;
+}
+
+/**
+ * @brief
+ * Constructs an NLS section name, by concatenating the given BaseName
+ * with the provided code page number in a given base.
+ *
+ * @param[in]   CodePage
+ * Code page number.
+ *
+ * @param[in]   Base
+ * Integer base used for converting to string. Usually set to 10.
+ *
+ * @param[in]   MinWidth
+ * Minimal length the string representation should have. If it is shorter,
+ * leading zeros are added until the minimum width is reached.
+ *
+ * @param[in]   BaseName
+ * Base name of the section (e.g. L"\\NLS\\NlsSectionCP").
+ *
+ * @param[out]  SectionName
+ * Buffer that will hold the constructed name.
+ *
+ * @param[in]   ResultLength
+ * Size of the result buffer, in characters.
+ *
+ * @return
+ * TRUE if the buffer was large enough and was filled with
+ * the requested information, FALSE otherwise.
+ *
+ * @see NlsConvertIntegerToString
+ **/
+NTSTATUS
+WINAPI
+GetNlsSectionName(
+    _In_ ULONG CodePage,
+    _In_ ULONG Base,
+    _In_ ULONG MinWidth,
+    _In_ PCWSTR BaseName,
+    _Out_ PWSTR SectionName,
+    _In_ ULONG ResultLength)
+{
+    NTSTATUS Status;
+    size_t cchLength;
+
+#if 0
     /*
      * If the name including the terminating NULL character doesn't
      * fit in the output buffer then fail.
      */
-    if (strlen(Integer) + strlen(BaseName) >= ResultSize)
-        return FALSE;
+    if (wcslen(BaseName) + wcslen(Integer) >= ResultLength)
+        return STATUS_UNSUCCESSFUL;
+#endif
 
-    lstrcpyA(Result, BaseName);
-    lstrcatA(Result, Integer);
+    Status = RtlStringCchCopyW(SectionName, ResultLength, BaseName);
+    if (!NT_SUCCESS(Status))
+        return Status;
 
-    return TRUE;
+    Status = RtlStringCchLengthW(SectionName, ResultLength, &cchLength);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    // NOTE: Here, cchLength should be == wcslen(BaseName)
+    SectionName += cchLength;
+    ResultLength -= cchLength;
+    Status = NlsConvertIntegerToString(CodePage,
+                                       Base,
+                                       MinWidth,
+                                       SectionName,
+                                       ResultLength);
+
+    return Status;
 }
 
 /**
- * @name GetCPFileNameFromRegistry
+ * @brief
+ * Gets file name of code page definition file.
  *
- * Get file name of code page definition file.
+ * @param[in]   CodePage
+ * Code page number to get file name of.
  *
- * @param CodePage
- *        Code page number to get file name of.
- * @param FileName
- *        Buffer that is filled with file name of successful return. Can
- *        be set to NULL.
- * @param FileNameSize
- *        Size of the buffer to hold file name in WCHARs.
+ * @param[in]   FileName
+ * Buffer that is filled with file name of successful return.
+ * Can be set to NULL.
  *
- * @return TRUE if the file name was retrieved, FALSE otherwise.
+ * @param[in] FileNameSize
+ * Size of the buffer to hold file name in WCHARs.
  *
- * @implemented
- */
-
+ * @return
+ * TRUE if the file name was retrieved, FALSE otherwise.
+ **/
 BOOL
 WINAPI
-GetCPFileNameFromRegistry(UINT CodePage, LPWSTR FileName, ULONG FileNameSize)
+GetCPFileNameFromRegistry(
+    _In_ UINT CodePage,
+    _In_opt_ LPWSTR FileName,
+    _In_ ULONG FileNameSize)
 {
     WCHAR ValueNameBuffer[11];
     UNICODE_STRING KeyName, ValueName;
@@ -1571,20 +1796,23 @@ GetCPFileNameFromRegistry(UINT CodePage, LPWSTR FileName, ULONG FileNameSize)
 
     NtClose(KeyHandle);
 
-    /* Check if we succeded and the value is non-empty string. */
+    /* Check if we succeeded and the value is non-empty string. */
     if (NT_SUCCESS(Status) && Kvpi->Type == REG_SZ &&
         Kvpi->DataLength > sizeof(WCHAR))
     {
         bRetValue = TRUE;
         if (FileName != NULL)
         {
-            lstrcpynW(FileName, (WCHAR*)Kvpi->Data,
-                      min(Kvpi->DataLength / sizeof(WCHAR), FileNameSize));
+            Status = RtlStringCchCopyNW(FileName,
+                                        FileNameSize,
+                                        (PWCHAR)Kvpi->Data,
+                                        Kvpi->DataLength / sizeof(WCHAR));
+            bRetValue = NT_SUCCESS(Status);
         }
     }
 
     /* free temporary buffer */
-    HeapFree(GetProcessHeap(),0,Kvpi);
+    HeapFree(GetProcessHeap(), 0, Kvpi);
     return bRetValue;
 }
 
@@ -1608,6 +1836,8 @@ IsValidCodePage(UINT CodePage)
         return TRUE;
     if (IntGetLoadedCodePageEntry(CodePage))
         return TRUE;
+    // FIXME: Windows also verifies that the file retrieved
+    // from the registry actually exists on the system.
     return GetCPFileNameFromRegistry(CodePage, NULL, 0);
 }
 
@@ -2403,7 +2633,7 @@ CreateNlsSecurityDescriptor(
 
     if (DescriptorSize < NLS_SECTION_SECURITY_DESCRIPTOR_SIZE)
     {
-        DPRINT1("Security descriptor size too small\n");
+        DPRINT1("NLSAPI: Security descriptor size too small\n");
         return STATUS_BUFFER_TOO_SMALL;
     }
 
@@ -2415,7 +2645,7 @@ CreateNlsSecurityDescriptor(
                                          &WorldSid);
     if (!NT_SUCCESS(Status))
     {
-        DPRINT1("Failed to create World SID (Status 0x%08x)\n", Status);
+        DPRINT1("NLSAPI: Failed to create World SID - 0x%08x\n", Status);
         return Status;
     }
 
@@ -2424,7 +2654,7 @@ CreateNlsSecurityDescriptor(
                                          SECURITY_DESCRIPTOR_REVISION);
     if (!NT_SUCCESS(Status))
     {
-        DPRINT1("Failed to create security descriptor (Status 0x%08x)\n", Status);
+        DPRINT1("NLSAPI: Failed to create security descriptor - 0x%08x\n", Status);
         goto Quit;
     }
 
@@ -2436,7 +2666,7 @@ CreateNlsSecurityDescriptor(
     Status = RtlCreateAcl(Dacl, DaclSize, ACL_REVISION);
     if (!NT_SUCCESS(Status))
     {
-        DPRINT1("Failed to create DACL (Status 0x%08x)\n", Status);
+        DPRINT1("NLSAPI: Failed to create DACL - 0x%08x\n", Status);
         goto Quit;
     }
 
@@ -2444,7 +2674,7 @@ CreateNlsSecurityDescriptor(
     Status = RtlAddAccessAllowedAce(Dacl, ACL_REVISION, AccessMask, WorldSid);
     if (!NT_SUCCESS(Status))
     {
-        DPRINT1("Failed to add allowed access ACE for World SID (Status 0x%08x)\n", Status);
+        DPRINT1("NLSAPI: Failed to add allowed access ACE for World SID - 0x%08x\n", Status);
         goto Quit;
     }
 
@@ -2452,7 +2682,7 @@ CreateNlsSecurityDescriptor(
     Status = RtlSetDaclSecurityDescriptor(SecurityDescriptor, TRUE, Dacl, FALSE);
     if (!NT_SUCCESS(Status))
     {
-        DPRINT1("Failed to set DACL into descriptor (Status 0x%08x)\n", Status);
+        DPRINT1("NLSAPI: Failed to set DACL into descriptor - 0x%08x\n", Status);
         goto Quit;
     }
 
@@ -2470,12 +2700,83 @@ BOOL WINAPI IsValidUILanguage(LANGID langid)
     return 0;
 }
 
-/*
- * @unimplemented
- */
-VOID WINAPI NlsConvertIntegerToString(ULONG Value,ULONG Base,ULONG strsize, LPWSTR str, ULONG strsize2)
+/**
+ * @brief
+ * Converts an integer into its string representation in a given base,
+ * with an optional minimal width specification.
+ *
+ * @param[in]   Value
+ * The integer to convert.
+ *
+ * @param[in]   Base
+ * Integer base used for converting to string. Usually set to 10.
+ *
+ * @param[in]   MinWidth
+ * Minimal length the string representation should have. If it is shorter,
+ * leading zeros are added until the minimum width is reached.
+ *
+ * @param[out]  Result
+ * Buffer that will hold the string representation.
+ *
+ * @param[in]   ResultLength
+ * Size of the result buffer, in characters.
+ *
+ * @return
+ * STATUS_SUCCESS if the buffer was large enough and the conversion was
+ * done successfully; a failure code otherwise.
+ **/
+NTSTATUS
+WINAPI
+NlsConvertIntegerToString(
+    _In_ ULONG Value,
+    _In_ ULONG Base,
+    _In_opt_ ULONG MinWidth,
+    _Out_ PWSTR Result,
+    _In_ ULONG ResultLength)
 {
-    STUB;
+    NTSTATUS Status;
+    UNICODE_STRING String;
+    USHORT BufferSize;
+    /* Local buffer long enough to store a NULL-terminated 32-bit unsigned value
+     * in the smallest base possible (base 2). Increasing the base will decrease
+     * the length needed to represent the number. */
+    WCHAR Buffer[32 + 1];
+
+    /*
+     * Convert the number in the local buffer. Note that we specify the
+     * user-provided buffer size instead (capped to our internal buffer size),
+     * so that we can determine whether or not it is large enough to contain
+     * the result.
+     */
+    BufferSize = (USHORT)min(sizeof(Buffer), ResultLength * sizeof(WCHAR));
+    RtlInitEmptyUnicodeString(&String, Buffer, BufferSize);
+    Status = RtlIntegerToUnicodeString(Value, Base, &String);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    /* Convert the string length to number of characters */
+    String.Length /= sizeof(WCHAR);
+
+    /* Left-pad the destination buffer with leading zeros if necessary */
+    if (String.Length < MinWidth)
+    {
+        MinWidth -= String.Length; // Padding length.
+
+        /* If the total required size (including the NULL-terminator)
+         * is larger than what the destination buffer can hold, fail. */
+        if (MinWidth + String.Length >= ResultLength)
+            return STATUS_BUFFER_OVERFLOW;
+
+        while (MinWidth > 0)
+        {
+            *Result++ = L'0';
+            --ResultLength;
+            --MinWidth;
+        }
+    }
+
+    /* Copy the converted number to the destination buffer */
+    return RtlStringCchCopyNW(Result, ResultLength, String.Buffer, String.Length);
 }
 
 /*

@@ -50,13 +50,15 @@ CSR_API(BaseSrvRefreshIniFileMapping);
 /* nls.c */
 VOID
 NTAPI
-BaseSrvNLSInit(IN PBASE_STATIC_SERVER_DATA StaticData);
+BaseSrvNLSInit(
+    _In_ PBASE_STATIC_SERVER_DATA StaticData);
 
 NTSTATUS
 NTAPI
-BaseSrvNlsConnect(IN PCSR_PROCESS CsrProcess,
-                  IN OUT PVOID  ConnectionInfo,
-                  IN OUT PULONG ConnectionInfoLength);
+BaseSrvNlsConnect(
+    _In_ PCSR_PROCESS CsrProcess,
+    _Inout_ PVOID  ConnectionInfo,
+    _Inout_ PULONG ConnectionInfoLength);
 
 CSR_API(BaseSrvNlsSetUserInfo);
 CSR_API(BaseSrvNlsSetMultipleUserInfo);

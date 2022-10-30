@@ -24,15 +24,34 @@ BOOLEAN BaseSrvKernel32DelayLoadComplete;
 HANDLE BaseSrvKernel32DllHandle;
 UNICODE_STRING BaseSrvKernel32DllPath;
 
-POPEN_DATA_FILE pOpenDataFile;
-PVOID /*PGET_DEFAULT_SORTKEY_SIZE */ pGetDefaultSortkeySize;
-PVOID /*PGET_LINGUIST_LANG_SIZE*/ pGetLinguistLangSize;
-PVOID /*PNLS_CONVERT_INTEGER_TO_STRING*/ pNlsConvertIntegerToString;
-PVOID /*PVALIDATE_LCTYPE*/ pValidateLCType;
-PVALIDATE_LOCALE pValidateLocale;
-PGET_NLS_SECTION_NAME pGetNlsSectionName;
-PVOID /*PGET_USER_DEFAULT_LANGID*/ pGetUserDefaultLangID;
-PGET_CP_FILE_NAME_FROM_REGISTRY pGetCPFileNameFromRegistry;
+NTSTATUS
+(WINAPI *pOpenDataFile)(
+    _Out_ PHANDLE FileHandle,
+    _In_ PCWSTR FileName);
+
+PVOID pGetDefaultSortkeySize;
+PVOID pGetLinguistLangSize;
+PVOID pNlsConvertIntegerToString;
+PVOID pValidateLCType;
+
+BOOL (WINAPI *pValidateLocale)(IN ULONG LocaleId);
+
+NTSTATUS
+(WINAPI *pGetNlsSectionName)(
+    _In_ ULONG CodePage,
+    _In_ ULONG Base,
+    _In_ ULONG MinWidth,
+    _In_ PCWSTR BaseName,
+    _Out_ PWSTR SectionName,
+    _In_ ULONG ResultSize);
+
+PVOID pGetUserDefaultLangID;
+
+BOOL
+(WINAPI *pGetCPFileNameFromRegistry)(
+    _In_ UINT CodePage,
+    _In_opt_ LPWSTR FileName,
+    _In_ ULONG FileNameSize);
 
 NTSTATUS
 (WINAPI *pCreateNlsSecurityDescriptor)(
@@ -40,18 +59,24 @@ NTSTATUS
     _In_ SIZE_T DescriptorSize,
     _In_ ULONG AccessMask);
 
-BASESRV_KERNEL_IMPORTS BaseSrvKernel32Imports[10] =
+typedef struct _BASESRV_KERNEL_IMPORTS
 {
-    { "OpenDataFile", (PVOID*) &pOpenDataFile },
-    { "GetDefaultSortkeySize", (PVOID*) &pGetDefaultSortkeySize },
-    { "GetLinguistLangSize", (PVOID*) &pGetLinguistLangSize },
-    { "NlsConvertIntegerToString", (PVOID*) &pNlsConvertIntegerToString },
-    { "ValidateLCType", (PVOID*) &pValidateLCType },
-    { "ValidateLocale", (PVOID*) &pValidateLocale },
-    { "GetNlsSectionName", (PVOID*) &pGetNlsSectionName },
-    { "GetUserDefaultLangID", (PVOID*) &pGetUserDefaultLangID },
-    { "GetCPFileNameFromRegistry", (PVOID*) &pGetCPFileNameFromRegistry },
-    { "CreateNlsSecurityDescriptor", (PVOID*) &pCreateNlsSecurityDescriptor },
+    PCSTR  FunctionName;
+    PVOID* FunctionPointer;
+} BASESRV_KERNEL_IMPORTS, *PBASESRV_KERNEL_IMPORTS;
+
+BASESRV_KERNEL_IMPORTS BaseSrvKernel32Imports[] =
+{
+    { "OpenDataFile", (PVOID*)&pOpenDataFile },
+    { "GetDefaultSortkeySize", (PVOID*)&pGetDefaultSortkeySize },
+    { "GetLinguistLangSize", (PVOID*)&pGetLinguistLangSize },
+    { "NlsConvertIntegerToString", (PVOID*)&pNlsConvertIntegerToString },
+    { "ValidateLCType", (PVOID*)&pValidateLCType },
+    { "ValidateLocale", (PVOID*)&pValidateLocale },
+    { "GetNlsSectionName", (PVOID*)&pGetNlsSectionName },
+    { "GetUserDefaultLangID", (PVOID*)&pGetUserDefaultLangID },
+    { "GetCPFileNameFromRegistry", (PVOID*)&pGetCPFileNameFromRegistry },
+    { "CreateNlsSecurityDescriptor", (PVOID*)&pCreateNlsSecurityDescriptor },
 };
 
 /* FUNCTIONS *****************************************************************/
@@ -65,7 +90,8 @@ BaseSrvDelayLoadKernel32(VOID)
     ANSI_STRING ProcedureName;
 
     /* Only do this once */
-    if (BaseSrvKernel32DelayLoadComplete) return STATUS_SUCCESS;
+    if (BaseSrvKernel32DelayLoadComplete)
+        return STATUS_SUCCESS;
 
     /* Loop all imports */
     for (i = 0; i < RTL_NUMBER_OF(BaseSrvKernel32Imports); i++)
@@ -114,7 +140,8 @@ BaseSrvDelayLoadKernel32(VOID)
 
 VOID
 NTAPI
-BaseSrvNLSInit(IN PBASE_STATIC_SERVER_DATA StaticData)
+BaseSrvNLSInit(
+    _In_ PBASE_STATIC_SERVER_DATA StaticData)
 {
     /* Initialize the lock */
     RtlInitializeCriticalSection(&NlsCacheCriticalSection);
@@ -137,9 +164,10 @@ BaseSrvNLSInit(IN PBASE_STATIC_SERVER_DATA StaticData)
 
 NTSTATUS
 NTAPI
-BaseSrvNlsConnect(IN PCSR_PROCESS CsrProcess,
-                  IN OUT PVOID  ConnectionInfo,
-                  IN OUT PULONG ConnectionInfoLength)
+BaseSrvNlsConnect(
+    _In_ PCSR_PROCESS CsrProcess,
+    _Inout_ PVOID  ConnectionInfo,
+    _Inout_ PULONG ConnectionInfoLength)
 {
     /* Does nothing */
     return STATUS_SUCCESS;
@@ -162,10 +190,11 @@ CSR_API(BaseSrvNlsSetMultipleUserInfo)
 CSR_API(BaseSrvNlsCreateSection)
 {
     NTSTATUS Status;
-    HANDLE SectionHandle, ProcessHandle, FileHandle;
+    HANDLE SectionHandle, ProcessHandle;
+    HANDLE FileHandle = NULL;
     ULONG LocaleId;
     UNICODE_STRING NlsSectionName;
-    PWCHAR NlsFileName;
+    PWSTR NlsFileName = NULL;
     UCHAR SecurityDescriptor[NLS_SECTION_SECURITY_DESCRIPTOR_SIZE];
     OBJECT_ATTRIBUTES ObjectAttributes;
     WCHAR FileNameBuffer[32];
@@ -174,7 +203,8 @@ CSR_API(BaseSrvNlsCreateSection)
 
     /* Load kernel32 first and import the NLS routines */
     Status = BaseSrvDelayLoadKernel32();
-    if (!NT_SUCCESS(Status)) return Status;
+    if (!NT_SUCCESS(Status))
+        return Status;
 
     /* Assume failure */
     NlsMsg->SectionHandle = NULL;
@@ -184,7 +214,8 @@ CSR_API(BaseSrvNlsCreateSection)
     DPRINT1("NLS: Create Section with LCID: %lx for Type: %d\n", LocaleId, NlsMsg->Type);
     if (LocaleId)
     {
-        if (!pValidateLocale(LocaleId)) return STATUS_INVALID_PARAMETER;
+        if (!pValidateLocale(LocaleId))
+            return STATUS_INVALID_PARAMETER;
     }
 
     /* Check which NLS section is being created */
@@ -211,11 +242,11 @@ CSR_API(BaseSrvNlsCreateSection)
             RtlInitUnicodeString(&NlsSectionName, L"\\NLS\\NlsSectionSortTbls");
             NlsFileName = L"sorttbls.nls";
             break;
-        case 6:
+        case 6: // Default OemCP
             RtlInitUnicodeString(&NlsSectionName, L"\\NLS\\NlsSectionCP437");
             NlsFileName = L"c_437.nls";
             break;
-        case 7:
+        case 7: // Default ACP
             RtlInitUnicodeString(&NlsSectionName, L"\\NLS\\NlsSectionCP1252");
             NlsFileName = L"c_1252.nls";
             break;
@@ -224,12 +255,16 @@ CSR_API(BaseSrvNlsCreateSection)
             NlsFileName = L"l_except.nls";
             break;
         case 9:
-            DPRINT1("This type not yet supported\n");
+            DPRINT1("Type %d not yet supported\n", NlsMsg->Type);
+            // pGetNlsSectionName(L"\\NLS\\NlsSectionSortkey");
             return STATUS_NOT_IMPLEMENTED;
         case 10:
-            DPRINT1("This type not yet supported\n");
+            DPRINT1("Type %d not yet supported\n", NlsMsg->Type);
+            // pGetNlsSectionName(L"\\NLS\\NlsSectionLANG");
+            // or L"\\NLS\\NlsSectionLANG_INTL"
             return STATUS_NOT_IMPLEMENTED;
         case 11:
+        {
             /* Get the filename for this locale */
             if (!pGetCPFileNameFromRegistry(NlsMsg->LocaleId,
                                             FileNameBuffer,
@@ -244,7 +279,7 @@ CSR_API(BaseSrvNlsCreateSection)
             Status = pGetNlsSectionName(NlsMsg->LocaleId,
                                         10,
                                         0,
-                                        L"\\NLS\\NlsSectionCP",
+                                        NLS_SECTION_CP_PFX,
                                         NlsSectionNameBuffer,
                                         RTL_NUMBER_OF(NlsSectionNameBuffer));
             if (!NT_SUCCESS(Status))
@@ -258,6 +293,7 @@ CSR_API(BaseSrvNlsCreateSection)
             DPRINT1("Section name: %S\n", NlsSectionNameBuffer);
             RtlInitUnicodeString(&NlsSectionName, NlsSectionNameBuffer);
             break;
+        }
         case 12:
             RtlInitUnicodeString(&NlsSectionName, L"\\NLS\\NlsSectionGeo");
             NlsFileName = L"geo.nls";
@@ -267,12 +303,16 @@ CSR_API(BaseSrvNlsCreateSection)
             return STATUS_INVALID_PARAMETER;
     }
 
-    /* Open the specified NLS file */
-    Status = pOpenDataFile(&FileHandle, NlsFileName);
-    if (Status != STATUS_SUCCESS)
+    /* Open the NLS file if specified, otherwise just create section */
+    if (NlsFileName)
     {
-        DPRINT1("NLS: Failed to open file: %lx\n", Status);
-        return Status;
+        Status = pOpenDataFile(&FileHandle, NlsFileName);
+        if (Status != STATUS_SUCCESS)
+        {
+            DPRINT1("NLS: Failed to open file: %lx\n", Status);
+            // FIXME: Should we always fail?
+            return Status;
+        }
     }
 
     /* Create an SD for the section object */
@@ -282,24 +322,27 @@ CSR_API(BaseSrvNlsCreateSection)
     if (!NT_SUCCESS(Status))
     {
         DPRINT1("NLS: CreateNlsSecurityDescriptor FAILED!: %lx\n", Status);
-        NtClose(FileHandle);
+        if (FileHandle) NtClose(FileHandle);
         return Status;
     }
 
-    /* Create the section object proper */
+    /* Create the section object */
     InitializeObjectAttributes(&ObjectAttributes,
                                &NlsSectionName,
                                OBJ_CASE_INSENSITIVE | OBJ_PERMANENT | OBJ_OPENIF,
                                NULL,
                                &SecurityDescriptor);
+
     Status = NtCreateSection(&SectionHandle,
                              SECTION_MAP_READ,
                              &ObjectAttributes,
-                             0,
+                             NULL,
                              PAGE_READONLY,
                              SEC_COMMIT,
                              FileHandle);
-    NtClose(FileHandle);
+
+    if (FileHandle) NtClose(FileHandle);
+
     if (!NT_SUCCESS(Status))
     {
         DPRINT1("NLS: Failed to create section! %lx\n", Status);
@@ -319,14 +362,14 @@ CSR_API(BaseSrvNlsCreateSection)
         return Status;
     }
 
-    /* Duplicate the handle to the section object into it */
+    /* Duplicate the section object handle to the process, closing the source handle */
     Status = NtDuplicateObject(NtCurrentProcess(),
                                SectionHandle,
                                ProcessHandle,
                                &NlsMsg->SectionHandle,
                                0,
                                0,
-                               3);
+                               DUPLICATE_SAME_ACCESS | DUPLICATE_CLOSE_SOURCE);
     NtClose(ProcessHandle);
     return Status;
 }

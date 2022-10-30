@@ -549,17 +549,6 @@ OpenFile(LPCSTR lpFileName,
 /*
  * @unimplemented
  */
-BOOL
-WINAPI
-OpenDataFile(HANDLE hFile, DWORD dwUnused)
-{
-    STUB;
-    return FALSE;
-}
-
-/*
- * @unimplemented
- */
 HANDLE
 WINAPI
 ReOpenFile(IN HANDLE hOriginalFile,
