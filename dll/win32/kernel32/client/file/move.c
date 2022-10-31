@@ -592,11 +592,14 @@ BasepOpenFileForMove(IN LPCWSTR File,
                                    OBJ_CASE_INSENSITIVE,
                                    RelativeName.ContainingDirectory,
                                    NULL);
-        /* Force certain flags here, given ops we'll do */
+
+        /* Force certain flags here, given operations we will do */
         IntShareAccess = ShareAccess | FILE_SHARE_READ | FILE_SHARE_WRITE;
         OpenOptions |= FILE_OPEN_FOR_BACKUP_INTENT | FILE_SYNCHRONOUS_IO_NONALERT;
 
-        /* We'll try to read reparse tag */
+        /* Attempt to open the file and try to read the reparse tag.
+         * If we do not manage a proper opening, we will attempt to
+         * reopen without reparse support. */
         Status = NtOpenFile(FileHandle,
                             DesiredAccess | FILE_READ_ATTRIBUTES | SYNCHRONIZE,
                             ObjectAttributes,
@@ -605,28 +608,27 @@ BasepOpenFileForMove(IN LPCWSTR File,
                             OpenOptions | FILE_OPEN_REPARSE_POINT);
         if (NT_SUCCESS(Status))
         {
-            /* Attempt the read */
+            /* We managed to open, read the reparse tag */
             Status = NtQueryInformationFile(*FileHandle,
                                             &IoStatusBlock,
                                             &TagInfo,
                                             sizeof(TagInfo),
                                             FileAttributeTagInformation);
 
-            /* Return if failure with a status that wouldn't mean the FSD cannot support reparse points */
+            /* Return in case of failure with a status, other than one
+             * that means the FSD does not support reparse points */
             if (!NT_SUCCESS(Status) &&
                 (Status != STATUS_NOT_IMPLEMENTED && Status != STATUS_INVALID_PARAMETER))
             {
                 _SEH2_LEAVE;
             }
 
-            if (NT_SUCCESS(Status))
-            {
+            if (!NT_SUCCESS(Status) ||
                 /* This cannot happen on mount points */
-                if (TagInfo.FileAttributes & FILE_ATTRIBUTE_DEVICE ||
-                    TagInfo.ReparseTag == IO_REPARSE_TAG_MOUNT_POINT)
-                {
-                    _SEH2_LEAVE;
-                }
+                !(TagInfo.FileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) ||
+                 (TagInfo.ReparseTag == IO_REPARSE_TAG_MOUNT_POINT))
+            {
+                _SEH2_LEAVE;
             }
 
             NtClose(*FileHandle);
@@ -721,8 +723,10 @@ MoveFileWithProgressW(IN LPCWSTR lpExistingFileName,
                       IN LPVOID lpData,
                       IN DWORD dwFlags)
 {
+    BOOL Ret = FALSE;
     NTSTATUS Status;
-    PWSTR NewBuffer;
+    BOOL ReplaceIfExists, DelayUntilReboot, AttemptReopenWithoutReparse;
+    ULONG OpenOptions;
     IO_STATUS_BLOCK IoStatusBlock;
     COPY_PROGRESS_CONTEXT CopyContext;
     OBJECT_ATTRIBUTES ObjectAttributes;
@@ -730,7 +734,6 @@ MoveFileWithProgressW(IN LPCWSTR lpExistingFileName,
     UNICODE_STRING NewPathU, ExistingPathU;
     FILE_ATTRIBUTE_TAG_INFORMATION TagInfo;
     HANDLE SourceHandle = INVALID_HANDLE_VALUE, NewHandle, ExistingHandle;
-    BOOL Ret = FALSE, ReplaceIfExists, DelayUntilReboot, AttemptReopenWithoutReparse;
 
     DPRINT("MoveFileWithProgressW(%S, %S, %p, %p, %x)\n",
            lpExistingFileName, lpNewFileName, lpProgressRoutine, lpData, dwFlags);
@@ -764,20 +767,25 @@ MoveFileWithProgressW(IN LPCWSTR lpExistingFileName,
             _SEH2_LEAVE;
         }
 
-        /* Unless we manage a proper opening, we'll attempt to reopen without reparse support */
-        AttemptReopenWithoutReparse = TRUE;
         InitializeObjectAttributes(&ObjectAttributes,
                                    &ExistingPathU,
                                    OBJ_CASE_INSENSITIVE,
                                    NULL,
                                    NULL);
-        /* Attempt to open source file */
+
+        OpenOptions  = ((dwFlags & MOVEFILE_WRITE_THROUGH) ? FILE_WRITE_THROUGH : 0);
+        OpenOptions |= FILE_OPEN_FOR_BACKUP_INTENT | FILE_SYNCHRONOUS_IO_NONALERT;
+
+        /* Attempt to open the file and try to read the reparse tag.
+         * If we do not manage a proper opening, we will attempt to
+         * reopen without reparse support. */
+        AttemptReopenWithoutReparse = TRUE;
         Status = NtOpenFile(&SourceHandle,
                             FILE_READ_ATTRIBUTES | DELETE | SYNCHRONIZE,
                             &ObjectAttributes,
                             &IoStatusBlock,
                             FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-                            FILE_OPEN_FOR_BACKUP_INTENT | ((dwFlags & MOVEFILE_WRITE_THROUGH) ? FILE_WRITE_THROUGH : 0));
+                            OpenOptions | FILE_OPEN_REPARSE_POINT);
         if (!NT_SUCCESS(Status))
         {
             /* If we failed and the file doesn't exist, don't attempt to reopen without reparse */
@@ -798,7 +806,7 @@ MoveFileWithProgressW(IN LPCWSTR lpExistingFileName,
         }
         else
         {
-            /* We managed to open, so query information */
+            /* We managed to open, read the reparse tag */
             Status = NtQueryInformationFile(SourceHandle,
                                             &IoStatusBlock,
                                             &TagInfo,
@@ -806,7 +814,8 @@ MoveFileWithProgressW(IN LPCWSTR lpExistingFileName,
                                             FileAttributeTagInformation);
             if (!NT_SUCCESS(Status))
             {
-                /* Do not tolerate any other error than something related to not supported operation */
+                /* Return in case of failure with a status, other than one
+                 * that means the FSD does not support reparse points */
                 if (Status != STATUS_NOT_IMPLEMENTED && Status != STATUS_INVALID_PARAMETER)
                 {
                     BaseSetLastNTError(Status);
@@ -830,15 +839,15 @@ MoveFileWithProgressW(IN LPCWSTR lpExistingFileName,
             }
         }
 
-        /* Simply reopen if required */
         if (AttemptReopenWithoutReparse)
         {
+            /* Reattempt to open normally, following reparse point if needed */
             Status = NtOpenFile(&SourceHandle,
                                 DELETE | SYNCHRONIZE,
                                 &ObjectAttributes,
                                 &IoStatusBlock,
                                 FILE_SHARE_READ | FILE_SHARE_WRITE,
-                                ((dwFlags & MOVEFILE_WRITE_THROUGH) ? FILE_WRITE_THROUGH : 0));
+                                OpenOptions);
             if (!NT_SUCCESS(Status))
             {
                 BaseSetLastNTError(Status);
@@ -864,6 +873,7 @@ MoveFileWithProgressW(IN LPCWSTR lpExistingFileName,
             /* If new file exists and we're allowed to replace, then mark the path with ! */
             if (ReplaceIfExists && NewPathU.Length)
             {
+                PWSTR NewBuffer;
                 NewBuffer = RtlAllocateHeap(RtlGetProcessHeap(), 0, NewPathU.Length + sizeof(WCHAR));
                 if (NewBuffer == NULL)
                 {
