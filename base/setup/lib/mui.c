@@ -480,6 +480,91 @@ AddFontsSettingsToRegistry(
     NTSTATUS Status;
     ULONG uIndex = 0;
 
+
+//
+//
+#if 0
+//
+//
+
+    /* Load 'font.inf' from the destination path */
+    hInf = SpInfOpenInfFile(FontInfPath,
+                            NULL,
+                            INF_STYLE_OLDNT, // INF_STYLE_WIN4
+                            pSetupData->LanguageId,
+                            &ErrorLine);
+    if (hInf == INVALID_HANDLE_VALUE)
+    {
+        DPRINT("SpInfOpenInfFile() failed\n");
+        return;
+    }
+
+
+
+    Success = SpInfFindFirstLine(hInf,
+                                 L"Font.CP860.96", // FIXME: Modify "CP860"
+                                 NULL, &InfContext);
+    if (!Success)
+    {
+        /* Nothing to do for update! */
+        DPRINT1("No update needed for the registry!\n");
+        goto Cleanup;
+    }
+
+
+    do
+    {
+        INF_GetDataField(&InfContext, 0, &Action);
+        INF_GetDataField(&InfContext, 1, &Section); // FIXME: Comma-separated list of sections.
+
+        DPRINT("Action: %S  Section %S\n", Action, Section);
+
+        if (Action == NULL)
+        {
+            INF_FreeData(Action);
+            INF_FreeData(Section);
+            break; // Hackfix
+        }
+
+        if (!_wcsicmp(Action, L"AddReg"))
+            Delete = FALSE;
+        else if (!_wcsicmp(Action, L"DelReg"))
+            Delete = TRUE;
+        else
+        {
+            DPRINT1("Unrecognized registry INF action '%S'\n", Action);
+            INF_FreeData(Action);
+            INF_FreeData(Section);
+            continue;
+        }
+
+        INF_FreeData(Action);
+
+        // if (StatusRoutine) StatusRoutine(ImportRegHive, File);
+
+#if 0
+        if (!ImportRegistryFile(pSetupData->SourcePath.Buffer,
+                                File, Section,
+                                pSetupData->LanguageId, Delete))
+        {
+            DPRINT1("Importing %S failed\n", File);
+            INF_FreeData(File);
+            INF_FreeData(Section);
+            ErrorNumber = ERROR_IMPORT_HIVE;
+            goto Cleanup;
+        }
+#else
+        // TODO: Import corresponding sections of INF file into registry.
+#endif
+    } while (SpInfFindNextLine(&InfContext, &InfContext));
+
+//
+//
+#endif
+//
+//
+
+
     RtlInitUnicodeString(&KeyName,
                          L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\FontSubstitutes");
     InitializeObjectAttributes(&ObjectAttributes,

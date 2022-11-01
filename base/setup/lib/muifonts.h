@@ -1,5 +1,15 @@
 #pragma once
 
+/*
+ * In FONT.INF:
+ *
+ * Font.Latin.Reg
+ *
+ * Missing: the variations
+ * "Baltic,186", "CE,238", "CYR,204", "Greek,161", "TUR,162"
+ * for Arial, Courier New, and Times New Roman,
+ * and the "System" font.
+ */
 MUI_SUBFONT LatinFonts[] =
 {
     /*Font                       Substitute  */
@@ -32,6 +42,10 @@ MUI_SUBFONT LatinFonts[] =
     { NULL, NULL }
 };
 
+/*
+ * Exactly the same case as LatinFonts.
+ * Font.Cyrillic.Reg
+ */
 MUI_SUBFONT CyrillicFonts[] =
 {
     { L"Arial Baltic,186",       L"Arial,186" },
@@ -63,6 +77,10 @@ MUI_SUBFONT CyrillicFonts[] =
     { NULL, NULL }
 };
 
+/*
+ * Same situation as LatinFonts.
+ * Font.Greek.Reg
+ */
 MUI_SUBFONT GreekFonts[] =
 {
     { L"Arial Baltic,186",       L"Arial,186" },
@@ -94,6 +112,10 @@ MUI_SUBFONT GreekFonts[] =
     { NULL, NULL }
 };
 
+/*
+ * Same situation as LatinFonts.
+ * Font.Hebrew.Reg
+ */
 MUI_SUBFONT HebrewFonts[] =
 {
     { L"Arial Baltic,186",       L"Arial,186" },
@@ -114,7 +136,7 @@ MUI_SUBFONT HebrewFonts[] =
     { L"MS Shell Dlg",           L"Tahoma" },
     { L"MS Shell Dlg 2",         L"Tahoma" },
     { L"System",                 L"FreeSans" },
-    { L"Terminal",               L"Courier New" },
+    { L"Terminal",               L"Lucida Console" },
     { L"Times",                  L"Times New Roman" },
     { L"Times New Roman Baltic,186",   L"Times New Roman,186" },
     { L"Times New Roman CE,238",       L"Times New Roman,238" },
