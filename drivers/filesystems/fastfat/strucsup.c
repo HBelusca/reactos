@@ -1367,8 +1367,25 @@ Return Value:
         //
 
         if (IsPagingFile) {
-
-            SetFlag( Fcb->FcbState, FCB_STATE_PAGING_FILE | FCB_STATE_SYSTEM_FILE );
+            //
+            // FIXME: To reproduce NTFS functionality on deleting paging files,
+            // we should not mark it as a system file. This will allow to fail
+            // opening for deletion with STATUS_SHARING_VIOLATION instead of
+            // STATUS_ACCESS_DENIED (see FatCommonCreate()), thus making the
+            // MOVEFILE_DELAY_UNTIL_REBOOT functionality of Win32 MoveFileEx()/
+            // MoveFileWithProgressW() to work as designed.
+            //
+            // NOTE: That extra FCB_STATE_SYSTEM_FILE wasn't there in NT 3.x
+            // but has been added since and is there in Win2k3. NTFS never marks
+            // the paging file as system file. Only FS-specific "system" files
+            // are marked as such (the EA file in FASTFAT; the $xxx files in NTFS).
+            //
+            // NOTE 2: Extra FCB_STATE_SYSTEM_FILE added in NT 4 but after the
+            // FatCreateFcb call in FatOpenExistingFile.
+            //
+            // See NtfsCreateFcb.
+            //
+            SetFlag( Fcb->FcbState, FCB_STATE_PAGING_FILE /* | FCB_STATE_SYSTEM_FILE */ );
         }
 
         //

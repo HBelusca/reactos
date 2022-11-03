@@ -339,6 +339,11 @@ WritePageFileSettings(PVIRTMEM pVirtMem)
                           _T("%s\\pagefile.sys"),
                           pVirtMem->PageFile[i].szDrive);
 
+                // NOTE: On FAT filesystems, attempting to delete the
+                // pagefile.sys will fail with ERROR_ACCESS_DENIED
+                // (returned by the internal NtOpenFile() call in the
+                // MoveFileEx() implementation), and the delay-until-reboot
+                // functionality will not be executed.
                 MoveFileEx(szText, NULL, MOVEFILE_DELAY_UNTIL_REBOOT);
             }
         }
