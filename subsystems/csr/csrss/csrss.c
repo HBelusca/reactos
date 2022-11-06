@@ -34,20 +34,22 @@ CsrpSetDefaultProcessHardErrorMode(VOID)
                             sizeof(DefaultHardErrorMode));
 }
 
-int
-_cdecl
-_main(int argc,
-      char *argv[],
-      char *envp[],
-      int DebugFlag)
+INT
+__cdecl
+main(
+    _In_ INT argc,
+    _In_ PCHAR argv[],
+    _In_ PCHAR envp[],
+    _In_opt_ ULONG DebugFlags)
 {
     KPRIORITY BasePriority = PROCESS_PRIORITY_NORMAL_FOREGROUND + 4;
     NTSTATUS Status;
 #if defined (_X86_)
     ULONG Response;
 #endif
+
     UNREFERENCED_PARAMETER(envp);
-    UNREFERENCED_PARAMETER(DebugFlag);
+    UNREFERENCED_PARAMETER(DebugFlags);
 
     /* Set the base priority */
     NtSetInformationProcess(NtCurrentProcess(),

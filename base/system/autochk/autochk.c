@@ -521,11 +521,11 @@ QueryTimeout(
 
 INT
 __cdecl
-_main(
-    IN INT argc,
-    IN PCHAR argv[],
-    IN PCHAR envp[],
-    IN ULONG DebugFlag)
+main(
+    _In_ INT argc,
+    _In_ PCHAR argv[],
+    _In_ PCHAR envp[],
+    _In_opt_ ULONG DebugFlags)
 {
     NTSTATUS Status;
     LONG TimeOut;
@@ -537,6 +537,9 @@ _main(
     ANSI_STRING VolumePathA;
     UNICODE_STRING VolumePathU;
     WCHAR VolumePath[128] = L"";
+
+    UNREFERENCED_PARAMETER(envp);
+    UNREFERENCED_PARAMETER(DebugFlags);
 
     /*
      * Parse the command-line: optional command switches,

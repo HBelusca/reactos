@@ -427,12 +427,13 @@ SmpUnhandledExceptionFilter(IN PEXCEPTION_POINTERS ExceptionInfo)
     return EXCEPTION_EXECUTE_HANDLER;
 }
 
-NTSTATUS
+INT
 __cdecl
-_main(IN INT argc,
-      IN PCHAR argv[],
-      IN PCHAR envp[],
-      IN ULONG DebugFlag)
+wmain(
+    _In_ INT argc,
+    _In_ PWCHAR argv[],
+    _In_ PWCHAR envp[],
+    _In_opt_ ULONG DebugFlags)
 {
     NTSTATUS Status;
     KPRIORITY SetBasePriority;
@@ -442,6 +443,11 @@ _main(IN INT argc,
     ULONG Flags;
     PROCESS_BASIC_INFORMATION ProcessInfo;
     UNICODE_STRING DbgString, InitialCommand;
+
+    UNREFERENCED_PARAMETER(argc);
+    UNREFERENCED_PARAMETER(argv);
+    UNREFERENCED_PARAMETER(envp);
+    UNREFERENCED_PARAMETER(DebugFlags);
 
     /* Make us critical */
     RtlSetProcessIsCritical(TRUE, NULL, FALSE);
@@ -456,7 +462,7 @@ _main(IN INT argc,
     ASSERT(NT_SUCCESS(Status));
 
     /* Save the debug flag if it was passed */
-    if (DebugFlag) SmpDebug = DebugFlag != 0;
+    if (DebugFlags) SmpDebug = (DebugFlags != 0);
 
     /* Build the hard error parameters */
     Parameters[0] = (ULONG_PTR)&DbgString;
@@ -574,7 +580,7 @@ _main(IN INT argc,
     _SEH2_END;
 
     /* Something in the init loop failed, terminate SMSS */
-    return SmpTerminate(Parameters, 1, RTL_NUMBER_OF(Parameters));
+    return (INT)SmpTerminate(Parameters, 1, RTL_NUMBER_OF(Parameters));
 }
 
 /* EOF */
