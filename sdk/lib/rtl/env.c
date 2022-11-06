@@ -17,7 +17,7 @@
 
 NTSTATUS
 NTAPI
-RtlSetEnvironmentStrings(IN PWCHAR NewEnvironment, IN ULONG NewEnvironmentSize)
+RtlSetEnvironmentStrings(IN PWCHAR NewEnvironment, IN SIZE_T NewEnvironmentSize)
 {
     UNIMPLEMENTED;
     return STATUS_NOT_IMPLEMENTED;
