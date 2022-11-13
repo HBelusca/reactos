@@ -67,17 +67,20 @@ SmpTerminateForeignSession(IN PSM_API_MSG SmApiMsg,
 
 NTSTATUS
 NTAPI
-SmpExecPgm(IN PSM_API_MSG SmApiMsg,
-           IN PSMP_CLIENT_CONTEXT ClientContext,
-           IN HANDLE SmApiPort)
+SmpExecPgm(
+    _In_ PSM_API_MSG SmApiMsg,
+    _In_ PSMP_CLIENT_CONTEXT ClientContext,
+    _In_ HANDLE SmApiPort)
 {
-    HANDLE ProcessHandle;
     NTSTATUS Status;
+    HANDLE ProcessHandle;
     PSM_EXEC_PGM_MSG SmExecPgm;
     RTL_USER_PROCESS_INFORMATION ProcessInformation;
     OBJECT_ATTRIBUTES ObjectAttributes;
 
-    /* Open the client process */
+    /* Open the client process.
+     * NOTE: We could have used ClientContext->ProcessHandle if
+     * the latter had been opened with PROCESS_DUP_HANDLE as well. */
     InitializeObjectAttributes(&ObjectAttributes, NULL, 0, NULL, NULL);
     Status = NtOpenProcess(&ProcessHandle,
                            PROCESS_DUP_HANDLE,
@@ -127,13 +130,30 @@ SmpExecPgm(IN PSM_API_MSG SmApiMsg,
         return Status;
     }
 
-    /* Close the process handle and call the internal client API */
+    /* Close the process handle and call the internal client API.
+     * See SmpSbCreateSession() for more details about its changes
+     * compared to the Win2k3 one. */
     NtClose(ProcessHandle);
-    return SmpSbCreateSession(NULL,
-                              NULL,
-                              &ProcessInformation,
-                              0,
-                              SmExecPgm->DebugFlag ? &SmApiMsg->h.ClientId : NULL);
+    Status = SmpSbCreateSession(-1,
+#ifdef __REACTOS__
+                                ClientContext->Subsystem,
+#else
+                                NULL,
+#endif
+                                &ProcessInformation,
+                                0,
+                                SmExecPgm->DebugFlag ? &SmApiMsg->h.ClientId : NULL);
+#if (NTDDI_VERSION < NTDDI_VISTA)
+    /* Adjust the returned error code for backwards compatibility with Win2k3 */
+    if (Status == STATUS_NO_SUCH_PACKAGE)
+        Status = STATUS_UNSUCCESSFUL;
+#endif
+
+    /* Close the original handles as they are no longer needed */
+    NtClose(ProcessInformation.ProcessHandle);
+    NtClose(ProcessInformation.ThreadHandle);
+
+    return Status;
 }
 
 NTSTATUS
@@ -331,7 +351,7 @@ SmpHandleConnectionRequest(IN HANDLE SmApiPort,
         }
 
         /* Drop the reference we had acquired */
-        if (TypeSubsystem) SmpDereferenceSubsystem(TypeSubsystem);
+        if (TypeSubsystem) SmpDereferenceKnownSubSys(TypeSubsystem);
     }
 
     /* Check if we'll be accepting the connection */
@@ -373,7 +393,7 @@ SmpHandleConnectionRequest(IN HANDLE SmApiPort,
         DPRINT1("Accept failed or rejected: %lx\n", Status);
         if (ClientContext != (PVOID)SbApiMsg) RtlFreeHeap(SmpHeap, 0, ClientContext);
         if (ProcessHandle) NtClose(ProcessHandle);
-        if (CidSubsystem) SmpDereferenceSubsystem(CidSubsystem);
+        if (CidSubsystem) SmpDereferenceKnownSubSys(CidSubsystem);
         return Status;
     }
 
@@ -414,7 +434,7 @@ SmpHandleConnectionRequest(IN HANDLE SmApiPort,
     }
 
     /* Dereference the subsystem and return the result */
-    if (CidSubsystem) SmpDereferenceSubsystem(CidSubsystem);
+    if (CidSubsystem) SmpDereferenceKnownSubSys(CidSubsystem);
     return Status;
 }
 

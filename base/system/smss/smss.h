@@ -165,12 +165,21 @@ SmpApiLoop(
 NTSTATUS
 NTAPI
 SmpSbCreateSession(
-    IN PVOID Reserved,
-    IN PSMP_SUBSYSTEM OtherSubsystem,
-    IN PRTL_USER_PROCESS_INFORMATION ProcessInformation,
-    IN ULONG DbgSessionId,
-    IN PCLIENT_ID DbgUiClientId
-);
+    _In_ ULONG MuSessionId,
+    _In_opt_ PSMP_SUBSYSTEM ParentSubsystem,
+    _Inout_ PRTL_USER_PROCESS_INFORMATION ProcessInformation,
+    _In_opt_ ULONG DbgSessionId,
+    _In_opt_ PCLIENT_ID DbgUiClientId);
+
+NTSTATUS
+NTAPI
+SmpSbCreateProcess(
+    _In_ HANDLE PortHandle,
+    _In_ PUNICODE_STRING FileName,
+    _In_ PUNICODE_STRING Directory,
+    _In_ PUNICODE_STRING CommandLine,
+    _In_ ULONG Flags,
+    _Out_ PRTL_USER_PROCESS_INFORMATION ProcessInformation);
 
 /* smsessn.c */
 
@@ -187,11 +196,9 @@ SmpDeleteSession(
 );
 
 ULONG
-NTAPI
 SmpAllocateSessionId(
-    IN PSMP_SUBSYSTEM Subsystem,
-    IN PSMP_SUBSYSTEM OtherSubsystem
-);
+    _In_ PSMP_SUBSYSTEM Subsystem,
+    _In_opt_ PSMP_SUBSYSTEM ParentSubsystem);
 
 NTSTATUS
 NTAPI
@@ -246,11 +253,13 @@ SmpTerminate(
 
 /* smsubsys.c */
 
+PSMP_SUBSYSTEM
+SmpCreateKnownSubSys(
+    _In_ ULONG MuSessionId);
+
 VOID
-NTAPI
-SmpDereferenceSubsystem(
-    IN PSMP_SUBSYSTEM SubSystem
-);
+SmpDereferenceKnownSubSys(
+    _In_ PSMP_SUBSYSTEM SubSystem);
 
 PSMP_SUBSYSTEM
 NTAPI

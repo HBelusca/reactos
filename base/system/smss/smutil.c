@@ -232,8 +232,8 @@ NTSTATUS
 NTAPI
 SmpParseCommandLine(IN PUNICODE_STRING CommandLine,
                     OUT PULONG Flags,
-                    OUT PUNICODE_STRING FileName,
-                    OUT PUNICODE_STRING Directory,
+                    OUT PUNICODE_STRING FileName,   // ImageFileName
+                    OUT PUNICODE_STRING Directory,  // ImageFileDirectory
                     OUT PUNICODE_STRING Arguments)
 {
     ULONG Length;

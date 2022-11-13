@@ -24,27 +24,71 @@ WCHAR InitialCommandBuffer[256];
 
 /* FUNCTIONS ******************************************************************/
 
-NTSTATUS
-NTAPI
-SmpCallCsrCreateProcess(IN PSB_API_MSG SbApiMsg,
-                        IN USHORT MessageLength,
-                        IN HANDLE PortHandle)
+/**
+ * @brief
+ * Allocates a structure describing a newly started environment subsystem
+ * on the specified Terminal Services session.
+ *
+ * @param[in]   MuSessionId
+ * The session ID of the Terminal Services session on which the new
+ * environment subsystem is started.
+ *
+ * @return
+ * The allocated subsystem structure, or NULL in case of failure.
+ **/
+PSMP_SUBSYSTEM
+SmpCreateKnownSubSys(
+    _In_ ULONG MuSessionId)
 {
+    PSMP_SUBSYSTEM Subsystem;
     NTSTATUS Status;
 
-    /* Initialize the header and send the message to CSRSS */
-    SbApiMsg->h.u2.ZeroInit = 0;
-    SbApiMsg->h.u1.s1.DataLength = MessageLength + 8;
-    SbApiMsg->h.u1.s1.TotalLength = sizeof(SB_API_MSG);
-    SbApiMsg->ApiNumber = SbpCreateProcess;
-    Status = NtRequestWaitReplyPort(PortHandle, &SbApiMsg->h, &SbApiMsg->h);
-    if (NT_SUCCESS(Status)) Status = SbApiMsg->ReturnValue;
-    return Status;
+    Subsystem = RtlAllocateHeap(SmpHeap, SmBaseTag, sizeof(SMP_SUBSYSTEM));
+    if (!Subsystem)
+        return NULL;
+
+    /* Initialize its header and reference count */
+    Subsystem->ReferenceCount = 1;
+    Subsystem->MuSessionId = MuSessionId;
+    // The new subsystem is being initialized. This will be seen by the while-loop above.
+    Subsystem->ImageType = -1;
+
+    /* Clear out all the other data for now */
+    Subsystem->Terminating = FALSE;
+    Subsystem->ProcessHandle = NULL;
+    Subsystem->Event = NULL;
+    Subsystem->PortHandle = NULL;
+    Subsystem->SbApiPort = NULL;
+
+    /* Create the event we'll be waiting on for initialization */
+    Status = NtCreateEvent(&Subsystem->Event,
+                           EVENT_ALL_ACCESS,
+                           NULL,
+                           NotificationEvent,
+                           FALSE);
+    if (!NT_SUCCESS(Status))
+    {
+        /* This failed, bail out */
+        RtlFreeHeap(SmpHeap, 0, Subsystem);
+        return NULL;
+    }
+
+    return Subsystem;
 }
 
+/**
+ * @brief
+ * Dereferences an existing environment subsystem, terminating it
+ * when its reference count reaches zero.
+ *
+ * @param[in]   SubSystem
+ * The environment subsystem to dereference.
+ *
+ * @return  None.
+ **/
 VOID
-NTAPI
-SmpDereferenceSubsystem(IN PSMP_SUBSYSTEM SubSystem)
+SmpDereferenceKnownSubSys(
+    _In_ PSMP_SUBSYSTEM SubSystem)
 {
     /* Acquire the database lock while we (potentially) destroy this subsystem */
     RtlEnterCriticalSection(&SmpKnownSubSysLock);
@@ -142,15 +186,9 @@ SmpLoadSubSystem(IN PUNICODE_STRING FileName,
                  OUT PHANDLE ProcessId,
                  IN ULONG Flags)
 {
-    PSMP_SUBSYSTEM Subsystem, NewSubsystem, KnownSubsystem = NULL;
-    HANDLE SubSysProcessId;
     NTSTATUS Status = STATUS_SUCCESS;
-    SB_API_MSG SbApiMsg;
+    PSMP_SUBSYSTEM Subsystem, NewSubsystem;
     RTL_USER_PROCESS_INFORMATION ProcessInformation;
-    LARGE_INTEGER Timeout;
-    PVOID State;
-    PSB_CREATE_PROCESS_MSG CreateProcess = &SbApiMsg.u.CreateProcess;
-    PSB_CREATE_SESSION_MSG CreateSession = &SbApiMsg.u.CreateSession;
 
     /* Make sure this is a found subsystem */
     if (Flags & SMP_INVALID_PATH)
@@ -176,7 +214,7 @@ SmpLoadSubSystem(IN PUNICODE_STRING FileName,
 
         /* Dereference it and try the next one */
         RtlEnterCriticalSection(&SmpKnownSubSysLock);
-        SmpDereferenceSubsystem(Subsystem);
+        SmpDereferenceKnownSubSys(Subsystem);
     }
 
     /* Check if this is a POSIX subsystem */
@@ -195,85 +233,59 @@ SmpLoadSubSystem(IN PUNICODE_STRING FileName,
     if (Subsystem)
     {
         /* Dereference and return, no work to do */
-        SmpDereferenceSubsystem(Subsystem);
+        SmpDereferenceKnownSubSys(Subsystem);
         RtlLeaveCriticalSection(&SmpKnownSubSysLock);
         return STATUS_SUCCESS;
     }
 
     /* Allocate a new subsystem! */
-    NewSubsystem = RtlAllocateHeap(SmpHeap, SmBaseTag, sizeof(SMP_SUBSYSTEM));
+    /* Create the event we'll be waiting on for initialization */
+    NewSubsystem = SmpCreateKnownSubSys(MuSessionId);
     if (!NewSubsystem)
     {
-        RtlLeaveCriticalSection(&SmpKnownSubSysLock);
-        return STATUS_NO_MEMORY;
-    }
-
-    /* Initialize its header and reference count */
-    NewSubsystem->ReferenceCount = 1;
-    NewSubsystem->MuSessionId = MuSessionId;
-    NewSubsystem->ImageType = -1;
-
-    /* Clear out all the other data for now */
-    NewSubsystem->Terminating = FALSE;
-    NewSubsystem->ProcessHandle = NULL;
-    NewSubsystem->Event = NULL;
-    NewSubsystem->PortHandle = NULL;
-    NewSubsystem->SbApiPort = NULL;
-
-    /* Create the event we'll be waiting on for initialization */
-    Status = NtCreateEvent(&NewSubsystem->Event,
-                           EVENT_ALL_ACCESS,
-                           NULL,
-                           NotificationEvent,
-                           FALSE);
-    if (!NT_SUCCESS(Status))
-    {
         /* This failed, bail out */
-        RtlFreeHeap(SmpHeap, 0, NewSubsystem);
         RtlLeaveCriticalSection(&SmpKnownSubSysLock);
         return STATUS_NO_MEMORY;
     }
 
-    /* Insert the subsystem and release the lock. It can now be found */
+    /* Insert the subsystem and release the lock. It can now be found. */
     InsertTailList(&SmpKnownSubSysHead, &NewSubsystem->Entry);
     RtlLeaveCriticalSection(&SmpKnownSubSysLock);
 
-    /* The OS/2 and POSIX subsystems are actually Windows applications! */
+    /* We are defer-starting the subsystem */
+    Flags |= SMP_DEFERRED_FLAG;
+    Subsystem = NULL;
+
+    /* We *assume* that the OS/2 and POSIX subsystems are actually
+     * Windows applications, and thus need to be started under it!
+     * This is a bit of a hack; it would be better to predetermine
+     * the subsystem in a more robust way. */
     if (Flags & (SMP_POSIX_FLAG | SMP_OS2_FLAG))
     {
-        /* Locate the Windows subsystem for this session */
-        KnownSubsystem = SmpLocateKnownSubSysByType(MuSessionId,
-                                                    IMAGE_SUBSYSTEM_WINDOWS_GUI);
-        if (!KnownSubsystem)
+        /* Locate the Windows subsystem (CSRSS) for this session */
+        Subsystem = SmpLocateKnownSubSysByType(MuSessionId,
+                                               IMAGE_SUBSYSTEM_WINDOWS_GUI);
+        if (!Subsystem)
         {
             DPRINT1("SMSS: SmpLoadSubSystem - SmpLocateKnownSubSysByType Failed\n");
-            goto Quickie2;
+            goto Cleanup;
         }
 
-        /* Fill out all the process details and call CSRSS to launch it */
-        CreateProcess->In.ImageName = FileName;
-        CreateProcess->In.CurrentDirectory = Directory;
-        CreateProcess->In.CommandLine = CommandLine;
-        CreateProcess->In.DllPath = SmpDefaultLibPath.Length ?
-                                    &SmpDefaultLibPath : NULL;
-        CreateProcess->In.Flags = Flags | SMP_DEFERRED_FLAG;
-        CreateProcess->In.DebugFlags = SmpDebug;
-        Status = SmpCallCsrCreateProcess(&SbApiMsg,
-                                         sizeof(*CreateProcess),
-                                         KnownSubsystem->SbApiPort);
+        /* Call CSRSS to launch the process, and retrieve its
+         * information we will need for the create session. */
+        Status = SmpSbCreateProcess(Subsystem->SbApiPort,
+                                    FileName,
+                                    Directory,
+                                    CommandLine,
+                                    Flags,
+                                    &ProcessInformation);
         if (!NT_SUCCESS(Status))
         {
             /* Handle failures */
-            DPRINT1("SMSS: SmpLoadSubSystem - SmpCallCsrCreateProcess Failed with  Status %lx\n",
+            DPRINT1("SMSS: SmpLoadSubSystem - SmpSbCreateProcess Failed with Status %lx\n",
                     Status);
-            goto Quickie2;
+            goto Cleanup;
         }
-
-        /* Save the process information we'll need for the create session */
-        ProcessInformation.ProcessHandle = CreateProcess->Out.ProcessHandle;
-        ProcessInformation.ThreadHandle = CreateProcess->Out.ThreadHandle;
-        ProcessInformation.ClientId = CreateProcess->Out.ClientId;
-        ProcessInformation.ImageInformation.SubSystemType = CreateProcess->Out.SubsystemType;
     }
     else
     {
@@ -282,14 +294,14 @@ SmpLoadSubSystem(IN PUNICODE_STRING FileName,
                                  Directory,
                                  CommandLine,
                                  MuSessionId,
-                                 Flags | SMP_DEFERRED_FLAG,
+                                 Flags,
                                  &ProcessInformation);
         if (!NT_SUCCESS(Status))
         {
             /* Handle failures */
-            DPRINT1("SMSS: SmpLoadSubSystem - SmpExecuteImage Failed with  Status %lx\n",
+            DPRINT1("SMSS: SmpLoadSubSystem - SmpExecuteImage Failed with Status %lx\n",
                     Status);
-            goto Quickie2;
+            goto Cleanup;
         }
     }
 
@@ -301,7 +313,7 @@ SmpLoadSubSystem(IN PUNICODE_STRING FileName,
     if (ProcessInformation.ImageInformation.SubSystemType == IMAGE_SUBSYSTEM_NATIVE)
     {
         /* This must be CSRSS itself, since it's a native subsystem image */
-        SubSysProcessId = ProcessInformation.ClientId.UniqueProcess;
+        HANDLE SubSysProcessId = ProcessInformation.ClientId.UniqueProcess;
         if ((ProcessId) && !(*ProcessId)) *ProcessId = SubSysProcessId;
 
         /* Was this the initial CSRSS on Session 0? */
@@ -315,79 +327,27 @@ SmpLoadSubSystem(IN PUNICODE_STRING FileName,
     }
     else
     {
-        /* This is the POSIX or OS/2 subsystem process, copy its information */
-        CreateSession->ProcessInfo = ProcessInformation;
-
-        CreateSession->DbgSessionId = 0;
-        *(PULONGLONG)&CreateSession->DbgUiClientId = 0;
-
-        /* This should find CSRSS because they are POSIX or OS/2 subsystems */
-        Subsystem = SmpLocateKnownSubSysByType(MuSessionId,
-                                               ProcessInformation.ImageInformation.SubSystemType);
-        if (!Subsystem)
-        {
-            /* Odd failure -- but handle it anyway */
-            Status = STATUS_NO_SUCH_PACKAGE;
-            DPRINT1("SMSS: SmpLoadSubSystem - SmpLocateKnownSubSysByType Failed with  Status %lx for sessionid %lu\n",
-                    Status,
-                    MuSessionId);
-            goto Quickie;
-        }
-
-        /* Duplicate the parent process handle for the subsystem to have */
-        Status = NtDuplicateObject(NtCurrentProcess(),
-                                   ProcessInformation.ProcessHandle,
-                                   Subsystem->ProcessHandle,
-                                   &CreateSession->ProcessInfo.ProcessHandle,
-                                   PROCESS_ALL_ACCESS,
-                                   0,
-                                   0);
+        /*
+         * This is the POSIX or OS/2 subsystem process, started by the
+         * Windows subsystem (CSRSS). Request the *actual* subsystem that
+         * handles this POSIX or OS/2 subsystem (in principle, this should
+         * be CSRSS as well, but it might be another one if our previous
+         * hackish guess was wrong) to create an environment session.
+         */
+        Status = SmpSbCreateSession(MuSessionId,
+#ifdef __REACTOS__
+                                    Subsystem,
+#else
+                                    NULL,
+#endif
+                                    &ProcessInformation,
+                                    0,
+                                    NULL);
         if (!NT_SUCCESS(Status))
         {
-            /* Fail since this is critical */
-            DPRINT1("SMSS: SmpLoadSubSystem - NtDuplicateObject Failed with  Status %lx for sessionid %lu\n",
-                    Status,
-                    MuSessionId);
-            goto Quickie;
-        }
-
-        /* Duplicate the initial thread handle for the subsystem to have */
-        Status = NtDuplicateObject(NtCurrentProcess(),
-                                   ProcessInformation.ThreadHandle,
-                                   Subsystem->ProcessHandle,
-                                   &CreateSession->ProcessInfo.ThreadHandle,
-                                   THREAD_ALL_ACCESS,
-                                   0,
-                                   0);
-        if (!NT_SUCCESS(Status))
-        {
-            /* Fail since this is critical */
-            DPRINT1("SMSS: SmpLoadSubSystem - NtDuplicateObject Failed with  Status %lx for sessionid %lu\n",
-                    Status,
-                    MuSessionId);
-            goto Quickie;
-        }
-
-        /* Allocate an internal Session ID for this subsystem */
-        CreateSession->SessionId = SmpAllocateSessionId(Subsystem, NULL);
-
-        /* Send the create session message to the subsystem */
-        SbApiMsg.ReturnValue = STATUS_SUCCESS;
-        SbApiMsg.h.u2.ZeroInit = 0;
-        SbApiMsg.h.u1.s1.DataLength = sizeof(SB_CREATE_SESSION_MSG) + 8;
-        SbApiMsg.h.u1.s1.TotalLength = sizeof(SB_API_MSG);
-        SbApiMsg.ApiNumber = SbpCreateSession;
-        Status = NtRequestWaitReplyPort(Subsystem->SbApiPort,
-                                        &SbApiMsg.h,
-                                        &SbApiMsg.h);
-        if (NT_SUCCESS(Status)) Status = SbApiMsg.ReturnValue;
-        if (!NT_SUCCESS(Status))
-        {
-            /* Delete the session and handle failure if the LPC call failed */
-            SmpDeleteSession(CreateSession->SessionId);
-            DPRINT1("SMSS: SmpLoadSubSystem - NtRequestWaitReplyPort Failed with  Status %lx for sessionid %lu\n",
-                    Status,
-                    MuSessionId);
+            /* Handle failures */
+            DPRINT1("SMSS: SmpLoadSubSystem - SmpSbCreateSession Failed with Status %lx\n",
+                    Status);
             goto Quickie;
         }
     }
@@ -405,13 +365,14 @@ SmpLoadSubSystem(IN PUNICODE_STRING FileName,
     if (MuSessionId)
     {
         /* Wait up to 60 seconds for it to initialize */
+        LARGE_INTEGER Timeout;
         Timeout.QuadPart = -600000000;
         Status = NtWaitForSingleObject(NewSubsystem->Event, FALSE, &Timeout);
 
         /* Timeout is done -- does this session still exist? */
         if (!SmpCheckDuplicateMuSessionId(MuSessionId))
         {
-            /* Nope, it died. Cleanup should've ocurred in a different path. */
+            /* Nope, it died. Cleanup should have occurred in a different path. */
             DPRINT1("SMSS: SmpLoadSubSystem - session deleted\n");
             return STATUS_DELETE_PENDING;
         }
@@ -420,9 +381,8 @@ SmpLoadSubSystem(IN PUNICODE_STRING FileName,
         if (Status != STATUS_WAIT_0)
         {
             /* Something is wrong with the subsystem, so back out of everything */
-            DPRINT1("SMSS: SmpLoadSubSystem - Timeout waiting for subsystem connect with Status %lx for sessionid %lu\n",
-                    Status,
-                    MuSessionId);
+            DPRINT1("SMSS: SmpLoadSubSystem - Timeout waiting for subsystem connect with Status %lx for SessionId %lu\n",
+                    Status, MuSessionId);
             goto Quickie;
         }
     }
@@ -435,7 +395,7 @@ SmpLoadSubSystem(IN PUNICODE_STRING FileName,
     /* Subsystem is created, resumed, and initialized. Close handles and exit */
     NtClose(ProcessInformation.ThreadHandle);
     Status = STATUS_SUCCESS;
-    goto Quickie2;
+    goto Cleanup;
 
 Quickie:
     /* This is the failure path. First check if we need to detach from session */
@@ -443,21 +403,18 @@ Quickie:
     {
         /* We were not attached, or did not launch subsystems that required it */
         DPRINT1("SMSS: Did not detach from Session Space: SessionId=%x Flags=%x Status=%x\n",
-                AttachedSessionId,
-                Flags | SMP_DEFERRED_FLAG,
-                Status);
+                AttachedSessionId, Flags, Status);
     }
     else
     {
         /* Get the privilege we need for detachment */
+        PVOID State;
         Status = SmpAcquirePrivilege(SE_LOAD_DRIVER_PRIVILEGE, &State);
         if (!NT_SUCCESS(Status))
         {
             /* We can't detach without it */
             DPRINT1("SMSS: Did not detach from Session Space: SessionId=%x Flags=%x Status=%x\n",
-                    AttachedSessionId,
-                    Flags | SMP_DEFERRED_FLAG,
-                    Status);
+                    AttachedSessionId, Flags, Status);
         }
         else
         {
@@ -486,18 +443,17 @@ Quickie:
     NtTerminateProcess(ProcessInformation.ProcessHandle, Status);
     NtClose(ProcessInformation.ThreadHandle);
 
-Quickie2:
-    /* This is the cleanup path -- first dereference our subsystems */
+Cleanup:
+    /* This is the cleanup path: first dereference our subsystems */
     RtlEnterCriticalSection(&SmpKnownSubSysLock);
-    if (Subsystem) SmpDereferenceSubsystem(Subsystem);
-    if (KnownSubsystem) SmpDereferenceSubsystem(KnownSubsystem);
+    if (Subsystem) SmpDereferenceKnownSubSys(Subsystem);
 
     /* In the failure case, destroy the new subsystem we just created */
     if (!NT_SUCCESS(Status))
     {
         RemoveEntryList(&NewSubsystem->Entry);
         NtSetEvent(NewSubsystem->Event, NULL);
-        SmpDereferenceSubsystem(NewSubsystem);
+        SmpDereferenceKnownSubSys(NewSubsystem);
     }
 
     /* Finally, we're all done! */

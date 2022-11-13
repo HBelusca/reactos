@@ -20,7 +20,7 @@ typedef struct _SMP_SESSION
     LIST_ENTRY Entry;
     ULONG SessionId;
     PSMP_SUBSYSTEM Subsystem;
-    PSMP_SUBSYSTEM OtherSubsystem;
+    PSMP_SUBSYSTEM ParentSubsystem;
 } SMP_SESSION, *PSMP_SESSION;
 
 RTL_CRITICAL_SECTION SmpSessionListLock;
@@ -118,10 +118,27 @@ SmpDeleteSession(IN ULONG SessionId)
     }
 }
 
+/**
+ * @brief
+ * Allocates and assigns a unique environment session ID for
+ * the specified subsystem.
+ *
+ * @param[in]   Subsystem
+ * The subsystem for which to allocate and assign a unique session ID.
+ *
+ * @param[in]   ParentSubsystem
+ * Optional pointer to the parent subsystem that created the new one.
+ *
+ * @return
+ * The unique environment session ID.
+ *
+ * @remark
+ * Named SmpAssignUniqueSequenceNumber() on Vista+.
+ **/
 ULONG
-NTAPI
-SmpAllocateSessionId(IN PSMP_SUBSYSTEM Subsystem,
-                     IN PSMP_SUBSYSTEM OtherSubsystem)
+SmpAllocateSessionId(
+    _In_ PSMP_SUBSYSTEM Subsystem,
+    _In_opt_ PSMP_SUBSYSTEM ParentSubsystem)
 {
     ULONG SessionId;
     PSMP_SESSION Session;
@@ -150,7 +167,7 @@ SmpAllocateSessionId(IN PSMP_SUBSYSTEM Subsystem,
         /* Write the session data and insert it into the session list */
         Session->Subsystem = Subsystem;
         Session->SessionId = SessionId;
-        Session->OtherSubsystem = OtherSubsystem;
+        Session->ParentSubsystem = ParentSubsystem;
         InsertTailList(&SmpSessionListHead, &Session->Entry);
     }
     else
