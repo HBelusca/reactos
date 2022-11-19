@@ -12,13 +12,6 @@
 #define NDEBUG
 #include <debug.h>
 
-VOID
-NTAPI
-KdPortPutByteEx(
-    PCPPORT PortInformation,
-    UCHAR ByteToSend
-);
-
 /* GLOBALS ********************************************************************/
 
 KINTERRUPT KxUnexpectedInterrupt;
@@ -427,6 +420,7 @@ AppCpuInit:
     KiIdleLoop();
 }
 
+#include <internal/kd.h>
 ULONG
 DbgPrintEarly(const char *fmt, ...)
 {
@@ -444,9 +438,9 @@ DbgPrintEarly(const char *fmt, ...)
     {
         if (*String == '\n')
         {
-            KdPortPutByteEx(NULL, '\r');
+            KdPortPutByte('\r');
         }
-        KdPortPutByteEx(NULL, *String);
+        KdPortPutByte(*String);
         String++;
     }
 

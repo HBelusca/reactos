@@ -9,7 +9,6 @@
 /* INCLUDES ******************************************************************/
 
 /* C Headers */
-#define DbgPrint DbgPrintEarly
 #include <stdio.h>
 
 /* WDK HAL Compilation hack */
