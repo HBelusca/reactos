@@ -37,10 +37,10 @@ ULONG WinLdrTerminalDelay;
 
 CPPORT Port[4] =
 {
-    {NULL, 0, TRUE},
-    {NULL, 0, TRUE},
-    {NULL, 0, TRUE},
-    {NULL, 0, TRUE}
+    {NULL, 0, PORT_DEFAULT_RATE},
+    {NULL, 0, PORT_DEFAULT_RATE},
+    {NULL, 0, PORT_DEFAULT_RATE},
+    {NULL, 0, PORT_DEFAULT_RATE}
 };
 
 /* FUNCTIONS ******************************************************************/

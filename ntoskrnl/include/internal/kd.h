@@ -1,7 +1,5 @@
 #pragma once
 
-#include <cportlib/cportlib.h>
-
 //
 // Kernel Debugger Port Definition
 //

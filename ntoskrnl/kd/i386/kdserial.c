@@ -3,6 +3,7 @@
  * PROJECT:         ReactOS kernel
  * FILE:            ntoskrnl/kd/i386/kdbg.c
  * PURPOSE:         Serial i/o functions for the kernel debugger.
+ *                  Serial Port Kernel Debugging Transport Library
  * PROGRAMMER:      Alex Ionescu
  *                  Hervé Poussineau
  */
@@ -13,7 +14,7 @@
 #define NDEBUG
 #include <debug.h>
 
-//#include <cportlib/cportlib.h>
+#include <cportlib/cportlib.h>
 #include <cportlib/uartinfo.h>
 
 /* STATIC VARIABLES ***********************************************************/
