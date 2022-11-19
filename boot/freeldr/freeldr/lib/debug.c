@@ -44,11 +44,20 @@ ULONG DebugPort = RS232;
 
 /* Serial debug connection */
 #if defined(SARCH_PC98)
-ULONG BaudRate = 9600;
+#define DEFAULT_DEBUG_PORT      2 /* COM2 */
+#define DEFAULT_DEBUG_COM1_IRQ  4
+#define DEFAULT_DEBUG_COM2_IRQ  5
+#define DEFAULT_DEBUG_BAUD_RATE 9600
+#define DEFAULT_BAUD_RATE       9600
 #else
-ULONG BaudRate = 115200;
+#define DEFAULT_DEBUG_PORT      2 /* COM2 */
+#define DEFAULT_DEBUG_COM1_IRQ  4
+#define DEFAULT_DEBUG_COM2_IRQ  3
+#define DEFAULT_DEBUG_BAUD_RATE 115200
+#define DEFAULT_BAUD_RATE       19200
 #endif
 
+ULONG BaudRate = DEFAULT_DEBUG_BAUD_RATE;
 ULONG ComPort  = 0; // The COM port initializer chooses the first available port starting from COM4 down to COM1.
 ULONG PortIrq  = 0; // Not used at the moment.
 

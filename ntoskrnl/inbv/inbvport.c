@@ -1,31 +1,33 @@
 /*
- * PROJECT:         ReactOS Kernel
- * LICENSE:         BSD - See COPYING.ARM in the top level directory
- * FILE:            ntoskrnl/inbv/inbvport.c
- * PURPOSE:         Serial Port Boot Driver for Headless Terminal Support
- * PROGRAMMERS:     ReactOS Portable Systems Group
+ * PROJECT:     ReactOS Kernel
+ * LICENSE:     BSD - See COPYING.ARM in the top level directory
+ * PURPOSE:     Serial Port Boot Driver for Headless Terminal Support
+ * COPYRIGHT:   Copyright 20xx ReactOS Portable Systems Group
+ *              Copyright 2022 Hermès Bélusca-Maïto <hermes.belusca-maito@reactos.org>
  */
 
 /* INCLUDES ******************************************************************/
 
 #include <ntoskrnl.h>
-#include <debug.h>
+#include <cportlib/cportlib.h>
+#include <cportlib/uartinfo.h>
 
 /* GLOBALS *******************************************************************/
 
 CPPORT Port[4] =
 {
-    {NULL, 0, TRUE},
-    {NULL, 0, TRUE},
-    {NULL, 0, TRUE},
-    {NULL, 0, TRUE}
+    {NULL, 0, PORT_DEFAULT_RATE},
+    {NULL, 0, PORT_DEFAULT_RATE},
+    {NULL, 0, PORT_DEFAULT_RATE},
+    {NULL, 0, PORT_DEFAULT_RATE}
 };
 
 /* FUNCTIONS *****************************************************************/
 
 BOOLEAN
 NTAPI
-InbvPortPollOnly(IN ULONG PortId)
+InbvPortPollOnly(
+    _In_ ULONG PortId)
 {
     UCHAR Dummy;
 
@@ -35,8 +37,9 @@ InbvPortPollOnly(IN ULONG PortId)
 
 BOOLEAN
 NTAPI
-InbvPortGetByte(IN  ULONG  PortId,
-                OUT PUCHAR Byte)
+InbvPortGetByte(
+    _In_ ULONG PortId,
+    _Out_ PUCHAR Byte)
 {
     /* Read a byte from the port */
     return CpGetByte(&Port[PortId], Byte, TRUE, FALSE) == CP_GET_SUCCESS;
@@ -44,8 +47,9 @@ InbvPortGetByte(IN  ULONG  PortId,
 
 VOID
 NTAPI
-InbvPortPutByte(IN ULONG PortId,
-                IN UCHAR Byte)
+InbvPortPutByte(
+    _In_ ULONG PortId,
+    _In_ UCHAR Byte)
 {
     /* Send the byte */
     CpPutByte(&Port[PortId], Byte);
@@ -53,8 +57,9 @@ InbvPortPutByte(IN ULONG PortId,
 
 VOID
 NTAPI
-InbvPortEnableFifo(IN ULONG   PortId,
-                   IN BOOLEAN Enable)
+InbvPortEnableFifo(
+    _In_ ULONG PortId,
+    _In_ BOOLEAN Enable)
 {
     /* Set FIFO as requested */
     CpEnableFifo(Port[PortId].Address, Enable);
@@ -62,7 +67,8 @@ InbvPortEnableFifo(IN ULONG   PortId,
 
 VOID
 NTAPI
-InbvPortTerminate(IN ULONG PortId)
+InbvPortTerminate(
+    _In_ ULONG PortId)
 {
     /* The port is now available */
     Port[PortId].Address = NULL;
@@ -70,18 +76,19 @@ InbvPortTerminate(IN ULONG PortId)
 
 BOOLEAN
 NTAPI
-InbvPortInitialize(IN  ULONG   BaudRate,
-                   IN  ULONG   PortNumber,
-                   IN  PUCHAR  PortAddress,
-                   OUT PULONG  PortId,
-                   IN  BOOLEAN IsMMIODevice)
+InbvPortInitialize(
+    _In_ ULONG BaudRate,
+    _In_ ULONG PortNumber,
+    _In_ PUCHAR PortAddress,
+    _Out_ PULONG PortId,
+    _In_ BOOLEAN IsMMIODevice)
 {
     /* Not yet supported */
     ASSERT(IsMMIODevice == FALSE);
 
-#if defined(SARCH_PC98)
     /* Set default baud rate */
-    if (BaudRate == 0) BaudRate = 9600;
+    if (BaudRate == 0)
+        BaudRate = DEFAULT_BAUD_RATE;
 
     /* Check if port or address given */
     if (PortNumber)
@@ -89,83 +96,47 @@ InbvPortInitialize(IN  ULONG   BaudRate,
         /* Pick correct address for port */
         if (!PortAddress)
         {
-            if (PortNumber == 1)
-            {
-                PortAddress = (PUCHAR)0x30;
-            }
-            else
-            {
-                PortAddress = (PUCHAR)0x238;
-                PortNumber = 2;
-            }
+            if (PortNumber < 1 || PortNumber > MAX_COM_PORTS)
+                PortNumber = MAX_COM_PORTS;
+            PortAddress = UlongToPtr(BaseArray[PortNumber]);
         }
     }
     else
     {
         /* Pick correct port for address */
-        PortAddress = (PUCHAR)0x30;
+#if defined(SARCH_PC98)
+        PortAddress = UlongToPtr(BaseArray[1]);
         if (CpDoesPortExist(PortAddress))
         {
             PortNumber = 1;
         }
         else
         {
-            PortAddress = (PUCHAR)0x238;
+            PortAddress = UlongToPtr(BaseArray[2]);
             if (!CpDoesPortExist(PortAddress))
                 return FALSE;
 
             PortNumber = 2;
         }
-    }
 #else
-    /* Set default baud rate */
-    if (BaudRate == 0) BaudRate = 19200;
-
-    /* Check if port or address given */
-    if (PortNumber)
-    {
-        /* Pick correct address for port */
-        if (!PortAddress)
-        {
-            switch (PortNumber)
-            {
-                case 1:
-                    PortAddress = (PUCHAR)0x3F8;
-                    break;
-
-                case 2:
-                    PortAddress = (PUCHAR)0x2F8;
-                    break;
-
-                case 3:
-                    PortAddress = (PUCHAR)0x3E8;
-                    break;
-
-                default:
-                    PortNumber = 4;
-                    PortAddress = (PUCHAR)0x2E8;
-            }
-        }
-    }
-    else
-    {
-        /* Pick correct port for address */
-        PortAddress = (PUCHAR)0x2F8;
+        PortAddress = UlongToPtr(BaseArray[2]);
         if (CpDoesPortExist(PortAddress))
         {
             PortNumber = 2;
         }
         else
         {
-            PortAddress = (PUCHAR)0x3F8;
-            if (!CpDoesPortExist(PortAddress)) return FALSE;
+            PortAddress = UlongToPtr(BaseArray[1]);
+            if (!CpDoesPortExist(PortAddress))
+                return FALSE;
             PortNumber = 1;
         }
-    }
 #endif
+    }
 
     /* Initialize the port unless it's already up, and then return it */
-    if (Port[PortNumber - 1].Address) return FALSE;
+    if (Port[PortNumber - 1].Address)
+        return FALSE;
 
     CpInitialize(&Port[PortNumber - 1], PortAddress, BaudRate);
     *PortId = PortNumber - 1;

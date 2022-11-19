@@ -10,6 +10,7 @@
 
 #include <freeldr.h>
 #include <cportlib/cportlib.h>
+#include <cportlib/uartinfo.h>
 #include "ntldropts.h"
 
 /* Note: Move these to some smbios.h header */
@@ -34,10 +35,10 @@ ULONG WinLdrTerminalDelay;
 
 CPPORT Port[4] =
 {
-    {NULL, 0, TRUE},
-    {NULL, 0, TRUE},
-    {NULL, 0, TRUE},
-    {NULL, 0, TRUE}
+    {NULL, 0, PORT_DEFAULT_RATE},
+    {NULL, 0, PORT_DEFAULT_RATE},
+    {NULL, 0, PORT_DEFAULT_RATE},
+    {NULL, 0, PORT_DEFAULT_RATE}
 };
 
 /* FUNCTIONS ******************************************************************/
@@ -68,9 +69,9 @@ WinLdrPortInitialize(IN ULONG BaudRate,
                      IN BOOLEAN TerminalConnected,
                      OUT PULONG PortId)
 {
-#if defined(SARCH_PC98)
     /* Set default baud rate */
-    if (BaudRate == 0) BaudRate = 9600;
+    if (BaudRate == 0)
+        BaudRate = DEFAULT_BAUD_RATE;
 
     /* Check if port or address given */
     if (PortNumber)
@@ -78,80 +79,43 @@ WinLdrPortInitialize(IN ULONG BaudRate,
         /* Pick correct address for port */
         if (!PortAddress)
         {
-            if (PortNumber == 1)
-            {
-                PortAddress = (PUCHAR)0x30;
-            }
-            else
-            {
-                PortAddress = (PUCHAR)0x238;
-                PortNumber = 2;
-            }
+            if (PortNumber < 1 || PortNumber > MAX_COM_PORTS)
+                PortNumber = MAX_COM_PORTS;
+            PortAddress = UlongToPtr(BaseArray[PortNumber]);
         }
     }
     else
     {
         /* Pick correct port for address */
-        PortAddress = (PUCHAR)0x30;
+#if defined(SARCH_PC98)
+        PortAddress = UlongToPtr(BaseArray[1]);
         if (CpDoesPortExist(PortAddress))
         {
             PortNumber = 1;
         }
         else
         {
-            PortAddress = (PUCHAR)0x238;
+            PortAddress = UlongToPtr(BaseArray[2]);
             if (!CpDoesPortExist(PortAddress))
                 return FALSE;
 
             PortNumber = 2;
         }
-    }
 #else
-    /* Set default baud rate */
-    if (BaudRate == 0) BaudRate = 19200;
-
-    /* Check if port or address given */
-    if (PortNumber)
-    {
-        /* Pick correct address for port */
-       if (!PortAddress)
-        {
-            switch (PortNumber)
-            {
-                case 1:
-                    PortAddress = (PUCHAR)0x3F8;
-                    break;
-
-                case 2:
-                    PortAddress = (PUCHAR)0x2F8;
-                    break;
-
-                case 3:
-                    PortAddress = (PUCHAR)0x3E8;
-                    break;
-
-                default:
-                    PortNumber = 4;
-                    PortAddress = (PUCHAR)0x2E8;
-            }
-        }
-    }
-    else
-    {
-        /* Pick correct port for address */
-        PortAddress = (PUCHAR)0x2F8;
+        PortAddress = UlongToPtr(BaseArray[2]);
         if (CpDoesPortExist(PortAddress))
         {
             PortNumber = 2;
         }
         else
         {
-            PortAddress = (PUCHAR)0x3F8;
-            if (!CpDoesPortExist(PortAddress)) return FALSE;
+            PortAddress = UlongToPtr(BaseArray[1]);
+            if (!CpDoesPortExist(PortAddress))
+                return FALSE;
             PortNumber = 1;
-         }
-    }
+        }
 #endif
+    }
 
     /* Not yet supported */
     ASSERT(LoaderRedirectionInformation.IsMMIODevice == FALSE);
@@ -214,16 +178,14 @@ WinLdrInitializeHeadlessPort(VOID)
     PortAddress = LoaderRedirectionInformation.PortAddress;
     BaudRate = LoaderRedirectionInformation.BaudRate;
 
-#if defined(SARCH_PC98)
     /* Pick a port address */
     if (PortNumber)
     {
         if (!PortAddress)
         {
-            if (PortNumber == 2)
-                LoaderRedirectionInformation.PortAddress = (PUCHAR)0x238;
-            else
-                LoaderRedirectionInformation.PortAddress = (PUCHAR)0x30;
+            if (PortNumber < 1 || PortNumber > MAX_COM_PORTS)
+                PortNumber = 1;
+            LoaderRedirectionInformation.PortAddress = UlongToPtr(BaseArray[PortNumber]);
         }
     }
     else
@@ -232,39 +194,6 @@ WinLdrInitializeHeadlessPort(VOID)
         WinLdrTerminalConnected = FALSE;
         return;
     }
-#else
-    /* Pick a port address */
-    if (PortNumber)
-    {
-        if (!PortAddress)
-        {
-            switch (PortNumber)
-            {
-                case 2:
-                    LoaderRedirectionInformation.PortAddress = (PUCHAR)0x2F8;
-                    break;
-
-                case 3:
-                    LoaderRedirectionInformation.PortAddress = (PUCHAR)0x3E8;
-                    break;
-
-                case 4:
-                    LoaderRedirectionInformation.PortAddress = (PUCHAR)0x2E8;
-                    break;
-
-                default:
-                    LoaderRedirectionInformation.PortAddress = (PUCHAR)0x3F8;
-                    break;
-            }
-        }
-    }
-    else
-    {
-        /* No number, so no EMS */
-        WinLdrTerminalConnected = FALSE;
-        return;
-    }
-#endif
 
     /* Call arch code to initialize the port */
     PortAddress = LoaderRedirectionInformation.PortAddress;
