@@ -170,9 +170,9 @@ DbgPrintEarly(const char *fmt, ...)
     {
         if (*String == '\n')
         {
-            KdPortPutByteEx(NULL, '\r');
+            KdPortPutByte('\r');
         }
-        KdPortPutByteEx(NULL, *String);
+        KdPortPutByte(*String);
         String++;
     }
 
