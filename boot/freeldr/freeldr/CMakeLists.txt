@@ -32,7 +32,6 @@ list(APPEND FREELDR_BOOTLIB_SOURCE
     lib/peloader.c
     lib/cache/blocklist.c
     lib/cache/cache.c
-    lib/comm/rs232.c
     ## add KD support
     lib/fs/btrfs.c
     lib/fs/ext2.c

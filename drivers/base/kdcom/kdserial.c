@@ -35,30 +35,30 @@ KdpSendBuffer(
  * \brief Receives data from the KD port and fills a buffer.
  * \param Buffer Pointer to a buffer that receives the data.
  * \param Size Size of data to receive in bytes.
- * \return KDP_PACKET_RECEIVED if successful.
- *         KDP_PACKET_TIMEOUT if the receive timed out.
+ * \return KdPacketReceived if successful.
+ *         KdPacketTimedOut if the receive timed out.
  */
-KDP_STATUS
+KDSTATUS
 NTAPI
 KdpReceiveBuffer(
     OUT PVOID Buffer,
     IN  ULONG Size)
 {
+    KDSTATUS Status;
     PUCHAR ByteBuffer = Buffer;
     UCHAR Byte;
-    KDP_STATUS Status;
 
     while (Size-- > 0)
     {
         /* Try to get a byte from the port */
         Status = KdpReceiveByte(&Byte);
-        if (Status != KDP_PACKET_RECEIVED)
+        if (Status != KdPacketReceived)
             return Status;
 
         *ByteBuffer++ = Byte;
     }
 
-    return KDP_PACKET_RECEIVED;
+    return KdPacketReceived;
 }
 
 
@@ -66,17 +66,17 @@ KdpReceiveBuffer(
  * \name KdpReceivePacketLeader
  * \brief Receives a packet leader from the KD port.
  * \param PacketLeader Pointer to an ULONG that receives the packet leader.
- * \return KDP_PACKET_RECEIVED if successful.
- *         KDP_PACKET_TIMEOUT if the receive timed out.
- *         KDP_PACKET_RESEND if a breakin byte was detected.
+ * \return KdPacketReceived if successful.
+ *         KdPacketTimedOut if the receive timed out.
+ *         KdPacketNeedsResend if a breakin byte was detected.
  */
-KDP_STATUS
+KDSTATUS
 NTAPI
 KdpReceivePacketLeader(
     OUT PULONG PacketLeader)
 {
+    KDSTATUS KdStatus;
     UCHAR Index = 0, Byte, Buffer[4];
-    KDP_STATUS KdStatus;
 
     /* Set first character to 0 */
     Buffer[0] = 0;
@@ -87,20 +87,20 @@ KdpReceivePacketLeader(
         KdStatus = KdpReceiveByte(&Byte);
 
         /* Check for timeout */
-        if (KdStatus == KDP_PACKET_TIMEOUT)
+        if (KdStatus == KdPacketTimedOut)
         {
             /* Check if we already got a breakin byte */
             if (Buffer[0] == BREAKIN_PACKET_BYTE)
             {
-                return KDP_PACKET_RESEND;
+                return KdPacketNeedsResend;
             }
 
             /* Report timeout */
-            return KDP_PACKET_TIMEOUT;
+            return KdPacketTimedOut;
         }
 
         /* Check if we received a byte */
-        if (KdStatus == KDP_PACKET_RECEIVED)
+        if (KdStatus == KdPacketReceived)
         {
             /* Check if this is a valid packet leader byte */
             if (Byte == PACKET_LEADER_BYTE ||
@@ -144,7 +144,7 @@ KdpReceivePacketLeader(
     /* Return the received packet leader */
     *PacketLeader = *(PULONG)Buffer;
 
-    return KDP_PACKET_RECEIVED;
+    return KdPacketReceived;
 }
 
 /* EOF */

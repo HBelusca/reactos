@@ -2,8 +2,7 @@
  * COPYRIGHT:       See COPYING in the top level directory
  * PROJECT:         ReactOS kernel
  * FILE:            ntoskrnl/kd/i386/kdbg.c
- * PURPOSE:         Serial i/o functions for the kernel debugger.
- *                  Serial Port Kernel Debugging Transport Library
+ * PURPOSE:         NT 5.0-style Serial Port Kernel Debugging Transport Library
  * PROGRAMMER:      Alex Ionescu
  *                  Hervé Poussineau
  */
@@ -35,13 +34,86 @@
 
 /* STATIC VARIABLES ***********************************************************/
 
-// static CPPORT DefaultPort = {0, 0, 0};
+ULONG  ComPortNumber;
+CPPORT KdComPort;
+ULONG  KdComPortIrq = 0; // Not used at the moment.
+#ifdef KDDEBUG
+static CPPORT KdDebugComPort;
+#endif
+// PUCHAR KdComPortInUse = NULL; // In the HAL
 
 /* The COM port must only be initialized once! */
 // static BOOLEAN PortInitialized = FALSE;
 
+/* DEBUGGING ******************************************************************/
+
+#ifdef KDDEBUG
+ULONG KdpDbgPrint(const char *Format, ...)
+{
+    va_list ap;
+    int Length;
+    char* ptr;
+    CHAR Buffer[512];
+
+    va_start(ap, Format);
+    Length = _vsnprintf(Buffer, sizeof(Buffer), Format, ap);
+    va_end(ap);
+
+    /* Check if we went past the buffer */
+    if (Length == -1)
+    {
+        /* Terminate it if we went over-board */
+        Buffer[sizeof(Buffer) - 1] = '\n';
+
+        /* Put maximum */
+        Length = sizeof(Buffer);
+    }
+
+    ptr = Buffer;
+    while (Length--)
+    {
+        if (*ptr == '\n')
+            CpPutByte(&KdDebugComPort, '\r');
+
+        CpPutByte(&KdDebugComPort, *ptr++);
+    }
+
+    return 0;
+}
+#endif
+
 /* REACTOS FUNCTIONS **********************************************************/
 
+BOOLEAN
+NTAPI
+KdPortInitialize(
+    _In_ PKD_PORT_INFORMATION PortInformation,
+    _In_opt_ PLOADER_PARAMETER_BLOCK LoaderBlock,
+    _In_ BOOLEAN Initialize)
+{
+    NTSTATUS Status;
+    ULONG ComPort = PortInformation->ComPort;
+
+    KDDBGPRINT("KdPortInitialize, Port = COM%ld\n", ComPort);
+
+    // TODO: Do some minor things.
+
+    if (!Initialize)
+        return TRUE;
+
+    /* Initialize the serial port proper */
+    Status = CpInitialize(&KdComPort,
+                          UlongToPtr(BaseArray[ComPort]),
+                          PortInformation->BaudRate);
+    if (!NT_SUCCESS(Status))
+        return FALSE;
+
+    ComPortNumber = ComPort;
+    KdComPortInUse = KdComPort.Address;
+    return TRUE;
+}
+
+// ReactOS-specific
 BOOLEAN
 NTAPI
 KdPortInitializeEx(
@@ -57,7 +129,7 @@ KdPortInitializeEx(
 
     if (!PortInitialized)
     {
-        DefaultPort.BaudRate = PortInformation->BaudRate;
+        KdComPort.BaudRate = PortInformation->BaudRate;
 
         if (ComPortNumber == 0)
         {
@@ -71,7 +143,7 @@ KdPortInitializeEx(
             {
                 if (CpDoesPortExist(UlongToPtr(BaseArray[ComPortNumber])))
                 {
-                    PortInformation->Address = DefaultPort.Address = BaseArray[ComPortNumber];
+                    PortInformation->Address = KdComPort.Address = BaseArray[ComPortNumber];
                     break;
                 }
             }
@@ -113,30 +185,61 @@ KdPortInitializeEx(
         HalDisplayString(buffer);
 #endif /* NDEBUG */
 
-#if 0
         /* Set global info */
-        KdComPortInUse = DefaultPort.Address;
-#endif
+        KdComPortInUse = KdComPort.Address;
         return TRUE;
     }
 }
 
+
+ULONG
+NTAPI
+KdPortGetByte(
+    _Out_ PUCHAR Byte)
+{
+    return CpGetByte(&KdComPort, Byte, TRUE, FALSE);
+}
+
+#if 0
+// ReactOS-specific
 BOOLEAN
 NTAPI
 KdPortGetByteEx(
-    IN PCPPORT PortInformation,
-    OUT PUCHAR ByteReceived)
+    IN PCPPORT Port,
+    OUT PUCHAR Byte)
 {
-    return (CpGetByte(PortInformation, ByteReceived, FALSE, FALSE) == CP_GET_SUCCESS);
+    return (CpGetByte(Port, Byte, FALSE, FALSE) == CP_GET_SUCCESS);
+}
+#endif
+
+ULONG
+NTAPI
+KdPortPollByte(
+    _Out_ PUCHAR Byte)
+{
+    return CpGetByte(&KdComPort, Byte, FALSE, FALSE);
 }
 
 VOID
 NTAPI
-KdPortPutByteEx(
-    IN PCPPORT PortInformation,
-    IN UCHAR ByteToSend)
+KdPortPutByte(
+    _In_ UCHAR Byte)
 {
-    CpPutByte(PortInformation, ByteToSend);
+    CpPutByte(&KdComPort, Byte);
+}
+
+VOID
+NTAPI
+KdPortRestore(VOID)
+{
+    NOTHING;
+}
+
+VOID
+NTAPI
+KdPortSave(VOID)
+{
+    NOTHING;
 }
 
 /* EOF */

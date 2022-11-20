@@ -38,6 +38,8 @@
 #define DPRINT_HEAP         15  // messages in a bottle
 #define DBG_CHANNELS_COUNT  16
 
+BOOLEAN Rs232PortInUse(PUCHAR Base);
+
 #if DBG && !defined(_M_ARM)
 
     VOID    DebugInit(IN ULONG_PTR FrLdrSectionId);

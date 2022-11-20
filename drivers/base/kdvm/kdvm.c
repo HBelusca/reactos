@@ -444,7 +444,7 @@ KdSendPacket(
 }
 
 
-KDP_STATUS
+KDSTATUS
 NTAPI
 KdReceivePacket(
     _In_ ULONG PacketType,
@@ -491,14 +491,14 @@ KdReceivePacket(
     if (!KdVmAddCommandToBuffer(KDVM_CMD_ReceivePacket, &RecvPktRequest, sizeof(RecvPktRequest)))
     {
         KDDBGPRINT("KdReceivePacket: Failed to add SendPacket command\n");
-        return KDP_PACKET_RESEND;
+        return KdPacketNeedsResend;
     }
 
     RecvPktResult = KdVmSendReceive(&ReceivedSize);
     if (ReceivedSize < sizeof(*RecvPktResult))
     {
         KDDBGPRINT("KdReceivePacket: Invalid size for RecvPktResult: %lx\n", ReceivedSize);
-        return KDP_PACKET_RESEND;
+        return KdPacketNeedsResend;
     }
 
     ExpectedSize = sizeof(*RecvPktResult) +
@@ -508,7 +508,7 @@ KdReceivePacket(
     {
         KDDBGPRINT("KdReceivePacket: Invalid size for RecvPktResult: %lu, expected %lu\n",
                    ReceivedSize, ExpectedSize);
-        return KDP_PACKET_RESEND;
+        return KdPacketNeedsResend;
     }
 
     if (KdContext != NULL)
@@ -558,4 +558,3 @@ KdReceivePacket(
     KDDBGPRINT("KdReceivePacket: returning status %u\n", RecvPktResult->KdStatus);
     return RecvPktResult->KdStatus;
 }
-

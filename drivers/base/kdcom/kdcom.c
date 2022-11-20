@@ -32,51 +32,6 @@
 #include <cportlib/uartinfo.h>
 
 
-/* GLOBALS ********************************************************************/
-
-CPPORT KdComPort;
-ULONG  KdComPortIrq = 0; // Not used at the moment.
-#ifdef KDDEBUG
-CPPORT KdDebugComPort;
-#endif
-
-/* DEBUGGING ******************************************************************/
-
-#ifdef KDDEBUG
-ULONG KdpDbgPrint(const char *Format, ...)
-{
-    va_list ap;
-    int Length;
-    char* ptr;
-    CHAR Buffer[512];
-
-    va_start(ap, Format);
-    Length = _vsnprintf(Buffer, sizeof(Buffer), Format, ap);
-    va_end(ap);
-
-    /* Check if we went past the buffer */
-    if (Length == -1)
-    {
-        /* Terminate it if we went over-board */
-        Buffer[sizeof(Buffer) - 1] = '\n';
-
-        /* Put maximum */
-        Length = sizeof(Buffer);
-    }
-
-    ptr = Buffer;
-    while (Length--)
-    {
-        if (*ptr == '\n')
-            CpPutByte(&KdDebugComPort, '\r');
-
-        CpPutByte(&KdDebugComPort, *ptr++);
-    }
-
-    return 0;
-}
-#endif
-
 /* FUNCTIONS ******************************************************************/
 
 NTSTATUS
@@ -109,29 +64,6 @@ KdRestore(IN BOOLEAN SleepTransition)
     return STATUS_SUCCESS;
 }
 
-NTSTATUS
-NTAPI
-KdpPortInitialize(IN ULONG ComPortNumber,
-                  IN ULONG ComPortBaudRate)
-{
-    NTSTATUS Status;
-
-    KDDBGPRINT("KdpPortInitialize, Port = COM%ld\n", ComPortNumber);
-
-    Status = CpInitialize(&KdComPort,
-                          UlongToPtr(BaseArray[ComPortNumber]),
-                          ComPortBaudRate);
-    if (!NT_SUCCESS(Status))
-    {
-        return STATUS_INVALID_PARAMETER;
-    }
-    else
-    {
-        KdComPortInUse = KdComPort.Address;
-        return STATUS_SUCCESS;
-    }
-}
-
 /******************************************************************************
  * \name KdDebuggerInitialize0
  * \brief Phase 0 initialization.
@@ -142,9 +74,7 @@ NTSTATUS
 NTAPI
 KdDebuggerInitialize0(IN PLOADER_PARAMETER_BLOCK LoaderBlock OPTIONAL)
 {
-    ULONG ComPortNumber   = DEFAULT_DEBUG_PORT;
-    ULONG ComPortBaudRate = DEFAULT_DEBUG_BAUD_RATE;
-
+    KD_PORT_INFORMATION PortInfo = {DEFAULT_DEBUG_PORT, DEFAULT_DEBUG_BAUD_RATE};
     PCHAR CommandLine, PortString, BaudString, IrqString;
     ULONG Value;
 
@@ -187,8 +117,8 @@ KdDebuggerInitialize0(IN PLOADER_PARAMETER_BLOCK LoaderBlock OPTIONAL)
             }
 
             /* Set the port to use */
-            ComPortNumber = Value;
-       }
+            PortInfo.ComPort = Value;
+        }
 
         /* Check if we got a baud rate */
         if (BaudString)
@@ -204,7 +134,7 @@ KdDebuggerInitialize0(IN PLOADER_PARAMETER_BLOCK LoaderBlock OPTIONAL)
             {
                 /* Read and set it */
                 Value = atol(BaudString + 1);
-                if (Value) ComPortBaudRate = Value;
+                if (Value) PortInfo.BaudRate = Value;
             }
         }
 
@@ -243,7 +173,7 @@ KdDebuggerInitialize0(IN PLOADER_PARAMETER_BLOCK LoaderBlock OPTIONAL)
     for (ComPort = MAX_COM_PORTS; ComPort > 0; ComPort--)
     {
         /* Check if the port exist; skip the KD port */
-        if ((ComPort != ComPortNumber) && CpDoesPortExist(UlongToPtr(BaseArray[ComPort])))
+        if ((ComPort != PortInfo.ComPort) && CpDoesPortExist(UlongToPtr(BaseArray[ComPort])))
             break;
     }
     if (ComPort != 0)
@@ -254,7 +184,8 @@ KdDebuggerInitialize0(IN PLOADER_PARAMETER_BLOCK LoaderBlock OPTIONAL)
     KDDBGPRINT("KdDebuggerInitialize0\n");
 
     /* Initialize the port */
-    return KdpPortInitialize(ComPortNumber, ComPortBaudRate);
+    return (KdPortInitialize(&PortInfo, LoaderBlock, TRUE)
+                ? STATUS_SUCCESS : STATUS_UNSUCCESSFUL);
 }
 
 /******************************************************************************
@@ -276,66 +207,66 @@ NTAPI
 KdpSendByte(IN UCHAR Byte)
 {
     /* Send the byte */
-    CpPutByte(&KdComPort, Byte);
+    KdPortPutByte(Byte);
 }
 
-KDP_STATUS
+KDSTATUS
 NTAPI
 KdpPollByte(OUT PUCHAR OutByte)
 {
-    USHORT Status;
+    ULONG CpStatus;
 
     /* Poll the byte */
-    Status = CpGetByte(&KdComPort, OutByte, FALSE, FALSE);
-    switch (Status)
+    CpStatus = KdPortPollByte(OutByte);
+    switch (CpStatus)
     {
         case CP_GET_SUCCESS:
-            return KDP_PACKET_RECEIVED;
+            return KdPacketReceived;
 
         case CP_GET_NODATA:
-            return KDP_PACKET_TIMEOUT;
+            return KdPacketTimedOut;
 
         case CP_GET_ERROR:
         default:
-            return KDP_PACKET_RESEND;
+            return KdPacketNeedsResend;
     }
 }
 
-KDP_STATUS
+KDSTATUS
 NTAPI
 KdpReceiveByte(OUT PUCHAR OutByte)
 {
-    USHORT Status;
+    ULONG CpStatus;
 
     /* Get the byte */
-    Status = CpGetByte(&KdComPort, OutByte, TRUE, FALSE);
-    switch (Status)
+    CpStatus = KdPortGetByte(OutByte);
+    switch (CpStatus)
     {
         case CP_GET_SUCCESS:
-            return KDP_PACKET_RECEIVED;
+            return KdPacketReceived;
 
         case CP_GET_NODATA:
-            return KDP_PACKET_TIMEOUT;
+            return KdPacketTimedOut;
 
         case CP_GET_ERROR:
         default:
-            return KDP_PACKET_RESEND;
+            return KdPacketNeedsResend;
     }
 }
 
-KDP_STATUS
+KDSTATUS
 NTAPI
 KdpPollBreakIn(VOID)
 {
-    KDP_STATUS KdStatus;
+    KDSTATUS KdStatus;
     UCHAR Byte;
 
     KdStatus = KdpPollByte(&Byte);
-    if ((KdStatus == KDP_PACKET_RECEIVED) && (Byte == BREAKIN_PACKET_BYTE))
+    if ((KdStatus == KdPacketReceived) && (Byte == BREAKIN_PACKET_BYTE))
     {
-        return KDP_PACKET_RECEIVED;
+        return KdPacketReceived;
     }
-    return KDP_PACKET_TIMEOUT;
+    return KdPacketTimedOut;
 }
 
 /* EOF */

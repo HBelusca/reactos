@@ -12,8 +12,6 @@
 /* INCLUDES ****************************************************************/
 
 #include <ntoskrnl.h>
-#define NDEBUG
-#include <debug.h>
 
 CHAR
 KdbpTryGetCharSerial(ULONG Retry)
@@ -21,9 +19,9 @@ KdbpTryGetCharSerial(ULONG Retry)
     CHAR Result = -1;
 
     if (Retry == 0)
-        while (!KdPortGetByteEx(&SerialPortInfo, (PUCHAR)&Result));
+        while (!KdPortGetByte((PUCHAR)&Result)); // KdPortPollByte
     else
-        while (!KdPortGetByteEx(&SerialPortInfo, (PUCHAR)&Result) && Retry-- > 0);
+        while (!KdPortGetByte((PUCHAR)&Result) && Retry-- > 0); // KdPortPollByte
 
     return Result;
 }

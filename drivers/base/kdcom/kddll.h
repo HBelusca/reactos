@@ -22,26 +22,19 @@ extern ULONG KdpDbgPrint(const char* Format, ...);
 #define KDDBGPRINT KdpDbgPrint
 #endif
 
-typedef enum
-{
-    KDP_PACKET_RECEIVED = 0,
-    KDP_PACKET_TIMEOUT  = 1,
-    KDP_PACKET_RESEND   = 2
-} KDP_STATUS;
-
 VOID
 NTAPI
 KdpSendBuffer(
     IN PVOID Buffer,
     IN ULONG Size);
 
-KDP_STATUS
+KDSTATUS
 NTAPI
 KdpReceiveBuffer(
     OUT PVOID Buffer,
     IN  ULONG Size);
 
-KDP_STATUS
+KDSTATUS
 NTAPI
 KdpReceivePacketLeader(
     OUT PULONG PacketLeader);
@@ -50,15 +43,15 @@ VOID
 NTAPI
 KdpSendByte(IN UCHAR Byte);
 
-KDP_STATUS
+KDSTATUS
 NTAPI
 KdpPollByte(OUT PUCHAR OutByte);
 
-KDP_STATUS
+KDSTATUS
 NTAPI
 KdpReceiveByte(OUT PUCHAR OutByte);
 
-KDP_STATUS
+KDSTATUS
 NTAPI
 KdpPollBreakIn(VOID);
 

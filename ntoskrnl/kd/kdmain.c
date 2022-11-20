@@ -36,7 +36,7 @@ KdpGetDebugMode(PCHAR Currentp2)
     /* Check for Serial Debugging */
     else if (!_strnicmp(p2, "COM", 3))
     {
-        /* Gheck for a valid Serial Port */
+        /* Check for a valid Serial Port */
         p2 += 3;
         if (*p2 != ':')
         {
@@ -47,7 +47,7 @@ KdpGetDebugMode(PCHAR Currentp2)
                 KdpDebugMode.Serial = TRUE;
 
                 /* Set the port to use */
-                SerialPortNumber = Value;
+                ComPortInfo.ComPort = Value;
             }
         }
         else
@@ -56,8 +56,8 @@ KdpGetDebugMode(PCHAR Currentp2)
             if (Value)
             {
                 KdpDebugMode.Serial = TRUE;
-                SerialPortInfo.Address = UlongToPtr(Value);
-                SerialPortNumber = 0;
+                KdComPort.Address = UlongToPtr(Value);
+                ComPortInfo.ComPort = 0;
             }
         }
     }
@@ -120,6 +120,24 @@ KdDebuggerInitialize0(
         /* Get the debug mode and wrapper */
         Port = KdpGetDebugMode(Port);
         Port = strstr(Port, "DEBUGPORT");
+    }
+
+    /* Check if we got a baud rate */
+    if (BaudString)
+    {
+        /* Move past the actual string, to reach the rate */
+        BaudString += sizeof("BAUDRATE") - 1;
+
+        /* Now get past any spaces */
+        while (*BaudString == ' ') BaudString++;
+
+        /* And make sure we have a rate */
+        if (*BaudString)
+        {
+            /* Read and set it */
+            Value = atol(BaudString + 1);
+            if (Value) ComPortInfo.BaudRate = Value;
+        }
     }
 
     /* Use serial port then */

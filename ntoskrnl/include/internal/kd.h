@@ -1,33 +1,10 @@
 #pragma once
 
-//
-// Kernel Debugger Port Definition
-//
-struct _KD_DISPATCH_TABLE;
-
-BOOLEAN
-NTAPI
-KdPortInitializeEx(
-    PCPPORT PortInformation,
-    ULONG ComPortNumber
-);
-
-BOOLEAN
-NTAPI
-KdPortGetByteEx(
-    PCPPORT PortInformation,
-    PUCHAR ByteReceived);
-
-VOID
-NTAPI
-KdPortPutByteEx(
-    PCPPORT PortInformation,
-    UCHAR ByteToSend
-);
-
 #ifdef _NTOSKRNL_
 
 /* KD ROUTINES ***************************************************************/
+
+struct _KD_DISPATCH_TABLE;
 
 typedef enum _KD_CONTINUE_TYPE
 {
@@ -165,10 +142,7 @@ typedef struct _KD_DISPATCH_TABLE
 
 /* The current Debugging Mode */
 extern KDP_DEBUG_MODE KdpDebugMode;
-
-/* Port Information for the Serial Native Mode */
-extern ULONG  SerialPortNumber;
-extern CPPORT SerialPortInfo;
+extern KD_PORT_INFORMATION ComPortInfo;
 
 /* Init Functions for Native Providers */
 extern PKDP_INIT_ROUTINE InitRoutines[KdMax];

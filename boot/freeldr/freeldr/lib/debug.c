@@ -35,12 +35,12 @@
 static UCHAR DbgChannels[DBG_CHANNELS_COUNT];
 
 #define SCREEN  1
-#define RS232   2
+#define SERIAL  2
 #define BOCHS   4
 
 #define BOCHS_OUTPUT_PORT   0xE9
 
-ULONG DebugPort = RS232;
+static ULONG DebugPort = SERIAL;
 
 /* Serial debug connection */
 #if defined(SARCH_PC98)
@@ -57,11 +57,81 @@ ULONG DebugPort = RS232;
 #define DEFAULT_BAUD_RATE       19200
 #endif
 
-ULONG BaudRate = DEFAULT_DEBUG_BAUD_RATE;
-ULONG ComPort  = 0; // The COM port initializer chooses the first available port starting from COM4 down to COM1.
-ULONG PortIrq  = 0; // Not used at the moment.
+#include <cportlib/cportlib.h>
+#include <cportlib/uartinfo.h>
 
-BOOLEAN DebugStartOfLine = TRUE;
+// The COM port initializer chooses the first available port starting from COM4 down to COM1.
+static KD_PORT_INFORMATION PortInfo = {/*DEFAULT_DEBUG_PORT*/ 0, DEFAULT_DEBUG_BAUD_RATE};
+
+static BOOLEAN DebugStartOfLine = TRUE;
+
+// FIXME: Change this with KdPortInitialize
+BOOLEAN Rs232PortInitialize(IN ULONG ComPort,
+                            IN ULONG BaudRate)
+{
+    NTSTATUS Status;
+    PUCHAR Address;
+
+    /*
+     * Check whether it's the first time we initialize a COM port.
+     * If not, check whether the specified one was already initialized.
+     */
+    if ((ComPortNumber != 0) && (ComPortNumber == ComPort))
+        return TRUE;
+
+    if (BaudRate == 0)
+        BaudRate = DEFAULT_BAUD_RATE;
+
+    if (ComPort == 0)
+    {
+        /*
+         * Start enumerating COM ports from the last one to the first one,
+         * and break when we find a valid port.
+         * If we reach the first element of the list, the invalid COM port,
+         * then it means that no valid port was found.
+         */
+        for (ComPort = MAX_COM_PORTS; ComPort > 0; ComPort--)
+        {
+            if (CpDoesPortExist(UlongToPtr(BaseArray[ComPort])))
+            {
+                Address = UlongToPtr(BaseArray[ComPort]);
+                break;
+            }
+        }
+        if (ComPort == 0)
+            return FALSE;
+    }
+    else if (ComPort <= MAX_COM_PORTS)
+    {
+        if (CpDoesPortExist(UlongToPtr(BaseArray[ComPort])))
+            Address = UlongToPtr(BaseArray[ComPort]);
+        else
+            return FALSE;
+    }
+    else
+    {
+        return FALSE;
+    }
+
+    Status = CpInitialize(&KdComPort, Address, BaudRate);
+    if (!NT_SUCCESS(Status)) return FALSE;
+
+    ComPortNumber = ComPort;
+
+    return TRUE;
+}
+
+#endif /* DBG */
+
+BOOLEAN Rs232PortInUse(PUCHAR Base)
+{
+#if DBG
+    // return (KdComPortInUse == Base);
+    return ((ComPortNumber != 0) && (KdComPort.Address == Base));
+#else
+    return FALSE;
+#endif
+}
 
 VOID DebugInit(IN ULONG_PTR FrLdrSectionId)
 {
@@ -150,11 +220,11 @@ VOID DebugInit(IN ULONG_PTR FrLdrSectionId)
         else if (strncmp(PortString, "COM", 3) == 0)
         {
             PortString += 3;
-            DebugPort |= RS232;
+            DebugPort |= SERIAL;
 
             /* Set the port to use */
             Value = atol(PortString);
-            if (Value) ComPort = Value;
+            if (Value) PortInfo.ComPort = Value;
         }
 
         PortString = strstr(PortString, "DEBUGPORT");
@@ -174,7 +244,7 @@ VOID DebugInit(IN ULONG_PTR FrLdrSectionId)
         {
             /* Read and set it */
             Value = atol(BaudString + 1);
-            if (Value) BaudRate = Value;
+            if (Value) PortInfo.BaudRate = Value;
         }
     }
 
@@ -192,16 +262,16 @@ VOID DebugInit(IN ULONG_PTR FrLdrSectionId)
         {
             /* Read and set it */
             Value = atol(IrqString + 1);
-            if (Value) PortIrq = Value;
+            if (Value) KdComPortIrq = Value;
         }
     }
 
 Done:
     /* Try to initialize the port; if it fails, remove the corresponding flag */
-    if (DebugPort & RS232)
+    if (DebugPort & SERIAL)
     {
-        if (!Rs232PortInitialize(ComPort, BaudRate))
-            DebugPort &= ~RS232;
+        if (!Rs232PortInitialize(PortInfo.ComPort, PortInfo.BaudRate))
+            DebugPort &= ~SERIAL;
     }
 }
 
@@ -210,12 +280,12 @@ VOID DebugPrintChar(UCHAR Character)
     if (Character == '\n')
         DebugStartOfLine = TRUE;
 
-    if (DebugPort & RS232)
+    if (DebugPort & SERIAL)
     {
         if (Character == '\n')
-            Rs232PortPutByte('\r');
+            KdPortPutByte('\r');
 
-        Rs232PortPutByte(Character);
+        KdPortPutByte(Character);
     }
     if (DebugPort & BOCHS)
     {
