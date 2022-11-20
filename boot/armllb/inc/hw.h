@@ -68,12 +68,6 @@ LlbHwGetSerialUart(
     VOID
 );
 
-VOID
-NTAPI
-LlbHwUartSendChar(
-    IN CHAR Char
-);
-
 BOOLEAN
 NTAPI
 LlbHwUartTxReady(

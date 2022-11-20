@@ -22,14 +22,12 @@
 
 #include <intrin.h>
 #include <ioaccess.h>
-#include <ntstatus.h>
+//#include <ntstatus.h>
 #include <cportlib/cportlib.h>
 #include <drivers/serial/ns16550.h>
+#include "hwinfo.h"
 
 /* GLOBALS ********************************************************************/
-
-/* Wait timeout value */
-#define TIMEOUT_COUNT   (1024 * 200)
 
 UCHAR RingIndicator;
 
@@ -153,7 +151,7 @@ Uart16550EnableFifo(
                             : SERIAL_FCR_DISABLE);
 }
 
-VOID
+BOOLEAN
 NTAPI
 Uart16550SetBaud(
     _Inout_ PCPPORT Port,
@@ -175,26 +173,33 @@ Uart16550SetBaud(
 
     /* Save baud rate in port */
     Port->BaudRate = BaudRate;
+    return TRUE;
 }
 
-NTSTATUS
+BOOLEAN
 NTAPI
-Uart16550Initialize(
+Uart16550InitializePort(
+    _In_opt_ PCSTR LoadOptions,
     _Inout_ PCPPORT Port,
-    _In_ PUCHAR Address,
-    _In_ ULONG BaudRate)
+    _In_ BOOLEAN MemoryMapped,
+    _In_ UCHAR AccessSize,
+    _In_ UCHAR BitWidth)
 {
+    PUCHAR Address;
+
+    UNREFERENCED_PARAMETER(LoadOptions);
+
     /* Validity checks */
-    if (Port == NULL || Address == NULL || BaudRate == 0)
-        return STATUS_INVALID_PARAMETER;
+    if (Port == NULL || Port->Address == NULL || Port->BaudRate == 0)
+        return FALSE;
+
+    Address = Port->Address;
 
     if (!Uart16550DoesPortExist(Address))
         return STATUS_NOT_FOUND;
 
     /* Initialize port data */
-    Port->Address  = Address;
-    Port->BaudRate = 0;
-    Port->Flags    = 0;
+    Port->Flags = 0;
 
     /* Disable the interrupts */
     WRITE_PORT_UCHAR(Address + LINE_CONTROL_REGISTER, 0);
@@ -205,7 +210,7 @@ Uart16550Initialize(
                      SERIAL_MCR_DTR | SERIAL_MCR_RTS | SERIAL_MCR_OUT2);
 
     /* Set the baud rate */
-    Uart16550SetBaud(Port, BaudRate);
+    Uart16550SetBaud(Port, Port->BaudRate);
 
     /* Set 8 data bits, 1 stop bit, no parity, no break */
     WRITE_PORT_UCHAR(Port->Address + LINE_CONTROL_REGISTER,
@@ -213,13 +218,43 @@ Uart16550Initialize(
 
     /* Turn on FIFO */
     // TODO: Check whether FIFO exists and turn it on in that case.
+    //CpEnableFifo(Address, TRUE); // for 16550
     Uart16550EnableFifo(Address, TRUE); // for 16550
 
     /* Read junk out of the RBR */
     (VOID)READ_PORT_UCHAR(Address + RECEIVE_BUFFER_REGISTER);
 
-    return STATUS_SUCCESS;
+    return TRUE;
 }
+
+#if defined(_M_IX86) || defined(_M_AMD64)
+BOOLEAN
+NTAPI
+Legacy16550InitializePort(
+    _In_opt_ PCSTR LoadOptions,
+    _Inout_ PCPPORT Port,
+    _In_ BOOLEAN MemoryMapped,
+    _In_ UCHAR AccessSize,
+    _In_ UCHAR BitWidth)
+{
+    ULONG ComPortNumber;
+
+    /* Validity checks */
+    if (Port == NULL)
+        return FALSE;
+    if (MemoryMapped != FALSE || /* AccessSize || */ BitWidth != 8)
+        return FALSE;
+
+    ComPortNumber = PtrToUlong(Port->Address);
+    if (ComPortNumber <= 0 || ComPortNumber >= sizeof(BaseArray) / sizeof(BaseArray[0]))
+        return FALSE;
+
+    Port->Address = UlongToPtr(BaseArray[ComPortNumber]);
+    ;
+
+    return Uart16550InitializePort(LoadOptions, Port, FALSE, AccSize, 8);
+}
+#endif
 
 static UCHAR
 NTAPI
@@ -245,64 +280,57 @@ Cp16550ReadLsr(
     return Lsr;
 }
 
-USHORT
+UART_STATUS
 NTAPI
 Uart16550GetByte(
     _Inout_ PCPPORT Port,
-    _Out_ PUCHAR Byte,
-    _In_ BOOLEAN Wait,
-    _In_ BOOLEAN Poll)
+    _Out_ PUCHAR Byte) //, IN BOOLEAN Poll
 {
     UCHAR Lsr;
-    ULONG LimitCount = Wait ? TIMEOUT_COUNT : 1;
 
     /* Handle early read-before-init */
     if (!Port->Address)
-        return CP_GET_NODATA;
+        return UartNoData;
 
-    /* If "wait" mode enabled, spin many times, otherwise attempt just once */
-    while (LimitCount--)
+    /* Read LSR for data ready */
+    Lsr = Cp16550ReadLsr(Port, SERIAL_LSR_DR);
+    if ((Lsr & SERIAL_LSR_DR) == SERIAL_LSR_DR)
     {
-        /* Read LSR for data ready */
-        Lsr = Cp16550ReadLsr(Port, SERIAL_LSR_DR);
-        if ((Lsr & SERIAL_LSR_DR) == SERIAL_LSR_DR)
+        /* If an error happened, clear the byte and fail */
+        if (Lsr & (SERIAL_LSR_FE | SERIAL_LSR_PE | SERIAL_LSR_OE))
         {
-            /* If an error happened, clear the byte and fail */
-            if (Lsr & (SERIAL_LSR_FE | SERIAL_LSR_PE | SERIAL_LSR_OE))
-            {
-                *Byte = 0;
-                return CP_GET_ERROR;
-            }
-
-            /* If only polling was requested by caller, return now */
-            if (Poll)
-                return CP_GET_SUCCESS;
-
-            /* Otherwise read the byte and return it */
-            *Byte = READ_PORT_UCHAR(Port->Address + RECEIVE_BUFFER_REGISTER);
-
-            /* Handle CD if port is in modem control mode */
-            if (Port->Flags & CPPORT_FLAG_MODEM_CONTROL)
-            {
-                /* Not implemented yet */
-                // DPRINT1("CP: CPPORT_FLAG_MODEM_CONTROL unexpected\n");
-            }
-
-            /* Byte was read */
-            return CP_GET_SUCCESS;
+            *Byte = 0;
+            return UartError;
         }
+
+        // /* If only polling was requested by caller, return now */
+        // if (Poll) return UartSuccess;
+
+        /* Otherwise read the byte and return it */
+        *Byte = READ_PORT_UCHAR(Port->Address + RECEIVE_BUFFER_REGISTER);
+
+        /* Handle CD if port is in modem control mode */
+        if (Port->Flags & CPPORT_FLAG_MODEM_CONTROL)
+        {
+            /* Not implemented yet */
+            // DPRINT1("CP: CPPORT_FLAG_MODEM_CONTROL unexpected\n");
+        }
+
+        /* Byte was read */
+        return UartSuccess;
     }
 
     /* Reset LSR, no data was found */
     Cp16550ReadLsr(Port, 0);
-    return CP_GET_NODATA;
+    return UartNoData;
 }
 
-VOID
+UART_STATUS
 NTAPI
 Uart16550PutByte(
     _Inout_ PCPPORT Port,
-    _In_ UCHAR Byte)
+    _In_ UCHAR Byte,
+    _In_ BOOLEAN BusyWait)
 {
     /* Check if port is in modem control to handle CD */
     // while (Port->Flags & CPPORT_FLAG_MODEM_CONTROL)  // Commented for the moment.
@@ -313,11 +341,70 @@ Uart16550PutByte(
     }
 
     /* Wait for LSR to say we can go ahead */
-    while (!(Cp16550ReadLsr(Port, SERIAL_LSR_THRE) & SERIAL_LSR_THRE))
-        NOTHING;
+    while ((Cp16550ReadLsr(Port, SERIAL_LSR_THRE) & SERIAL_LSR_THRE) == 0x00)
+    {
+        if (!BusyWait)
+            return UartNotReady;
+    }
 
     /* Send the byte */
     WRITE_PORT_UCHAR(Port->Address + TRANSMIT_HOLDING_REGISTER, Byte);
+    return UartSuccess;
 }
+
+BOOLEAN
+NTAPI
+Uart16550RxReady(
+    _Inout_ PCPPORT Port)
+{
+    /* Read LSR for data ready */
+    Lsr = Cp16550ReadLsr(Port, SERIAL_LSR_DR);
+    if ((Lsr & SERIAL_LSR_DR) == SERIAL_LSR_DR)
+    {
+        /* If an error happened, fail */
+        if (Lsr & (SERIAL_LSR_FE | SERIAL_LSR_PE | SERIAL_LSR_OE))
+            return FALSE; // UartError;
+
+        return TRUE; // UartSuccess;
+    }
+
+    return FALSE; // UartNoData;
+}
+
+
+ENABLE_FIFO xxx = Uart16550EnableFifo;
+DOES_PORT_EXIST xxx = Uart16550DoesPortExist;
+
+#if defined(_M_IX86) || defined(_M_AMD64)
+UART_HARDWARE_DRIVER
+Legacy16550HardwareDrive =
+{
+    Legacy16550InitializePort,
+    Uart16550SetBaud,
+    Uart16550GetByte,
+    Uart16550PutByte,
+    Uart16550RxReady
+};
+#endif
+
+UART_HARDWARE_DRIVER
+Uart16550HardwareDriver =
+{
+    Uart16550InitializePort,
+    Uart16550SetBaud,
+    Uart16550GetByte,
+    Uart16550PutByte,
+    Uart16550RxReady
+};
+
+UART_HARDWARE_DRIVER
+MM16550HardwareDriver =
+{
+    Uart16550InitializePort, // FIXME
+    Uart16550SetBaud,
+    Uart16550GetByte,
+    Uart16550PutByte,
+    Uart16550RxReady
+};
 
 /* EOF */

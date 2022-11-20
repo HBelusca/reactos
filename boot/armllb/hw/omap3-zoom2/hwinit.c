@@ -2,7 +2,7 @@
  * PROJECT:         ReactOS Boot Loader
  * LICENSE:         BSD - See COPYING.ARM in the top level directory
  * FILE:            boot/armllb/hw/omap3-zoom2/hwinit.c
- * PURPOSE:         LLB UART Initialization Routines for OMAP3 ZOOM2
+ * PURPOSE:         LLB Hardware Initialization Routines for OMAP3 ZOOM2
  * PROGRAMMERS:     ReactOS Portable Systems Group
  */
 
@@ -94,6 +94,7 @@ NTAPI
 LlbHwInitialize(VOID)
 {
     /* Setup the UART (NS16550) */
+    CpInitialize(&LlbHwOmap3UartPorts[0], SERIAL_TL16CP754C_QUAD0_BASE, 115200);
     LlbHwOmap3UartInitialize();
 
     /* Setup the NEC WVGA LCD Panel and the Display Controller */

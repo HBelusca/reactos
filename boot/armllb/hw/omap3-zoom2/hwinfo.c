@@ -10,6 +10,14 @@
 
 TIMEINFO LlbTime;
 
+CPPORT LlbHwOmap3UartPorts[4] =
+{
+    {NULL, 0, 0},
+    {NULL, 0, 0},
+    {NULL, 0, 0},
+    {NULL, 0, 0}
+};
+
 static
 UCHAR
 BCD_INT(
@@ -38,6 +46,13 @@ LlbHwGetTmr0Base(VOID)
 {
     return 0x48318000;
 }
+
+
+
+
+
+
+
 
 ULONG
 NTAPI

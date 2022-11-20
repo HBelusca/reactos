@@ -3,13 +3,21 @@
  * LICENSE:     BSD - See COPYING.ARM in the top level directory
  * PURPOSE:     Header for the ComPort Library
  * COPYRIGHT:   Copyright 2010 ReactOS Portable Systems Group
+ *              Copyright 2012-2022 Hermès Bélusca-Maïto <hermes.belusca-maito@reactos.org>
+ *
+ * NOTE: The CPortLib has been updated in Windows 10 and is now documented:
+ * https://docs.microsoft.com/en-us/windows-hardware/drivers/ddi/uart/
  */
 
 /* INCLUDES *******************************************************************/
 
+#ifndef _CPORTLIB_
+#define _CPORTLIB_
+
 #pragma once
 
 #include <ntdef.h>
+#include "uart.h"
 
 //
 // Return error codes.
@@ -21,7 +29,7 @@
 //
 // COM port flags.
 //
-#define CPPORT_FLAG_MODEM_CONTROL   0x02
+#define CPPORT_FLAG_MODEM_CONTROL   PORT_RING_INDICATOR
 
 typedef struct _CPPORT
 {
@@ -30,10 +38,21 @@ typedef struct _CPPORT
     USHORT Flags;
 } CPPORT, *PCPPORT;
 
+/* ReactOS-specific callback */
+typedef BOOLEAN
+(NTAPI *DOES_PORT_EXIST)
+    _In_ PUCHAR Address);
+
 BOOLEAN
 NTAPI
 CpDoesPortExist(
     _In_ PUCHAR Address);
+
+/* ReactOS-specific callback */
+typedef BOOLEAN
+(NTAPI *ENABLE_FIFO)
+    _In_ PUCHAR Address,
+    _In_ BOOLEAN Enable);
 
 VOID
 NTAPI
@@ -67,5 +86,7 @@ NTAPI
 CpPutByte(
     _Inout_ PCPPORT Port,
     _In_ UCHAR Byte);
+
+#endif /* _CPORTLIB_ */
 
 /* EOF */

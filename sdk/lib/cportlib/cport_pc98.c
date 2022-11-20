@@ -27,6 +27,20 @@
 
 /* GLOBALS ********************************************************************/
 
+#if 0
+static struct
+{
+    PUCHAR Address;
+    BOOLEAN HasFifo;
+    BOOLEAN FifoEnabled;
+    UCHAR RingIndicator;
+} Rs232ComPort[] =
+{
+    { (PUCHAR)0x030, FALSE, FALSE, 0 },
+    { (PUCHAR)0x238, FALSE, FALSE, 0 }
+};
+#endif
+
 static BOOLEAN IsNp21W;
 static BOOLEAN HasFifo;
 static BOOLEAN IsFifoEnabled;
@@ -35,7 +49,7 @@ static BOOLEAN IsFifoEnabled;
 
 static
 BOOLEAN
-CpiIsNekoProject(VOID)
+CpiIsNekoProject(VOID) // Pc98IsNekoProject
 {
     UCHAR Input[4] = "NP2";
     UCHAR Output[4] = { 0 };
@@ -133,7 +147,7 @@ Cpi8251DoesPortExist(
 
 BOOLEAN
 NTAPI
-CpDoesPortExist(
+CpDoesPortExist( // Pc98DoesPortExist
     _In_ PUCHAR Address)
 {
     if (IS_NS16550(Address))
@@ -144,7 +158,7 @@ CpDoesPortExist(
 
 VOID
 NTAPI
-CpEnableFifo(
+CpEnableFifo( // Pc98EnableFifo
     _In_ PUCHAR Address,
     _In_ BOOLEAN Enable)
 {
@@ -161,26 +175,21 @@ CpEnableFifo(
 
     IsFifoEnabled = Enable;
 
-    if (Enable)
-        Value = SR_8251F_FCR_ENABLE | SR_8251F_FCR_RCVR_RESET | SR_8251F_FCR_TXMT_RESET;
-    else
-        Value = SR_8251F_FCR_DISABLE;
-    WRITE_PORT_UCHAR((PUCHAR)SER_8251F_REG_FCR, Value);
+    WRITE_PORT_UCHAR((PUCHAR)SER_8251F_REG_FCR,
+                     Enable ? SR_8251F_FCR_ENABLE | SR_8251F_FCR_RCVR_RESET | SR_8251F_FCR_TXMT_RESET
+                            : SR_8251F_FCR_DISABLE);
 }
 
-VOID
+BOOLEAN
 NTAPI
-CpSetBaud(
+CpSetBaud( // Pc98SetBaud
     _Inout_ PCPPORT Port,
     _In_ ULONG BaudRate)
 {
     ULONG i;
 
     if (IS_NS16550(Port->Address))
-    {
-        Uart16550SetBaud(Port, BaudRate);
-        return;
-    }
+        return Uart16550SetBaud(Port, BaudRate);
 
     if (IS_COM1(Port->Address))
     {
@@ -242,39 +251,47 @@ CpSetBaud(
         WRITE_PORT_UCHAR((PUCHAR)SER_8251F_REG_FCR,
                          SR_8251F_FCR_ENABLE | SR_8251F_FCR_RCVR_RESET | SR_8251F_FCR_TXMT_RESET);
     }
+
+    /* Save baud rate in port */
+    Port->BaudRate = BaudRate;
+    return TRUE;
 }
 
-NTSTATUS
+BOOLEAN
 NTAPI
-CpInitialize(
+Pc98InitializePort(
+    _In_opt_ PCSTR LoadOptions,
     _Inout_ PCPPORT Port,
-    _In_ PUCHAR Address,
-    _In_ ULONG BaudRate)
+    _In_ BOOLEAN MemoryMapped,
+    _In_ UCHAR AccessSize,
+    _In_ UCHAR BitWidth)
 {
+    PUCHAR Address;
     PUCHAR DataReg;
 
     if (IS_NS16550(Address))
-        return Uart16550Initialize(Port, Address, BaudRate);
+        return Uart16550InitializePort(LoadOptions, Port, MemoryMapped, AccessSize, BitWidth);
 
-    if (Port == NULL || Address == NULL || BaudRate == 0)
-        return STATUS_INVALID_PARAMETER;
+    /* Validity checks */
+    if (Port == NULL || Port->Address == NULL || Port->BaudRate == 0)
+        return FALSE; // STATUS_INVALID_PARAMETER;
+
+    Address = Port->Address;
 
     if (!Cpi8251DoesPortExist(Address))
         return STATUS_NOT_FOUND;
 
     /* Initialize port data */
-    Port->Address  = Address;
-    Port->BaudRate = 0;
-    Port->Flags    = 0;
+    Port->Flags = 0;
 
     if (IS_COM1(Address))
     {
-        IsNp21W = CpiIsNekoProject();
+        IsNp21W = CpiIsNekoProject(); // Pc98IsNekoProject();
         HasFifo = Cpi8251HasFifo();
     }
 
     /* Perform port initialization */
-    CpSetBaud(Port, BaudRate);
+    CpSetBaud(Port, Port->BaudRate);
     CpEnableFifo(Address, TRUE);
 
     /* Read junk out of the data register */
@@ -284,7 +301,7 @@ CpInitialize(
         DataReg = Port->Address;
     READ_PORT_UCHAR(DataReg);
 
-    return STATUS_SUCCESS;
+    return TRUE;
 }
 
 static UCHAR
@@ -330,23 +347,20 @@ CpReadLsr(
     return Lsr;
 }
 
-USHORT
+UART_STATUS
 NTAPI
-CpGetByte(
+Pc98GetByte(
     _Inout_ PCPPORT Port,
-    _Out_ PUCHAR Byte,
-    _In_ BOOLEAN Wait,
-    _In_ BOOLEAN Poll)
+    _Out_ PUCHAR Byte) //, IN BOOLEAN Poll
 {
-    ULONG RetryCount;
     UCHAR RxReadyFlags, ErrorFlags;
 
     if (IS_NS16550(Port->Address))
-        return Uart16550GetByte(Port, Byte, Wait, Poll);
+        return Uart16550GetByte(Port, Byte);
 
     /* Handle early read-before-init */
     if (!Port->Address)
-        return CP_GET_NODATA;
+        return UartNoData;
 
     // FIXME HACK: NP21/W emulation bug, needs to be fixed on the emulator side.
     // Do a read from 0x136 to receive bytes by an emulated serial port.
@@ -364,14 +378,13 @@ CpGetByte(
         ErrorFlags = SR_8251A_STATUS_FE | SR_8251A_STATUS_OE | SR_8251A_STATUS_PE;
     }
 
-    /* Poll for data ready */
-    for (RetryCount = Wait ? TIMEOUT_COUNT : 1; RetryCount > 0; RetryCount--)
+    do
     {
         UCHAR Lsr = CpReadLsr(Port, RxReadyFlags);
         PUCHAR DataReg;
 
         if (!(Lsr & RxReadyFlags))
-            continue;
+            break;
 
         /* Handle error condition */
         if (Lsr & ErrorFlags)
@@ -390,13 +403,16 @@ CpGetByte(
             if (IsFifoEnabled)
                 WRITE_PORT_UCHAR((PUCHAR)SER_8251F_REG_FCR, SR_8251F_FCR_ENABLE);
 
+            /* An error happened, clear the byte and fail */
             *Byte = 0;
-            return CP_GET_ERROR;
+            return UartError;
         }
 
+        /* If only polling was requested by caller, return now */
         if (Poll)
-            return CP_GET_SUCCESS;
+            return UartSuccess;
 
+        /* Otherwise read the byte and return it */
         if (IsFifoEnabled)
             DataReg = UlongToPtr(SER_8251F_REG_RBR);
         else
@@ -405,28 +421,29 @@ CpGetByte(
 
         // TODO: Handle CD if port is in modem control mode
 
-        return CP_GET_SUCCESS;
-    }
+        /* Byte was read */
+        return UartSuccess;
+    } while(0);
 
     /* Reset LSR, no data was found */
     CpReadLsr(Port, 0);
-    return CP_GET_NODATA;
+    return UartNoData;
 }
 
-VOID
+UART_STATUS
 NTAPI
-CpPutByte(
+Pc98PutByte(
     _Inout_ PCPPORT Port,
-    _In_ UCHAR Byte)
+    _In_ UCHAR Byte,
+    _In_ BOOLEAN BusyWait)
 {
     PUCHAR DataReg;
     UCHAR TxReadyFlags;
 
     if (IS_NS16550(Port->Address))
-    {
-        Uart16550PutByte(Port, Byte);
-        return;
-    }
+        return Uart16550PutByte(Port, Byte, BusyWait);
+
+    /* TODO: Check if port is in modem control to handle CD */
 
     if (IsFifoEnabled)
     {
@@ -440,7 +457,7 @@ CpPutByte(
          * to receive data.
          */
         if (!(READ_PORT_UCHAR((PUCHAR)SER_8251F_REG_MSR) & SR_8251F_MSR_CTS))
-            return;
+            return UartError;
     }
     else
     {
@@ -448,8 +465,68 @@ CpPutByte(
         TxReadyFlags = SR_8251A_STATUS_TxEMPTY;
     }
 
-    while (!(CpReadLsr(Port, TxReadyFlags) & TxReadyFlags))
-        NOTHING;
+    while ((CpReadLsr(Port, TxReadyFlags) & TxReadyFlags) == 0)
+    {
+        if (!BusyWait)
+            return UartNotReady;
+    }
 
     WRITE_PORT_UCHAR(DataReg, Byte);
+    return UartSuccess;
 }
+
+BOOLEAN
+NTAPI
+Pc98RxReady(
+    _Inout_ PCPPORT Port)
+{
+    UCHAR RxReadyFlags, ErrorFlags;
+
+    if (IS_NS16550(Port->Address))
+        return Uart16550RxReady(Port);
+
+    // FIXME HACK: NP21/W emulation bug, needs to be fixed on the emulator side.
+    // Do a read from 0x136 to receive bytes by an emulated serial port.
+    // if (IsNp21W)
+    //     (VOID)READ_PORT_UCHAR((PUCHAR)SER_8251F_REG_IIR);
+
+    if (IsFifoEnabled)
+    {
+        RxReadyFlags = SR_8251F_LSR_RxRDY;
+        ErrorFlags = SR_8251F_LSR_PE | SR_8251F_LSR_OE;
+    }
+    else
+    {
+        RxReadyFlags = SR_8251A_STATUS_RxRDY;
+        ErrorFlags = SR_8251A_STATUS_FE | SR_8251A_STATUS_OE | SR_8251A_STATUS_PE;
+    }
+
+    /* Read LSR for data ready */
+    UCHAR Lsr = CpReadLsr(Port, RxReadyFlags);
+    if ((Lsr & RxReadyFlags) /*== RxReadyFlags*/) // FIXME
+    {
+        /* If an error happened, fail */
+        if (Lsr & ErrorFlags)
+            return FALSE; // UartError;
+
+        return TRUE; // UartSuccess;
+    }
+
+    return FALSE; // UartNoData;
+}
+
+
+ENABLE_FIFO xxx = Pc98EnableFifo;
+DOES_PORT_EXIST xxx = Pc98DoesPortExist;
+
+UART_HARDWARE_DRIVER
+Pc98HardwareDriver =
+{
+    Pc98InitializePort,
+    Pc98SetBaud,
+    Pc98GetByte,
+    Pc98PutByte,
+    Pc98RxReady
+};
+
+/* EOF */
