@@ -106,4 +106,5 @@ LlbHwRtcRead(VOID)
     /* Read RTC value */
     return READ_REGISTER_ULONG(PL031_RTC_DR);
 }
+
 /* EOF */

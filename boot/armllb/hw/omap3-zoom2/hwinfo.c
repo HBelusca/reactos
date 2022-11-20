@@ -10,6 +10,14 @@
 
 TIMEINFO LlbTime;
 
+CPPORT LlbHwOmap3UartPorts[4] =
+{
+    {NULL, 0, 0},
+    {NULL, 0, 0},
+    {NULL, 0, 0},
+    {NULL, 0, 0}
+};
+
 #define BCD_INT(bcd) (((bcd & 0xf0) >> 4) * 10 + (bcd &0x0f))
 
 ULONG
@@ -32,6 +40,13 @@ LlbHwGetTmr0Base(VOID)
 {
     return 0x48318000;
 }
+
+
+
+
+
+
+
 
 ULONG
 NTAPI

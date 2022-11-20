@@ -16,7 +16,6 @@ LlbHwInitialize(VOID)
     LlbHwVersaClcdInitialize();
 
     /* Setup the UART (PL011) */
-    // CpInitialize(Port, Address, BaudRate);
     LlbHwVersaUartInitialize();
 
     /* Setup the KMI (PL050) */
@@ -50,5 +49,6 @@ LlbHwLoadOsLoaderFromRam(VOID)
     /* Return the OS loader base address */
     return (POSLOADER_INIT)Base;
 }
+
 
 /* EOF */

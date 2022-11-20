@@ -12,7 +12,6 @@ VOID
 NTAPI
 LlbHwInitialize(VOID)
 {
-    // CpInitialize(Port, Address, BaudRate);
     while (TRUE);
 }
 

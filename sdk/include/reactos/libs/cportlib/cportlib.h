@@ -1,16 +1,23 @@
 /*
- * PROJECT:         ReactOS ComPort Library
- * LICENSE:         BSD - See COPYING.ARM in the top level directory
- * FILE:            include/reactos/libs/cportlib/cportlib.h
- * PURPOSE:         Header for the ComPort Library
- * PROGRAMMERS:     ReactOS Portable Systems Group
+ * PROJECT:     ReactOS ComPort Library
+ * LICENSE:     BSD - See COPYING.ARM in the top level directory
+ * PURPOSE:     Header for the ComPort Library
+ * COPYRIGHT:   Copyright 20xx ReactOS Portable Systems Group
+ *              Copyright 2012-2022 Hermès Bélusca-Maïto <hermes.belusca-maito@reactos.org>
+ *
+ * NOTE: The CPortLib has been updated in Windows 10 and is now documented:
+ * https://docs.microsoft.com/en-us/windows-hardware/drivers/ddi/uart/
  */
 
 /* INCLUDES *******************************************************************/
 
+#ifndef _CPORTLIB_
+#define _CPORTLIB_
+
 #pragma once
 
 #include <ntdef.h>
+#include "uart.h"
 
 //
 // Return error codes.
@@ -22,7 +29,7 @@
 //
 // COM port flags.
 //
-#define CPPORT_FLAG_MODEM_CONTROL   0x02
+#define CPPORT_FLAG_MODEM_CONTROL   PORT_RING_INDICATOR
 
 typedef struct _CPPORT
 {
@@ -31,55 +38,55 @@ typedef struct _CPPORT
     USHORT Flags;
 } CPPORT, *PCPPORT;
 
+/* ReactOS-specific callback */
+typedef BOOLEAN
+(NTAPI *ENABLE_FIFO(
+    _In_ PUCHAR Address,
+    _In_ BOOLEAN Enable);
+
 VOID
 NTAPI
 CpEnableFifo(
-    IN PUCHAR  Address,
-    IN BOOLEAN Enable
-);
+    _In_ PUCHAR Address,
+    _In_ BOOLEAN Enable);
 
 VOID
 NTAPI
 CpSetBaud(
-    IN PCPPORT Port,
-    IN ULONG   BaudRate
-);
+    _In_ PCPPORT Port,
+    _In_ ULONG BaudRate);
 
 NTSTATUS
 NTAPI
 CpInitialize(
-    IN PCPPORT Port,
-    IN PUCHAR  Address,
-    IN ULONG   BaudRate
-);
+    _Inout_ PCPPORT Port,
+    _In_ PUCHAR Address,
+    _In_ ULONG BaudRate);
+
+/* ReactOS-specific callback */
+typedef BOOLEAN
+(NTAPI *DOES_PORT_EXIST(
+    _In_ PUCHAR Address);
 
 BOOLEAN
 NTAPI
 CpDoesPortExist(
-    IN PUCHAR Address
-);
-
-UCHAR
-NTAPI
-CpReadLsr(
-    IN PCPPORT Port,
-    IN UCHAR   ExpectedValue
-);
+    _In_ PUCHAR Address);
 
 USHORT
 NTAPI
 CpGetByte(
-    IN  PCPPORT Port,
-    OUT PUCHAR  Byte,
-    IN  BOOLEAN Wait,
-    IN  BOOLEAN Poll
-);
+    _In_ PCPPORT Port,
+    _Out_ PUCHAR Byte,
+    _In_ BOOLEAN Wait,
+    _In_ BOOLEAN Poll);
 
 VOID
 NTAPI
 CpPutByte(
-    IN PCPPORT Port,
-    IN UCHAR   Byte
-);
+    _In_ PCPPORT Port,
+    _In_ UCHAR Byte);
+
+#endif /* _CPORTLIB_ */
 
 /* EOF */
