@@ -18,7 +18,7 @@ KdbpSendCommandSerial(
     _In_ PCSTR Command)
 {
     while (*Command)
-        KdPortPutByteEx(&SerialPortInfo, *Command++);
+        KdPortPutByte(*Command++);
 }
 
 CHAR
@@ -28,9 +28,9 @@ KdbpTryGetCharSerial(
     CHAR Result = -1;
 
     if (Retry == 0)
-        while (!KdPortGetByteEx(&SerialPortInfo, (PUCHAR)&Result));
+        while (!KdPortGetByte((PUCHAR)&Result)); // KdPortPollByte
     else
-        while (!KdPortGetByteEx(&SerialPortInfo, (PUCHAR)&Result) && Retry-- > 0);
+        while (!KdPortGetByte((PUCHAR)&Result) && Retry-- > 0); // KdPortPollByte
 
     return Result;
 }

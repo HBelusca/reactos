@@ -70,7 +70,6 @@
 #include <arcsupp.h>
 #include <bytesex.h>
 #include <cache.h>
-#include <comm.h>
 #include <disk.h>
 #include <fs.h>
 #include <inifile.h>

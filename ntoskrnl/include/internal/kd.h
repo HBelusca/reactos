@@ -1,29 +1,5 @@
 #pragma once
 
-//
-// Kernel Debugger Port Definition
-//
-
-BOOLEAN
-NTAPI
-KdPortInitializeEx(
-    PCPPORT PortInformation,
-    ULONG ComPortNumber
-);
-
-BOOLEAN
-NTAPI
-KdPortGetByteEx(
-    PCPPORT PortInformation,
-    PUCHAR ByteReceived);
-
-VOID
-NTAPI
-KdPortPutByteEx(
-    PCPPORT PortInformation,
-    UCHAR ByteToSend
-);
-
 #ifdef _NTOSKRNL_
 
 /* KD GLOBALS ****************************************************************/

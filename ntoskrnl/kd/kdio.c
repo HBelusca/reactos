@@ -37,8 +37,7 @@ static HANDLE KdpLogFileHandle;
 ANSI_STRING KdpLogFileName = RTL_CONSTANT_STRING("\\SystemRoot\\debug.log");
 
 static KSPIN_LOCK KdpSerialSpinLock;
-ULONG  SerialPortNumber = DEFAULT_DEBUG_PORT;
-CPPORT SerialPortInfo   = {0, DEFAULT_DEBUG_BAUD_RATE, 0};
+KD_PORT_INFORMATION ComPortInfo = {DEFAULT_DEBUG_PORT, DEFAULT_DEBUG_BAUD_RATE};
 
 #define KdpScreenLineLengthDefault 80
 static CHAR KdpScreenLineBuffer[KdpScreenLineLengthDefault + 1] = "";
@@ -378,9 +377,9 @@ KdpSerialPrint(
     {
         if (*pch == '\n')
         {
-            KdPortPutByteEx(&SerialPortInfo, '\r');
+            KdPortPutByte('\r');
         }
-        KdPortPutByteEx(&SerialPortInfo, *pch);
+        KdPortPutByte(*pch);
         ++pch;
     }
 
@@ -402,13 +401,12 @@ KdpSerialInit(
         /* Write out the functions that we support for now */
         DispatchTable->KdpPrintRoutine = KdpSerialPrint;
 
-        /* Initialize the Port */
-        if (!KdPortInitializeEx(&SerialPortInfo, SerialPortNumber))
+        /* Initialize the port */
+        if (!KdPortInitialize(&ComPortInfo, NULL, TRUE))
         {
             KdpDebugMode.Serial = FALSE;
             return STATUS_DEVICE_DOES_NOT_EXIST;
         }
-        KdComPortInUse = SerialPortInfo.Address;
 
         /* Initialize spinlock */
         KeInitializeSpinLock(&KdpSerialSpinLock);
@@ -421,6 +419,8 @@ KdpSerialInit(
     {
         /* Announce ourselves */
         HalDisplayString("   Serial debugging enabled\r\n");
+        // DbgPrint("   Serial debugging enabled. COM%ld %ld Baud\n",
+                 // KdComPort.ComPort, KdComPort.BaudRate);
     }
 
     return STATUS_SUCCESS;

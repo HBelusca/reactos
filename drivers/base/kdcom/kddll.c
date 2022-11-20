@@ -75,7 +75,7 @@ KdpSendControlPacket(
  *       packet byte is received.
  * \sa http://www.nynaeve.net/?p=169
  */
-KDP_STATUS
+KDSTATUS
 NTAPI
 KdReceivePacket(
     IN ULONG PacketType,
@@ -85,7 +85,7 @@ KdReceivePacket(
     IN OUT PKD_CONTEXT KdContext)
 {
     UCHAR Byte = 0;
-    KDP_STATUS KdStatus;
+    KDSTATUS KdStatus;
     KD_PACKET Packet;
     ULONG Checksum;
 
@@ -99,10 +99,10 @@ KdReceivePacket(
     {
         /* Step 1 - Read PacketLeader */
         KdStatus = KdpReceivePacketLeader(&Packet.PacketLeader);
-        if (KdStatus != KDP_PACKET_RECEIVED)
+        if (KdStatus != KdPacketReceived)
         {
             /* Check if we got a breakin  */
-            if (KdStatus == KDP_PACKET_RESEND)
+            if (KdStatus == KdPacketNeedsResend)
             {
                 KdContext->KdpControlCPending = TRUE;
             }
@@ -111,7 +111,7 @@ KdReceivePacket(
 
         /* Step 2 - Read PacketType */
         KdStatus = KdpReceiveBuffer(&Packet.PacketType, sizeof(USHORT));
-        if (KdStatus != KDP_PACKET_RECEIVED)
+        if (KdStatus != KdPacketReceived)
         {
             /* Didn't receive a PacketType. */
             return KdStatus;
@@ -121,12 +121,12 @@ KdReceivePacket(
         if (Packet.PacketLeader == CONTROL_PACKET_LEADER &&
             Packet.PacketType == PACKET_TYPE_KD_RESEND)
         {
-            return KDP_PACKET_RESEND;
+            return KdPacketNeedsResend;
         }
 
         /* Step 3 - Read ByteCount */
         KdStatus = KdpReceiveBuffer(&Packet.ByteCount, sizeof(USHORT));
-        if (KdStatus != KDP_PACKET_RECEIVED)
+        if (KdStatus != KdPacketReceived)
         {
             /* Didn't receive ByteCount. */
             return KdStatus;
@@ -134,7 +134,7 @@ KdReceivePacket(
 
         /* Step 4 - Read PacketId */
         KdStatus = KdpReceiveBuffer(&Packet.PacketId, sizeof(ULONG));
-        if (KdStatus != KDP_PACKET_RECEIVED)
+        if (KdStatus != KdPacketReceived)
         {
             /* Didn't receive PacketId. */
             return KdStatus;
@@ -150,7 +150,7 @@ KdReceivePacket(
 
         /* Step 5 - Read Checksum */
         KdStatus = KdpReceiveBuffer(&Packet.Checksum, sizeof(ULONG));
-        if (KdStatus != KDP_PACKET_RECEIVED)
+        if (KdStatus != KdPacketReceived)
         {
             /* Didn't receive Checksum. */
             return KdStatus;
@@ -168,7 +168,7 @@ KdReceivePacket(
                     {
                         /* Remote acknowledges the last packet */
                         CurrentPacketId ^= 1;
-                        return KDP_PACKET_RECEIVED;
+                        return KdPacketReceived;
                     }
                     /* That's not what we were waiting for, start over */
                     continue;
@@ -183,7 +183,7 @@ KdReceivePacket(
                 case PACKET_TYPE_KD_RESEND:
                     KDDBGPRINT("KdReceivePacket - got PACKET_TYPE_KD_RESEND\n");
                     /* Remote wants us to resend the last packet */
-                    return KDP_PACKET_RESEND;
+                    return KdPacketNeedsResend;
 
                 default:
                     KDDBGPRINT("KdReceivePacket - got unknown control packet\n");
@@ -198,7 +198,7 @@ KdReceivePacket(
             /* We received something different */
             KdpSendControlPacket(PACKET_TYPE_KD_RESEND, 0);
             CurrentPacketId ^= 1;
-            return KDP_PACKET_RECEIVED;
+            return KdPacketReceived;
         }
 
         /* Get size of the message header */
@@ -220,7 +220,7 @@ KdReceivePacket(
         /* Receive the message header data */
         KdStatus = KdpReceiveBuffer(MessageHeader->Buffer,
                                     MessageHeader->Length);
-        if (KdStatus != KDP_PACKET_RECEIVED)
+        if (KdStatus != KdPacketReceived)
         {
             /* Didn't receive data. Packet needs to be resent. */
             KDDBGPRINT("KdReceivePacket - Didn't receive message header data.\n");
@@ -251,7 +251,7 @@ KdReceivePacket(
                 /* Receive the message data */
                 KdStatus = KdpReceiveBuffer(MessageData->Buffer,
                                            MessageData->Length);
-                if (KdStatus != KDP_PACKET_RECEIVED)
+                if (KdStatus != KdPacketReceived)
                 {
                     /* Didn't receive data. Start over. */
                     KDDBGPRINT("KdReceivePacket - Didn't receive message data.\n");
@@ -267,7 +267,7 @@ KdReceivePacket(
 
         /* We must receive a PACKET_TRAILING_BYTE now */
         KdStatus = KdpReceiveBuffer(&Byte, sizeof(UCHAR));
-        if (KdStatus != KDP_PACKET_RECEIVED || Byte != PACKET_TRAILING_BYTE)
+        if (KdStatus != KdPacketReceived || Byte != PACKET_TRAILING_BYTE)
         {
             KDDBGPRINT("KdReceivePacket - wrong trailing byte (0x%x), status 0x%x\n", Byte, KdStatus);
             KdpSendControlPacket(PACKET_TYPE_KD_RESEND, 0);
@@ -299,14 +299,14 @@ KdReceivePacket(
             /* Yes, return success */
             //KDDBGPRINT("KdReceivePacket - all ok\n");
             RemotePacketId ^= 1;
-            return KDP_PACKET_RECEIVED;
+            return KdPacketReceived;
         }
 
         /* We received something different, ignore it. */
         KDDBGPRINT("KdReceivePacket - wrong PacketType\n");
     }
 
-    return KDP_PACKET_RECEIVED;
+    return KdPacketReceived;
 }
 
 VOID
@@ -318,7 +318,7 @@ KdSendPacket(
     IN OUT PKD_CONTEXT KdContext)
 {
     KD_PACKET Packet;
-    KDP_STATUS KdStatus;
+    KDSTATUS KdStatus;
     ULONG Retries;
 
     /* Initialize a KD_PACKET */
@@ -366,14 +366,14 @@ KdSendPacket(
                                    KdContext);
 
         /* Did we succeed? */
-        if (KdStatus == KDP_PACKET_RECEIVED)
+        if (KdStatus == KdPacketReceived)
         {
             /* Packet received, we can quit the loop */
             CurrentPacketId &= ~SYNC_PACKET_ID;
             Retries = KdContext->KdpDefaultRetries;
             break;
         }
-        else if (KdStatus == KDP_PACKET_TIMEOUT)
+        else if (KdStatus == KdPacketTimedOut)
         {
             /* Timeout, decrement the retry count */
             if (Retries > 0)
@@ -417,7 +417,7 @@ KdSendPacket(
                 return;
             }
         }
-        // else (KdStatus == KDP_PACKET_RESEND) /* Resend the packet */
+        // else (KdStatus == KdPacketNeedsResend) /* Resend the packet */
 
         /* Packet timed out, send it again */
         KDDBGPRINT("KdSendPacket got KdStatus 0x%x\n", KdStatus);

@@ -116,10 +116,7 @@ typedef struct _KD_DISPATCH_TABLE
 
 /* The current Debugging Mode */
 extern KDP_DEBUG_MODE KdpDebugMode;
-
-/* Port Information for the Serial Native Mode */
-extern ULONG  SerialPortNumber;
-extern CPPORT SerialPortInfo;
+extern KD_PORT_INFORMATION ComPortInfo;
 
 /* Logging file path */
 extern ANSI_STRING KdpLogFileName;

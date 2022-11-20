@@ -37,13 +37,6 @@ extern UCHAR KdVmDataBuffer[KDVM_BUFFER_SIZE];
 extern PHYSICAL_ADDRESS KdVmBufferPhysicalAddress;
 extern ULONG KdVmBufferPos;
 
-typedef enum
-{
-    KDP_PACKET_RECEIVED = 0,
-    KDP_PACKET_TIMEOUT = 1,
-    KDP_PACKET_RESEND = 2
-} KDP_STATUS;
-
 typedef struct _KDVM_MARSHAL_STRING
 {
     USHORT Length;
@@ -115,7 +108,7 @@ typedef struct
     KDVM_MARSHAL_STRING MessageHeader;
     KDVM_MARSHAL_STRING MessageData;
     KDVM_CONTEXT KdContext;
-    KDP_STATUS KdStatus;
+    KDSTATUS KdStatus;
     ULONG FullSize;
     ULONG HeaderSize;
     ULONG DataSize;
@@ -145,6 +138,5 @@ NTAPI
 KdVmKdVmExchangeData(
     _Out_ PVOID* ReceiveData,
     _Out_ PULONG ReceiveDataSize);
-
 
 #endif /* _KDDLL_H_ */
