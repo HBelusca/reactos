@@ -786,8 +786,8 @@ KdbpCmdFilter(
         }
 
         /* Get current mask value */
-        NtSetDebugFilterState(ComponentId, set, TRUE);
-        NtSetDebugFilterState(ComponentId, clear, FALSE);
+        DbgSetDebugFilterState(ComponentId, set, TRUE);
+        DbgSetDebugFilterState(ComponentId, clear, FALSE);
     }
 
     return TRUE;
