@@ -1,6 +1,5 @@
 
 #include <asm.inc>
-
 #include <ksamd64.inc>
 
 .code64

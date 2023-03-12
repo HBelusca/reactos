@@ -90,6 +90,7 @@
 #include <wdbgexts.h>
 #include <kddll.h>
 #ifdef KDBG
+    #include <kdbg/kdb_public.h>
     /* Define new names for these exports also present in KDBG */
     #define KdD0Transition          KdbgD0Transition
     #define KdD3Transition          KdbgD3Transition
