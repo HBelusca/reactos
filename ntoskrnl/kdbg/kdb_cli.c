@@ -90,8 +90,6 @@ BOOLEAN ExpKdbgExtDefWrites(ULONG Argc, PCHAR Argv[]);
 BOOLEAN ExpKdbgExtIrpFind(ULONG Argc, PCHAR Argv[]);
 BOOLEAN ExpKdbgExtHandle(ULONG Argc, PCHAR Argv[]);
 
-extern char __ImageBase;
-
 #ifdef __ROS_DWARF__
 static BOOLEAN KdbpCmdPrintStruct(ULONG Argc, PCHAR Argv[]);
 #endif
@@ -124,6 +122,13 @@ BOOLEAN
     IN PCHAR Command,
     IN ULONG Argc,
     IN PCH Argv[]);
+
+ULONG_PTR NtosBase = 0;
+DBGKD_GET_VERSION64 KdVersion = {0};
+PKDDEBUGGER_DATA64 KdDebuggerData = NULL;
+PLIST_ENTRY ProcessListHead = NULL;
+PLIST_ENTRY ModuleListHead = NULL;
+PFN_COUNT* NumberOfPhysicalPages = NULL;
 
 static PKDBG_CLI_ROUTINE KdbCliCallbacks[10];
 static BOOLEAN KdbUseIntelSyntax = FALSE; /* Set to TRUE for intel syntax */
@@ -1918,7 +1923,6 @@ KdbpCmdProc(
     BOOLEAN ReferencedProcess = FALSE;
     PCHAR State, pend, str1, str2;
     ULONG_PTR ul;
-    extern LIST_ENTRY PsActiveProcessHead;
 
     if (Argc >= 2 && _stricmp(Argv[1], "list") == 0)
     {
@@ -1957,7 +1961,7 @@ KdbpCmdProc(
 
             Entry = Entry->Flink;
         }
-        while(Entry != &PsActiveProcessHead);
+        while (Entry != &PsActiveProcessHead);
     }
     else if (Argc >= 2 && _stricmp(Argv[1], "attach") == 0)
     {
@@ -2067,9 +2071,8 @@ KdbpCmdMod(
     {
         if (!KdbpSymFindModule(NULL, 0, &LdrEntry))
         {
-            ULONG_PTR ntoskrnlBase = (ULONG_PTR)__ImageBase;
             KdbpPrint("  Base      Size      Name\n");
-            KdbpPrint("  %p  %08x  %s\n", (PVOID)ntoskrnlBase, 0, "ntoskrnl.exe");
+            KdbpPrint("  %p  %08x  %s\n", (PVOID)NtosBase, 0, "ntoskrnl.exe");
             return TRUE;
         }
 
@@ -2083,7 +2086,7 @@ KdbpCmdMod(
         KdbpPrintUnicodeString(&LdrEntry->BaseDllName);
         KdbpPrint("\n");
 
-        if(DisplayOnlyOneModule || !KdbpSymFindModule(NULL, i++, &LdrEntry))
+        if (DisplayOnlyOneModule || !KdbpSymFindModule(NULL, i++, &LdrEntry))
             break;
     }
 

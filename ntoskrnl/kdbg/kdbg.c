@@ -14,7 +14,13 @@
 
 /* GLOBALS *******************************************************************/
 
-static ULONG KdbgNextApiNumber = DbgKdContinueApi;
+///// static ULONG KdbgNextApiNumber = DbgKdContinueApi;
+static ULONG KdbgNextApiNumber =
+#ifdef KDBG
+    DbgKdGetVersionApi;
+#else
+    DbgKdContinueApi;
+#endif
 static CONTEXT KdbgContext;
 static EXCEPTION_RECORD64 KdbgExceptionRecord;
 static BOOLEAN KdbgFirstChanceException;
@@ -85,6 +91,7 @@ KdSendPacket(
     if (PacketType == PACKET_TYPE_KD_STATE_CHANGE64)
     {
         PDBGKD_ANY_WAIT_STATE_CHANGE WaitStateChange = (PDBGKD_ANY_WAIT_STATE_CHANGE)MessageHeader->Buffer;
+
         if (WaitStateChange->NewState == DbgKdLoadSymbolsStateChange)
         {
             /* Load or unload symbols */
@@ -102,10 +109,13 @@ KdSendPacket(
             KdbgFirstChanceException = WaitStateChange->u.Exception.FirstChance;
             return;
         }
+        // DbgKdCommandStringStateChange
+        KdbPrintf("%s: WaitState %d is UNIMPLEMENTED\n", __FUNCTION__, WaitStateChange->NewState);
     }
     else if (PacketType == PACKET_TYPE_KD_STATE_MANIPULATE)
     {
         PDBGKD_MANIPULATE_STATE64 ManipulateState = (PDBGKD_MANIPULATE_STATE64)MessageHeader->Buffer;
+
         if (ManipulateState->ApiNumber == DbgKdGetContextApi)
         {
             KD_CONTINUE_TYPE Result;
@@ -117,6 +127,7 @@ KdSendPacket(
                 KeSetContextPc(&KdbgContext, KeGetContextPc(&KdbgContext) + 2);
             }
 
+            /* Finally, enter KDBG proper */
             Result = KdbEnterDebuggerException(&KdbgExceptionRecord,
                                                KdbgContext.SegCs & 1,
                                                &KdbgContext,
@@ -138,10 +149,26 @@ KdSendPacket(
             KdbgNextApiNumber = DbgKdContinueApi;
             return;
         }
+        else if (ManipulateState->ApiNumber == DbgKdGetVersionApi)
+        {
+            PLIST_ENTRY DebuggerDataList;
+
+            /* Copy the relevant data */
+            RtlCopyMemory(&KdVersion, &ManipulateState->u.GetVersion64, sizeof(KdVersion));
+            DebuggerDataList = (PLIST_ENTRY)(ULONG_PTR)KdVersion.DebuggerDataList;
+            NtosBase = (ULONG_PTR)KdVersion.KernBase;
+            KdDebuggerData = CONTAINING_RECORD(DebuggerDataList->Flink, KDDEBUGGER_DATA64, Header.List);
+            ProcessListHead = (PLIST_ENTRY)*(ULONG_PTR*)&KdDebuggerData->PsActiveProcessHead;
+            ModuleListHead = (PLIST_ENTRY)*(ULONG_PTR*)&KdDebuggerData->PsLoadedModuleList;
+            NumberOfPhysicalPages = (PFN_COUNT*)*(ULONG_PTR*)&KdDebuggerData->MmNumberOfPhysicalPages;
+            /* Note that NtosBase is also == (ULONG_PTR)KdDebuggerData->KernBase; */
+
+            KdbgNextApiNumber = DbgKdContinueApi;
+            return;
+        }
     }
 
     KdbPrintf("%s: PacketType %d is UNIMPLEMENTED\n", __FUNCTION__, PacketType);
-    return;
 }
 
 KDSTATUS
@@ -176,7 +203,9 @@ KdReceivePacket(
     if (PacketType == PACKET_TYPE_KD_STATE_MANIPULATE)
     {
         PDBGKD_MANIPULATE_STATE64 ManipulateState = (PDBGKD_MANIPULATE_STATE64)MessageHeader->Buffer;
+
         RtlZeroMemory(MessageHeader->Buffer, MessageHeader->MaximumLength);
+
         if (KdbgNextApiNumber == DbgKdGetContextApi)
         {
             ManipulateState->ApiNumber = DbgKdGetContextApi;
@@ -191,10 +220,16 @@ KdReceivePacket(
             MessageData->Buffer = (PCHAR)&KdbgContext;
             return KdPacketReceived;
         }
+        else if (KdbgNextApiNumber == DbgKdGetVersionApi)
+        {
+            ManipulateState->ApiNumber = DbgKdGetVersionApi;
+            return KdPacketReceived;
+        }
         else if (KdbgNextApiNumber != DbgKdContinueApi)
         {
-            KdbPrintf("%s:%d is UNIMPLEMENTED\n", __FUNCTION__, __LINE__);
+            KdbPrintf("%s: ApiNumber %d is UNIMPLEMENTED\n", __FUNCTION__, KdbgNextApiNumber);
         }
+
         ManipulateState->ApiNumber = DbgKdContinueApi;
         ManipulateState->u.Continue.ContinueStatus = KdbgContinueStatus;
 

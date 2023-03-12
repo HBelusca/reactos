@@ -61,6 +61,16 @@ typedef enum _KD_CONTINUE_TYPE
 
 /* GLOBALS *******************************************************************/
 
+extern ULONG_PTR NtosBase;
+extern DBGKD_GET_VERSION64 KdVersion;
+extern PKDDEBUGGER_DATA64 KdDebuggerData;
+extern PLIST_ENTRY ProcessListHead;
+extern PLIST_ENTRY ModuleListHead;
+extern PFN_COUNT* NumberOfPhysicalPages;
+//#define PsActiveProcessHead (*ProcessListHead)
+//#define PsLoadedModuleList  (*ModuleListHead)
+//#define MmNumberOfPhysicalPages (*NumberOfPhysicalPages)
+
 extern volatile PCHAR KdbInitFileBuffer;
 
 extern PEPROCESS KdbCurrentProcess;
