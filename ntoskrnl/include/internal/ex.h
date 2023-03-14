@@ -1465,6 +1465,23 @@ _ExReleaseFastMutexUnsafeAndLeaveCriticalRegion(IN OUT PFAST_MUTEX FastMutex)
 
 /* OTHER FUNCTIONS **********************************************************/
 
+NTSTATUS
+NTAPI
+ExLockUserBuffer(
+    _In_ PVOID BaseAddress,
+    _In_ ULONG Length,
+    _In_ KPROCESSOR_MODE AccessMode,
+    _In_ LOCK_OPERATION Operation,
+    _Out_ PVOID* MappedSystemVa,
+    _Out_ PMDL* OutMdl
+);
+
+VOID
+NTAPI
+ExUnlockUserBuffer(
+    _Pre_notnull_ __drv_freesMem(Mdl) PMDL Mdl
+);
+
 BOOLEAN
 NTAPI
 ExTryToAcquireResourceExclusiveLite(

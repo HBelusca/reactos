@@ -191,7 +191,8 @@ ExpQueryModuleInformation(IN PLIST_ENTRY KernelModeList,
 
 VOID
 NTAPI
-ExUnlockUserBuffer(PMDL Mdl)
+ExUnlockUserBuffer(
+    _Pre_notnull_ __drv_freesMem(Mdl) PMDL Mdl)
 {
     MmUnlockPages(Mdl);
     ExFreePoolWithTag(Mdl, TAG_MDL);
@@ -200,21 +201,24 @@ ExUnlockUserBuffer(PMDL Mdl)
 NTSTATUS
 NTAPI
 ExLockUserBuffer(
-    PVOID BaseAddress,
-    ULONG Length,
-    KPROCESSOR_MODE AccessMode,
-    LOCK_OPERATION Operation,
-    PVOID *MappedSystemVa,
-    PMDL *OutMdl)
+    _In_ PVOID BaseAddress,
+    _In_ ULONG Length,
+    _In_ KPROCESSOR_MODE AccessMode,
+    _In_ LOCK_OPERATION Operation,
+    _Out_ PVOID* MappedSystemVa,
+    _Out_ PMDL* OutMdl)
 {
     PMDL Mdl;
     PAGED_CODE();
+
+    /* Make sure we got a valid length */
+    ASSERT(Length != 0);
 
     *MappedSystemVa = NULL;
     *OutMdl = NULL;
 
     /* Allocate an MDL for the buffer */
-    Mdl = IoAllocateMdl(BaseAddress, Length, FALSE, TRUE, NULL);
+    Mdl = MmCreateMdl(NULL, BaseAddress, Length);
     if (Mdl == NULL)
     {
         return STATUS_INSUFFICIENT_RESOURCES;
@@ -233,7 +237,8 @@ ExLockUserBuffer(
     _SEH2_END;
 
     /* Return the safe kernel mode buffer */
-    *MappedSystemVa = MmGetSystemAddressForMdlSafe(Mdl, NormalPagePriority);
+    Mdl->MdlFlags |= MDL_MAPPING_CAN_FAIL;
+    *MappedSystemVa = MmGetSystemAddressForMdlSafe(Mdl, NormalPagePriority /* | MdlMappingNoExecute */);
     if (*MappedSystemVa == NULL)
     {
         ExUnlockUserBuffer(Mdl);
