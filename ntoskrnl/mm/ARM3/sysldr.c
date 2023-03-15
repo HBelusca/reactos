@@ -47,11 +47,12 @@ ULONG_PTR MmPteCodeStart, MmPteCodeEnd;
 /* FUNCTIONS ******************************************************************/
 
 PVOID
-NTAPI
-MiCacheImageSymbols(IN PVOID BaseAddress)
+MiCacheImageSymbols(
+    _In_ PVOID BaseAddress)
 {
     ULONG DebugSize;
     PVOID DebugDirectory = NULL;
+
     PAGED_CODE();
 
     /* Make sure it's safe to access the image */
@@ -65,9 +66,46 @@ MiCacheImageSymbols(IN PVOID BaseAddress)
     }
     _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
     {
-        /* Nothing */
+        NOTHING;
     }
     _SEH2_END;
+
+#ifdef __ROS_ROSSYM__
+    /* Return the directory if we got one */
+    if (DebugDirectory)
+        return DebugDirectory;
+
+    /* If we support ReactOS-specific RosSym symbols, try to find them */
+    _SEH2_TRY
+    {
+        PIMAGE_NT_HEADERS NtHeaders;
+        PIMAGE_SECTION_HEADER Section;
+        ULONG i;
+
+        /* Get the NT headers */
+        NtHeaders = RtlImageNtHeader(BaseAddress);
+        if (!NtHeaders)
+            _SEH2_YIELD(return NULL);
+
+        /* Go through all sections */
+        for (i = 0, Section = IMAGE_FIRST_SECTION(NtHeaders);
+             i < NtHeaders->FileHeader.NumberOfSections;
+             ++i, ++Section)
+        {
+            if (strncmp((PCCH)Section->Name, ROSSYM_SECTION_NAME, IMAGE_SIZEOF_SHORT_NAME) == 0)
+            {
+                /* HACK: Just make DebugDirectory point to the section header */
+                DebugDirectory = (PVOID)Section;
+                break;
+            }
+        }
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        NOTHING;
+    }
+    _SEH2_END;
+#endif // __ROS_ROSSYM__
 
     /* Return the directory */
     return DebugDirectory;
@@ -3441,13 +3479,8 @@ LoaderScan:
         PspRunLoadImageNotifyRoutines(FileName, NULL, &ImageInfo);
     }
 
-#ifdef __ROS_ROSSYM__
-    /* MiCacheImageSymbols doesn't detect rossym */
-    if (TRUE)
-#else
-    /* Check if there's symbols */
+    /* Check if there are symbols */
     if (MiCacheImageSymbols(LdrEntry->DllBase))
-#endif
     {
         UNICODE_STRING UnicodeTemp;
         STRING AnsiTemp;
