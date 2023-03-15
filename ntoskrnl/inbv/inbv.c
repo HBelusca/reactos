@@ -107,7 +107,7 @@ FindBitmapResource(
     NTSTATUS Status;
     PVOID Data = NULL;
 
-    /* Loop the driver list */
+    /* Loop the boot modules list */
     ListHead = &LoaderBlock->LoadOrderListHead;
     for (NextEntry = ListHead->Flink;
          NextEntry != ListHead;

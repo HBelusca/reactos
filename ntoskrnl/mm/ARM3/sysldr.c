@@ -675,7 +675,7 @@ MiUpdateThunks(IN PLOADER_PARAMETER_BLOCK LoaderBlock,
     OldBaseTop = (ULONG_PTR)OldBase + Size - 1;
     Delta = (ULONG_PTR)NewBase - (ULONG_PTR)OldBase;
 
-    /* Loop the loader block */
+    /* Loop the boot modules list */
     for (NextEntry = LoaderBlock->LoadOrderListHead.Flink;
          NextEntry != &LoaderBlock->LoadOrderListHead;
          NextEntry = NextEntry->Flink)
@@ -1744,7 +1744,7 @@ MiReloadBootLoadedDrivers(IN PLOADER_PARAMETER_BLOCK LoaderBlock)
     PMMPFN Pfn1;
     MMPTE TempPte, OldPte;
 
-    /* Loop driver list */
+    /* Loop the boot modules list */
     for (NextEntry = LoaderBlock->LoadOrderListHead.Flink;
          NextEntry != &LoaderBlock->LoadOrderListHead;
          NextEntry = NextEntry->Flink)
