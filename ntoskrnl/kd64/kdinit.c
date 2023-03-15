@@ -143,21 +143,11 @@ KdInitSystem(
     _In_ ULONG BootPhase,
     _In_opt_ PLOADER_PARAMETER_BLOCK LoaderBlock)
 {
-    BOOLEAN EnableKd, DisableKdAfterInit = FALSE, BlockEnable;
+    BOOLEAN EnableKd, DisableKdAfterInit = FALSE, BlockEnable = FALSE;
     PSTR CommandLine, DebugLine, DebugOptionStart, DebugOptionEnd;
-    STRING ImageName;
     PLDR_DATA_TABLE_ENTRY LdrEntry;
-    PLIST_ENTRY NextEntry;
-    ULONG i, j, Length;
+    ULONG i;
     SIZE_T DebugOptionLength;
-    SIZE_T MemSizeMBs;
-    CHAR NameBuffer[256];
-    PWCHAR Name;
-
-#if defined(__GNUC__)
-    /* Make gcc happy */
-    BlockEnable = FALSE;
-#endif
 
     /* Check if this is Phase 1 */
     if (BootPhase)
@@ -214,7 +204,7 @@ KdInitSystem(
     /* Check if we have a loader block */
     if (LoaderBlock)
     {
-        /* Get the image entry */
+        /* Get the kernel entry */
         LdrEntry = CONTAINING_RECORD(LoaderBlock->LoadOrderListHead.Flink,
                                      LDR_DATA_TABLE_ENTRY,
                                      InLoadOrderLinks);
@@ -392,8 +382,7 @@ KdInitSystem(
         SharedUserData->KdDebuggerEnabled = TRUE;
 
         /* Display separator + ReactOS version at start of the debug log */
-        MemSizeMBs = KdpGetMemorySizeInMBs(KeLoaderBlock);
-        KdpPrintBanner(MemSizeMBs);
+        KdpPrintBanner(KdpGetMemorySizeInMBs(KeLoaderBlock));
 
         /* Check if the debugger should be disabled initially */
         if (DisableKdAfterInit)
@@ -409,13 +398,22 @@ KdInitSystem(
             return TRUE;
         }
 
-        /* Check if we have a loader block */
+        /*
+         * If we have a loader block, load the symbols of the first
+         * two boot images: NTOS kernel and HAL. The other ones will
+         * be loaded later by ExpLoadBootSymbols().
+         */
         if (LoaderBlock)
         {
-            /* Loop boot images */
-            NextEntry = LoaderBlock->LoadOrderListHead.Flink;
-            i = 0;
-            while ((NextEntry != &LoaderBlock->LoadOrderListHead) && (i < 2))
+            ULONG Count, Length;
+            PLIST_ENTRY NextEntry;
+            PWCHAR Name;
+            STRING ImageName;
+            CHAR NameBuffer[256];
+
+            for (NextEntry = LoaderBlock->LoadOrderListHead.Flink, i = 0;
+                 NextEntry != &LoaderBlock->LoadOrderListHead && i < 2;
+                 NextEntry = NextEntry->Flink, ++i)
             {
                 /* Get the image entry */
                 LdrEntry = CONTAINING_RECORD(NextEntry,
@@ -425,25 +423,26 @@ KdInitSystem(
                 /* Generate the image name */
                 Name = LdrEntry->FullDllName.Buffer;
                 Length = LdrEntry->FullDllName.Length / sizeof(WCHAR);
-                j = 0;
+
+                /* If the name is too long, just truncate it */
+                if (sizeof(NameBuffer) < Length + sizeof(ANSI_NULL))
+                    Length = sizeof(NameBuffer) - sizeof(ANSI_NULL);
+
+                /* Do cheap Unicode to ANSI conversion */
+                Count = 0;
                 do
                 {
-                    /* Do cheap Unicode to ANSI conversion */
-                    NameBuffer[j++] = (CHAR)*Name++;
-                } while (j < Length);
+                    NameBuffer[Count++] = (CHAR)*Name++;
+                } while (Count < Length);
 
                 /* Null-terminate */
-                NameBuffer[j] = ANSI_NULL;
+                NameBuffer[Count] = ANSI_NULL;
 
-                /* Load symbols for image */
+                /* Load symbols for the image */
                 RtlInitString(&ImageName, NameBuffer);
                 DbgLoadImageSymbols(&ImageName,
                                     LdrEntry->DllBase,
                                     (ULONG_PTR)PsGetCurrentProcessId());
-
-                /* Go to the next entry */
-                NextEntry = NextEntry->Flink;
-                i++;
             }
         }
 
