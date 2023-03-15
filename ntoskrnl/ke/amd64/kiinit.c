@@ -439,36 +439,6 @@ KiInitializeKernelMachineDependent(
 #endif
 }
 
-static LDR_DATA_TABLE_ENTRY LdrCoreEntries[3];
-
-void
-KiInitModuleList(IN PLOADER_PARAMETER_BLOCK LoaderBlock)
-{
-    PLDR_DATA_TABLE_ENTRY LdrEntry;
-    PLIST_ENTRY Entry;
-    ULONG i;
-
-    /* Initialize the list head */
-    InitializeListHead(&PsLoadedModuleList);
-
-    /* Loop the first 3 entries */
-    for (Entry = LoaderBlock->LoadOrderListHead.Flink, i = 0;
-         Entry != &LoaderBlock->LoadOrderListHead && i < 3;
-         Entry = Entry->Flink, i++)
-    {
-        /* Get the data table entry */
-        LdrEntry = CONTAINING_RECORD(Entry,
-                                     LDR_DATA_TABLE_ENTRY,
-                                     InLoadOrderLinks);
-
-        /* Copy the entry */
-        LdrCoreEntries[i] = *LdrEntry;
-
-        /* Insert the copy into the list */
-        InsertTailList(&PsLoadedModuleList, &LdrCoreEntries[i].InLoadOrderLinks);
-    }
-}
-
 CODE_SEG("INIT")
 DECLSPEC_NORETURN
 VOID
@@ -522,9 +492,6 @@ KiSystemStartup(IN PLOADER_PARAMETER_BLOCK LoaderBlock)
     /* Initial setup for the boot CPU */
     if (Cpu == 0)
     {
-        /* Initialize the module list (ntos, hal, kdcom) */
-        KiInitModuleList(LoaderBlock);
-
         /* Setup the IDT */
         KeInitExceptions();
 
