@@ -15,6 +15,8 @@
 #define NDEBUG
 #include <debug.h>
 
+#define DbgPrint(fmt, ...)  (KdpDprintf(fmt, ##__VA_ARGS__), 0)
+
 BOOLEAN
 RosSymCreateFromMem(PVOID ImageStart, ULONG_PTR ImageSize, PROSSYM_INFO *RosSymInfo)
 {

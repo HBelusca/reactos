@@ -42,6 +42,8 @@
 #define NDEBUG
 #include <debug.h>
 
+#define DbgPrint(fmt, ...)  (KdpDprintf(fmt, ##__VA_ARGS__), 0)
+
 static PROSSYM_ENTRY
 FindEntry(IN PROSSYM_INFO RosSymInfo, IN ULONG_PTR RelativeAddress)
 {

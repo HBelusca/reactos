@@ -15,6 +15,8 @@
 #define NDEBUG
 #include <debug.h>
 
+#define DbgPrint(fmt, ...)  (KdpDprintf(fmt, ##__VA_ARGS__), 0)
+
 BOOLEAN
 RosSymCreateFromFile(PVOID FileContext, PROSSYM_INFO *RosSymInfo)
 {

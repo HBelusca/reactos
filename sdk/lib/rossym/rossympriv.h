@@ -9,6 +9,12 @@
 
 #pragma once
 
+extern VOID
+__cdecl
+KdpDprintf(
+    _In_ PCHAR Format,
+    ...);
+
 extern ROSSYM_CALLBACKS RosSymCallbacks;
 
 #define RosSymAllocMem(Size) (*RosSymCallbacks.AllocMemProc)(Size)
