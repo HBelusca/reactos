@@ -547,6 +547,7 @@ static inline
 VOID
 KdbpSymQueueLoadSymbols(
     _Inout_ PLDR_DATA_TABLE_ENTRY LdrEntry,
+    _In_ BOOLEAN Notify,
     _In_ BOOLEAN InsertAtHead)
 {
     /* Add a reference until we really process it. It will be released
@@ -566,7 +567,8 @@ KdbpSymQueueLoadSymbols(
                                     &LdrEntry->InInitializationOrderLinks,
                                     &SymbolsToLoadLock);
     }
-    KeSetEvent(&SymbolsToLoadEvent, IO_NO_INCREMENT, FALSE);
+    if (Notify)
+        KeSetEvent(&SymbolsToLoadEvent, IO_NO_INCREMENT, FALSE);
 }
 
 /**
@@ -577,12 +579,20 @@ KdbpSymQueueLoadSymbols(
  * @see BootSymbolsToLoad.
  **/
 static VOID
-KdbpSymLoadPendingBootSymbols(VOID)
+KdbpSymLoadPendingBootSymbols(
+    _In_ BOOLEAN Notify)
 {
+    LIST_ENTRY DelayedLoading;
+
     PLIST_ENTRY ListEntry;
     PLDR_DATA_TABLE_ENTRY LdrEntry1, LdrEntry2;
     NTSTATUS Status;
     KIRQL OldIrql;
+
+    /*
+     * Initialize the temporary list for modules whose symbols need to be retry loading. It will be prepended back in order into the SymbolsToLoad list.
+     */
+    InitializeListHead(&DelayedLoading);
 
     while (!IsListEmpty(&BootSymbolsToLoad))
     {
@@ -629,11 +639,12 @@ KdbpSymLoadPendingBootSymbols(VOID)
             continue;
         }
 
+        /* Try to load the symbols for this module */
         Status = KdbpSymLoadSymbolsWorker(LdrEntry2);
         if (Status == STATUS_RETRY)
         {
             /* Queue the entry for deferred loading */
-            KdbpSymQueueLoadSymbols(LdrEntry2, TRUE);
+            KdbpSymQueueLoadSymbols(LdrEntry2, Notify, TRUE);
         }
         /* Otherwise, we either succeeded, or failed
          * for whatever other reason: just continue. */
@@ -652,6 +663,7 @@ KdbpSymLoadPendingBootSymbols(VOID)
  * We must do this because KdbSymProcessSymbols is called at high IRQL
  * and we can't set the event from here.
  **/
+#define USE_TEMP_LIST
 static KSTART_ROUTINE LoadSymbolsRoutine;
 _Use_decl_annotations_
 static VOID
@@ -659,10 +671,13 @@ NTAPI
 LoadSymbolsRoutine(
     _In_ PVOID Context)
 {
+#ifdef USE_TEMP_LIST
     LIST_ENTRY DelayedLoading;
+#endif
 
     UNREFERENCED_PARAMETER(Context);
 
+#ifdef USE_TEMP_LIST
     /*
      * Initialize the temporary list that contains the modules
      * we need to retry loading their symbols later. It will be
@@ -670,11 +685,12 @@ LoadSymbolsRoutine(
      * has been enumerated.
      */
     InitializeListHead(&DelayedLoading);
+#endif
 
 // FIXME: Should we re-do this here too? (see also KdbSymProcessSymbols)
     /* Load any pending boot symbols */
     if (!IsListEmpty(&BootSymbolsToLoad))
-        KdbpSymLoadPendingBootSymbols();
+        KdbpSymLoadPendingBootSymbols(FALSE);
 
     while (TRUE)
     {
@@ -695,6 +711,8 @@ LoadSymbolsRoutine(
         }
 
         /* Loop through the list of modules whose symbols to load */
+#ifdef USE_TEMP_LIST
+
         while ((ListEntry = ExInterlockedRemoveHeadList(&SymbolsToLoad, &SymbolsToLoadLock)))
         {
             LdrEntry = CONTAINING_RECORD(ListEntry,
@@ -703,6 +721,7 @@ LoadSymbolsRoutine(
 
             /***/InitializeListHead(&LdrEntry->InInitializationOrderLinks);/***/
 
+            /* Try to load the symbols for this module */
             Status = KdbpSymLoadSymbolsWorker(LdrEntry);
             if (Status == STATUS_RETRY)
             {
@@ -712,13 +731,14 @@ LoadSymbolsRoutine(
             }
             else
             {
-                /* Release the reference we took previously */
+                /* Release the reference taken previously
+                 * in KdbpSymQueueLoadSymbols(). */
                 MmUnloadSystemImage(LdrEntry);
             }
         }
 
-        /* Finally, move the modules we need to reload later on,
-         * back in orderly fashion into the list of symbols to load. */
+        /* Finally, move the modules we need to reload later, back
+         * in orderly fashion into the list of symbols to load. */
         KeAcquireSpinLock(&SymbolsToLoadLock, &OldIrql);
         while (!IsListEmpty(&DelayedLoading))
         {
@@ -733,6 +753,65 @@ LoadSymbolsRoutine(
                            &LdrEntry->InInitializationOrderLinks);
         }
         KeReleaseSpinLock(&SymbolsToLoadLock, OldIrql);
+
+#else // USE_TEMP_LIST
+
+        KeAcquireSpinLock(&SymbolsToLoadLock, &OldIrql);
+        for (ListEntry = SymbolsToLoad.Flink;
+             ListEntry != &SymbolsToLoad; NOTHING)
+        {
+            LdrEntry = CONTAINING_RECORD(ListEntry,
+                                         LDR_DATA_TABLE_ENTRY,
+                                         InInitializationOrderLinks);
+            /* Go to the next entry (we may unlink this entry later) */
+            ListEntry = ListEntry->Flink;
+
+            KeReleaseSpinLock(&SymbolsToLoadLock, OldIrql);
+
+            /* Try to load the symbols for this module */
+            Status = KdbpSymLoadSymbolsWorker(LdrEntry);
+            if (Status != STATUS_RETRY)
+            {
+                /* Release the reference taken previously
+                 * in KdbpSymQueueLoadSymbols(). */
+                MmUnloadSystemImage(LdrEntry);
+
+                KeAcquireSpinLock(&SymbolsToLoadLock, &OldIrql);
+                RemoveEntryList(&LdrEntry->InInitializationOrderLinks);
+            }
+            else
+            {
+                KeAcquireSpinLock(&SymbolsToLoadLock, &OldIrql);
+            }
+        }
+        KeReleaseSpinLock(&SymbolsToLoadLock, OldIrql);
+
+
+        while ((ListEntry = ExInterlockedRemoveHeadList(&SymbolsToLoad, &SymbolsToLoadLock)))
+        {
+            LdrEntry = CONTAINING_RECORD(ListEntry,
+                                         LDR_DATA_TABLE_ENTRY,
+                                         InInitializationOrderLinks);
+
+            /***/InitializeListHead(&LdrEntry->InInitializationOrderLinks);/***/
+
+            /* Try to load the symbols for this module */
+            Status = KdbpSymLoadSymbolsWorker(LdrEntry);
+            if (Status == STATUS_RETRY)
+            {
+                /* Move it to the temporary list, we will retry later */
+                InsertHeadList(&DelayedLoading,
+                               &LdrEntry->InInitializationOrderLinks);
+            }
+            else
+            {
+                /* Release the reference taken previously
+                 * in KdbpSymQueueLoadSymbols(). */
+                MmUnloadSystemImage(LdrEntry);
+            }
+        }
+
+#endif // USE_TEMP_LIST
     }
 }
 
@@ -757,7 +836,7 @@ KdbSymProcessSymbols(
     NTSTATUS Status;
     CHAR ModuleNameAnsi[64];
 
-    if (!LoadSymbols)
+    if (Load && !LoadSymbols)
         return;
 
     KdbpSymUnicodeToAnsi(&LdrEntry->FullDllName,
@@ -789,6 +868,9 @@ KdbSymProcessSymbols(
         return;
     }
 
+    if (!LoadSymbols)
+        return;
+
     /* Don't reload symbols if they already exist */
     if (LdrEntry->PatchInformation)
     {
@@ -811,21 +893,24 @@ KdbSymProcessSymbols(
 
     /*
      * The Mm subsystem is now initialized, or we are in InitPhase >= 1:
-     * try to load the symbols from the loaded image in memory (loading
-     * them requires memory allocations by RosSym). If loading the symbols
-     * from memory fails, defer-load the symbols from the file image:
-     * we cannot load them now since we are at HIGH_IRQL.
+     * attempt to load any symbols from the loaded images in memory
+     * (loading them requires memory allocations by RosSym).
      */
 
     /* Load any pending boot symbols */
     if (!IsListEmpty(&BootSymbolsToLoad))
-        KdbpSymLoadPendingBootSymbols();
+        KdbpSymLoadPendingBootSymbols(TRUE);
 
+    /*
+     * Try to load the symbols from the loaded image in memory. If loading
+     * the symbols from memory fails, defer-load the symbols from the file
+     * image: we cannot load them now since we are at HIGH_IRQL.
+     */
     Status = KdbpSymLoadSymbolsWorker(LdrEntry);
     if (Status == STATUS_RETRY)
     {
         /* Queue the entry for deferred loading */
-        KdbpSymQueueLoadSymbols(LdrEntry, FALSE);
+        KdbpSymQueueLoadSymbols(LdrEntry, TRUE, FALSE);
     }
     /* Otherwise, we either succeeded, or failed
      * for whatever other reason: just bail out. */
@@ -850,7 +935,6 @@ KdbSymReloadSymbols(VOID)
         return;
 
     KeAcquireSpinLock(&PsLoadedModuleSpinLock, &OldIrql);
-
     for (ListEntry = PsLoadedModuleList.Flink;
          ListEntry != &PsLoadedModuleList;
          ListEntry = ListEntry->Flink)
@@ -860,9 +944,70 @@ KdbSymReloadSymbols(VOID)
                                      InLoadOrderLinks);
         KdbSymProcessSymbols(LdrEntry, TRUE);
     }
-
     KeReleaseSpinLock(&PsLoadedModuleSpinLock, OldIrql);
 }
+
+VOID
+KdbSymUnloadSymbols(
+    _In_ BOOLEAN UnloadAll)
+{
+    PLIST_ENTRY ListEntry;
+    PLDR_DATA_TABLE_ENTRY LdrEntry;
+    KIRQL OldIrql;
+
+    /*
+     * Cleanup any pending loading list.
+     */
+
+    while (!IsListEmpty(&BootSymbolsToLoad))
+    {
+        ListEntry = RemoveHeadList(&BootSymbolsToLoad);
+    }
+
+    KeClearEvent(&SymbolsToLoadEvent);
+    while ((ListEntry = ExInterlockedRemoveHeadList(&SymbolsToLoad, &SymbolsToLoadLock)))
+    {
+        LdrEntry = CONTAINING_RECORD(ListEntry,
+                                     LDR_DATA_TABLE_ENTRY,
+                                     InInitializationOrderLinks);
+
+        /* Release the reference taken in KdbpSymQueueLoadSymbols() */
+        MmUnloadSystemImage(LdrEntry);
+    }
+
+    /*
+     * Now, unload all loaded symbols if necessary.
+     */
+    if (!UnloadAll)
+        return;
+
+#if 0
+
+    while ((ListEntry = ExInterlockedRemoveHeadList(&LoadedSymbols, &LoadedSymbolsLock)))
+    {
+        LdrEntry = CONTAINING_RECORD(ListEntry,
+                                     LDR_DATA_TABLE_ENTRY,
+                                     InInitializationOrderLinks);
+        KdbSymProcessSymbols(LdrEntry, FALSE);
+    }
+
+#else
+
+    KeAcquireSpinLock(&PsLoadedModuleSpinLock, &OldIrql);
+    for (ListEntry = PsLoadedModuleList.Flink;
+         ListEntry != &PsLoadedModuleList;
+         ListEntry = ListEntry->Flink)
+    {
+        LdrEntry = CONTAINING_RECORD(ListEntry,
+                                     LDR_DATA_TABLE_ENTRY,
+                                     InLoadOrderLinks);
+        KdbSymProcessSymbols(LdrEntry, FALSE);
+    }
+    KeReleaseSpinLock(&PsLoadedModuleSpinLock, OldIrql);
+
+#endif
+}
+
 
 /**
  * @brief   Initializes the KDB symbols implementation.
