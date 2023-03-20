@@ -136,6 +136,7 @@ static BOOLEAN KdbRepeatLastCommand = FALSE;
 
 volatile PCHAR KdbInitFileBuffer = NULL; /* Buffer where KDBinit file is loaded into during initialization */
 BOOLEAN KdbpBugCheckRequested = FALSE;
+ULONG KdbInitPhase = 0;
 
 /* Variables for Dmesg */
 static const ULONG KdpDmesgBufferSize = 128 * 1024; // 512*1024;
@@ -3557,6 +3558,9 @@ KdbInitialize(
 {
     /* Saves the different symbol-loading status across boot phases */
     static ULONG LoadSymbols = 0;
+
+    /* Save the current initialization phase */
+    KdbInitPhase = BootPhase;
 
     if (BootPhase == 0)
     {

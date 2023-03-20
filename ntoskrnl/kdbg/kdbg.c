@@ -88,10 +88,27 @@ KdSendPacket(
         if (WaitStateChange->NewState == DbgKdLoadSymbolsStateChange)
         {
             /* Load or unload symbols */
+            PDBGKD_LOAD_SYMBOLS64 LoadSymbols = &WaitStateChange->u.LoadSymbols;
             PLDR_DATA_TABLE_ENTRY LdrEntry;
-            if (KdbpSymFindModule((PVOID)(ULONG_PTR)WaitStateChange->u.LoadSymbols.BaseOfDll, -1, &LdrEntry))
+#if 0
+            ANSI_STRING ImageName;
+
+            ImageName.Buffer = MessageData->Buffer;
+            ImageName.MaximumLength = MessageData->Length;
+            ImageName.Length = ImageName.MaximumLength - sizeof(ANSI_NULL);
+
+KdbPrintf("\nDbgKdLoadSymbolsStateChange:\n");
+KdbPrintf("    LoadSymbols: %s\n", !(LoadSymbols->UnloadSymbols) ? "TRUE" : "FALSE");
+KdbPrintf("    PathName   : %Z\n", &ImageName);
+KdbPrintf("    BaseOfDll  : 0x%lx\n", LoadSymbols->BaseOfDll);
+KdbPrintf("    ProcessId  : 0x%lx\n", LoadSymbols->ProcessId);
+KdbPrintf("    CheckSum   : 0x%x\n", LoadSymbols->CheckSum);
+KdbPrintf("    SizeOfImage: 0x%x\n", LoadSymbols->SizeOfImage);
+#endif
+
+            if (KdbpSymFindModule((PVOID)(ULONG_PTR)LoadSymbols->BaseOfDll, -1, &LdrEntry))
             {
-                KdbSymProcessSymbols(LdrEntry, !WaitStateChange->u.LoadSymbols.UnloadSymbols);
+                KdbSymProcessSymbols(LdrEntry, !LoadSymbols->UnloadSymbols);
             }
             return;
         }

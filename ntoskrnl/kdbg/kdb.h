@@ -172,9 +172,9 @@ KdbpRpnEvaluateParsedExpression(
 
 BOOLEAN
 KdbpSymFindModule(
-    IN PVOID Address  OPTIONAL,
-    IN INT Index  OPTIONAL,
-    OUT PLDR_DATA_TABLE_ENTRY* pLdrEntry);
+    _In_opt_ PVOID Address,
+    _In_opt_ INT Index,
+    _Out_ PLDR_DATA_TABLE_ENTRY* pLdrEntry);
 
 BOOLEAN
 KdbSymPrintAddress(
