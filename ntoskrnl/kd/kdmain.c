@@ -14,10 +14,14 @@
 #define NDEBUG
 #include <debug.h>
 
+#undef KdDebuggerInitialize0
+#undef KdDebuggerInitialize1
 #undef KdD0Transition
 #undef KdD3Transition
 #undef KdSave
 #undef KdRestore
+#undef KdSendPacket
+#undef KdReceivePacket
 
 /* PUBLIC FUNCTIONS *********************************************************/
 
@@ -303,7 +307,7 @@ KdpInitDriver(VOID)
 {
     static BOOLEAN InitCalled = FALSE;
     NTSTATUS Status;
-    UNICODE_STRING DriverName = RTL_CONSTANT_STRING(L"\\Driver\\KdDriver");
+    UNICODE_STRING DriverName = RTL_CONSTANT_STRING(L"\\Driver\\KdTerm");
 
     ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
 
@@ -363,8 +367,6 @@ KdDebuggerInitialize1(
 
     /* Make space for the displayed providers' signons */
     HalDisplayString("\r\n");
-
-    NtGlobalFlag |= FLG_STOP_ON_EXCEPTION;
 
     /* If we don't need to reinitialize providers for Phase 2, we are done */
     if (!ReinitForPhase2)

@@ -17,9 +17,63 @@ static KD_CONTEXT KdbgKdContext;
 
 #undef KdSendPacket
 #define pKdSendPacket KdSendPacket
+VOID
+KdbpPrintPacket(
+    _In_ PSTRING MessageHeader,
+    _In_ PSTRING MessageData,
+    _Inout_ PKD_CONTEXT Context)
+{
+    ULONG ApiNumber = ((PDBGKD_DEBUG_IO)MessageHeader->Buffer)->ApiNumber;
+
+    ASSERT(MessageHeader->Length == sizeof(DBGKD_DEBUG_IO));
+    ASSERT((ApiNumber == DbgKdPrintStringApi) ||
+           (ApiNumber == DbgKdGetStringApi));
+    ASSERT(MessageData);
+
+    /* IO packet: call KdTerm */
+    pKdSendPacket(PACKET_TYPE_KD_DEBUG_IO, MessageHeader, MessageData, Context);
+
+    /* NOTE: MessageData->Length should be equal to
+     * DebugIo.u.PrintString.LengthOfString, or to
+     * DebugIo.u.GetString.LengthOfPromptString */
+
+    /* Call also our debug print routine */
+    KdbDebugPrint(MessageData->Buffer, MessageData->Length);
+}
 
 #undef KdReceivePacket
 #define pKdReceivePacket KdReceivePacket
+KDSTATUS
+KdbpPromptPacket(
+    _Out_ PSTRING MessageHeader,
+    _Out_ PSTRING MessageData,
+    _Out_ PULONG DataLength,
+    _Inout_ PKD_CONTEXT Context)
+{
+    KDSTATUS Status;
+    ULONG ApiNumber = ((PDBGKD_DEBUG_IO)MessageHeader->Buffer)->ApiNumber;
+
+    ASSERT(MessageHeader->MaximumLength == sizeof(DBGKD_DEBUG_IO));
+    ASSERT(ApiNumber == DbgKdGetStringApi);
+    ASSERT(MessageData);
+
+    /* IO packet: call KdTerm */
+    Status = pKdReceivePacket(PACKET_TYPE_KD_DEBUG_IO,
+                              MessageHeader,
+                              MessageData,
+                              DataLength,
+                              Context);
+    if (Status == KdPacketReceived)
+    {
+        // ASSERT(*DataLength == MessageData->Length);
+
+        /* Mirror the answer to our debug print routine */
+        KdbDebugPrint(MessageData->Buffer, MessageData->Length);
+        KdbDebugPrint("\n", 1);
+    }
+
+    return Status;
+}
 
 static VOID
 KdbPrintStringWorker(
@@ -56,8 +110,7 @@ KdbPrintStringWorker(
     Data->Buffer = (PCHAR)Output->Buffer;
 
     /* Send the packet */
-    /* IO packet: call KdTerm */
-    pKdSendPacket(PACKET_TYPE_KD_DEBUG_IO, Header, Data, &KdbgKdContext);
+    KdbpPrintPacket(Header, Data, &KdbgKdContext);
 }
 
 VOID
@@ -97,12 +150,7 @@ KdbPromptStringWorker(
     do
     {
         /* Get our reply */
-        /* IO packet: call KdTerm */
-        Status = pKdReceivePacket(PACKET_TYPE_KD_DEBUG_IO,
-                                  &Header,
-                                  &Data,
-                                  &Length,
-                                  &KdbgKdContext);
+        Status = KdbpPromptPacket(&Header, &Data, &Length, &KdbgKdContext);
 
         /* Return TRUE if we need to resend */
         if (Status == KdPacketNeedsResend)

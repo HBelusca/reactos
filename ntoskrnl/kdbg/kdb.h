@@ -1,5 +1,4 @@
 #pragma once
-#include "../kd/kd.h"
 
 /* TYPES *********************************************************************/
 
@@ -93,10 +92,15 @@ KdbpStackSwitchAndCall(
 
 /* from kdb_cli.c */
 
+VOID
+KdbDebugPrint(
+    _In_ PCCH String,
+    _In_ ULONG Length);
+
 NTSTATUS
 NTAPI
 KdbInitialize(
-    _In_ PKD_DISPATCH_TABLE DispatchTable,
+    // _In_ PKD_DISPATCH_TABLE DispatchTable,
     _In_ ULONG BootPhase);
 
 BOOLEAN
@@ -300,6 +304,19 @@ KbdEnableMouse(VOID);
 
 
 /* From kdb_print.c */
+
+VOID
+KdbpPrintPacket(
+    _In_ PSTRING MessageHeader,
+    _In_ PSTRING MessageData,
+    _Inout_ PKD_CONTEXT Context);
+
+KDSTATUS
+KdbpPromptPacket(
+    _Out_ PSTRING MessageHeader,
+    _Out_ PSTRING MessageData,
+    _Out_ PULONG DataLength,
+    _Inout_ PKD_CONTEXT Context);
 
 VOID
 KdbPrintString(

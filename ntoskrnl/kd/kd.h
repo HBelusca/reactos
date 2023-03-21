@@ -69,10 +69,6 @@ KdpDebugLogInit(
     _In_ struct _KD_DISPATCH_TABLE *DispatchTable,
     _In_ ULONG BootPhase);
 
-#ifdef KDBG
-#define KdpKdbgInit KdbInitialize
-#endif
-
 
 /* KD GLOBALS ****************************************************************/
 
@@ -86,8 +82,7 @@ KdpDebugLogInit(
 #define KdScreen    0
 #define KdSerial    1
 #define KdFile      2
-#define KdKdbg      3
-#define KdMax       4
+#define KdMax       3
 
 /* KD Private Debug Modes */
 typedef struct _KDP_DEBUG_MODE

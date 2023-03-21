@@ -35,6 +35,19 @@
 #define NDEBUG
 #include "debug.h"
 
+// FIXME: From kdio.c
+KIRQL
+NTAPI
+KdbpAcquireLock(
+    _In_ PKSPIN_LOCK SpinLock);
+
+VOID
+NTAPI
+KdbpReleaseLock(
+    _In_ PKSPIN_LOCK SpinLock,
+    _In_ KIRQL OldIrql);
+
+
 /* DEFINES *******************************************************************/
 
 #define KDB_ENTER_CONDITION_TO_STRING(cond)                               \
@@ -3299,8 +3312,7 @@ KdbpCliMainLoop(
          * Repeat the last one if the user pressed Enter.
          * This reduces the risk of RSI when single-stepping!
          */
-        // TEMP HACK! Issue an empty string instead of duplicating "kdb:>"
-        CmdLen = KdbPrompt(/*KdbPromptStr.Buffer*/"", Command, sizeof(Command));
+        CmdLen = KdbPrompt(KdbPromptStr.Buffer, Command, sizeof(Command));
         if (CmdLen == 0)
         {
             /* Nothing received but the user didn't press Enter, retry */
@@ -3486,8 +3498,7 @@ KdbpCliInit(VOID)
  * using the dmesg command. KdbDebugPrint() protects KdpDmesgBuffer
  * from simultaneous writes by use of KdpDmesgLogSpinLock.
  **/
-static VOID
-NTAPI
+VOID
 KdbDebugPrint(
     _In_ PCCH String,
     _In_ ULONG Length)
@@ -3501,6 +3512,11 @@ KdbDebugPrint(
 
     if (KdpDmesgBuffer == NULL)
         return;
+
+    // HACK around limitation of KdbpPagerInternal:
+    // Strip any trailing NULL-terminator.
+    while (Length > 0 && String[Length-1] == ANSI_NULL)
+        --Length;
 
     /* Acquire the printing spinlock without waiting at raised IRQL */
     OldIrql = KdbpAcquireLock(&KdpDmesgLogSpinLock);
@@ -3534,22 +3550,27 @@ KdbDebugPrint(
      * debug strings before they will be wiped over by next writes. */
 }
 
+
+typedef
+NTSTATUS
+(NTAPI *PKDP_INIT_ROUTINE)(
+    // _In_ struct _KD_DISPATCH_TABLE *DispatchTable,
+    _In_ ULONG BootPhase);
+
+PKDP_INIT_ROUTINE KdpInitRoutine = NULL;
+
 /**
  * @brief   Initializes the KDBG debugger.
- *
- * @param[in]   DispatchTable
- * Pointer to the KD dispatch table.
  *
  * @param[in]   BootPhase
  * Phase of initialization.
  *
  * @return  A status value.
- * @note    Also known as "KdpKdbgInit".
  **/
 NTSTATUS
 NTAPI
 KdbInitialize(
-    _In_ PKD_DISPATCH_TABLE DispatchTable,
+    // _In_ PKD_DISPATCH_TABLE DispatchTable,
     _In_ ULONG BootPhase)
 {
     /* Saves the different symbol-loading status across boot phases */
@@ -3557,24 +3578,13 @@ KdbInitialize(
 
     if (BootPhase == 0)
     {
-        /* Write out the functions that we support for now */
-        DispatchTable->KdpPrintRoutine = KdbDebugPrint;
-
-        /* Check if we have a command line */
-        if (KeLoaderBlock && KeLoaderBlock->LoadOptions)
-        {
-            /* Get the KDBG Settings */
-            KdbpGetCommandLineSettings(KeLoaderBlock->LoadOptions);
-        }
-
-        /* Register for BootPhase 1 initialization and as a Provider */
-        DispatchTable->KdpInitRoutine = KdbInitialize;
-        InsertTailList(&KdProviders, &DispatchTable->KdProvidersList);
+        /* Register for BootPhase 1 initialization */
+        /*DispatchTable->*/KdpInitRoutine = KdbInitialize;
     }
     else if (BootPhase == 1)
     {
         /* Register for later BootPhase 2 reinitialization */
-        DispatchTable->KdpInitRoutine = KdbInitialize;
+        /*DispatchTable->*/KdpInitRoutine = KdbInitialize;
 
         /* Initialize Dmesg support */
 
@@ -3619,7 +3629,7 @@ KdbInitialize(
         if (Status == STATUS_OBJECT_NAME_NOT_FOUND ||
             Status == STATUS_OBJECT_PATH_NOT_FOUND)
         {
-            DispatchTable->KdpInitRoutine = KdbInitialize;
+            /*DispatchTable->*/KdpInitRoutine = KdbInitialize;
         }
     }
 

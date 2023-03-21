@@ -9,7 +9,22 @@
 
 /* INCLUDES ******************************************************************/
 
+#if 0
+
+#define NOEXTAPI
+#include <ntifs.h>
+#include <halfuncs.h>
+#include <stdio.h>
+#include <arc/arc.h>
+#include <windbgkd.h>
+#include <kddll.h>
+
+#else
+
 #include <ntoskrnl.h>
+
+#endif
+
 #include "kdb.h"
 
 /* GLOBALS *******************************************************************/
@@ -21,6 +36,57 @@ static BOOLEAN KdbgFirstChanceException;
 static NTSTATUS KdbgContinueStatus = STATUS_SUCCESS;
 
 /* FUNCTIONS *****************************************************************/
+
+NTSTATUS
+NTAPI
+KdDebuggerInitialize0(
+    _In_opt_ PLOADER_PARAMETER_BLOCK LoaderBlock)
+#undef KdDebuggerInitialize0
+#define pKdDebuggerInitialize0 KdDebuggerInitialize0
+{
+    NTSTATUS Status;
+    PCHAR CommandLine;
+
+    /* Call KdTerm */
+    Status = pKdDebuggerInitialize0(LoaderBlock);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    if (LoaderBlock)
+    {
+        /* Check if we have a command line */
+        CommandLine = LoaderBlock->LoadOptions;
+        if (CommandLine)
+        {
+            /* Upcase it */
+            _strupr(CommandLine);
+
+            /* Get the KDBG Settings */
+            KdbpGetCommandLineSettings(CommandLine);
+        }
+    }
+
+    return KdbInitialize(0);
+}
+
+NTSTATUS
+NTAPI
+KdDebuggerInitialize1(
+    _In_opt_ PLOADER_PARAMETER_BLOCK LoaderBlock)
+#undef KdDebuggerInitialize1
+#define pKdDebuggerInitialize1 KdDebuggerInitialize1
+{
+    NTSTATUS Status;
+
+    /* Call KdTerm */
+    Status = pKdDebuggerInitialize1(LoaderBlock);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    NtGlobalFlag |= FLG_STOP_ON_EXCEPTION;
+
+    return KdbInitialize(1);
+}
 
 NTSTATUS
 NTAPI
@@ -72,15 +138,93 @@ KdSendPacket(
     _In_opt_ PSTRING MessageData,
     _Inout_ PKD_CONTEXT Context)
 #undef KdSendPacket
-#define pKdSendPacket KdSendPacket
 {
     if (PacketType == PACKET_TYPE_KD_DEBUG_IO)
     {
-        /* Call KdTerm */
-        pKdSendPacket(PacketType, MessageHeader, MessageData, Context);
+        PDBGKD_DEBUG_IO DebugIo = (PDBGKD_DEBUG_IO)MessageHeader->Buffer;
+        ULONG ApiNumber;
+        PCHAR Buffer;
+
+        /* Validate API call */
+        if (MessageHeader->Length != sizeof(DBGKD_DEBUG_IO))
+            return;
+        if ((DebugIo->ApiNumber != DbgKdPrintStringApi) &&
+            (DebugIo->ApiNumber != DbgKdGetStringApi))
+        {
+            return;
+        }
+        if (!MessageData)
+            return;
+
+        /*
+         * WinDbg expects, for DbgKdGetStringApi, to be sent only one such
+         * packet and emit a reply to it.  Since we want to insert our own
+         * KDBG prompt just after the original prompt and before receiving
+         * the reply, we cannot send the original prompt as part of the
+         * DbgKdGetStringApi call, then print our own prompt with a
+         * DbgKdPrintStringApi call, and expect to receive a reply for the
+         * original DbgKdGetStringApi call.  WinDbg would block the output
+         * after the sent DbgKdGetStringApi to wait for user prompt, and
+         * resume output afterwards.  Only then our KDBG prompt would be
+         * displayed, and trigger a desynchronization with WinDbg for when
+         * the next reply for DbgKdGetStringApi is expected.
+         *
+         * The only solution to this problem is to first print the original
+         * prompt via a DbgKdPrintStringApi call, and then, print our own
+         * KDBG prompt as part of the original DbgKdGetStringApi call.
+         */
+
+        ApiNumber = DebugIo->ApiNumber;
+        if (ApiNumber == DbgKdGetStringApi)
+        {
+            /*
+             * To print the original prompt, change its ApiNumber to
+             * DbgKdPrintStringApi so that WinDbg thinks it's a regular
+             * string being printed, and does not wait for user input.
+             * NOTE: DebugIo points inside MessageHeader data.
+             * Save also the original I/O buffer as we will modify it.
+             */
+            DebugIo->ApiNumber = DbgKdPrintStringApi;
+            Buffer = MessageData->Buffer;
+
+            /* Acquire the terminal since we are called for a prompt */
+            if (&KD_TERM) KD_TERM.SetState(TRUE);
+        }
+
+        /* Print the string or the original prompt */
+        KdbpPrintPacket(MessageHeader, MessageData, Context);
+
+        if (ApiNumber == DbgKdGetStringApi)
+        {
+            extern const CSTRING KdbPromptStr;
+
+            /* The original prompt string has been printed; go to the
+             * new line and print the kdb prompt -- for SYSREG2 support. */
+            // KdbPrintf("\n%Z", &KdbPromptStr); // Alternatively, use "Input> "
+
+            // KdbPuts("\n");
+            DebugIo->u.PrintString.LengthOfString = 1;
+            MessageData->Length = DebugIo->u.PrintString.LengthOfString;
+            MessageData->Buffer = "\n";
+            KdbpPrintPacket(MessageHeader, MessageData, Context);
+
+            /* Restore the original ApiNumber and print our prompt
+             * as part of the original DbgKdGetStringApi call. */
+            DebugIo->ApiNumber = ApiNumber;
+
+            // KdbPuts(KdbPromptStr.Buffer);
+            DebugIo->u.GetString.LengthOfPromptString = KdbPromptStr.Length;
+            MessageData->Length = DebugIo->u.GetString.LengthOfPromptString;
+            MessageData->Buffer = (PCHAR)KdbPromptStr.Buffer;
+            KdbpPrintPacket(MessageHeader, MessageData, Context);
+
+            /* And restore the original buffer that will receive the reply */
+            MessageData->Buffer = Buffer;
+        }
+
         return;
     }
-
+    else
     /* Debugger-only packets */
     if (PacketType == PACKET_TYPE_KD_STATE_CHANGE64)
     {
@@ -139,8 +283,6 @@ KdSendPacket(
             return;
         }
     }
-
-    KdbPrintf("%s: PacketType %d is UNIMPLEMENTED\n", __FUNCTION__, PacketType);
     return;
 }
 
@@ -153,7 +295,6 @@ KdReceivePacket(
     _Out_ PULONG DataLength,
     _Inout_ PKD_CONTEXT Context)
 #undef KdReceivePacket
-#define pKdReceivePacket KdReceivePacket
 {
     if (PacketType == PACKET_TYPE_KD_POLL_BREAKIN)
     {
@@ -164,14 +305,28 @@ KdReceivePacket(
 
     if (PacketType == PACKET_TYPE_KD_DEBUG_IO)
     {
-        /* Call KdTerm */
-        return pKdReceivePacket(PacketType,
-                                MessageHeader,
-                                MessageData,
-                                DataLength,
-                                Context);
-    }
+        PDBGKD_DEBUG_IO DebugIo = (PDBGKD_DEBUG_IO)MessageHeader->Buffer;
+        KDSTATUS Status;
 
+        /* Validate API call */
+        if (MessageHeader->MaximumLength != sizeof(DBGKD_DEBUG_IO))
+            return KdPacketNeedsResend;
+        if (DebugIo->ApiNumber != DbgKdGetStringApi)
+            return KdPacketNeedsResend;
+        if (!MessageData)
+            return KdPacketNeedsResend;
+
+        Status = KdbpPromptPacket(MessageHeader, MessageData, DataLength, Context);
+
+        if (Status == KdPacketReceived || Status == KdPacketNeedsResend)
+        {
+            /* Release the terminal acquired in KdSendPacket() */
+            if (&KD_TERM) KD_TERM.SetState(FALSE);
+        }
+
+        return Status;
+    }
+    else
     /* Debugger-only packets */
     if (PacketType == PACKET_TYPE_KD_STATE_MANIPULATE)
     {

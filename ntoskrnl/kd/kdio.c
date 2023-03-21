@@ -20,6 +20,12 @@
 #define NDEBUG
 #include <debug.h>
 
+#undef KdDebuggerInitialize0
+#undef KdDebuggerInitialize1
+#undef KdD0Transition
+#undef KdD3Transition
+#undef KdSave
+#undef KdRestore
 #undef KdSendPacket
 #undef KdReceivePacket
 
@@ -52,9 +58,6 @@ PKDP_INIT_ROUTINE InitRoutines[KdMax] =
     KdpScreenInit,
     KdpSerialInit,
     KdpDebugLogInit,
-#ifdef KDBG // See kdb_cli.c
-    KdpKdbgInit
-#endif
 };
 
 /* LOCKING FUNCTIONS *********************************************************/
@@ -442,6 +445,10 @@ KdpScreenAcquire(VOID)
         InbvEnableDisplayString(TRUE);
         InbvSetScrollRegion(0, 0, SCREEN_WIDTH - 1, SCREEN_HEIGHT - 1);
     }
+    else
+    {
+        KdIoPuts("********* -----> Could NOT acquire SCREEN!! <----- *********\n");
+    }
 }
 
 // extern VOID NTAPI InbvSetDisplayOwnership(IN BOOLEAN DisplayOwned);
@@ -593,9 +600,6 @@ KdIoPrintf(
     KdIoPrintString(Buffer, Length);
 }
 
-#ifdef KDBG
-extern const CSTRING KdbPromptStr;
-#endif
 
 VOID
 NTAPI
@@ -646,11 +650,15 @@ KdReceivePacket(
     _Out_ PULONG DataLength,
     _Inout_ PKD_CONTEXT Context)
 {
-#ifdef KDBG
     PDBGKD_DEBUG_IO DebugIo;
     STRING ResponseString;
     CHAR MessageBuffer[512];
-#endif
+
+    if (PacketType == PACKET_TYPE_KD_POLL_BREAKIN)
+    {
+        /* We don't support breaks-in */
+        return KdPacketTimedOut;
+    }
 
     if (PacketType != PACKET_TYPE_KD_DEBUG_IO)
     {
@@ -658,7 +666,6 @@ KdReceivePacket(
         return KdPacketTimedOut;
     }
 
-#ifdef KDBG
     DebugIo = (PDBGKD_DEBUG_IO)MessageHeader->Buffer;
 
     /* Validate API call */
@@ -666,6 +673,9 @@ KdReceivePacket(
         return KdPacketNeedsResend;
     if (DebugIo->ApiNumber != DbgKdGetStringApi)
         return KdPacketNeedsResend;
+
+    if (!KdpDebugMode.Value)
+        return KdPacketReceived;
 
     /* NOTE: We cannot use directly MessageData->Buffer here as it points
      * to the temporary KdpMessageBuffer scratch buffer that is being
@@ -676,11 +686,6 @@ KdReceivePacket(
                                        MessageData->MaximumLength);
     ResponseString.MaximumLength = min(ResponseString.MaximumLength,
                                        DebugIo->u.GetString.LengthOfStringRead);
-
-    /* The prompt string has been printed by KdSendPacket; go to
-     * new line and print the kdb prompt -- for SYSREG2 support. */
-    KdIoPrintString("\n", 1);
-    KdIoPuts(KdbPromptStr.Buffer); // Alternatively, use "Input> "
 
     if (!(KdbDebugState & KD_DEBUG_KDSERIAL))
         KbdDisableMouse();
@@ -707,7 +712,6 @@ KdReceivePacket(
 
     /* Only now we can copy back the data into MessageData->Buffer */
     RtlCopyMemory(MessageData->Buffer, ResponseString.Buffer, *DataLength);
-#endif
 
     return KdPacketReceived;
 }
