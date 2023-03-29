@@ -59,7 +59,7 @@ typedef UCHAR byte_t;
 /* FUNCTIONS *****************************************************************/
 
 static VOID
-KbdSendCommandToMouse(UCHAR Command)
+KbdSendCommandToMouse(_In_ UCHAR Command)
 {
     ULONG Retry = 20000;
 
@@ -101,7 +101,9 @@ VOID KbdDisableMouse(VOID)
 }
 
 CHAR
-KdbpTryGetCharKeyboard(PULONG ScanCode, ULONG Retry)
+KdpTryGetCharKeyboard(
+    _Out_ PULONG ScanCode,
+    _In_ ULONG Retry)
 {
     static byte_t last_key = 0;
     static byte_t shift = 0;

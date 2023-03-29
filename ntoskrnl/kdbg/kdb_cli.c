@@ -2895,7 +2895,7 @@ KdpFilterEscapes(
  *       Maximum length of buffer is limited only by memory size.
  *       Uses KdbPrintf internally.
  *
- * Note: BufLength should be greater than (KdTermSize.cx * KdTermSize.cy).
+ * Note: BufLength should be greater than (KD_TERM.Size.cx * KD_TERM.Size.cy).
  */
 static VOID
 KdbpPagerInternal(
@@ -2903,7 +2903,7 @@ KdbpPagerInternal(
     _In_ ULONG BufLength,
     _In_ BOOLEAN DoPage)
 {
-    static BOOLEAN TerminalInitialized = FALSE;
+    static SIZE TermSize = {0,0};
     CHAR c;
     ULONG ScanCode;
     PCHAR p;
@@ -2917,17 +2917,11 @@ KdbpPagerInternal(
     if (KdbOutputAborted)
         return;
 
-    /* Initialize the terminal */
-    if (!TerminalInitialized)
+    /* Retrieve the terminal size each time the number of printed rows is 0 */
+    if (/*&KD_TERM &&*/ KdbNumberOfRowsPrinted == 0)
     {
-        TerminalInitialized = TRUE;
-        KdpInitTerminal();
-    }
-
-    /* Refresh terminal size each time when number of rows printed is 0 */
-    if (KdbNumberOfRowsPrinted == 0)
-    {
-        KdpUpdateTerminalSize(&KdTermSize);
+        KD_TERM.UpdateSize();
+        TermSize = KD_TERM.Size;
     }
 
     /* Loop through the strings */
@@ -2954,7 +2948,7 @@ KdbpPagerInternal(
         /* Calculate the number of lines which will be printed in
          * the terminal when outputting the current line. */
         if (i > 0)
-            RowsPrintedByTerminal = (i + KdbNumberOfColsPrinted - 1) / KdTermSize.cx;
+            RowsPrintedByTerminal = (i + KdbNumberOfColsPrinted - 1) / TermSize.cx;
         else
             RowsPrintedByTerminal = 0;
 
@@ -2964,8 +2958,8 @@ KdbpPagerInternal(
         //KdbPrintf("!%d!%d!%d!%d!", KdbNumberOfRowsPrinted, KdbNumberOfColsPrinted, i, RowsPrintedByTerminal);
 
         /* Display a prompt if we printed one screen full of text */
-        if (KdTermSize.cy > 0 &&
-            (LONG)(KdbNumberOfRowsPrinted + RowsPrintedByTerminal) >= KdTermSize.cy)
+        if (TermSize.cy > 0 &&
+            (LONG)(KdbNumberOfRowsPrinted + RowsPrintedByTerminal) >= TermSize.cy)
         {
             PCSTR Prompt;
 
@@ -2980,13 +2974,22 @@ KdbpPagerInternal(
             else
                 Prompt = "--- Press q to abort, any other key to continue ---";
 
-            KdbPuts(Prompt);
-            c = KdpReadTermKey(&ScanCode);
-            if (DoPage) // Show pressed key
-                KdbPrintf(" '%c'/scan=%04x\n", c, ScanCode);
+            if (/*&KD_TERM*/ TRUE)
+            {
+                KdbPuts(Prompt);
+                c = KD_TERM.ReadKey(&ScanCode);
+                if (DoPage) // Show pressed key
+                    KdbPrintf(" '%c'/scan=%04x\n", c, ScanCode);
+                else
+                    KdbPuts("\n");
+            }
             else
-                KdbPuts("\n");
-
+            {
+                CHAR Action[2];
+                KdbPrompt(Prompt, Action, sizeof(Action));
+                c = Action[0];
+                ScanCode = 0;
+            }
             RowsPrintedByTerminal++;
 
             if (c == 'q')
@@ -3000,13 +3003,13 @@ KdbpPagerInternal(
                 if (ScanCode == KEYSC_END || c == 'e')
                 {
                     PCHAR pBufEnd = Buffer + BufLength;
-                    p = CountOnePageUp(Buffer, BufLength, pBufEnd, &KdTermSize);
+                    p = CountOnePageUp(Buffer, BufLength, pBufEnd, &TermSize);
                     i = strcspn(p, "\n");
                 }
                 else if (ScanCode == KEYSC_PAGEUP  ||
                          ScanCode == KEYSC_ARROWUP || c == 'u')
                 {
-                    p = CountOnePageUp(Buffer, BufLength, p, &KdTermSize);
+                    p = CountOnePageUp(Buffer, BufLength, p, &TermSize);
                     i = strcspn(p, "\n");
                 }
                 else if (ScanCode == KEYSC_HOME || c == 'h')
@@ -3033,7 +3036,7 @@ KdbpPagerInternal(
 
         /* Remove escape sequences from the line if there is no terminal connected */
         // FIXME: Dangerous operation since we modify the source string!!
-        if (!KdTermConnected)
+        if (!KD_TERM.Connected)
             KdpFilterEscapes(p);
 
         /* Print the current line */
@@ -3071,7 +3074,7 @@ KdbpPagerInternal(
  *       Maximum length of buffer is limited only by memory size.
  *       Uses KdbPrintf internally.
  *
- * Note: BufLength should be greater than (KdTermSize.cx * KdTermSize.cy).
+ * Note: BufLength should be greater than (KD_TERM.Size.cx * KD_TERM.Size.cy).
  */
 VOID
 KdbpPager(

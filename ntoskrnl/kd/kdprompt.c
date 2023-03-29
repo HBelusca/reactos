@@ -55,11 +55,11 @@ KdIoReadLine(
     PCHAR Orig = Buffer;
     ULONG ScanCode = 0;
     CHAR Key;
-    BOOLEAN EchoOn = !(KdbDebugState & KD_DEBUG_KDNOECHO);
+    BOOLEAN EchoOn = !KD_TERM.NoEcho;
     LONG CmdHistIndex = -1; // Start at end of history.
 
     /* Flush the input buffer */
-    KdpFlushTerminalInput();
+    KdpTermFlushInput();
 
     /* Bail out if the buffer is zero-sized */
     if (Size == 0)
@@ -67,7 +67,7 @@ KdIoReadLine(
 
     for (;;)
     {
-        Key = KdpReadTermKey(&ScanCode);
+        Key = KdpTermReadKey(&ScanCode);
 
         /* Check for return or newline */
         if ((Key == '\r') || (Key == '\n'))

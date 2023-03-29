@@ -1,6 +1,6 @@
 #pragma once
 
-/* KD ROUTINES ***************************************************************/
+/* KD IO ROUTINES ************************************************************/
 
 struct _KD_DISPATCH_TABLE;
 
@@ -32,6 +32,26 @@ KdIoReadLine(
     _In_ SIZE_T Size);
 
 
+/* KD TERMINAL ROUTINES ******************************************************/
+
+BOOLEAN
+KdpTermInit(VOID);
+
+VOID
+NTAPI
+KdpTermSetState(
+    _In_ BOOLEAN Enable);
+
+VOID
+NTAPI
+KdpTermFlushInput(VOID);
+
+CHAR
+NTAPI
+KdpTermReadKey(
+    _Out_ PULONG ScanCode);
+
+
 /* INIT ROUTINES *************************************************************/
 
 KIRQL
@@ -50,6 +70,7 @@ KdpScreenAcquire(VOID);
 
 VOID
 KdpScreenRelease(VOID);
+
 
 NTSTATUS
 NTAPI

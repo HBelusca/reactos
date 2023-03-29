@@ -39,13 +39,13 @@ KdpGetTerminalSettings(
         if (!_strnicmp(p1, "KDSERIAL", CONST_STR_LEN("KDSERIAL")))
         {
             p1 += CONST_STR_LEN("KDSERIAL");
-            KdbDebugState |= KD_DEBUG_KDSERIAL;
+            KD_TERM.SerialInput = TRUE;
             KdpDebugMode.Serial = TRUE;
         }
         else if (!_strnicmp(p1, "KDNOECHO", CONST_STR_LEN("KDNOECHO")))
         {
             p1 += CONST_STR_LEN("KDNOECHO");
-            KdbDebugState |= KD_DEBUG_KDNOECHO;
+            KD_TERM.NoEcho = TRUE;
         }
 
         /* Move on to the next option */
@@ -165,6 +165,9 @@ KdDebuggerInitialize0(
         DispatchTable[i].InitStatus = InitRoutines[i](&DispatchTable[i], 0);
         Success = (Success || NT_SUCCESS(DispatchTable[i].InitStatus));
     }
+
+    /* Initialize the terminal */
+    KdpTermInit();
 
     /* Return success if at least one of the providers succeeded */
     return (Success ? STATUS_SUCCESS : STATUS_UNSUCCESSFUL);
@@ -367,6 +370,9 @@ KdDebuggerInitialize1(
 
     /* Make space for the displayed providers' signons */
     HalDisplayString("\r\n");
+
+    /* Re-initialize the terminal */
+    KdpTermInit();
 
     /* If we don't need to reinitialize providers for Phase 2, we are done */
     if (!ReinitForPhase2)

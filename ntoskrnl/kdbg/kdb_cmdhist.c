@@ -16,6 +16,8 @@
  * History range in ring buffer:
  * (KdbCommandHistoryIndex; RTL_NUMBER_OF(KdbCommandHistory) - 1]
  *   and [0; KdbCommandHistoryIndex].
+ * NOTE: It would be better if the lower part at KdbCommandHistoryIndex
+ * was inclusive instead.
  **/
 
 /* Command history string ring buffer */

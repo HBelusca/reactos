@@ -14,7 +14,7 @@
 /* FUNCTIONS *****************************************************************/
 
 VOID
-KdbpSendCommandSerial(
+KdpSendCommandSerial(
     _In_ PCSTR Command)
 {
     while (*Command)
@@ -22,7 +22,7 @@ KdbpSendCommandSerial(
 }
 
 CHAR
-KdbpTryGetCharSerial(
+KdpTryGetCharSerial(
     _In_ ULONG Retry)
 {
     CHAR Result = -1;

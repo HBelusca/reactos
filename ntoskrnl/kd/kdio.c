@@ -13,9 +13,6 @@
 #include <reactos/buildno.h>
 #include "kd.h"
 #include "kdterminal.h"
-#ifdef KDBG
-#include "../kdbg/kdb.h"
-#endif
 
 #define NDEBUG
 #include <debug.h>
@@ -637,6 +634,10 @@ KdSendPacket(
     if (!KdpDebugMode.Value)
         return;
 
+    /* Acquire the terminal if we are called for a prompt */
+    if (DebugIo->ApiNumber == DbgKdGetStringApi)
+        KdpTermSetState(TRUE);
+
     /* Print the string proper */
     KdIoPrintString(MessageData->Buffer, MessageData->Length);
 }
@@ -687,9 +688,6 @@ KdReceivePacket(
     ResponseString.MaximumLength = min(ResponseString.MaximumLength,
                                        DebugIo->u.GetString.LengthOfStringRead);
 
-    if (!(KdbDebugState & KD_DEBUG_KDSERIAL))
-        KbdDisableMouse();
-
     /*
      * Read a NULL-terminated line of user input and retrieve its length.
      * Official documentation states that DbgPrompt() includes a terminating
@@ -702,8 +700,8 @@ KdReceivePacket(
         (USHORT)KdIoReadLine(ResponseString.Buffer,
                              ResponseString.MaximumLength);
 
-    if (!(KdbDebugState & KD_DEBUG_KDSERIAL))
-        KbdEnableMouse();
+    /* Release the terminal acquired in KdSendPacket() */
+    KdpTermSetState(FALSE);
 
     /* Adjust and return the string length */
     *DataLength = min(ResponseString.Length + sizeof(ANSI_NULL),

@@ -1,7 +1,7 @@
 /*
  * PROJECT:     ReactOS KDBG Kernel Debugger Terminal Driver
  * LICENSE:     GPL-2.0-or-later (https://spdx.org/licenses/GPL-2.0-or-later)
- * PURPOSE:     KD Terminal Driver public header
+ * PURPOSE:     KD Terminal Driver Interface public header
  * COPYRIGHT:   Copyright 2023 Hermès Bélusca-Maïto <hermes.belusca-maito@reactos.org>
  */
 
@@ -29,32 +29,42 @@ typedef struct _SIZE
 } SIZE, *PSIZE;
 
 /* KD Controlling Terminal */
-
-/* These values MUST be nonzero, they're used as bit masks */
-typedef enum _KDB_OUTPUT_SETTINGS
+typedef struct _KD_TERMINAL
 {
-    KD_DEBUG_KDSERIAL = 1,
-    KD_DEBUG_KDNOECHO = 2
-} KDB_OUTPUT_SETTINGS;
+    /*COORD*/ SIZE Size;
+    BOOLEAN Connected;
+    union
+    {
+        UCHAR Flags;
+        struct
+        {
+            UCHAR Serial : 1;
+            UCHAR ReportsSize : 1;
+            UCHAR NoEcho : 1;       // KDNOECHO
+            UCHAR SerialInput : 1;  // KDSERIAL
+        };
+    };
 
-extern ULONG KdbDebugState;
-extern SIZE KdTermSize;
-extern BOOLEAN KdTermConnected;
-extern BOOLEAN KdTermSerial;
-extern BOOLEAN KdTermReportsSize;
+    VOID
+    (NTAPI *SetState)(
+        _In_ BOOLEAN Enable);
 
-BOOLEAN
-KdpInitTerminal(VOID);
+    BOOLEAN
+    (NTAPI *UpdateSize)(VOID);
 
-BOOLEAN
-KdpUpdateTerminalSize(
-    _Out_ PSIZE TermSize);
+    CHAR
+    (NTAPI *ReadKey)(
+        _Out_ PULONG ScanCode);
 
-VOID
-KdpFlushTerminalInput(VOID);
+} KD_TERMINAL, *PKD_TERMINAL;
 
-CHAR
-KdpReadTermKey(
-    _Out_ PULONG ScanCode);
+// #ifdef _KDTERMINAL_
+extern KD_TERMINAL KdTerminal;
+#define KD_TERM KdTerminal
+// #else
+// __CREATE_NTOS_DATA_IMPORT_ALIAS(KdTerminal)
+// extern PKD_TERMINAL KdTerminal;
+// #define KD_TERM (*KdTerminal)
+// #endif
 
 /* EOF */
