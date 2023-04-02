@@ -13,7 +13,7 @@
 
 /* INCLUDES ******************************************************************/
 
-#include <ntoskrnl.h>
+#include "kd.h"
 
 #define KBD_STATUS_REG          0x64
 #define KBD_CNTL_REG            0x64

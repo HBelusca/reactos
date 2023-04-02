@@ -9,9 +9,7 @@
 
 /* INCLUDES *****************************************************************/
 
-#include <ntoskrnl.h>
-#define NDEBUG
-#include <debug.h>
+#include "../kd.h"
 
 #if defined(SARCH_PC98)
 #define DEFAULT_BAUD_RATE   9600

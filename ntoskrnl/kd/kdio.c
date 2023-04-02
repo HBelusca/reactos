@@ -9,22 +9,17 @@
 
 /* INCLUDES ******************************************************************/
 
-#include <ntoskrnl.h>
-#include <reactos/buildno.h>
 #include "kd.h"
+#include <reactos/buildno.h>
 #include "kdterminal.h"
 
 #define NDEBUG
 #include <debug.h>
 
-#undef KdDebuggerInitialize0
-#undef KdDebuggerInitialize1
-#undef KdD0Transition
-#undef KdD3Transition
-#undef KdSave
-#undef KdRestore
-#undef KdSendPacket
-#undef KdReceivePacket
+#ifndef _NTOSKRNL_
+#define InterlockedExchangeAddUL(Addend, Value) \
+   (ULONG)InterlockedExchangeAdd((PLONG)(Addend), (LONG)(Value))
+#endif
 
 /* GLOBALS *******************************************************************/
 
@@ -217,7 +212,7 @@ KdpDebugLogInit(
         /* Allocate a buffer for debug log */
         KdpDebugBuffer = ExAllocatePoolZero(NonPagedPool,
                                             KdpBufferSize,
-                                            TAG_KDBG);
+                                            KDBG_TAG);
         if (!KdpDebugBuffer)
         {
             KdpDebugMode.File = FALSE;
@@ -349,7 +344,7 @@ KdpDebugLogInit(
 
 Failure:
         KdpFreeBytes = 0;
-        ExFreePoolWithTag(KdpDebugBuffer, TAG_KDBG);
+        ExFreePoolWithTag(KdpDebugBuffer, KDBG_TAG);
         KdpDebugBuffer = NULL;
         KdpDebugMode.File = FALSE;
         RemoveEntryList(&DispatchTable->KdProvidersList);

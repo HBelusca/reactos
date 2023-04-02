@@ -9,7 +9,6 @@
 
 /* INCLUDES ******************************************************************/
 
-#include <ntoskrnl.h>
 #include "kd.h"
 #include "kdterminal.h"
 

@@ -1,4 +1,73 @@
+
+#ifndef _KDTERM_H_
+#define _KDTERM_H_
+
 #pragma once
+
+#ifndef _NTOSKRNL_
+
+#include <stdio.h>
+#include <stdlib.h>
+
+/* KD Support */
+#define NOEXTAPI
+#include <ntifs.h>
+#include <windbgkd.h>
+// #include <wdbgexts.h>
+
+#include <arc/arc.h>
+#include <kddll.h>
+
+#include <cportlib/cportlib.h>
+#include <drivers/bootvid/bootvid.h>
+#include <ndk/halfuncs.h>
+//#include <ndk/haltypes.h>
+#include <ndk/inbvfuncs.h>
+#include <ndk/iofuncs.h>
+
+#define KiReleaseSpinLock   KeReleaseSpinLockFromDpcLevel
+
+#else
+
+#include <ntoskrnl.h>
+
+#undef KdDebuggerInitialize0
+#undef KdDebuggerInitialize1
+#undef KdD0Transition
+#undef KdD3Transition
+#undef KdSave
+#undef KdRestore
+#undef KdSendPacket
+#undef KdReceivePacket
+
+#endif /* _NTOSKRNL_ */
+
+#include <cportlib/cportlib.h>
+
+//
+// Kernel Debugger Port Definition
+//
+
+BOOLEAN
+NTAPI
+KdPortInitializeEx(
+    PCPPORT PortInformation,
+    ULONG ComPortNumber
+);
+
+BOOLEAN
+NTAPI
+KdPortGetByteEx(
+    PCPPORT PortInformation,
+    PUCHAR ByteReceived);
+
+VOID
+NTAPI
+KdPortPutByteEx(
+    PCPPORT PortInformation,
+    UCHAR ByteToSend
+);
+
 
 /* KD IO ROUTINES ************************************************************/
 
@@ -150,3 +219,5 @@ extern KD_DISPATCH_TABLE DispatchTable[KdMax];
 
 /* The KD Native Provider List */
 extern LIST_ENTRY KdProviders;
+
+#endif /* _KDTERM_H_ */

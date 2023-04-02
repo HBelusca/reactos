@@ -6,6 +6,7 @@ if (CMAKE_C_COMPILER_ID STREQUAL "GNU" OR CMAKE_C_COMPILER_ID STREQUAL "Clang")
     add_compile_options(-Wunused-result)
 endif()
 
+add_subdirectory(kd)
 include(ntos.cmake)
 
 set(NTOSKRNL_SOURCE ${SOURCE})

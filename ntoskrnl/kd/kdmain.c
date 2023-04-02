@@ -7,21 +7,11 @@
  *              Copyright 2023 Hermès Bélusca-Maïto <hermes.belusca-maito@reactos.org>
  */
 
-#include <ntoskrnl.h>
 #include "kd.h"
 #include "kdterminal.h"
 
 #define NDEBUG
 #include <debug.h>
-
-#undef KdDebuggerInitialize0
-#undef KdDebuggerInitialize1
-#undef KdD0Transition
-#undef KdD3Transition
-#undef KdSave
-#undef KdRestore
-#undef KdSendPacket
-#undef KdReceivePacket
 
 /* PUBLIC FUNCTIONS *********************************************************/
 
@@ -137,22 +127,48 @@ KdDebuggerInitialize0(
 
             /* Get the port */
             Port = strstr(CommandLine, "DEBUGPORT");
+// #ifndef _NTOSKRNL_
+            if (Port)
+            {
+                /* Move past the actual string, to reach the port*/
+                Port += sizeof("DEBUGPORT") - 1;
+
+                /* Now get past any spaces and skip the equal sign */
+                while (*Port == ' ') Port++;
+                Port++;
+
+                // /* Are we what we think we are? */
+                // if (strncmp(Port, "TERM", 4) != 0)
+                // {
+                    // return STATUS_INVALID_PARAMETER;
+                // }
+            }
+// #endif
         }
     }
 
+// #ifdef _NTOSKRNL_
+    // /* Check if we got the /DEBUGPORT parameter(s) */
+    // while (Port)
+    // {
+        // /* Move past the actual string, to reach the port*/
+        // Port += sizeof("DEBUGPORT") - 1;
+// #else
     /* Check if we got the /DEBUGPORT parameter(s) */
-    while (Port)
+    while (Port && (Port = strstr(Port, "KDOUTPUT")))
     {
         /* Move past the actual string, to reach the port*/
-        Port += sizeof("DEBUGPORT") - 1;
-
+        Port += sizeof("KDOUTPUT") - 1;
+// #endif
         /* Now get past any spaces and skip the equal sign */
         while (*Port == ' ') Port++;
         Port++;
 
         /* Get the debug mode and wrapper */
         Port = KdpGetDebugMode(Port);
-        Port = strstr(Port, "DEBUGPORT");
+// #ifdef _NTOSKRNL_
+        // Port = strstr(Port, "DEBUGPORT");
+// #endif
     }
 
     /* Use serial port then */
