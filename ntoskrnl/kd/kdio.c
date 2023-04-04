@@ -41,15 +41,30 @@ CPPORT SerialPortInfo   = {0, DEFAULT_DEBUG_BAUD_RATE, 0};
 static CHAR KdpScreenLineBuffer[KdpScreenLineLengthDefault + 1] = "";
 static ULONG KdpScreenLineBufferPos = 0, KdpScreenLineLength = 0;
 
-KDP_DEBUG_MODE KdpDebugMode;
-LIST_ENTRY KdProviders = {&KdProviders, &KdProviders};
-KD_DISPATCH_TABLE DispatchTable[KdMax] = {0};
+static VOID
+NTAPI
+KdpScreenPrint(
+    _In_ PCCH String,
+    _In_ ULONG Length);
 
-PKDP_INIT_ROUTINE InitRoutines[KdMax] =
+static VOID
+NTAPI
+KdpSerialPrint(
+    _In_ PCCH String,
+    _In_ ULONG Length);
+
+static VOID
+NTAPI
+KdpDebugLogPrint(
+    _In_ PCCH String,
+    _In_ ULONG Length);
+
+KDP_DEBUG_MODE KdpDebugMode;
+KD_DISPATCH_TABLE DispatchTable[KdMax] =
 {
-    KdpScreenInit,
-    KdpSerialInit,
-    KdpDebugLogInit,
+    {KdpScreenInit  , KdpScreenPrint  , STATUS_UNSUCCESSFUL},
+    {KdpSerialInit  , KdpSerialPrint  , STATUS_UNSUCCESSFUL},
+    {KdpDebugLogInit, KdpDebugLogPrint, STATUS_UNSUCCESSFUL},
 };
 
 /* LOCKING FUNCTIONS *********************************************************/
@@ -61,6 +76,7 @@ KdbpAcquireLock(
 {
     KIRQL OldIrql;
 
+#if 0
     /* Acquire the spinlock without waiting at raised IRQL */
     while (TRUE)
     {
@@ -77,6 +93,21 @@ KdbpAcquireLock(
         /* Someone else got the spinlock, lower IRQL back */
         KeLowerIrql(OldIrql);
     }
+#else
+    /* Check if we're at dispatch level or lower */
+    OldIrql = KeGetCurrentIrql();
+    if (OldIrql <= DISPATCH_LEVEL)
+    {
+        /* Loop until the lock is free */
+        while (!KeTestSpinLock(SpinLock));
+
+        /* Raise IRQL to dispatch level */
+        KeRaiseIrql(DISPATCH_LEVEL, &OldIrql);
+    }
+
+    /* Acquire the lock */
+    KeAcquireSpinLockAtDpcLevel(SpinLock);
+#endif
 
     return OldIrql;
 }
@@ -87,13 +118,30 @@ KdbpReleaseLock(
     _In_ PKSPIN_LOCK SpinLock,
     _In_ KIRQL OldIrql)
 {
-    /* Release the spinlock */
-    KiReleaseSpinLock(SpinLock);
-    // KeReleaseSpinLockFromDpcLevel(SpinLock);
-
-    /* Restore the old IRQL */
+    /* Release the spinlock and restore the old IRQL */
+    KeReleaseSpinLockFromDpcLevel(SpinLock);
+#if 0
     KeLowerIrql(OldIrql);
+#else
+    /* If we were at dispatch level or lower, restore the old IRQL */
+    if (OldIrql <= DISPATCH_LEVEL) KeLowerIrql(OldIrql);
+#endif
 }
+
+VOID
+KdDbgPrintString(
+    _In_ PCCH String,
+    _In_ ULONG Length);
+
+VOID
+KdDbgPuts(
+    _In_ PCSTR String);
+
+VOID
+__cdecl
+KdDbgPrintf(
+    _In_ PCSTR Format,
+    ...);
 
 /* FILE DEBUG LOG FUNCTIONS **************************************************/
 
@@ -112,10 +160,12 @@ KdpLoggerThread(PVOID Context)
     {
         KeWaitForSingleObject(&KdpLoggerThreadEvent, Executive, KernelMode, FALSE, NULL);
 
+KdDbgPuts("--> KdpLoggerThread\n");
+
         /* Bug */
         /* Keep KdpCurrentPosition and KdpFreeBytes values in local
          * variables to avoid their possible change from Producer part,
-         * KdpPrintToLogFile function
+         * KdpDebugLogPrint() function.
          */
         end = KdpCurrentPosition;
         num = KdpFreeBytes;
@@ -148,7 +198,7 @@ KdpLoggerThread(PVOID Context)
 
 static VOID
 NTAPI
-KdpPrintToLogFile(
+KdpDebugLogPrint(
     _In_ PCCH String,
     _In_ ULONG Length)
 {
@@ -183,6 +233,13 @@ KdpPrintToLogFile(
     KdbpReleaseLock(&KdpDebugLogSpinLock, OldIrql);
 
     /* Signal the logger thread */
+    //
+    // FIXME: In MP mode, KeFreezeExecution() will raise IRQL to HIGH_LEVEL,
+    // instead of just DPC_LEVEL as in SP. As a result, the following code
+    // will never be run in MP, except for when the event is first initialized.
+    //
+    // if (KdpLoggingEnabled)
+        // KdDbgPrintf("--> OldIrql: %u\n", (ULONG)OldIrql);
     if (OldIrql <= DISPATCH_LEVEL && KdpLoggingEnabled)
         KeSetEvent(&KdpLoggerThreadEvent, IO_NO_INCREMENT, FALSE);
 }
@@ -200,12 +257,8 @@ KdpDebugLogInit(
 
     if (BootPhase == 0)
     {
-        /* Write out the functions that we support for now */
-        DispatchTable->KdpPrintRoutine = KdpPrintToLogFile;
-
-        /* Register for BootPhase 1 initialization and as a Provider */
+        /* Register for BootPhase 1 initialization */
         DispatchTable->KdpInitRoutine = KdpDebugLogInit;
-        InsertTailList(&KdProviders, &DispatchTable->KdProvidersList);
     }
     else if (BootPhase == 1)
     {
@@ -216,7 +269,6 @@ KdpDebugLogInit(
         if (!KdpDebugBuffer)
         {
             KdpDebugMode.File = FALSE;
-            RemoveEntryList(&DispatchTable->KdProvidersList);
             return STATUS_NO_MEMORY;
         }
         KdpFreeBytes = KdpBufferSize;
@@ -347,7 +399,6 @@ Failure:
         ExFreePoolWithTag(KdpDebugBuffer, KDBG_TAG);
         KdpDebugBuffer = NULL;
         KdpDebugMode.File = FALSE;
-        RemoveEntryList(&DispatchTable->KdProvidersList);
     }
 
     return Status;
@@ -393,9 +444,6 @@ KdpSerialInit(
 
     if (BootPhase == 0)
     {
-        /* Write out the functions that we support for now */
-        DispatchTable->KdpPrintRoutine = KdpSerialPrint;
-
         /* Initialize the Port */
         if (!KdPortInitializeEx(&SerialPortInfo, SerialPortNumber))
         {
@@ -407,9 +455,8 @@ KdpSerialInit(
         /* Initialize spinlock */
         KeInitializeSpinLock(&KdpSerialSpinLock);
 
-        /* Register for BootPhase 1 initialization and as a Provider */
+        /* Register for BootPhase 1 initialization */
         DispatchTable->KdpInitRoutine = KdpSerialInit;
-        InsertTailList(&KdProviders, &DispatchTable->KdProvidersList);
     }
     else if (BootPhase == 1)
     {
@@ -439,7 +486,7 @@ KdpScreenAcquire(VOID)
     }
     else
     {
-        KdIoPuts("********* -----> Could NOT acquire SCREEN!! <----- *********\n");
+        KdDbgPuts("********* -----> Could NOT acquire SCREEN!! <----- *********\n");
     }
 }
 
@@ -520,12 +567,8 @@ KdpScreenInit(
 
     if (BootPhase == 0)
     {
-        /* Write out the functions that we support for now */
-        DispatchTable->KdpPrintRoutine = KdpScreenPrint;
-
-        /* Register for BootPhase 1 initialization and as a Provider */
+        /* Register for BootPhase 1 initialization */
         DispatchTable->KdpInitRoutine = KdpScreenInit;
-        InsertTailList(&KdProviders, &DispatchTable->KdProvidersList);
     }
     else if (BootPhase == 1)
     {
@@ -547,19 +590,13 @@ KdIoPrintString(
     _In_ PCCH String,
     _In_ ULONG Length)
 {
-    PLIST_ENTRY CurrentEntry;
-    PKD_DISPATCH_TABLE CurrentTable;
+    ULONG i;
 
-    /* Call the registered providers */
-    for (CurrentEntry = KdProviders.Flink;
-         CurrentEntry != &KdProviders;
-         CurrentEntry = CurrentEntry->Flink)
+    /* Call the providers */
+    for (i = 0; i < RTL_NUMBER_OF(DispatchTable); i++)
     {
-        CurrentTable = CONTAINING_RECORD(CurrentEntry,
-                                         KD_DISPATCH_TABLE,
-                                         KdProvidersList);
-
-        CurrentTable->KdpPrintRoutine(String, Length);
+        if (ADDR_TO_REL(DispatchTable[i].KdpPrintRoutine))
+            DispatchTable[i].KdpPrintRoutine(String, Length);
     }
 }
 
@@ -593,6 +630,10 @@ KdIoPrintf(
 }
 
 
+static ULONG KdbgNextApiNumber = DbgKdContinueApi;
+//static NTSTATUS KdbgContinueStatus = STATUS_SUCCESS;
+
+
 VOID
 NTAPI
 KdSendPacket(
@@ -603,9 +644,65 @@ KdSendPacket(
 {
     PDBGKD_DEBUG_IO DebugIo;
 
+    if (PacketType == PACKET_TYPE_KD_STATE_CHANGE32 ||
+        PacketType == PACKET_TYPE_KD_STATE_CHANGE64)
+    {
+        PDBGKD_ANY_WAIT_STATE_CHANGE WaitStateChange = (PDBGKD_ANY_WAIT_STATE_CHANGE)MessageHeader->Buffer;
+
+        if (WaitStateChange->NewState == DbgKdLoadSymbolsStateChange)
+            return; // Ignore -- Received anytime a new module loads.
+
+        /* We should not get to this case, unless something crashed... */
+        if (WaitStateChange->NewState == DbgKdExceptionStateChange)
+        {
+            PEXCEPTION_RECORD64 ExceptionRecord = &WaitStateChange->u.Exception.ExceptionRecord;
+
+            KdbgNextApiNumber = DbgKdContinueApi;
+            //KdbgContinueStatus = STATUS_UNSUCCESSFUL; // NT_SUCCESS: FALSE "Unhandled"
+
+            KdDbgPrintf("%s: Got exception 0x%08lx @ %p, Flags %x %s - Info[0]: 0x%x\n",
+                        __FUNCTION__,
+                        ExceptionRecord->ExceptionCode,
+                        ExceptionRecord->ExceptionAddress,
+                        ExceptionRecord->ExceptionFlags,
+                        WaitStateChange->u.Exception.FirstChance ? "FirstChance" : "LastChance",
+                        ExceptionRecord->ExceptionInformation[0]);
+            return;
+        }
+
+        /* Note that if we don't do anything more (like here), KD will proceed
+         * unconditionally with KdReceivePacket(PACKET_TYPE_KD_STATE_MANIPULATE).
+         * That is, unless we set here KdDebuggerNotPresent = FALSE, in which
+         * case KdReceivePacket() won't be called. */
+        KdDbgPrintf("%s: PACKET_TYPE_KD_STATE_CHANGE32/64 NewState %d is UNIMPLEMENTED\n",
+                    __FUNCTION__, WaitStateChange->NewState);
+        return;
+    }
+    else
+    if (PacketType == PACKET_TYPE_KD_STATE_MANIPULATE)
+    {
+        PDBGKD_MANIPULATE_STATE64 ManipulateState = (PDBGKD_MANIPULATE_STATE64)MessageHeader->Buffer;
+        KdDbgPrintf("%s: PACKET_TYPE_KD_STATE_MANIPULATE for ApiNumber %lu\n",
+                    __FUNCTION__, ManipulateState->ApiNumber);
+        return;
+    }
+
+/****/
+// HACK!!
+    if (PacketType == PACKET_TYPE_KD_FILE_IO)
+    {
+        /* Silence the "UNIMPLEMENTED" message.
+         * Note that if we don't do anything more (like here), KD will proceed
+         * unconditionally with KdReceivePacket(PACKET_TYPE_KD_FILE_IO).
+         * That is, unless we set here KdDebuggerNotPresent = FALSE, in which
+         * case KdReceivePacket() won't be called. */
+        return;
+    }
+/****/
+
     if (PacketType != PACKET_TYPE_KD_DEBUG_IO)
     {
-        KdIoPrintf("%s: PacketType %d is UNIMPLEMENTED\n", __FUNCTION__, PacketType);
+        KdDbgPrintf("%s: PacketType %d is UNIMPLEMENTED\n", __FUNCTION__, PacketType);
         return;
     }
 
@@ -656,9 +753,40 @@ KdReceivePacket(
         return KdPacketTimedOut;
     }
 
+/****/
+// HACK!!
+    if (PacketType == PACKET_TYPE_KD_FILE_IO)
+    {
+        PDBGKD_FILE_IO FileIo = (PDBGKD_FILE_IO)MessageHeader->Buffer;
+        FileIo->Status = STATUS_DEBUGGER_INACTIVE; // Any error status would do
+        return KdPacketReceived; // Not timeout or resend, otherwise KdCreateRemoteFile will loop forever...
+    }
+/****/
+
+    if (PacketType == PACKET_TYPE_KD_STATE_MANIPULATE)
+    {
+        PDBGKD_MANIPULATE_STATE64 ManipulateState = (PDBGKD_MANIPULATE_STATE64)MessageHeader->Buffer;
+        RtlZeroMemory(MessageHeader->Buffer, MessageHeader->MaximumLength);
+
+        if (KdbgNextApiNumber == DbgKdContinueApi)
+        {
+            ManipulateState->ApiNumber = DbgKdContinueApi;
+            ManipulateState->u.Continue.ContinueStatus = STATUS_UNSUCCESSFUL; // NT_SUCCESS: FALSE "Unhandled"
+        }
+        else
+        {
+            KdDbgPrintf("   %s: PACKET_TYPE_KD_STATE_MANIPULATE is UNIMPLEMENTED\n", __FUNCTION__);
+        }
+
+        /* Prepare for next time */
+        KdbgNextApiNumber = DbgKdContinueApi;
+        //KdbgContinueStatus = STATUS_UNSUCCESSFUL;
+        return KdPacketReceived;
+    }
+
     if (PacketType != PACKET_TYPE_KD_DEBUG_IO)
     {
-        KdIoPrintf("%s: PacketType %d is UNIMPLEMENTED\n", __FUNCTION__, PacketType);
+        KdDbgPrintf("%s: PacketType %d is UNIMPLEMENTED\n", __FUNCTION__, PacketType);
         return KdPacketTimedOut;
     }
 

@@ -13,7 +13,6 @@
 #define NOEXTAPI
 #include <ntifs.h>
 #include <windbgkd.h>
-// #include <wdbgexts.h>
 
 #include <arc/arc.h>
 #include <kddll.h>
@@ -24,8 +23,6 @@
 //#include <ndk/haltypes.h>
 #include <ndk/inbvfuncs.h>
 #include <ndk/iofuncs.h>
-
-#define KiReleaseSpinLock   KeReleaseSpinLockFromDpcLevel
 
 #else
 
@@ -195,7 +192,6 @@ typedef struct _KDP_DEBUG_MODE
 /* Dispatch Table for Wrapper Functions */
 typedef struct _KD_DISPATCH_TABLE
 {
-    LIST_ENTRY KdProvidersList;
     PKDP_INIT_ROUTINE KdpInitRoutine;
     PKDP_PRINT_ROUTINE KdpPrintRoutine;
     NTSTATUS InitStatus;
@@ -211,13 +207,14 @@ extern CPPORT SerialPortInfo;
 /* Logging file path */
 extern ANSI_STRING KdpLogFileName;
 
-/* Init Functions for Native Providers */
-extern PKDP_INIT_ROUTINE InitRoutines[KdMax];
-
 /* Dispatch Tables for Native Providers */
 extern KD_DISPATCH_TABLE DispatchTable[KdMax];
 
-/* The KD Native Provider List */
-extern LIST_ENTRY KdProviders;
+/* Support for function pointers thorough runtime relocation */
+extern char __ImageBase;
+#define RVA_TO_VA(Base, Offset) ((PVOID)((ULONG_PTR)(Base) + (ULONG_PTR)(Offset)))
+#define VA_TO_RVA(Base, Ptr)    ((PVOID)((ULONG_PTR)(Ptr)  - (ULONG_PTR)(Base)))
+#define REL_TO_ADDR(Offset)     RVA_TO_VA(&__ImageBase, Offset)
+#define ADDR_TO_REL(Addr)       VA_TO_RVA(&__ImageBase, Addr)
 
 #endif /* _KDTERM_H_ */

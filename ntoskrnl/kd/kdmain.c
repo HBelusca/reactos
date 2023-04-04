@@ -10,8 +10,57 @@
 #include "kd.h"
 #include "kdterminal.h"
 
-#define NDEBUG
+//#define NDEBUG
 #include <debug.h>
+
+
+VOID
+KdDbgPrintString(
+    _In_ PCCH String,
+    _In_ ULONG Length)
+{
+    PCCH pch = String;
+
+    /* Output the string */
+    while (pch < String + Length && *pch)
+    {
+        if (*pch == '\n')
+        {
+            KdPortPutByteEx(&SerialPortInfo, '\r');
+        }
+        KdPortPutByteEx(&SerialPortInfo, *pch);
+        ++pch;
+    }
+}
+
+VOID
+KdDbgPuts(
+    _In_ PCSTR String)
+{
+    KdDbgPrintString(String, (ULONG)strlen(String));
+}
+
+VOID
+__cdecl
+KdDbgPrintf(
+    _In_ PCSTR Format,
+    ...)
+{
+    va_list ap;
+    ULONG Length;
+    CHAR Buffer[512];
+
+    /* Format the string */
+    va_start(ap, Format);
+    Length = (ULONG)_vsnprintf(Buffer,
+                               sizeof(Buffer),
+                               Format,
+                               ap);
+    va_end(ap);
+
+    /* Send it to the display providers */
+    KdDbgPrintString(Buffer, Length);
+}
 
 /* PUBLIC FUNCTIONS *********************************************************/
 
@@ -113,6 +162,13 @@ KdDebuggerInitialize0(
     ULONG i;
     BOOLEAN Success = FALSE;
 
+///////////////////
+SerialPortInfo.Address = (PUCHAR)0x3F8;
+SerialPortInfo.BaudRate = 115200;
+KdPortInitializeEx(&SerialPortInfo, /*SerialPortNumber*/ 1);
+KdComPortInUse = SerialPortInfo.Address;
+///////////////////
+
     if (LoaderBlock)
     {
         /* Check if we have a command line */
@@ -143,32 +199,25 @@ KdDebuggerInitialize0(
                     // return STATUS_INVALID_PARAMETER;
                 // }
             }
+
+            /* Reset Port to scan through all the command line */
+            Port = CommandLine;
 // #endif
         }
     }
 
-// #ifdef _NTOSKRNL_
-    // /* Check if we got the /DEBUGPORT parameter(s) */
-    // while (Port)
-    // {
-        // /* Move past the actual string, to reach the port*/
-        // Port += sizeof("DEBUGPORT") - 1;
-// #else
-    /* Check if we got the /DEBUGPORT parameter(s) */
+    /* Check if we got the /KDOUTPUT parameter(s) */
     while (Port && (Port = strstr(Port, "KDOUTPUT")))
     {
         /* Move past the actual string, to reach the port*/
         Port += sizeof("KDOUTPUT") - 1;
-// #endif
+
         /* Now get past any spaces and skip the equal sign */
         while (*Port == ' ') Port++;
         Port++;
 
         /* Get the debug mode and wrapper */
         Port = KdpGetDebugMode(Port);
-// #ifdef _NTOSKRNL_
-        // Port = strstr(Port, "DEBUGPORT");
-// #endif
     }
 
     /* Use serial port then */
@@ -178,8 +227,18 @@ KdDebuggerInitialize0(
     /* Call the providers at Phase 0 */
     for (i = 0; i < RTL_NUMBER_OF(DispatchTable); i++)
     {
-        DispatchTable[i].InitStatus = InitRoutines[i](&DispatchTable[i], 0);
-        Success = (Success || NT_SUCCESS(DispatchTable[i].InitStatus));
+        /* Get the provider */
+        PKD_DISPATCH_TABLE CurrentTable = &DispatchTable[i];
+
+        /* Call its initialization routine, which must succeed at Phase 0 */
+        CurrentTable->InitStatus = CurrentTable->KdpInitRoutine(CurrentTable, 0);
+        if (!NT_SUCCESS(CurrentTable->InitStatus))
+        {
+            /* Initialization failed, invalidate the entry */
+            CurrentTable->KdpInitRoutine  = REL_TO_ADDR(NULL);
+            CurrentTable->KdpPrintRoutine = REL_TO_ADDR(NULL);
+        }
+        Success = (Success || NT_SUCCESS(CurrentTable->InitStatus));
     }
 
     /* Initialize the terminal */
@@ -204,9 +263,7 @@ KdpDriverReinit(
     _In_opt_ PVOID Context,
     _In_ ULONG Count)
 {
-    PLIST_ENTRY CurrentEntry;
-    PKD_DISPATCH_TABLE CurrentTable;
-    PKDP_INIT_ROUTINE KdpInitRoutine;
+    ULONG i;
     ULONG BootPhase = (Count + 1); // Do BootPhase >= 2
     BOOLEAN ScheduleReinit = FALSE;
 
@@ -216,29 +273,36 @@ KdpDriverReinit(
            Context ? "" : "BOOT ", BootPhase);
 
     /* Call the registered providers */
-    for (CurrentEntry = KdProviders.Flink;
-         CurrentEntry != &KdProviders; NOTHING)
+    for (i = 0; i < RTL_NUMBER_OF(DispatchTable); i++)
     {
         /* Get the provider */
-        CurrentTable = CONTAINING_RECORD(CurrentEntry,
-                                         KD_DISPATCH_TABLE,
-                                         KdProvidersList);
-        /* Go to the next entry (the Init routine may unlink us) */
-        CurrentEntry = CurrentEntry->Flink;
+        PKD_DISPATCH_TABLE CurrentTable = &DispatchTable[i];
+        PKDP_INIT_ROUTINE KdpInitRoutine;
+
+        /* If no initialization routine because it either failed in
+         * previous phases, or already completed its initialization,
+         * just go to the next provider. */
+        if (!ADDR_TO_REL(CurrentTable->KdpInitRoutine))
+            continue;
+
+        /* Get the initialization routine and reset it */
+        KdpInitRoutine = CurrentTable->KdpInitRoutine;
+        CurrentTable->KdpInitRoutine = REL_TO_ADDR(NULL);
 
         /* Call it if it requires a reinitialization */
-        if (CurrentTable->KdpInitRoutine)
+        CurrentTable->InitStatus = KdpInitRoutine(CurrentTable, BootPhase);
+        DPRINT("KdpInitRoutine(%p) returned 0x%08lx\n",
+               CurrentTable, CurrentTable->InitStatus);
+        if (!NT_SUCCESS(CurrentTable->InitStatus) &&
+            !ADDR_TO_REL(CurrentTable->KdpInitRoutine))
         {
-            /* Get the initialization routine and reset it */
-            KdpInitRoutine = CurrentTable->KdpInitRoutine;
-            CurrentTable->KdpInitRoutine = NULL;
-            CurrentTable->InitStatus = KdpInitRoutine(CurrentTable, BootPhase);
-            DPRINT("KdpInitRoutine(%p) returned 0x%08lx\n",
-                   CurrentTable, CurrentTable->InitStatus);
-
-            /* Check whether it needs to be reinitialized again */
-            ScheduleReinit = (ScheduleReinit || CurrentTable->KdpInitRoutine);
+            /* Initialization failed, invalidate the entry */
+            //CurrentTable->KdpInitRoutine  = REL_TO_ADDR(NULL);
+            CurrentTable->KdpPrintRoutine = REL_TO_ADDR(NULL);
         }
+
+        /* Check whether it needs to be reinitialized again */
+        ScheduleReinit = (ScheduleReinit || ADDR_TO_REL(CurrentTable->KdpInitRoutine));
     }
 
     DPRINT("ScheduleReinit: %s\n", ScheduleReinit ? "TRUE" : "FALSE");
@@ -351,37 +415,46 @@ NTAPI
 KdDebuggerInitialize1(
     _In_opt_ PLOADER_PARAMETER_BLOCK LoaderBlock)
 {
-    PLIST_ENTRY CurrentEntry;
-    PKD_DISPATCH_TABLE CurrentTable;
-    PKDP_INIT_ROUTINE KdpInitRoutine;
+    ULONG i;
     BOOLEAN Success = FALSE;
     BOOLEAN ReinitForPhase2 = FALSE;
 
     /* Make space for the displayed providers' signons */
     HalDisplayString("\r\n");
 
-    /* Call the registered providers */
-    for (CurrentEntry = KdProviders.Flink;
-         CurrentEntry != &KdProviders; NOTHING)
+    /* Call the providers at Phase 1 */
+    for (i = 0; i < RTL_NUMBER_OF(DispatchTable); i++)
     {
         /* Get the provider */
-        CurrentTable = CONTAINING_RECORD(CurrentEntry,
-                                         KD_DISPATCH_TABLE,
-                                         KdProvidersList);
-        /* Go to the next entry (the Init routine may unlink us) */
-        CurrentEntry = CurrentEntry->Flink;
+        PKD_DISPATCH_TABLE CurrentTable = &DispatchTable[i];
+        PKDP_INIT_ROUTINE KdpInitRoutine;
+
+        /* If no initialization routine because it failed at Phase 0,
+         * invalidate the entry and go to the next provider. */
+        if (!ADDR_TO_REL(CurrentTable->KdpInitRoutine))
+        {
+            //CurrentTable->KdpInitRoutine  = REL_TO_ADDR(NULL);
+            CurrentTable->KdpPrintRoutine = REL_TO_ADDR(NULL);
+            continue;
+        }
 
         /* Get the initialization routine and reset it */
-        ASSERT(CurrentTable->KdpInitRoutine);
         KdpInitRoutine = CurrentTable->KdpInitRoutine;
-        CurrentTable->KdpInitRoutine = NULL;
+        CurrentTable->KdpInitRoutine = REL_TO_ADDR(NULL);
 
         /* Call it */
         CurrentTable->InitStatus = KdpInitRoutine(CurrentTable, 1);
+        if (!NT_SUCCESS(CurrentTable->InitStatus) &&
+            !ADDR_TO_REL(CurrentTable->KdpInitRoutine))
+        {
+            /* Initialization failed, invalidate the entry */
+            //CurrentTable->KdpInitRoutine  = REL_TO_ADDR(NULL);
+            CurrentTable->KdpPrintRoutine = REL_TO_ADDR(NULL);
+        }
 
         /* Check whether it needs to be reinitialized for Phase 2 */
         Success = (Success || NT_SUCCESS(CurrentTable->InitStatus));
-        ReinitForPhase2 = (ReinitForPhase2 || CurrentTable->KdpInitRoutine);
+        ReinitForPhase2 = (ReinitForPhase2 || ADDR_TO_REL(CurrentTable->KdpInitRoutine));
     }
 
     /* Make space for the displayed providers' signons */
