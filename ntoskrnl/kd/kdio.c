@@ -69,6 +69,31 @@ KD_DISPATCH_TABLE DispatchTable[KdMax] =
 
 /* LOCKING FUNCTIONS *********************************************************/
 
+#if !defined(_NTOSKRNL_) // && (NTDDI_VERSION < NTDDI_WS03)
+/*
+ * Implementation copied from ntoskrnl/ke/spinlock.c, for usage under
+ * Windows XP and before, where this function is not exported.
+ */
+#define KeTestSpinLock KdTestSpinLock
+static BOOLEAN
+FASTCALL
+KeTestSpinLock(_In_ PKSPIN_LOCK SpinLock)
+{
+    /* Test this spinlock */
+    if (*SpinLock)
+    {
+        /* Spinlock is busy, yield execution */
+        YieldProcessor();
+
+        /* Return busy flag */
+        return FALSE;
+    }
+
+    /* Spinlock appears to be free */
+    return TRUE;
+}
+#endif
+
 KIRQL
 NTAPI
 KdbpAcquireLock(
@@ -632,7 +657,6 @@ KdIoPrintf(
 
 static ULONG KdbgNextApiNumber = DbgKdContinueApi;
 //static NTSTATUS KdbgContinueStatus = STATUS_SUCCESS;
-
 
 VOID
 NTAPI
