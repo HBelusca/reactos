@@ -1,5 +1,10 @@
 #pragma once
 
+#include "../kd/kdterminal.h"
+extern PKD_TERMINAL pKdTerminal;
+#undef KD_TERM
+#define KD_TERM (*pKdTerminal)
+
 /* TYPES *********************************************************************/
 
 /* from kdb.c */

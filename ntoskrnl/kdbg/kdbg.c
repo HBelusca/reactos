@@ -27,7 +27,15 @@
 
 #include "kdb.h"
 
+// See mm/ARM3/sysldr.c
+extern PVOID
+NTAPI
+MiLocateExportName(IN PVOID DllBase,
+                   IN PCHAR ExportName);
+
 /* GLOBALS *******************************************************************/
+
+PKD_TERMINAL pKdTerminal = NULL;
 
 static ULONG KdbgNextApiNumber = DbgKdContinueApi;
 static CONTEXT KdbgContext;
@@ -44,13 +52,49 @@ KdDebuggerInitialize0(
 #undef KdDebuggerInitialize0
 #define pKdDebuggerInitialize0 KdDebuggerInitialize0
 {
+    static const UNICODE_STRING KdComLoadedName =
+#ifdef _NTOSKRNL_
+        RTL_CONSTANT_STRING(L"kdcom.dll");
+#else
+        RTL_CONSTANT_STRING(L"kdterm.dll");
+#endif
+
     NTSTATUS Status;
+    PLIST_ENTRY NextEntry;
+    PLDR_DATA_TABLE_ENTRY LdrEntry;
     PCHAR CommandLine;
 
     /* Call KdTerm */
     Status = pKdDebuggerInitialize0(LoaderBlock);
     if (!NT_SUCCESS(Status))
         return Status;
+
+    //
+    // BUGBUG: FIXME: What happens when the KD DLL gets relocated when
+    // Mm initializes?? Might be done "position-independent" by using:
+    // LdrEntry->DllBase + (KdTerminal_address - original_DllBase).
+    //
+    /*
+     * Check whether the KD transport DLL exports "KdTerminal" (only
+     * present if this is KdTerm; otherwise this is a regular KD DLL).
+     */
+    /* Loop the loaded module list and find the KD DLL base address */
+    for (NextEntry = LoaderBlock->LoadOrderListHead.Flink;
+         NextEntry != &LoaderBlock->LoadOrderListHead;
+         NextEntry = NextEntry->Flink)
+    {
+        /* Get the loader entry */
+        LdrEntry = CONTAINING_RECORD(NextEntry,
+                                     LDR_DATA_TABLE_ENTRY,
+                                     InLoadOrderLinks);
+
+        if (RtlEqualUnicodeString(&KdComLoadedName, &LdrEntry->BaseDllName, TRUE))
+        {
+            /* KD DLL found, check for the "KdTerminal" export */
+            pKdTerminal = MiLocateExportName(LdrEntry->DllBase, "KdTerminal");
+            break;
+        }
+    }
 
     if (LoaderBlock)
     {

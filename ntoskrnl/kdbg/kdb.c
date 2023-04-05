@@ -11,7 +11,6 @@
 
 #include <ntoskrnl.h>
 #include "kdb.h"
-#include "../kd/kdterminal.h"
 
 /* TYPES *********************************************************************/
 
@@ -1161,8 +1160,7 @@ KdbpInternalEnter(VOID)
     PVOID SavedInitialStack, SavedStackBase, SavedKernelStack;
     ULONG SavedStackLimit;
 
-    //if (&KD_TERM)
-        KD_TERM.SetState(TRUE);
+    if (&KD_TERM) KD_TERM.SetState(TRUE);
 
     /* Call the interface's main loop on a different stack */
     Thread = PsGetCurrentThread();
@@ -1183,8 +1181,7 @@ KdbpInternalEnter(VOID)
     Thread->Tcb.StackLimit = SavedStackLimit;
     Thread->Tcb.KernelStack = SavedKernelStack;
 
-    //if (&KD_TERM)
-        KD_TERM.SetState(FALSE);
+    if (&KD_TERM) KD_TERM.SetState(FALSE);
 }
 
 static ULONG

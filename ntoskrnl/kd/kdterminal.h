@@ -58,13 +58,15 @@ typedef struct _KD_TERMINAL
 
 } KD_TERMINAL, *PKD_TERMINAL;
 
-// #ifdef _KDTERMINAL_
-extern KD_TERMINAL KdTerminal;
+#ifndef _NTOSKRNL_
+#define NTKDAPI
+#else
+#define NTKDAPI __declspec(dllimport)
+#endif
+
+extern NTKDAPI KD_TERMINAL KdTerminal;
 #define KD_TERM KdTerminal
-// #else
-// __CREATE_NTOS_DATA_IMPORT_ALIAS(KdTerminal)
 // extern PKD_TERMINAL KdTerminal;
 // #define KD_TERM (*KdTerminal)
-// #endif
 
 /* EOF */

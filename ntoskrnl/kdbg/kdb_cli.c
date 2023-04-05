@@ -36,6 +36,9 @@
 #include "debug.h"
 
 // FIXME: From kdio.c
+// HACK: Alias those to the kernel-internal KD64 ones.
+#define KdbpAcquireLock KdpAcquireLock
+#define KdbpReleaseLock KdpReleaseLock
 KIRQL
 NTAPI
 KdbpAcquireLock(
@@ -2903,7 +2906,7 @@ KdbpPagerInternal(
     _In_ ULONG BufLength,
     _In_ BOOLEAN DoPage)
 {
-    static SIZE TermSize = {0,0};
+    static SIZE TermSize = {80, 24};
     CHAR c;
     ULONG ScanCode;
     PCHAR p;
@@ -2918,7 +2921,7 @@ KdbpPagerInternal(
         return;
 
     /* Retrieve the terminal size each time the number of printed rows is 0 */
-    if (/*&KD_TERM &&*/ KdbNumberOfRowsPrinted == 0)
+    if (&KD_TERM && KdbNumberOfRowsPrinted == 0)
     {
         KD_TERM.UpdateSize();
         TermSize = KD_TERM.Size;
@@ -2974,7 +2977,7 @@ KdbpPagerInternal(
             else
                 Prompt = "--- Press q to abort, any other key to continue ---";
 
-            if (/*&KD_TERM*/ TRUE)
+            if (&KD_TERM)
             {
                 KdbPuts(Prompt);
                 c = KD_TERM.ReadKey(&ScanCode);
@@ -3036,7 +3039,7 @@ KdbpPagerInternal(
 
         /* Remove escape sequences from the line if there is no terminal connected */
         // FIXME: Dangerous operation since we modify the source string!!
-        if (!KD_TERM.Connected)
+        if (&KD_TERM && !KD_TERM.Connected)
             KdpFilterEscapes(p);
 
         /* Print the current line */
