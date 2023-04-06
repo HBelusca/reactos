@@ -1524,6 +1524,20 @@ KdbEnterDebuggerException(
     OldEflags = __readeflags();
     _disable();
 
+    {
+extern BOOLEAN
+KdbpCmdBackTrace(
+    ULONG Argc,
+    PCHAR Argv[]);
+
+KdbpCmdBackTrace(0, NULL);
+    }
+
+    //
+    // FIXME: See r44743 (cba6f25d), r44766 (c300719e) and 835c3023.
+    // Having this, allows the clock interrupt to continue running,
+    // and triggers an infinite debugger entry recursion!!
+    //
     /* HACK: Save the current IRQL and pretend we are at dispatch level */
     OldIrql = KeGetCurrentIrql();
     if (OldIrql > DISPATCH_LEVEL)
@@ -1571,6 +1585,11 @@ KdbEnterDebuggerException(
     /* Decrement the entry count */
     InterlockedDecrement(&KdbEntryCount);
 
+    //
+    // FIXME: See r44743 (cba6f25d), r44766 (c300719e) and 835c3023.
+    // Having this, allows the clock interrupt to continue running,
+    // and triggers an infinite debugger entry recursion!!
+    //
     /* HACK: Raise back to old IRQL */
     if (OldIrql > DISPATCH_LEVEL)
         KeRaiseIrql(OldIrql, &OldIrql);

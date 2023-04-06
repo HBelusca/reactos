@@ -305,6 +305,8 @@ KdSendPacket(
                 KeSetContextPc(&KdbgContext, KeGetContextPc(&KdbgContext) + 2);
             }
 
+KeRosDumpStackFrames(NULL, 0);
+
             Result = KdbEnterDebuggerException(&KdbgExceptionRecord,
                                                KdbgContext.SegCs & 1,
                                                &KdbgContext,

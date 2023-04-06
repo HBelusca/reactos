@@ -72,7 +72,7 @@ KdbpReleaseLock(
 static BOOLEAN KdbpCmdEvalExpression(ULONG Argc, PCHAR Argv[]);
 static BOOLEAN KdbpCmdDisassembleX(ULONG Argc, PCHAR Argv[]);
 static BOOLEAN KdbpCmdRegs(ULONG Argc, PCHAR Argv[]);
-static BOOLEAN KdbpCmdBackTrace(ULONG Argc, PCHAR Argv[]);
+/*static*/ BOOLEAN KdbpCmdBackTrace(ULONG Argc, PCHAR Argv[]);
 
 static BOOLEAN KdbpCmdContinue(ULONG Argc, PCHAR Argv[]);
 static BOOLEAN KdbpCmdStep(ULONG Argc, PCHAR Argv[]);
@@ -1202,7 +1202,7 @@ GetNextFrame(
     return TRUE;
 }
 
-static BOOLEAN
+/*static*/ BOOLEAN
 KdbpCmdBackTrace(
     ULONG Argc,
     PCHAR Argv[])
@@ -1238,7 +1238,7 @@ KdbpCmdBackTrace(
 #else
 /*!\brief Displays a backtrace.
  */
-static BOOLEAN
+/*static*/ BOOLEAN
 KdbpCmdBackTrace(
     ULONG Argc,
     PCHAR Argv[])
