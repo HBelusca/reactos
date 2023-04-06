@@ -341,12 +341,40 @@ KdReceivePacket(
     _Out_ PULONG DataLength,
     _Inout_ PKD_CONTEXT Context)
 #undef KdReceivePacket
+#define pKdReceivePacket KdReceivePacket
 {
     if (PacketType == PACKET_TYPE_KD_POLL_BREAKIN)
     {
-        // FIXME TODO: Implement break-in for the debugger
-        // and return KdPacketReceived when handled properly.
-        return KdPacketTimedOut;
+        KDSTATUS Status;
+
+        /* Call KdTerm */
+        Status = pKdReceivePacket(PacketType,
+                                  MessageHeader,
+                                  MessageData,
+                                  DataLength,
+                                  Context);
+
+        /*
+         * HACK: If we've got a break-in, check whether the caller's IRQL
+         * was originally "low", otherwise refuse the break-in. KDBG currently
+         * does not work well at high IRQL and needs to artificially lower it,
+         * because it uses paged functions.
+         * See the IRQL hacks in KdbEnterDebuggerException() in kdb.c
+         * for more details.
+         */
+        if (Status == KdPacketReceived)
+        {
+            KIRQL Irql = KeGetCurrentPrcb()->DebuggerSavedIRQL;
+            if (Irql > DISPATCH_LEVEL)
+            {
+                KdbPrintf("BREAKIN refused because caller has "
+                          "IRQL > DISPATCH_LEVEL (%d)\n", Irql);
+                return KdPacketTimedOut;
+            }
+        }
+        /* Otherwise, continue with the break-in */
+
+        return Status;
     }
 
     if (PacketType == PACKET_TYPE_KD_DEBUG_IO)
