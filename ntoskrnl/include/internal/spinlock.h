@@ -31,7 +31,23 @@ KxAcquireSpinLock(
     if (((KSPIN_LOCK)KeGetCurrentThread() | 1) == *SpinLock)
     {
         /* We do, bugcheck! */
+#ifdef _NTOSKRNL_
+extern KSPIN_LOCK KdpDebuggerLock;
+if (SpinLock == &KdpDebuggerLock)
+{
+#if defined(CONFIG_SMP) || DBG
+/* Clear the lock  */
+#ifdef _WIN64
+InterlockedAnd64((PLONG64)SpinLock, 0);
+#else
+InterlockedAnd((PLONG)SpinLock, 0);
+#endif
+#endif
+KeMemoryBarrierWithoutFence();
+}
+#endif // _NTOSKRNL_
         KeBugCheckEx(SPIN_LOCK_ALREADY_OWNED, (ULONG_PTR)SpinLock, 0, 0, 0);
+        DbgBreakPoint();
     }
 #endif
 

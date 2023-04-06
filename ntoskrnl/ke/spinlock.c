@@ -324,7 +324,21 @@ KeTryToAcquireSpinLockAtDpcLevel(IN OUT PKSPIN_LOCK SpinLock)
     if (((KSPIN_LOCK)KeGetCurrentThread() | 1) == *SpinLock)
     {
         /* We do, bugcheck! */
+extern KSPIN_LOCK KdpDebuggerLock;
+if (SpinLock == &KdpDebuggerLock)
+{
+#if defined(CONFIG_SMP) || DBG
+/* Clear the lock  */
+#ifdef _WIN64
+InterlockedAnd64((PLONG64)SpinLock, 0);
+#else
+InterlockedAnd((PLONG)SpinLock, 0);
+#endif
+#endif
+KeMemoryBarrierWithoutFence();
+}
         KeBugCheckEx(SPIN_LOCK_ALREADY_OWNED, (ULONG_PTR)SpinLock, 0, 0, 0);
+        DbgBreakPoint();
     }
 #endif
 
