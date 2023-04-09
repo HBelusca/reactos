@@ -73,6 +73,9 @@ static BOOLEAN KdbpCmdEvalExpression(ULONG Argc, PCHAR Argv[]);
 static BOOLEAN KdbpCmdDisassembleX(ULONG Argc, PCHAR Argv[]);
 static BOOLEAN KdbpCmdRegs(ULONG Argc, PCHAR Argv[]);
 /*static*/ BOOLEAN KdbpCmdBackTrace(ULONG Argc, PCHAR Argv[]);
+#ifdef __ROS_DWARF__
+static BOOLEAN KdbpCmdPrintStruct(ULONG Argc, PCHAR Argv[]);
+#endif
 
 static BOOLEAN KdbpCmdContinue(ULONG Argc, PCHAR Argv[]);
 static BOOLEAN KdbpCmdStep(ULONG Argc, PCHAR Argv[]);
@@ -94,8 +97,11 @@ static BOOLEAN KdbpCmdBugCheck(ULONG Argc, PCHAR Argv[]);
 static BOOLEAN KdbpCmdReboot(ULONG Argc, PCHAR Argv[]);
 static BOOLEAN KdbpCmdFilter(ULONG Argc, PCHAR Argv[]);
 static BOOLEAN KdbpCmdSet(ULONG Argc, PCHAR Argv[]);
-static BOOLEAN KdbpCmdHelp(ULONG Argc, PCHAR Argv[]);
 static BOOLEAN KdbpCmdDmesg(ULONG Argc, PCHAR Argv[]);
+static BOOLEAN KdbpCmdHelp(ULONG Argc, PCHAR Argv[]);
+
+static BOOLEAN KdbpCmdEchoToggle(ULONG Argc, PCHAR Argv[]);
+static BOOLEAN KdbpCmdAttribs(ULONG Argc, PCHAR Argv[]);
 
 BOOLEAN ExpKdbgExtPool(ULONG Argc, PCHAR Argv[]);
 BOOLEAN ExpKdbgExtPoolUsed(ULONG Argc, PCHAR Argv[]);
@@ -106,10 +112,6 @@ BOOLEAN ExpKdbgExtIrpFind(ULONG Argc, PCHAR Argv[]);
 BOOLEAN ExpKdbgExtHandle(ULONG Argc, PCHAR Argv[]);
 
 extern char __ImageBase;
-
-#ifdef __ROS_DWARF__
-static BOOLEAN KdbpCmdPrintStruct(ULONG Argc, PCHAR Argv[]);
-#endif
 
 /* Be more descriptive than intrinsics */
 #ifndef Ke386GetGlobalDescriptorTable
@@ -359,7 +361,8 @@ static const struct
     PCHAR Syntax;
     PCHAR Help;
     BOOLEAN (*Fn)(ULONG Argc, PCHAR Argv[]);
-} KdbDebuggerCommands[] = {
+} KdbDebuggerCommands[] =
+{
     /* Data */
     { NULL, NULL, "Data", NULL },
     { "?", "? expression", "Evaluate expression.", KdbpCmdEvalExpression },
@@ -374,6 +377,7 @@ static const struct
 #ifdef __ROS_DWARF__
     { "dt", "dt [mod] [type] [addr]", "Print a struct. The address is optional.", KdbpCmdPrintStruct },
 #endif
+
     /* Flow control */
     { NULL, NULL, "Flow control", NULL },
     { "cont", "cont", "Continue execution (leave debugger).", KdbpCmdContinue },
@@ -411,6 +415,8 @@ static const struct
     { "dmesg", "dmesg", "Display debug messages on screen, with navigation on pages.", KdbpCmdDmesg },
     { "kmsg", "kmsg", "Kernel dmesg. Alias for dmesg.", KdbpCmdDmesg },
     { "help", "help", "Display help screen.", KdbpCmdHelp },
+
+    /* External extensions */
     { "!pool", "!pool [Address [Flags]]", "Display information about pool allocations.", ExpKdbgExtPool },
     { "!poolused", "!poolused [Flags [Tag]]", "Display pool usage.", ExpKdbgExtPoolUsed },
     { "!poolfind", "!poolfind Tag [Pool]", "Search for pool tag allocations.", ExpKdbgExtPoolFind },
@@ -418,7 +424,130 @@ static const struct
     { "!defwrites", "!defwrites", "Display cache write values.", ExpKdbgExtDefWrites },
     { "!irpfind", "!irpfind [Pool [startaddress [criteria data]]]", "Lists IRPs potentially matching criteria.", ExpKdbgExtIrpFind },
     { "!handle", "!handle [Handle]", "Displays info about handles.", ExpKdbgExtHandle },
+
+    /* Output Display */
+    { NULL, NULL, "Output Display", NULL },
+    { "echo", "echo", "Toggles serial echo", KdbpCmdEchoToggle },
+    { "attribs", "attribs [none|ansi|dml]", "Enables or disables usage of display attributes.", KdbpCmdAttribs },
 };
+
+
+// Restore echo toggle command from commit 5405cd7d (r7723) (Arty, 2004)
+// that has been removed by KDB rewrite by Gregor Anich (2005) in commit f3cea5b1 (r13841)
+static BOOLEAN
+KdbpCmdEchoToggle(
+    ULONG Argc,
+    PCHAR Argv[])
+{
+    if (&KD_TERM)
+    {
+        KD_TERM.NoEcho = !KD_TERM.NoEcho;
+        KdbPrintf("Echo mode is %s\n", KD_TERM.NoEcho ? "off" : "on");
+    }
+    else
+    {
+        /* Terminal unavailable, show an error */
+        KdbPuts("Terminal support not detected. This command is available\n"
+                "only when KDBG is used with /DEBUGPORT=TERM boot option.\n");
+    }
+    return TRUE;
+}
+
+
+typedef struct _ATTRIB
+{
+    PCSTR Enable;
+    PCSTR Disable;
+} ATTRIB, *PATTRIB;
+
+enum
+{
+    AttribsNone = 0,
+    AttribsAnsi,
+    AttribsDML,
+    AttribsTypeMax
+} AttribsType = AttribsNone;
+
+enum
+{
+    /*Attrib*/Normal = 0,
+    /*Attrib*/Bold,
+    /*Attrib*/Italic,
+    /*Attrib*/Underline,
+    /*Attrib*/Reverse,
+    AttribDispMax
+};
+
+const ATTRIB AttribNone = {"", ""};
+
+const PCSTR DmlEnableTag = "<?dml?>";
+
+#define ENABLE_DML_IF_NEEDED(attrib) \
+    ((((attrib) != &AttribNone) && (AttribsType == AttribsDML)) ? DmlEnableTag : "")
+
+const ATTRIB Attributes[AttribsTypeMax][AttribDispMax] =
+{
+/* None */
+    {AttribNone, AttribNone, AttribNone, AttribNone, AttribNone},
+/* Ansi */
+    {
+        AttribNone,
+        {"\x1b[1m", "\x1b[0m" /* "\x1b[22m" instead of "21" as it can be double-underlined */},
+        {"\x1b[3m", "\x1b[0m" /* "\x1b[23m" */},
+        {"\x1b[4m", "\x1b[0m" /* "\x1b[24m" */},
+        {"\x1b[7m", "\x1b[0m" /* "\x1b[27m" */}
+    },
+/* DML */
+    {
+        AttribNone,
+        {"<b>", "</b>"},
+        {"<i>", "</i>"},
+        {"<u>", "</u>"},
+        {"<col fg=\"wbg\" bg=\"wfg\">", "</col>"}
+    }
+};
+
+static BOOLEAN
+KdbpCmdAttribs(
+    ULONG Argc,
+    PCHAR Argv[])
+{
+    static const PCSTR AttribsTypeNames[] = {"None", "ANSI", "DML"};
+
+    if (Argc <= 1)
+    {
+        KdbPrintf("Current display attributes type is: %s\n",
+                  (AttribsType < AttribsTypeMax) ? AttribsTypeNames[AttribsType]
+                                                 : AttribsNone);
+        return TRUE;
+    }
+
+    if (_stricmp(Argv[1], "none") == 0)
+    {
+        AttribsType = AttribsNone;
+    }
+    else if (_stricmp(Argv[1], "ansi") == 0)
+    {
+        if (&KD_TERM)
+            AttribsType = AttribsAnsi;
+        else
+            KdbPrintf("Display attribute type '%s' valid only when Terminal support is available.\n", Argv[1]);
+    }
+    else if (_stricmp(Argv[1], "dml") == 0)
+    {
+        if (!&KD_TERM)
+            AttribsType = AttribsDML;
+        else
+            KdbPrintf("Display attribute type '%s' valid only when WinDbg support is available.\n", Argv[1]);
+    }
+    else
+    {
+        KdbPrintf("Display attribute type '%s' is invalid.\n", Argv[1]);
+    }
+
+    return TRUE;
+}
+
 
 /* FUNCTIONS *****************************************************************/
 
@@ -719,7 +848,7 @@ KdbpCmdFilter(
     PCHAR pend;
     PCSTR opt, p;
 
-    static struct
+    static const struct
     {
         PCSTR Name;
         ULONG Level;
@@ -1468,7 +1597,9 @@ KdbpCmdBreakPointList(
     BOOLEAN Enabled = FALSE;
     BOOLEAN Global = FALSE;
     PEPROCESS Process = NULL;
-    PCHAR str1, str2, ConditionExpr, GlobalOrLocal;
+    PCSTR Current;
+    const ATTRIB* CurrentAttrib;
+    PCHAR ConditionExpr, GlobalOrLocal;
     CHAR Buffer[20];
 
     l = KdbpGetNextBreakPointNr(0);
@@ -1489,13 +1620,13 @@ KdbpCmdBreakPointList(
 
         if (l == KdbLastBreakPointNr)
         {
-            str1 = "\x1b[1m*";
-            str2 = "\x1b[0m";
+            Current = "*";
+            CurrentAttrib = &Attributes[AttribsType][Bold];
         }
         else
         {
-            str1 = " ";
-            str2 = "";
+            Current = " ";
+            CurrentAttrib = &Attributes[AttribsType][Normal];
         }
 
         if (Global)
@@ -1511,36 +1642,44 @@ KdbpCmdBreakPointList(
 
         if (Type == KdbBreakPointSoftware || Type == KdbBreakPointTemporary)
         {
-            KdbpPrint(" %s%03d  BPX  0x%08x%s%s%s%s%s\n",
-                      str1, l, Address,
+            KdbpPrint(" %s%s%s%03d  BPX  0x%08x%s%s%s%s%s\n",
+                      ENABLE_DML_IF_NEEDED(CurrentAttrib),
+                      CurrentAttrib->Enable, Current,
+                      l, Address,
                       Enabled ? "" : "  disabled",
                       GlobalOrLocal,
                       ConditionExpr ? "  IF " : "",
                       ConditionExpr ? ConditionExpr : "",
-                      str2);
+                      CurrentAttrib->Disable);
         }
         else if (Type == KdbBreakPointHardware)
         {
             if (!Enabled)
             {
-                KdbpPrint(" %s%03d  BPM  0x%08x  %-5s %-5s  disabled%s%s%s%s\n", str1, l, Address,
+                KdbpPrint(" %s%s%s%03d  BPM  0x%08x  %-5s %-5s  disabled%s%s%s%s\n",
+                          ENABLE_DML_IF_NEEDED(CurrentAttrib),
+                          CurrentAttrib->Enable, Current,
+                          l, Address,
                           KDB_ACCESS_TYPE_TO_STRING(AccessType),
                           Size == 1 ? "byte" : (Size == 2 ? "word" : "dword"),
                           GlobalOrLocal,
                           ConditionExpr ? "  IF " : "",
                           ConditionExpr ? ConditionExpr : "",
-                          str2);
+                          CurrentAttrib->Disable);
             }
             else
             {
-                KdbpPrint(" %s%03d  BPM  0x%08x  %-5s %-5s  DR%d%s%s%s%s\n", str1, l, Address,
+                KdbpPrint(" %s%s%s%03d  BPM  0x%08x  %-5s %-5s  DR%d%s%s%s%s\n",
+                          ENABLE_DML_IF_NEEDED(CurrentAttrib),
+                          CurrentAttrib->Enable, Current,
+                          l, Address,
                           KDB_ACCESS_TYPE_TO_STRING(AccessType),
                           Size == 1 ? "byte" : (Size == 2 ? "word" : "dword"),
                           DebugReg,
                           GlobalOrLocal,
                           ConditionExpr ? "  IF " : "",
                           ConditionExpr ? ConditionExpr : "",
-                          str2);
+                          CurrentAttrib->Disable);
             }
         }
     }
@@ -1729,7 +1868,9 @@ KdbpCmdThread(
     PULONG_PTR Frame;
     ULONG_PTR Pc;
     ULONG_PTR ul = 0;
-    PCHAR State, pend, str1, str2;
+    PCHAR State, pend;
+    PCSTR Current;
+    const ATTRIB* CurrentAttrib;
     static const PCHAR ThreadStateToString[DeferredReady+1] =
     {
         "Initialized", "Ready", "Running",
@@ -1783,13 +1924,13 @@ KdbpCmdThread(
 
             if (Thread == KdbCurrentThread)
             {
-                str1 = "\x1b[1m*";
-                str2 = "\x1b[0m";
+                Current = "*";
+                CurrentAttrib = &Attributes[AttribsType][Bold];
             }
             else
             {
-                str1 = " ";
-                str2 = "";
+                Current = " ";
+                CurrentAttrib = &Attributes[AttribsType][Normal];
             }
 
             if (!Thread->Tcb.InitialStack)
@@ -1819,15 +1960,16 @@ KdbpCmdThread(
             else
                 State = "Unknown";
 
-            KdbpPrint(" %s0x%08x  %-11s  %3d     0x%08x  0x%08x  0x%08x%s\n",
-                      str1,
+            KdbpPrint(" %s%s%s0x%08x  %-11s  %3d     0x%08x  0x%08x  0x%08x%s\n",
+                      ENABLE_DML_IF_NEEDED(CurrentAttrib),
+                      CurrentAttrib->Enable, Current,
                       Thread->Cid.UniqueThread,
                       State,
                       Thread->Tcb.Priority,
                       Thread->Tcb.Affinity,
                       Frame,
                       Pc,
-                      str2);
+                      CurrentAttrib->Disable);
 
             Entry = Entry->Flink;
         }
@@ -1933,7 +2075,9 @@ KdbpCmdProc(
     PLIST_ENTRY Entry;
     PEPROCESS Process;
     BOOLEAN ReferencedProcess = FALSE;
-    PCHAR State, pend, str1, str2;
+    PCHAR State, pend;
+    PCSTR Current;
+    const ATTRIB* CurrentAttrib;
     ULONG_PTR ul;
     extern LIST_ENTRY PsActiveProcessHead;
 
@@ -1953,24 +2097,25 @@ KdbpCmdProc(
 
             if (Process == KdbCurrentProcess)
             {
-                str1 = "\x1b[1m*";
-                str2 = "\x1b[0m";
+                Current = "*";
+                CurrentAttrib = &Attributes[AttribsType][Bold];
             }
             else
             {
-                str1 = " ";
-                str2 = "";
+                Current = " ";
+                CurrentAttrib = &Attributes[AttribsType][Normal];
             }
 
             State = ((Process->Pcb.State == ProcessInMemory) ? "In Memory" :
                     ((Process->Pcb.State == ProcessOutOfMemory) ? "Out of Memory" : "In Transition"));
 
-            KdbpPrint(" %s0x%08x  %-10s  %s%s\n",
-                      str1,
+            KdbpPrint(" %s%s%s0x%08x  %-10s  %s%s\n",
+                      ENABLE_DML_IF_NEEDED(CurrentAttrib),
+                      CurrentAttrib->Enable, Current,
                       Process->UniqueProcessId,
                       State,
                       Process->ImageFileName,
-                      str2);
+                      CurrentAttrib->Disable);
 
             Entry = Entry->Flink;
         }
@@ -2756,6 +2901,7 @@ KdbpCmdHelp(
     ULONG Argc,
     PCHAR Argv[])
 {
+    const ATTRIB* AttribReverse = &Attributes[AttribsType][Reverse];
     ULONG i;
 
     KdbpPrint("Kernel debugger commands:\n");
@@ -2766,7 +2912,11 @@ KdbpCmdHelp(
             if (i > 0)
                 KdbpPrint("\n");
 
-            KdbpPrint("\x1b[7m* %s:\x1b[0m\n", KdbDebuggerCommands[i].Help);
+            KdbpPrint("%s%s* %s:%s\n",
+                      ENABLE_DML_IF_NEEDED(AttribReverse),
+                      AttribReverse->Enable,
+                      KdbDebuggerCommands[i].Help,
+                      AttribReverse->Disable);
             continue;
         }
 
@@ -3584,6 +3734,9 @@ KdbInitialize(
 
     if (BootPhase == 0)
     {
+        /* Determine which default display attributes type to use */
+        AttribsType = (&KD_TERM ? AttribsAnsi : AttribsDML);
+
         /* Register for BootPhase 1 initialization */
         /*DispatchTable->*/KdpInitRoutine = KdbInitialize;
     }
@@ -3619,10 +3772,11 @@ KdbInitialize(
         /* Announce ourselves */
         CHAR buffer[60];
         RtlStringCbPrintfA(buffer, sizeof(buffer),
-                           "   KDBG debugger enabled - %s\r\n",
-                           !(LoadSymbols & 0x2) ? "No symbols loaded" :
-                           !(LoadSymbols & 0x1) ? "Kernel symbols loaded"
-                                                : "Loading symbols");
+                           "   KDBG debugger enabled - %s mode - %s\r\n",
+                           (&KD_TERM ? "Terminal" : "WinDbg"),
+                           (!(LoadSymbols & 0x2) ? "No symbols loaded" :
+                            !(LoadSymbols & 0x1) ? "Kernel symbols loaded"
+                                                 : "Loading symbols"));
         HalDisplayString(buffer);
     }
 
