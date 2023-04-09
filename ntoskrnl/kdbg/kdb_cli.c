@@ -1960,6 +1960,7 @@ KdbpCmdThread(
             else
                 State = "Unknown";
 
+#if 0 // Working but disabled for tests...
             KdbpPrint(" %s%s%s0x%08x  %-11s  %3d     0x%08x  0x%08x  0x%08x%s\n",
                       ENABLE_DML_IF_NEEDED(CurrentAttrib),
                       CurrentAttrib->Enable, Current,
@@ -1970,6 +1971,34 @@ KdbpCmdThread(
                       Frame,
                       Pc,
                       CurrentAttrib->Disable);
+#else
+            if (AttribsType == AttribsDML)
+            {
+                KdbpPrint(" %s%s%s"
+                          "<exec cmd=\"thread attach 0x%08x\">0x%08x</exec>  %-11s  %3d     0x%08x  0x%08x  0x%08x%s\n",
+                          DmlEnableTag,
+                          CurrentAttrib->Enable, Current,
+                          Thread->Cid.UniqueThread, Thread->Cid.UniqueThread,
+                          State,
+                          Thread->Tcb.Priority,
+                          Thread->Tcb.Affinity,
+                          Frame,
+                          Pc,
+                          CurrentAttrib->Disable);
+            }
+            else
+            {
+                KdbpPrint(" %s%s0x%08x  %-11s  %3d     0x%08x  0x%08x  0x%08x%s\n",
+                          CurrentAttrib->Enable, Current,
+                          Thread->Cid.UniqueThread,
+                          State,
+                          Thread->Tcb.Priority,
+                          Thread->Tcb.Affinity,
+                          Frame,
+                          Pc,
+                          CurrentAttrib->Disable);
+            }
+#endif
 
             Entry = Entry->Flink;
         }
@@ -2109,6 +2138,7 @@ KdbpCmdProc(
             State = ((Process->Pcb.State == ProcessInMemory) ? "In Memory" :
                     ((Process->Pcb.State == ProcessOutOfMemory) ? "Out of Memory" : "In Transition"));
 
+#if 0 // Working but disabled for tests...
             KdbpPrint(" %s%s%s0x%08x  %-10s  %s%s\n",
                       ENABLE_DML_IF_NEEDED(CurrentAttrib),
                       CurrentAttrib->Enable, Current,
@@ -2116,6 +2146,28 @@ KdbpCmdProc(
                       State,
                       Process->ImageFileName,
                       CurrentAttrib->Disable);
+#else
+            if (AttribsType == AttribsDML)
+            {
+                KdbpPrint(" %s%s%s"
+                          "<exec cmd=\"proc attach 0x%08x\">0x%08x</exec>  %-10s  %s%s\n",
+                          DmlEnableTag,
+                          CurrentAttrib->Enable, Current,
+                          Process->UniqueProcessId, Process->UniqueProcessId,
+                          State,
+                          Process->ImageFileName,
+                          CurrentAttrib->Disable);
+            }
+            else
+            {
+                KdbpPrint(" %s%s0x%08x  %-10s  %s%s\n",
+                          CurrentAttrib->Enable, Current,
+                          Process->UniqueProcessId,
+                          State,
+                          Process->ImageFileName,
+                          CurrentAttrib->Disable);
+            }
+#endif
 
             Entry = Entry->Flink;
         }
