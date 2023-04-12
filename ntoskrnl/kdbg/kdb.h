@@ -135,12 +135,12 @@ KdbGetHistoryEntry(
 
 VOID
 KdbpPager(
-    _In_ PCHAR Buffer,
+    _In_ PCCH Buffer,
     _In_ ULONG BufLength);
 
 VOID
 KdbpPrint(
-    _In_ PSTR Format,
+    _In_ PCSTR Format,
     _In_ ...);
 
 VOID

@@ -3022,7 +3022,7 @@ memrchr(const void *s, int c, size_t n)
  *
  * @note    N lines count is hardcoded to the terminal's number of rows.
  **/
-static PCHAR
+static PCCH
 CountOnePageUp(
     _In_ PCCH Buffer,
     _In_ ULONG BufLength,
@@ -3090,6 +3090,13 @@ KdpFilterEscapes(
     }
 }
 
+static SIZE_T
+GetLineLength(
+    _In_ PCCH Line,
+    _In_ SIZE_T xxx)
+{
+}
+
 /*!\brief Prints the given string with, page by page.
  *
  * \param Buffer     Characters buffer to print.
@@ -3104,14 +3111,12 @@ KdpFilterEscapes(
  */
 static VOID
 KdbpPagerInternal(
-    _In_ PCHAR Buffer,
+    _In_ PCCH Buffer,
     _In_ ULONG BufLength,
     _In_ BOOLEAN DoPage)
 {
     static SIZE TermSize = {80, 24};
-    CHAR c;
-    ULONG ScanCode;
-    PCHAR p;
+    PCCH p;
     SIZE_T i;
     LONG RowsPrintedByTerminal;
 
@@ -3131,16 +3136,19 @@ KdbpPagerInternal(
 
     /* Loop through the strings */
     p = Buffer;
-    while (p[0] != '\0')
+    while (*p)
     {
         if (DoPage)
         {
+            // FIXME This must never happen!!
             if (p > Buffer + BufLength)
             {
                 KdbPrintf("Dmesg: error, p > Buffer+BufLength,d=%d", p - (Buffer + BufLength));
                 return;
             }
         }
+        /* Find the end of the current line */
+        // FIXME: Buffer not always NULL-terminated!!!!
         i = strcspn(p, "\n");
 
         if (DoPage)
@@ -3153,7 +3161,7 @@ KdbpPagerInternal(
         /* Calculate the number of lines which will be printed in
          * the terminal when outputting the current line. */
         if (i > 0)
-            RowsPrintedByTerminal = (i + KdbNumberOfColsPrinted - 1) / TermSize.cx;
+            RowsPrintedByTerminal = (KdbNumberOfColsPrinted + i - 1) / TermSize.cx;
         else
             RowsPrintedByTerminal = 0;
 
@@ -3167,6 +3175,8 @@ KdbpPagerInternal(
             (LONG)(KdbNumberOfRowsPrinted + RowsPrintedByTerminal) >= TermSize.cy)
         {
             PCSTR Prompt;
+            CHAR c;
+            ULONG ScanCode;
 
             /* Disable the repetition of previous command with long many-page output */
             KdbRepeatLastCommand = FALSE;
@@ -3209,59 +3219,42 @@ KdbpPagerInternal(
                 {
                     PCHAR pBufEnd = Buffer + BufLength;
                     p = CountOnePageUp(Buffer, BufLength, pBufEnd, &TermSize);
-                    i = strcspn(p, "\n");
                 }
                 else if (ScanCode == KEYSC_PAGEUP  ||
                          ScanCode == KEYSC_ARROWUP || c == 'u')
                 {
                     p = CountOnePageUp(Buffer, BufLength, p, &TermSize);
-                    i = strcspn(p, "\n");
                 }
                 else if (ScanCode == KEYSC_HOME || c == 'h')
                 {
                     p = Buffer;
-                    i = strcspn(p, "\n");
                 }
+                i = strcspn(p, "\n");
             }
 
             KdbNumberOfRowsPrinted = 0;
             KdbNumberOfColsPrinted = 0;
         }
 
-        /* Insert a NUL after the line and print only the current line */
-        if (p[i] == '\n' && p[i + 1] != '\0')
-        {
-            c = p[i + 1];
-            p[i + 1] = '\0';
-        }
-        else
-        {
-            c = '\0';
-        }
-
-        /* Remove escape sequences from the line if there is no terminal connected */
-        // FIXME: Dangerous operation since we modify the source string!!
-        if (&KD_TERM && !KD_TERM.Connected)
-            KdpFilterEscapes(p);
+        // // /* Remove escape sequences from the line if there is no terminal connected */
+        // // // FIXME: Dangerous operation since we modify the source string!!
+        // // if (&KD_TERM && !KD_TERM.Connected)
+            // // KdpFilterEscapes(p);
 
         /* Print the current line */
-        KdbPuts(p);
-
-        /* Restore not null char with saved */
-        if (c != '\0')
-            p[i + 1] = c;
+        KdbPutsN(p, i + 1);
 
         /* Set p to the start of the next line and
          * remember the number of rows/cols printed */
         p += i;
-        if (p[0] == '\n')
+        if (*p == '\n')
         {
             p++;
             KdbNumberOfColsPrinted = 0;
         }
         else
         {
-            ASSERT(p[0] == '\0');
+            ASSERT(*p == '\0');
             KdbNumberOfColsPrinted += i;
         }
 
@@ -3283,7 +3276,7 @@ KdbpPagerInternal(
  */
 VOID
 KdbpPager(
-    _In_ PCHAR Buffer,
+    _In_ PCCH Buffer,
     _In_ ULONG BufLength)
 {
     /* Call the internal function */
@@ -3301,7 +3294,7 @@ KdbpPager(
  */
 VOID
 KdbpPrint(
-    _In_ PSTR Format,
+    _In_ PCSTR Format,
     _In_ ...)
 {
     static CHAR Buffer[4096];

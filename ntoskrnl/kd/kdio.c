@@ -23,12 +23,32 @@
 
 /* GLOBALS *******************************************************************/
 
+//
+// Default size of the DbgPrint log buffer, see ntoskrnl/include/internal/kd64.h
+//
+#if DBG
+#define KD_DEFAULT_LOG_BUFFER_SIZE  0x8000
+#else
+#define KD_DEFAULT_LOG_BUFFER_SIZE  0x1000
+#endif
+
+//
+// KdPrint Circular Buffers
+//
+static CHAR KdPrintDefaultBuffer[KD_DEFAULT_LOG_BUFFER_SIZE];
+static PCHAR KdPrintWritePointer = KdPrintDefaultBuffer;
+static PCHAR KdPrintCircularBuffer = KdPrintDefaultBuffer;
+static ULONG KdPrintBufferSize = sizeof(KdPrintDefaultBuffer);
+#define KdpPrintSpinLock    KdpDebugLogSpinLock
+static KSPIN_LOCK KdpPrintSpinLock;
+
 #define KdpBufferSize  (1024 * 512)
 static BOOLEAN KdpLoggingEnabled = FALSE;
 static PCHAR KdpDebugBuffer = NULL;
 static volatile ULONG KdpCurrentPosition = 0;
 static volatile ULONG KdpFreeBytes = 0;
-static KSPIN_LOCK KdpDebugLogSpinLock;
+//static KSPIN_LOCK KdpDebugLogSpinLock;
+
 static KEVENT KdpLoggerThreadEvent;
 static HANDLE KdpLogFileHandle;
 ANSI_STRING KdpLogFileName = RTL_CONSTANT_STRING("\\SystemRoot\\debug.log");
@@ -227,35 +247,50 @@ KdpDebugLogPrint(
     _In_ PCCH String,
     _In_ ULONG Length)
 {
+#if 0
     KIRQL OldIrql;
-    ULONG beg, end, num;
+    ULONG oldPos, num;
 
-    if (KdpDebugBuffer == NULL) return;
+    if (!KdpDebugBuffer)
+        return;
 
     /* Acquire the printing spinlock without waiting at raised IRQL */
     OldIrql = KdbpAcquireLock(&KdpDebugLogSpinLock);
 
-    beg = KdpCurrentPosition;
     num = min(Length, KdpFreeBytes);
     if (num != 0)
     {
-        end = (beg + num) % KdpBufferSize;
-        KdpCurrentPosition = end;
+        oldPos = KdpCurrentPosition;
+        KdpCurrentPosition = (oldPos + num) % KdpBufferSize;
         KdpFreeBytes -= num;
 
-        if (end > beg)
+        if (oldPos < KdpCurrentPosition)
         {
-            RtlCopyMemory(KdpDebugBuffer + beg, String, num);
+            RtlCopyMemory(KdpDebugBuffer + oldPos, String, num);
         }
         else
         {
-            RtlCopyMemory(KdpDebugBuffer + beg, String, KdpBufferSize - beg);
-            RtlCopyMemory(KdpDebugBuffer, String + KdpBufferSize - beg, end);
+            RtlCopyMemory(KdpDebugBuffer + oldPos, String, KdpBufferSize - oldPos);
+            RtlCopyMemory(KdpDebugBuffer, String + KdpBufferSize - oldPos, KdpCurrentPosition);
         }
     }
 
     /* Release the spinlock */
     KdbpReleaseLock(&KdpDebugLogSpinLock, OldIrql);
+
+#else
+
+    /* If the string is empty, bail out */
+    if (!String || (Length == 0))
+        return;
+
+    /* If no log buffer available, bail out */
+    if (!KdPrintCircularBuffer /*|| (KdPrintBufferSize == 0)*/)
+        return;
+
+    /* String has already been logged */
+
+#endif
 
     /* Signal the logger thread */
     //
@@ -287,6 +322,10 @@ KdpDebugLogInit(
     }
     else if (BootPhase == 1)
     {
+//
+// TODO: Try enlarging the default log buffer, but if it fails
+// just continue using the old one without failing.
+//
         /* Allocate a buffer for debug log */
         KdpDebugBuffer = ExAllocatePoolZero(NonPagedPool,
                                             KdpBufferSize,
@@ -610,12 +649,61 @@ KdpScreenInit(
 
 /* GENERAL FUNCTIONS *********************************************************/
 
+// Adapted from ntoskrnl/kd64/kdprint.c!KdLogDbgPrint()
+static VOID
+KdIoLogPrint(
+    _In_ PCCH String,
+    _In_ ULONG Length)
+{
+    ULONG Remaining;
+    KIRQL OldIrql;
+
+    /* If the string is empty, bail out */
+    if (!String || (Length == 0))
+        return;
+
+    /* If no log buffer available, bail out */
+    if (!KdPrintCircularBuffer /*|| (KdPrintBufferSize == 0)*/)
+        return;
+
+    /* Acquire the spinlock without waiting at raised IRQL */
+    OldIrql = KdpAcquireLock(&KdpPrintSpinLock);
+
+    // KdPrintWritePointer == KdPrintCircularBuffer + KdpCurrentPosition
+    Length = min(Length, KdPrintBufferSize);
+    Remaining = (ULONG)(KdPrintCircularBuffer + KdPrintBufferSize - KdPrintWritePointer);
+
+    if (Length < Remaining)
+    {
+        RtlCopyMemory(KdPrintWritePointer, String, Length);
+        KdPrintWritePointer += Length;
+    }
+    else
+    {
+        RtlCopyMemory(KdPrintWritePointer, String, Remaining);
+        Length -= Remaining;
+        if (Length > 0)
+            RtlCopyMemory(KdPrintCircularBuffer, String + Remaining, Length);
+
+        KdPrintWritePointer = KdPrintCircularBuffer + Length;
+    }
+
+    /* Release the spinlock */
+    KdpReleaseLock(&KdpPrintSpinLock, OldIrql);
+}
+
 static VOID
 KdIoPrintString(
     _In_ PCCH String,
     _In_ ULONG Length)
 {
     ULONG i;
+
+    /* Log the string, so that we can replay it on a provider
+     * at later times (e.g. if it was not initialized yet, or
+     * for logging to file, or for displaying a screenful when
+     * re-enabling screen display). */
+    KdIoLogPrint(String, Length);
 
     /* Call the providers */
     for (i = 0; i < RTL_NUMBER_OF(DispatchTable); i++)
