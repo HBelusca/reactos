@@ -1,4 +1,4 @@
-##
+﻿##
 ## PROJECT:     FreeLoader
 ## LICENSE:     GPL-2.0-or-later (https://spdx.org/licenses/GPL-2.0-or-later)
 ## PURPOSE:     Common build definitions
@@ -38,6 +38,7 @@ list(APPEND FREELDR_ARC_SOURCE
 list(APPEND FREELDR_BOOTLIB_SOURCE
     lib/arcsupp.c
     lib/debug.c
+    lib/image.c
     lib/peloader.c
     lib/cache/blocklist.c
     lib/cache/cache.c

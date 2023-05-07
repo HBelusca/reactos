@@ -30,6 +30,12 @@ typedef VOID
 (*EDIT_OS_ENTRY_PROC)(
     _Inout_ OperatingSystemItem* OperatingSystem);
 
+ARC_STATUS
+LoadAndExecuteImage(
+    _In_ ULONG Argc,
+    _In_ PCHAR Argv[],
+    _In_ PCHAR Envp[]);
+
 static VOID
 EditCustomBootReactOSSetup(
     _Inout_ OperatingSystemItem* OperatingSystem)
@@ -54,7 +60,7 @@ typedef struct _OS_LOADING_METHOD
 static const OS_LOADING_METHOD
 OSLoadingMethods[] =
 {
-    {"ReactOSSetup", EditCustomBootReactOSSetup, LoadReactOSSetup},
+    {"Image"       , /*EditCustomImage*/ NULL, LoadAndExecuteImage},
 
 #if defined(_M_IX86) || defined(_M_AMD64)
 #ifndef UEFIBOOT
@@ -62,6 +68,8 @@ OSLoadingMethods[] =
     {"Linux"     , EditCustomBootLinux , LoadAndBootLinux },
 #endif
 #endif
+
+    {"ReactOSSetup", EditCustomBootReactOSSetup, LoadReactOSSetup},
 #ifdef _M_IX86
     {"WindowsNT40" , EditCustomBootNTOS, LoadAndBootWindows},
 #endif
@@ -69,6 +77,7 @@ OSLoadingMethods[] =
     {"Windows2003" , EditCustomBootNTOS, LoadAndBootWindows},
     {"WindowsVista", EditCustomBootNTOS, LoadAndBootWindows},
 };
+
 
 /* FUNCTIONS ******************************************************************/
 

@@ -75,10 +75,10 @@ PeLdrpFetchAddressOfSecurityCookie(PVOID BaseAddress, ULONG SizeOfImage)
 /* DllName - physical, UnicodeString->Buffer - virtual */
 static BOOLEAN
 PeLdrpCompareDllName(
-    IN PCH DllName,
-    IN PUNICODE_STRING UnicodeName)
+    _In_ PCCH DllName,
+    _In_ PCUNICODE_STRING UnicodeName)
 {
-    PWSTR Buffer;
+    PCWSTR Buffer;
     SIZE_T i, Length;
 
     /* First obvious check: for length of two names */
@@ -711,8 +711,8 @@ PeLdrAllocateDataTableEntry(
     DataTableEntry->SectionPointer = 0;
     DataTableEntry->CheckSum = NtHeaders->OptionalHeader.CheckSum;
 
-    /* Initialize BaseDllName field (UNICODE_STRING) from the Ansi BaseDllName
-       by simple conversion - copying each character */
+    /* Initialize BaseDllName field (UNICODE_STRING) from the ANSI
+     * BaseDllName by simple conversion - copying each character */
     Length = (USHORT)(strlen(BaseDllName) * sizeof(WCHAR));
     Buffer = (PWSTR)FrLdrHeapAlloc(Length, TAG_WLDR_NAME);
     if (Buffer == NULL)
@@ -735,8 +735,8 @@ PeLdrAllocateDataTableEntry(
         *Buffer++ = *BaseDllName++;
     }
 
-    /* Initialize FullDllName field (UNICODE_STRING) from the Ansi FullDllName
-       using the same method */
+    /* Initialize FullDllName field (UNICODE_STRING) from the ANSI
+     * FullDllName using the same method */
     Length = (USHORT)(strlen(FullDllName) * sizeof(WCHAR));
     Buffer = (PWSTR)FrLdrHeapAlloc(Length, TAG_WLDR_NAME);
     if (Buffer == NULL)
@@ -819,12 +819,15 @@ PeLdrFreeDataTableEntry(
  * @note
  * Addressing mode: physical.
  **/
-BOOLEAN
-PeLdrLoadImage(
+NTSTATUS
+PeLdrLoadImageEx(
     _In_ PCSTR FilePath,
     _In_ TYPE_OF_MEMORY MemoryType,
+    _In_opt_ USHORT ExpectedSubsystem,
+    _In_ ULONG LoadFlags,
     _Out_ PVOID* ImageBasePA)
 {
+    ARC_STATUS Status;
     ULONG FileId;
     PVOID PhysicalBase;
     PVOID VirtualBase = NULL;
@@ -832,7 +835,6 @@ PeLdrLoadImage(
     PIMAGE_NT_HEADERS NtHeaders;
     PIMAGE_SECTION_HEADER SectionHeader;
     ULONG VirtualSize, SizeOfRawData, NumberOfSections;
-    ARC_STATUS Status;
     LARGE_INTEGER Position;
     ULONG i, BytesRead;
 
@@ -864,12 +866,23 @@ PeLdrLoadImage(
         return FALSE;
     }
 
-    /* Ensure this is executable image */
+    /* Ensure this is an executable image */
     if (((NtHeaders->FileHeader.Characteristics & IMAGE_FILE_EXECUTABLE_IMAGE) == 0))
     {
         ERR("Not an executable image \"%s\"\n", FilePath);
         ArcClose(FileId);
         return FALSE;
+    }
+
+    if (LoadFlags & FLDR_LOADIMG_CHECK_SUBSYSTEM)
+    {
+        /* It must be of the expected subsystem */
+        if (NtHeaders->OptionalHeader.Subsystem != ExpectedSubsystem)
+        {
+            // Status = STATUS_INVALID_IMAGE_FORMAT;
+            ArcClose(FileId);
+            return FALSE;
+        }
     }
 
     /* Store number of sections to read and a pointer to the first section */
@@ -885,10 +898,10 @@ PeLdrLoadImage(
     {
         /* Don't fail, allocate again at any other "low" place */
         PhysicalBase = MmAllocateMemoryWithType(NtHeaders->OptionalHeader.SizeOfImage, MemoryType);
-
         if (PhysicalBase == NULL)
         {
-            ERR("Failed to alloc %lu bytes for image %s\n", NtHeaders->OptionalHeader.SizeOfImage, FilePath);
+            ERR("Failed to alloc %lu bytes for image %s\n",
+                NtHeaders->OptionalHeader.SizeOfImage, FilePath);
             ArcClose(FileId);
             return FALSE;
         }
@@ -900,7 +913,9 @@ PeLdrLoadImage(
     TRACE("Base PA: 0x%X, VA: 0x%X\n", PhysicalBase, VirtualBase);
 
     /* Copy headers from already read data */
-    RtlCopyMemory(PhysicalBase, HeadersBuffer, min(NtHeaders->OptionalHeader.SizeOfHeaders, sizeof(HeadersBuffer)));
+    RtlCopyMemory(PhysicalBase,
+                  HeadersBuffer,
+                  min(NtHeaders->OptionalHeader.SizeOfHeaders, sizeof(HeadersBuffer)));
     /* If headers are quite big, request next bytes from file */
     if (NtHeaders->OptionalHeader.SizeOfHeaders > sizeof(HeadersBuffer))
     {
@@ -908,7 +923,6 @@ PeLdrLoadImage(
         if (Status != ESUCCESS)
         {
             ERR("ArcRead('%s') failed. Status: %u\n", FilePath, Status);
-            // UiMessageBox("Error reading headers.");
             ArcClose(FileId);
             goto Failure;
         }
@@ -959,7 +973,10 @@ PeLdrLoadImage(
             TRACE("SH->VA: 0x%X\n", SectionHeader->VirtualAddress);
 
             /* Read this section from the file, size = SizeOfRawData */
-            Status = ArcRead(FileId, (PUCHAR)PhysicalBase + SectionHeader->VirtualAddress, SizeOfRawData, &BytesRead);
+            Status = ArcRead(FileId,
+                             (PUCHAR)PhysicalBase + SectionHeader->VirtualAddress,
+                             SizeOfRawData,
+                             &BytesRead);
             if (Status != ESUCCESS)
             {
                 ERR("PeLdrLoadImage(): Error reading section from file!\n");
@@ -984,7 +1001,7 @@ PeLdrLoadImage(
     if (Status != ESUCCESS)
         goto Failure;
 
-    /* Relocate the image, if it needs it */
+    /* Relocate the image if needed */
     if (NtHeaders->OptionalHeader.ImageBase != (ULONG_PTR)VirtualBase)
     {
         WARN("Relocating %p -> %p\n", NtHeaders->OptionalHeader.ImageBase, VirtualBase);
@@ -1008,4 +1025,22 @@ Failure:
     /* Cleanup and bail out */
     MmFreeMemory(PhysicalBase);
     return FALSE;
+}
+
+BOOLEAN
+PeLdrLoadImage(
+    _In_ PCSTR FilePath,
+    _In_ TYPE_OF_MEMORY MemoryType,
+    _Out_ PVOID* ImageBasePA)
+{
+    //ARC_STATUS Status;
+    NTSTATUS Status;
+
+    Status = PeLdrLoadImageEx(FilePath,
+                              MemoryType,
+                              IMAGE_SUBSYSTEM_UNKNOWN,
+                              0,
+                              ImageBasePA);
+
+    return NT_SUCCESS(Status);
 }
