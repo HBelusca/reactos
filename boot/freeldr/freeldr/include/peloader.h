@@ -83,3 +83,32 @@ FldrpUnloadImage(
 ARC_STATUS
 FldrpStartImage(
     _In_ PLDR_DATA_TABLE_ENTRY ImageEntry);
+
+//
+// Context structure for FreeLdr Boot Applications
+//
+#define BOOT_CONTEXT_SIGNATURE  'RDLF' // HEX(52444C46) == "FLDR"
+
+#define BOOT_MEMORY_PHYSICAL    0
+#define BOOT_MEMORY_VIRTUAL     1
+
+typedef struct _BOOT_CONTEXT
+{
+    ULONG Signature;    // == BOOT_CONTEXT_SIGNATURE
+    ULONG Size;         // == sizeof(BOOT_CONTEXT)
+
+    ULONG MemoryTranslation;
+
+    ARC_STATUS ExitStatus;
+
+    ANSI_STRING CommandLine;
+    PCHAR* Envp;
+    PMACHVTBL MachVtbl;
+    /*PUIVTBL*/PVOID UiTable;
+} BOOT_CONTEXT, *PBOOT_CONTEXT;
+
+#define IS_BOOT_CONTEXT_VALID(BootContextPtr)   \
+    (((BootContextPtr)->Signature == BOOT_CONTEXT_SIGNATURE) && \
+     ((BootContextPtr)->Size == sizeof(BOOT_CONTEXT)))
+
+// typedef VOID (NTAPI* BOOTMGR_ENTRY_POINT)(IN PBOOT_CONTEXT BootContext);

@@ -22,7 +22,6 @@ PLDR_DATA_TABLE_ENTRY FreeldrDTE;
 static BOOLEAN
 FrLdrInitImageSupport(VOID)
 {
-// extern char __ImageBase;
     BOOLEAN Success;
 
     if (FreeldrDTE)
@@ -92,11 +91,11 @@ FldrpLoadImage(
     }
 
     /* Load the image */
-    Success = PeLdrLoadImage(ImageFilePath, MemoryType, &ImageBase);
-    if (!Success)
+    Status = PeLdrLoadImage(ImageFilePath, MemoryType, &ImageBase);
+    if (Status != ESUCCESS)
     {
         ERR("PeLdrLoadImage('%s') failed\n", ImageFilePath);
-        return ENOEXEC;
+        return Status;
     }
 
     if (!ImportName)
@@ -204,6 +203,7 @@ FldrpUnloadImage(
     PVOID ImageBase = VaToPa(ImageEntry->DllBase);
     PeLdrFreeDataTableEntry(ImageEntry);
     MmFreeMemory(ImageBase);
+    // ERR("FldrpUnloadImage failed, possible memory leak\n");
     return TRUE;
 }
 
@@ -212,9 +212,12 @@ FldrpUnloadImage(
  * Execute a loaded external FreeLdr boot application or driver PE image.
  **/
 ARC_STATUS
-FldrpStartImage(
-    _In_ PLDR_DATA_TABLE_ENTRY ImageEntry)
+FldrpStartImageEx(
+    _In_ PLDR_DATA_TABLE_ENTRY ImageEntry,
+    _In_opt_ PCSTR CommandLine,
+    _In_opt_ PCHAR Envp[])
 {
+    ARC_STATUS Status;
     PIMAGE_NT_HEADERS NtHeaders;
     USHORT Subsystem;
 
@@ -223,7 +226,7 @@ FldrpStartImage(
     {
         PVOID Ptr;
         NTSTATUS (NTAPI *DriverEntry)(PVOID /*PDRIVER_OBJECT*/, PVOID /*PUNICODE_STRING*/);
-        /*VOID*/ NTSTATUS (NTAPI *AppEntry)(PVOID ParamBlock);
+        VOID (NTAPI *AppEntry)(PBOOT_CONTEXT ParamBlock);
     } EntryPoint;
 
     EntryPoint.Ptr = VaToPa(ImageEntry->EntryPoint);
@@ -231,6 +234,8 @@ FldrpStartImage(
     NtHeaders = RtlImageNtHeader(VaToPa(ImageEntry->DllBase));
     ASSERT(NtHeaders); // If ImageEntry valid, the image was valid and had a header...
     Subsystem = NtHeaders->OptionalHeader.Subsystem;
+
+    Status = ESUCCESS;
 
     /* Determine the entrypoint format from PE subsystem and call it accordingly */
     if (Subsystem == IMAGE_SUBSYSTEM_NATIVE)
@@ -240,23 +245,66 @@ FldrpStartImage(
         if (NtHeaders->FileHeader.Characteristics & IMAGE_FILE_DLL)
         {
             /* Driver */
-            EntryPoint.DriverEntry(NULL, NULL);
+            NTSTATUS NtStatus = EntryPoint.DriverEntry(NULL, NULL);
+            if (!NT_SUCCESS(NtStatus))
+            {
+                /* Driver loading failed, unload it */
+                FldrpUnloadImage(ImageEntry);
+                Status = (ARC_STATUS)NtStatus;
+            }
         }
         else
         {
             /* Boot application */
+            // KDESCRIPTOR Gdt, Idt;
+            PVOID BootData;
+            PVOID NewStack /*, NewGdt, NewIdt*/;
+            PBOOT_CONTEXT BootContext;
+            ULONG_PTR BootSizeNeeded;
 
-            // TODO: Create separate stack, etc, and switch to it.
+            /* Allocate space for the IDT, GDT, boot context and 24 pages of stack */
+            // TODO: IDT, GDT
+            BootSizeNeeded = (ULONG_PTR)PAGE_ALIGN(25 * PAGE_SIZE +
+                                                   /*Idt.Limit + Gdt.Limit + 1 +*/
+                                                   sizeof(BOOT_CONTEXT));
+            BootData = MmAllocateMemoryWithType(BootSizeNeeded, LoaderLoadedProgram);
+            if (!BootData)
+            {
+                ERR("Failed to allocate 0x%lx bytes\n", BootSizeNeeded);
+                return ENOMEM;
+            }
+            RtlZeroMemory(BootData, BootSizeNeeded);
 
-            //
-            // Entry-point prototype similar to the one of NtProcessStartup()
-            // with a standardized FreeLdr loading block as parameter.
-            //
-            // TODO: How to communicate the command line??
-            //
-            EntryPoint.AppEntry(NULL);
+            /* Set the new stack, GDT and IDT */
+            // For x86/x64... stack goes from top down to BootData.
+            NewStack = (PVOID)((ULONG_PTR)BootData + (24 * PAGE_SIZE) - 8);
+            BootContext = (PBOOT_CONTEXT)((ULONG_PTR)BootData + (24 * PAGE_SIZE));
+            // NewGdt = (PVOID)((ULONG_PTR)BootData + (24 * PAGE_SIZE) + sizeof(BOOT_CONTEXT));
+            // NewIdt = (PVOID)((ULONG_PTR)BootData + (24 * PAGE_SIZE) + sizeof(BOOT_CONTEXT) + Gdt.Limit + 1);
+
+            /* Prepare the boot context */
+            BootContext->Signature = BOOT_CONTEXT_SIGNATURE;
+            BootContext->Size = sizeof(BOOT_CONTEXT);
+            BootContext->MemoryTranslation = BOOT_MEMORY_PHYSICAL;
+            BootContext->ExitStatus = ESUCCESS;
+            RtlInitAnsiString(&BootContext->CommandLine, CommandLine);
+            BootContext->Envp = Envp;
+            BootContext->MachVtbl = &MachVtbl;
+            BootContext->UiTable = &UiVtbl;
+
+            // TODO: Switch to new stack.
+            DBG_UNREFERENCED_PARAMETER(NewStack);
+
+            /* Make it so! */
+            EntryPoint.AppEntry(BootContext);
 
             // TODO: Switch back to current stack.
+
+            Status = BootContext->ExitStatus;
+            TRACE("Boot app returned 0x%08lx\n", Status);
+
+            /* Cleanup and bail out */
+            MmFreeMemory(BootData);
         }
     }
 #if 0
@@ -266,7 +314,14 @@ FldrpStartImage(
     }
 #endif
 
-    return ESUCCESS;
+    return Status;
+}
+
+ARC_STATUS
+FldrpStartImage(
+    _In_ PLDR_DATA_TABLE_ENTRY ImageEntry)
+{
+    return FldrpStartImageEx(ImageEntry, NULL, NULL);
 }
 
 ARC_STATUS
@@ -291,12 +346,12 @@ NativeExecuteImage(
 
     /* Execute it */
     TRACE("Executing '%s'\n", ImageFilePath);
-    Status = FldrpStartImage(ImageDTE);
+    // Status = FldrpStartImage(ImageDTE);
+    Status = FldrpStartImageEx(ImageDTE, CommandLine, Envp);
     TRACE("'%s' terminated\n", ImageFilePath);
 
     /* And unload it */
-    if (!FldrpUnloadImage(ImageDTE))
-        ERR("FldrpUnloadImage failed, possible memory leak\n");
+    FldrpUnloadImage(ImageDTE);
 
     return Status;
 }
@@ -311,6 +366,9 @@ LoadAndExecuteImage(
     PCSTR ArgValue;
     PCSTR ImageFilePath;
     PSTR CommandLine;
+
+    PCSTR BootPath;
+    CHAR ArcPath[MAX_PATH];
 
     /* Retrieve the (mandatory) boot type */
     ArgValue = GetArgumentValue(Argc, Argv, "BootType");
@@ -330,27 +388,38 @@ LoadAndExecuteImage(
     /* Get the load options command line (optional) */
     CommandLine = GetArgumentValue(Argc, Argv, "Options");
 
-#ifdef UEFIBOOT
+    /* Fall back to using the system partition as default path */
+    BootPath = GetArgumentValue(Argc, Argv, "SystemPartition");
+
+    /* Concatenate paths */
+    RtlStringCbCopyA(ArcPath, sizeof(ArcPath), BootPath);
+    if (ArcPath[strlen(ArcPath)-1] != '\\')
+        RtlStringCbCatA(ArcPath, sizeof(ArcPath), "\\");
+    RtlStringCbCatA(ArcPath, sizeof(ArcPath), ImageFilePath);
+
+#if 0
+//#ifdef UEFIBOOT
 
     // TODO: Prefer doing it the UEFI way
     return ESUCCESS;
 
-#elif defined(ARC)
+//#elif defined(ARC)
 
     // TODO: Split the command line into Argv
 
     /* Execute the image */
-    return ArcExecute(ImageFilePath, 0 /*Argc*/, NULL /*Argv*/, Envp);
+    return ArcExecute(ArcPath, 0 /*Argc*/, NULL /*Argv*/, Envp);
 
-#else
+//#else
+#endif
 
     /* BIOS-type loader: do manual PE loading */
-    Status = NativeExecuteImage(ImageFilePath, CommandLine, Envp);
+    Status = NativeExecuteImage(ArcPath, CommandLine, Envp);
     if (Status != ESUCCESS)
-        UiMessageBox("Could not load %s", ImageFilePath);
+        UiMessageBox("Could not load %s", ArcPath);
     return Status;
 
-#endif
+//#endif
 }
 
 /* EOF */
