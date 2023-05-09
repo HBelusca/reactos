@@ -407,7 +407,7 @@ PeLdrpLoadAndScanReferencedDll(
         PeLdrImportDllLoadCallback(FullDllName);
 
     /* Load the image */
-    Success = PeLdrLoadImage(FullDllName, LoaderBootDriver, &BasePA);
+    Success = (PeLdrLoadImage(FullDllName, LoaderBootDriver, &BasePA) == ESUCCESS);
     if (!Success)
     {
         ERR("PeLdrLoadImage('%s') failed\n", FullDllName);
@@ -819,7 +819,7 @@ PeLdrFreeDataTableEntry(
  * @note
  * Addressing mode: physical.
  **/
-NTSTATUS
+ARC_STATUS
 PeLdrLoadImageEx(
     _In_ PCSTR FilePath,
     _In_ TYPE_OF_MEMORY MemoryType,
@@ -845,7 +845,7 @@ PeLdrLoadImageEx(
     if (Status != ESUCCESS)
     {
         WARN("ArcOpen('%s') failed. Status: %u\n", FilePath, Status);
-        return FALSE;
+        return Status;
     }
 
     /* Load the first 2 sectors of the image so we can read the PE header */
@@ -854,7 +854,7 @@ PeLdrLoadImageEx(
     {
         ERR("ArcRead('%s') failed. Status: %u\n", FilePath, Status);
         ArcClose(FileId);
-        return FALSE;
+        return Status;
     }
 
     /* Now read the MZ header to get the offset to the PE Header */
@@ -863,7 +863,7 @@ PeLdrLoadImageEx(
     {
         ERR("No NT header found in \"%s\"\n", FilePath);
         ArcClose(FileId);
-        return FALSE;
+        return EIO;
     }
 
     /* Ensure this is an executable image */
@@ -871,7 +871,7 @@ PeLdrLoadImageEx(
     {
         ERR("Not an executable image \"%s\"\n", FilePath);
         ArcClose(FileId);
-        return FALSE;
+        return EIO;
     }
 
     if (LoadFlags & FLDR_LOADIMG_CHECK_SUBSYSTEM)
@@ -881,7 +881,7 @@ PeLdrLoadImageEx(
         {
             // Status = STATUS_INVALID_IMAGE_FORMAT;
             ArcClose(FileId);
-            return FALSE;
+            return EIO;
         }
     }
 
@@ -903,7 +903,7 @@ PeLdrLoadImageEx(
             ERR("Failed to alloc %lu bytes for image %s\n",
                 NtHeaders->OptionalHeader.SizeOfImage, FilePath);
             ArcClose(FileId);
-            return FALSE;
+            return ENOMEM;
         }
     }
 
@@ -1019,28 +1019,23 @@ PeLdrLoadImageEx(
     *ImageBasePA = PhysicalBase;
 
     TRACE("PeLdrLoadImage() done, PA = %p\n", *ImageBasePA);
-    return TRUE;
+    return ESUCCESS;
 
 Failure:
     /* Cleanup and bail out */
     MmFreeMemory(PhysicalBase);
-    return FALSE;
+    return Status;
 }
 
-BOOLEAN
+ARC_STATUS
 PeLdrLoadImage(
     _In_ PCSTR FilePath,
     _In_ TYPE_OF_MEMORY MemoryType,
     _Out_ PVOID* ImageBasePA)
 {
-    //ARC_STATUS Status;
-    NTSTATUS Status;
-
-    Status = PeLdrLoadImageEx(FilePath,
-                              MemoryType,
-                              IMAGE_SUBSYSTEM_UNKNOWN,
-                              0,
-                              ImageBasePA);
-
-    return NT_SUCCESS(Status);
+    return PeLdrLoadImageEx(FilePath,
+                            MemoryType,
+                            IMAGE_SUBSYSTEM_UNKNOWN,
+                            0,
+                            ImageBasePA);
 }

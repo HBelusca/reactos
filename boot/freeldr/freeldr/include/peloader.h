@@ -28,7 +28,7 @@ extern PELDR_IMPORTDLL_LOAD_CALLBACK PeLdrImportDllLoadCallback;
 
 #define FLDR_LOADIMG_CHECK_SUBSYSTEM    0x01
 
-BOOLEAN
+ARC_STATUS
 PeLdrLoadImage(
     _In_ PCSTR FilePath,
     _In_ TYPE_OF_MEMORY MemoryType,

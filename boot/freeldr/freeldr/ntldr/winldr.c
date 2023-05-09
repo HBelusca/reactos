@@ -334,7 +334,7 @@ WinLdrLoadDeviceDriver(PLIST_ENTRY LoadOrderListHead,
     RtlStringCbPrintfA(FullPath, sizeof(FullPath), "%s%wZ", BootPath, FilePath);
 
     NtLdrOutputLoadMsg(FullPath, NULL);
-    Success = PeLdrLoadImage(FullPath, LoaderBootDriver, &DriverBase);
+    Success = (PeLdrLoadImage(FullPath, LoaderBootDriver, &DriverBase) == ESUCCESS);
     if (!Success)
     {
         ERR("PeLdrLoadImage('%s') failed\n", DllName);
@@ -531,7 +531,7 @@ LoadModule(
     RtlStringCbCatA(FullFileName, sizeof(FullFileName), File);
 
     NtLdrOutputLoadMsg(FullFileName, NULL);
-    Success = PeLdrLoadImage(FullFileName, MemoryType, &BaseAddress);
+    Success = (PeLdrLoadImage(FullFileName, MemoryType, &BaseAddress) == ESUCCESS);
     if (!Success)
     {
         ERR("PeLdrLoadImage('%s') failed\n", File);
