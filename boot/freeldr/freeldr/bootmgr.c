@@ -371,7 +371,7 @@ VOID RunLoader(VOID)
 #ifdef _M_IX86
 #ifndef UEFIBOOT
     /* Load additional SCSI driver (if any) */
-    if (LoadBootDeviceDriver() != ESUCCESS)
+    if (LoadScsiDeviceDriver() != ESUCCESS)
     {
         UiMessageBoxCritical("Unable to load additional boot device drivers.");
     }

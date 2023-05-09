@@ -1631,8 +1631,8 @@ ScsiPortWriteRegisterUshort(
 
 extern char __ImageBase;
 
-ULONG
-LoadBootDeviceDriver(VOID)
+ARC_STATUS
+LoadScsiDeviceDriver(VOID)
 {
     PIMAGE_NT_HEADERS NtHeaders;
     LIST_ENTRY ModuleListHead;
