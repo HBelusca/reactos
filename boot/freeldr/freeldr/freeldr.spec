@@ -1,3 +1,6 @@
+##
+## ScsiPort exports
+##
 @ stdcall RtlAssert(ptr ptr long ptr)
 @ varargs ScsiDebugPrint(long str)
 @ stdcall ScsiPortCompleteRequest(ptr long long long long)
@@ -45,3 +48,7 @@
 @ stdcall ScsiPortWriteRegisterUchar(ptr long)
 @ stdcall ScsiPortWriteRegisterUshort(ptr long)
 @ stdcall ScsiPortWriteRegisterUlong(ptr long)
+
+##
+## UI exports
+##
