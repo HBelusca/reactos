@@ -275,8 +275,8 @@ VOID
 NTAPI
 VidCleanUp(VOID)
 {
-    UNIMPLEMENTED;
-    while (TRUE);
+    /* Just fill the screen black */
+    VidSolidColorFill(0, 0, SCREEN_WIDTH - 1, SCREEN_HEIGHT - 1, BV_COLOR_BLACK);
 }
 
 VOID
