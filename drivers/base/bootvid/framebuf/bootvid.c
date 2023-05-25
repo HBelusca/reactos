@@ -12,6 +12,7 @@
 #include <debug.h>
 
 /* Include the Boot-time (POST) display discovery helper functions */
+#define GET_DISPLAY_BY_LDR_BLOCK
 #include <drivers/bootvid/framebuf.c>
 
 /* Scaling of the bootvid 640x480 default virtual screen to the larger video framebuffer */
