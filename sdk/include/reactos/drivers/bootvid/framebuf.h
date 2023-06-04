@@ -48,10 +48,16 @@ typedef struct _CM_FRAMEBUF_DEVICE_DATA
      * the number of bytes per scan-line (pitch/screen stride) via:
      * Pitch = PixelsPerScanLine * BytesPerPixel */
     ULONG PixelsPerScanLine; ///< Pitch/stride in pixels
-    ULONG BitsPerPixel;      ///< Pixel depth
+    ULONG BitsPerPixel;      ///< Pixel depth == BytesPerPixel * 8 ("PixelDepth")
+
+    // MEMMODEL MemoryModel; // Linear, banked, ...
 
     /* Pixel physical format for BPP > 8 */
-    struct
+    // UCHAR NumberRedBits;
+    // UCHAR NumberGreenBits;
+    // UCHAR NumberBlueBits;
+    // UCHAR NumberReservedBits;
+    struct /*FB_PIXEL_BITMASK*/
     {
         ULONG RedMask;
         ULONG GreenMask;
@@ -60,6 +66,47 @@ typedef struct _CM_FRAMEBUF_DEVICE_DATA
     } PixelMasks;
 
 } CM_FRAMEBUF_DEVICE_DATA, *PCM_FRAMEBUF_DEVICE_DATA;
+
+
+/* EFI 1.x */
+#ifdef EFI_UGA_DRAW_PROTOCOL_GUID
+
+/* NOTE: EFI UGA does not support any other format than 32-bit xRGB, and
+ * no direct access to the underlying hardware framebuffer is offered */
+// C_ASSERT(sizeof(EFI_UGA_PIXEL) == sizeof(ULONG));
+
+#endif /* EFI */
+
+/* UEFI support, see efi/GraphicsOutput.h */
+#ifdef EFI_GRAPHICS_OUTPUT_PROTOCOL_GUID // __GRAPHICS_OUTPUT_H__
+
+C_ASSERT(RTL_FIELD_SIZE(CM_FRAMEBUF_DEVICE_DATA, PixelInformation) == sizeof(EFI_PIXEL_BITMASK));
+// C_ASSERT(sizeof(EFI_GRAPHICS_OUTPUT_BLT_PIXEL) == sizeof(ULONG));
+
+/**
+ * @brief   Maps UEFI GOP pixel format to pixel masks.
+ * @see     EFI_PIXEL_BITMASK
+ **/
+static EFI_PIXEL_BITMASK EfiPixelMasks[] =
+{ /* Red,        Green,      Blue,       Reserved */
+    {0x000000FF, 0x0000FF00, 0x00FF0000, 0xFF000000},   // PixelRedGreenBlueReserved8BitPerColor
+    {0x00FF0000, 0x0000FF00, 0x000000FF, 0xFF000000},   // PixelBlueGreenRedReserved8BitPerColor
+    {0,          0,          0,          0}             // PixelBitMask, PixelBltOnly, ...
+};
+
+// TODO: this version of the struct is temporary
+// REACTOS_INTERNAL_BGCONTEXT
+typedef struct _ROSEFI_FRAMEBUFFER_DATA
+{
+    ULONG_PTR    BaseAddress;
+    ULONG        BufferSize;
+    UINT32       ScreenWidth;
+    UINT32       ScreenHeight;
+    UINT32       PixelsPerScanLine;
+    UINT32       PixelFormat;
+} ROSEFI_FRAMEBUFFER_DATA, *PROSEFI_FRAMEBUFFER_DATA;
+
+#endif /* UEFI */
 
 #ifdef __cplusplus
 }
