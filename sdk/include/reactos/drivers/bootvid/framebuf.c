@@ -37,7 +37,7 @@
 //#include <drivers/bootvid/framebuf.h> // FIXME: Include?
 #include <drivers/videoprt/vpcfgcnv.h>
 
-
+// See also in vpcfgcnv.h
 static BOOLEAN
 IsNewConfigData(
     _In_ PVOID ConfigurationData,
