@@ -9,6 +9,7 @@
 
 #include <uefildr.h>
 #include "../vidfb.h"
+// #include <drivers/bootvid/framebuf.h>
 
 #include <debug.h>
 DBG_DEFAULT_CHANNEL(HWDETECT);
@@ -237,8 +238,8 @@ DetectDisplayController(
 
     /* Initialize resource descriptor */
     RtlZeroMemory(PartialResourceList, Size);
-    PartialResourceList->Version  = 1;
-    PartialResourceList->Revision = 2;
+    PartialResourceList->Version  = ARC_VERSION;
+    PartialResourceList->Revision = ARC_REVISION;
     PartialResourceList->Count = 2;
 
     /* Set Memory */
@@ -259,8 +260,8 @@ DetectDisplayController(
     /* Get pointer to framebuffer-specific data */
     FramebufData = (PCM_FRAMEBUF_DEVICE_DATA)(PartialDescriptor + 1);
     RtlCopyMemory(FramebufData, FrameBufferData, sizeof(*FrameBufferData));
-    FramebufData->Version  = 1;
-    FramebufData->Revision = 3;
+    FramebufData->Version  = 2;
+    FramebufData->Revision = 0;
     FramebufData->VideoClock = 0; // FIXME: Use EDID
 
     FldrCreateComponentKey(BusKey,
@@ -297,8 +298,8 @@ DetectInternal(PCONFIGURATION_COMPONENT_DATA SystemKey, ULONG *BusNumber)
 
     /* Initialize resource descriptor */
     RtlZeroMemory(PartialResourceList, Size);
-    PartialResourceList->Version  = 1;
-    PartialResourceList->Revision = 1;
+    PartialResourceList->Version  = ARC_VERSION;
+    PartialResourceList->Revision = ARC_REVISION;
     PartialResourceList->Count = 0;
 
     /* Create new bus key */
