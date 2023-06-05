@@ -19,6 +19,7 @@
 #include <freeldr.h>
 #include <drivers/xbox/superio.h>
 #include "../../vidfb.h"
+// #include <drivers/bootvid/framebuf.h>
 
 #include <debug.h>
 DBG_DEFAULT_CHANNEL(HWDETECT);
@@ -174,8 +175,8 @@ DetectDisplayController(
 
     /* Initialize resource descriptor */
     RtlZeroMemory(PartialResourceList, Size);
-    PartialResourceList->Version = 1;
-    PartialResourceList->Revision = 2;
+    PartialResourceList->Version  = ARC_VERSION;
+    PartialResourceList->Revision = ARC_REVISION;
     PartialResourceList->Count = 3;
 
     /* Set IO Control Port */
@@ -205,8 +206,8 @@ DetectDisplayController(
     /* Get pointer to framebuffer-specific data */
     FramebufData = (PCM_FRAMEBUF_DEVICE_DATA)(PartialDescriptor + 1);
     RtlCopyMemory(FramebufData, FrameBufferData, sizeof(*FrameBufferData));
-    FramebufData->Version  = 1;
-    FramebufData->Revision = 3;
+    FramebufData->Version  = 2;
+    FramebufData->Revision = 0;
     FramebufData->VideoClock = 0;
 
     FldrCreateComponentKey(BusKey,
@@ -267,6 +268,7 @@ DetectIsaBios(
     /* Detect ISA/BIOS devices */
     DetectBiosDisks(SystemKey, BusKey);
     DetectSerialPorts(Options, BusKey, XboxGetSerialPort, MAX_XBOX_COM_PORTS);
+    // DetectDisplayController(BusKey);
 
     /* FIXME: Detect more ISA devices */
 }
