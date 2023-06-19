@@ -90,6 +90,7 @@ VOID DetectApmBios(PCONFIGURATION_COMPONENT_DATA SystemKey, ULONG *BusNumber);
 /* hwpci.c */
 VOID
 DetectPciBios(
+    _In_opt_ PCSTR Options,
     _In_ PCONFIGURATION_COMPONENT_DATA SystemKey,
     _Inout_ PULONG BusNumber,
     _In_ FIND_PCI_BIOS MachFindPciBios);
