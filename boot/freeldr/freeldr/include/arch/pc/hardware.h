@@ -95,6 +95,7 @@ VOID
 DetectPciBus(
     _In_ PCONFIGURATION_COMPONENT_DATA SystemKey,
     _Inout_ PULONG BusNumber,
+    _In_opt_ PCSTR Options,
     _In_ DETECT_PCI_BUS MachDetectPciBus);
 
 /* i386pnp.S */

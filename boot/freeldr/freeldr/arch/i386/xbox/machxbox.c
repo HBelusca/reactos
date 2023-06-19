@@ -308,7 +308,7 @@ XboxHwDetect(
     GetHarddiskConfigurationData = XboxGetHarddiskConfigurationData;
 
     /* TODO: Build actual Xbox's hardware configuration tree */
-    DetectPciBus(SystemKey, &BusNumber, XboxDetectPciBus);
+    DetectPciBus(SystemKey, &BusNumber, Options, XboxDetectPciBus);
     DetectIsaBios(Options, SystemKey, &BusNumber);
 
     /* On XBOX, the display controller is on PCI bus #1 */
@@ -364,6 +364,8 @@ VOID __cdecl ChainLoadBiosBootSectorCode(
 }
 
 /******************************************************************************/
+
+VOID NTAPI HalpInitBusHandlers(VOID);
 
 VOID
 MachInit(const char *CmdLine)
@@ -431,14 +433,18 @@ MachInit(const char *CmdLine)
     MachVtbl.HwDetect = XboxHwDetect;
     MachVtbl.HwIdle = XboxHwIdle;
 
-    /* Initialize our stuff */
+    /* Setup busy waiting */
+    HalpCalibrateStallExecution();
+
+    /* Initialize bus handlers */
+    HalpInitBusHandlers();
+
+    /* Initialize memory and video */
     XboxMemInit();
     XboxVideoInit();
 
     /* Set LEDs to orange after init */
     XboxSetLED("oooo");
-
-    HalpCalibrateStallExecution();
 }
 
 VOID

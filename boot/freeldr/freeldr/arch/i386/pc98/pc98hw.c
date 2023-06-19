@@ -1242,7 +1242,7 @@ Pc98HwDetect(
     GetHarddiskConfigurationData = Pc98GetHarddiskConfigurationData;
 
     /* Detect buses */
-    DetectPciBus(SystemKey, &BusNumber, PcDetectPciBus);
+    DetectPciBus(SystemKey, &BusNumber, Options, PcDetectPciBus);
     DetectApmBios(SystemKey, &BusNumber);
     DetectPnpBios(SystemKey, &BusNumber);
     DetectNesaBios(SystemKey, &BusNumber);

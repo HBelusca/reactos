@@ -11,4 +11,17 @@
 
 /* FUNCTIONS *****************************************************************/
 
+CODE_SEG("INIT")
+VOID
+NTAPI
+HalpInitBusHandlers(VOID)
+{
+    /* Initialize the PCI bus */
+    // HalpInitializePciBus();
+    HalpInitializePciStubs();
+
+    // /* Register root support */
+    // HalpInitBusHandler();
+}
+
 /* EOF */
