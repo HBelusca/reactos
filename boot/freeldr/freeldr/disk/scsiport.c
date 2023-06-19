@@ -57,11 +57,6 @@ DBG_DEFAULT_CHANNEL(SCSIPORT);
 
 /* GLOBALS ********************************************************************/
 
-#ifdef _M_IX86
-VOID NTAPI HalpInitializePciStubs(VOID);
-VOID NTAPI HalpInitBusHandler(VOID);
-#endif
-
 typedef struct
 {
     PVOID NonCachedExtension;
@@ -1660,12 +1655,6 @@ LoadBootDeviceDriver(VOID)
     PVOID ImageBase = NULL;
     ULONG (NTAPI *EntryPoint)(IN PVOID DriverObject, IN PVOID RegistryPath);
     BOOLEAN Success;
-
-    // FIXME: Must be done *INSIDE* the HAL!
-#ifdef _M_IX86
-    HalpInitializePciStubs();
-    HalpInitBusHandler();
-#endif
 
     /* Create full ntbootdd.sys path */
     strcpy(NtBootDdPath, FrLdrGetBootPath());
