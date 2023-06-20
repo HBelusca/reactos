@@ -34,6 +34,9 @@ function(add_hal _halname)
     endif()
 endfunction()
 
+# Mini-HAL library for the OS loader
+add_subdirectory(minihal)
+
 # The components
 include(generic.cmake)
 include(acpi.cmake)
@@ -47,7 +50,6 @@ if(ARCH STREQUAL "i386")
     include(pic.cmake)
     include(xbox.cmake)
     include(pc98.cmake)
-    add_subdirectory(minihal)
 
     remove_definitions(-DSARCH_XBOX)
     remove_definitions(-DSARCH_PC98)
