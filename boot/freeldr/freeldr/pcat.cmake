@@ -47,10 +47,7 @@ if(ARCH STREQUAL "i386")
         arch/i386/linux.S)
 
     list(APPEND PCATLDR_ARC_SOURCE
-        # disk/scsiport.c
         lib/fs/pxe.c
-        # arch/i386/halstub.c
-        # arch/i386/ntoskrnl.c
         arch/i386/drivemap.c
         arch/i386/hwacpi.c
         arch/i386/hwapm.c
@@ -119,7 +116,6 @@ elseif(ARCH STREQUAL "amd64")
 
     list(APPEND PCATLDR_ARC_SOURCE
         lib/fs/pxe.c
-        # arch/i386/ntoskrnl.c
         arch/i386/drivemap.c
         arch/i386/hwacpi.c
         arch/i386/hwapm.c
@@ -172,12 +168,8 @@ set(PCH_SOURCE
     ${FREELDR_NTLDR_SOURCE})
 
 add_pch(freeldr_common include/freeldr.h PCH_SOURCE)
+#target_link_libraries(freeldr_common mini_hal)
 add_dependencies(freeldr_common bugcodes asm xdk)
-
-## GCC builds need this extra thing for some reason...
-if(ARCH STREQUAL "i386" AND NOT MSVC)
-    target_link_libraries(freeldr_common mini_hal)
-endif()
 
 add_asm_files(freeldr_base_asm ${PCATLDR_BASE_ASM_SOURCE})
 
@@ -216,9 +208,7 @@ set_image_base(freeldr_pe 0x10000)
 set_subsystem(freeldr_pe native)
 set_entrypoint(freeldr_pe RealEntryPoint)
 
-if(ARCH STREQUAL "i386")
-    target_link_libraries(freeldr_pe mini_hal)
-endif()
+target_link_libraries(freeldr_common mini_hal)
 
 target_link_libraries(freeldr_pe freeldr_common cportlib blcmlib blrtl libcntpr)
 
