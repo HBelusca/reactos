@@ -12,92 +12,6 @@
 #define NDEBUG
 #include <debug.h>
 
-CODE_SEG("INIT")
-PBUS_HANDLER
-NTAPI
-HalpAllocateAndInitPciBusHandler(
-    IN ULONG PciType,
-    IN ULONG BusNo,
-    IN BOOLEAN TestAllocation
-);
-
-CODE_SEG("INIT")
-VOID
-NTAPI
-HalpFixupPciSupportedRanges(
-    IN ULONG BusCount
-);
-
-CODE_SEG("INIT")
-NTSTATUS
-NTAPI
-HalpGetChipHacks(
-    IN USHORT VendorId,
-    IN USHORT DeviceId,
-    IN UCHAR RevisionId,
-    IN PULONG HackFlags
-);
-
-CODE_SEG("INIT")
-BOOLEAN
-NTAPI
-HalpGetPciBridgeConfig(
-    IN ULONG PciType,
-    IN PUCHAR BusCount
-);
-
-CODE_SEG("INIT")
-BOOLEAN
-NTAPI
-HalpIsBridgeDevice(
-    IN PPCI_COMMON_CONFIG PciData
-);
-
-CODE_SEG("INIT")
-BOOLEAN
-NTAPI
-HalpIsIdeDevice(
-    IN PPCI_COMMON_CONFIG PciData
-);
-
-CODE_SEG("INIT")
-BOOLEAN
-NTAPI
-HalpIsRecognizedCard(
-    IN PPCI_REGISTRY_INFO_INTERNAL PciRegistryInfo,
-    IN PPCI_COMMON_CONFIG PciData,
-    IN ULONG Flags
-);
-
-CODE_SEG("INIT")
-BOOLEAN
-NTAPI
-HalpIsValidPCIDevice(
-    IN PBUS_HANDLER BusHandler,
-    IN PCI_SLOT_NUMBER Slot
-);
-
-CODE_SEG("INIT")
-NTSTATUS
-NTAPI
-HalpMarkChipsetDecode(
-    IN BOOLEAN OverrideEnable
-);
-
-CODE_SEG("INIT")
-VOID
-NTAPI
-HalpRegisterInternalBusHandlers(
-    VOID
-);
-
-CODE_SEG("INIT")
-VOID
-NTAPI
-ShowSize(
-    IN ULONG Size
-);
-
 /* GLOBALS ********************************************************************/
 
 extern KSPIN_LOCK HalpPCIConfigLock;
@@ -105,6 +19,7 @@ ULONG HalpPciIrqMask;
 
 /* PRIVATE FUNCTIONS **********************************************************/
 
+#ifndef _MINIHAL_
 PBUS_HANDLER
 NTAPI
 HalpAllocateBusHandler(IN INTERFACE_TYPE InterfaceType,
@@ -152,7 +67,6 @@ HalpAllocateBusHandler(IN INTERFACE_TYPE InterfaceType,
     return Bus;
 }
 
-#ifndef _MINIHAL_
 CODE_SEG("INIT")
 VOID
 NTAPI
@@ -226,9 +140,7 @@ HalpRegisterInternalBusHandlers(VOID)
     /* No support for EISA or MCA */
     ASSERT(HalpBusType == MACHINE_TYPE_ISA);
 }
-#endif // _MINIHAL_
 
-#ifndef _MINIHAL_
 CODE_SEG("INIT")
 NTSTATUS
 NTAPI
@@ -421,8 +333,6 @@ HalpIsValidPCIDevice(IN PBUS_HANDLER BusHandler,
     /* Header, interrupt and address data all make sense */
     return TRUE;
 }
-
-static BOOLEAN WarningsGiven[5];
 
 CODE_SEG("INIT")
 NTSTATUS
@@ -636,6 +546,8 @@ HalpIsBridgeDevice(IN PPCI_COMMON_CONFIG PciData)
              (PciData->SubClass == PCI_SUBCLASS_BR_CARDBUS)));
 }
 
+static BOOLEAN WarningsGiven[5];
+
 CODE_SEG("INIT")
 BOOLEAN
 NTAPI
@@ -679,7 +591,8 @@ HalpGetPciBridgeConfig(IN ULONG PciType,
                 if (!HalpIsBridgeDevice(PciData)) continue;
 
                 /* Not supported */
-                if (!WarningsGiven[2]++) DPRINT1("Your machine has a PCI-to-PCI or CardBUS Bridge. PCI devices may fail!\n");
+                if (!WarningsGiven[2]++)
+                    DPRINT1("Your machine has a PCI-to-PCI or CardBUS Bridge. PCI devices may fail!\n");
                 continue;
             }
         }
@@ -708,7 +621,8 @@ HalpFixupPciSupportedRanges(IN ULONG BusCount)
         while (ParentBus)
         {
             /* Should merge addresses */
-            if (!WarningsGiven[0]++) DPRINT1("Found parent bus (indicating PCI Bridge). PCI devices may fail!\n");
+            if (!WarningsGiven[0]++)
+                DPRINT1("Found parent bus (indicating PCI Bridge). PCI devices may fail!\n");
 
             /* Check the next parent */
             ParentBus = ParentBus->ParentHandler;
@@ -732,7 +646,8 @@ HalpFixupPciSupportedRanges(IN ULONG BusCount)
                 if (ParentBus->InterfaceType == PCIBus)
                 {
                     /* Should trim addresses */
-                    if (!WarningsGiven[1]++) DPRINT1("Found parent PCI Bus (indicating PCI-to-PCI Bridge). PCI devices may fail!\n");
+                    if (!WarningsGiven[1]++)
+                        DPRINT1("Found parent PCI Bus (indicating PCI-to-PCI Bridge). PCI devices may fail!\n");
                 }
 
                 /* Check the next parent */
@@ -753,8 +668,7 @@ HalpFixupPciSupportedRanges(IN ULONG BusCount)
 }
 
 CODE_SEG("INIT")
-VOID
-NTAPI
+static VOID
 ShowSize(ULONG x)
 {
     if (!x) return;
@@ -1011,7 +925,7 @@ HalpDebugPciDumpBus(IN PBUS_HANDLER BusHandler,
         }
     }
 }
-#endif
+#endif // _MINIHAL_
 
 CODE_SEG("INIT")
 VOID
@@ -1102,11 +1016,11 @@ HalpInitializePciBus(VOID)
         BusHandler = HalHandlerForBus(PCIBus, i);
 
         /* Loop every device */
-        for (j = 0; j < 32; j++)
+        for (j = 0; j < PCI_MAX_DEVICES; j++)
         {
             /* Loop every function */
             PciSlot.u.bits.DeviceNumber = j;
-            for (k = 0; k < 8; k++)
+            for (k = 0; k < PCI_MAX_FUNCTION; k++)
             {
                 /* Build the final slot structure */
                 PciSlot.u.bits.FunctionNumber = k;
@@ -1272,14 +1186,12 @@ HalpRegisterKdSupportFunctions(VOID)
     KdReleasePciDeviceforDebugging = HalpReleasePciDeviceForDebugging;
 
     /* Register memory functions */
-#ifndef _MINIHAL_
 #if (NTDDI_VERSION >= NTDDI_VISTA)
     KdMapPhysicalMemory64 = HalpMapPhysicalMemory64Vista;
     KdUnmapVirtualAddress = HalpUnmapVirtualAddressVista;
 #else
     KdMapPhysicalMemory64 = HalpMapPhysicalMemory64;
     KdUnmapVirtualAddress = HalpUnmapVirtualAddress;
-#endif
 #endif
 
     /* Register ACPI stub */
@@ -1508,7 +1420,6 @@ HalAssignSlotResources(IN PUNICODE_STRING RegistryPath,
     }
 }
 
-#ifndef _MINIHAL_
 /*
  * @implemented
  */
@@ -1528,7 +1439,6 @@ HalGetBusData(IN BUS_DATA_TYPE BusDataType,
                                  0,
                                  Length);
 }
-#endif // _MINIHAL_
 
 /*
  * @implemented
@@ -1542,12 +1452,14 @@ HalGetBusDataByOffset(IN BUS_DATA_TYPE BusDataType,
                       IN ULONG Offset,
                       IN ULONG Length)
 {
+#ifndef _MINIHAL_
     PBUS_HANDLER Handler;
     ULONG Status;
 
     /* Find the handler */
     Handler = HaliReferenceHandlerForConfigSpace(BusDataType, BusNumber);
-    if (!Handler) return 0;
+    if (!Handler)
+        return 0;
 
     /* Do the assignment */
     Status = Handler->GetBusData(Handler,
@@ -1560,6 +1472,42 @@ HalGetBusDataByOffset(IN BUS_DATA_TYPE BusDataType,
     /* Dereference the handler and return */
     HalDereferenceBusHandler(Handler);
     return Status;
+
+#else // _MINIHAL_
+
+    BUS_HANDLER BusHandler;
+
+    /* Look as the bus type */
+    if (BusDataType == Cmos)
+    {
+        /* Call CMOS Function */
+        return HalpGetCmosData(0, SlotNumber, Buffer, Length);
+    }
+    else if (BusDataType == EisaConfiguration)
+    {
+        /* FIXME: TODO */
+        ASSERT(FALSE);
+    }
+    else if ((BusDataType == PCIConfiguration) &&
+             (HalpPCIConfigInitialized) &&
+             ((BusNumber >= HalpMinPciBus) && (BusNumber <= HalpMaxPciBus)))
+    {
+        /* Setup fake PCI Bus handler */
+        RtlCopyMemory(&BusHandler, &HalpFakePciBusHandler, sizeof(BUS_HANDLER));
+        BusHandler.BusNumber = BusNumber;
+
+        /* Call PCI function */
+        return HalpGetPCIData(&BusHandler,
+                              &BusHandler,
+                              SlotNumber,
+                              Buffer,
+                              Offset,
+                              Length);
+    }
+
+    /* Invalid bus */
+    return 0;
+#endif // _MINIHAL_
 }
 
 #ifndef _MINIHAL_
@@ -1608,6 +1556,7 @@ HalGetInterruptVector(IN INTERFACE_TYPE InterfaceType,
     HalDereferenceBusHandler(Handler);
     return Vector;
 }
+#endif // _MINIHAL_
 
 /*
  * @implemented
@@ -1660,7 +1609,6 @@ HalSetBusDataByOffset(IN BUS_DATA_TYPE BusDataType,
     HalDereferenceBusHandler(Handler);
     return Status;
 }
-#endif // _MINIHAL_
 
 /*
  * @implemented
