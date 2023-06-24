@@ -133,11 +133,11 @@ UefiHwDetect(
 
     /* Create the 'System' key */
 #if defined(_M_IX86) || defined(_M_AMD64)
-    FldrCreateSystemKey(&SystemKey, "AT/AT COMPATIBLE");
+    FldrCreateSystemKey(&SystemKey, FALSE, "AT/AT COMPATIBLE");
 #elif defined(_M_IA64)
-    FldrCreateSystemKey(&SystemKey, "Intel Itanium processor family");
+    FldrCreateSystemKey(&SystemKey, FALSE, "Intel Itanium processor family");
 #elif defined(_M_ARM) || defined(_M_ARM64)
-    FldrCreateSystemKey(&SystemKey, "ARM processor family");
+    FldrCreateSystemKey(&SystemKey, FALSE, "ARM processor family");
 #else
     #error Please define a system key for your architecture
 #endif
