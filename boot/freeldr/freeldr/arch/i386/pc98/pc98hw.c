@@ -1225,7 +1225,7 @@ CreateSystemKey(
     }
     TRACE("System identifier '%s'\n", Identifier);
 
-    FldrCreateSystemKey(SystemKey, Identifier);
+    FldrCreateSystemKey(SystemKey, FALSE, Identifier);
     FrLdrHeapFree(Identifier, TAG_HW_RESOURCE_LIST);
 }
 
