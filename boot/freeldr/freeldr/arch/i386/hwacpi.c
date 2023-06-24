@@ -86,8 +86,8 @@ DetectAcpiBios(PCONFIGURATION_COMPONENT_DATA SystemKey, ULONG *BusNumber)
         }
 
         RtlZeroMemory(PartialResourceList, Size);
-        PartialResourceList->Version = 0;
-        PartialResourceList->Revision = 0;
+        PartialResourceList->Version  = ARC_VERSION;
+        PartialResourceList->Revision = ARC_REVISION;
         PartialResourceList->Count = 1;
 
         PartialDescriptor = &PartialResourceList->PartialDescriptors[0];
