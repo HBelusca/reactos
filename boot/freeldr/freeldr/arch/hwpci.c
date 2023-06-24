@@ -49,8 +49,8 @@ DetectPciBus(
 
             /* Initialize resource descriptor */
             RtlZeroMemory(PartialResourceList, Size);
-            PartialResourceList->Version = 1;
-            PartialResourceList->Revision = 1;
+            PartialResourceList->Version  = ARC_VERSION;
+            PartialResourceList->Revision = ARC_REVISION;
             PartialResourceList->Count = 1;
 
             PartialDescriptor = &PartialResourceList->PartialDescriptors[0];
