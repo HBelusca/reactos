@@ -20,6 +20,8 @@
 
 #include "resource.h"
 
+#define DEBUG_TMP
+
 /* Enable to support extended attributes.
  * See https://ss64.com/nt/attrib.html for an exhaustive list. */
 // TODO: If you enable this, translations need to be updated as well!
@@ -146,6 +148,8 @@ typedef struct _ENUMFILES_CTX
 
 } ENUMFILES_CTX, *PENUMFILES_CTX;
 
+DEBUG_TMP unsigned int iRecurse = 0;
+
 /* Returns TRUE if anything is done, FALSE otherwise */
 static BOOL
 EnumFilesWorker(
@@ -159,9 +163,25 @@ EnumFilesWorker(
     PWSTR pFilePart = EnumCtx->FullPathBuffer + offFilePart;
     size_t cchRemaining = EnumCtx->cchBuffer - offFilePart;
 
+    DEBUG_TMP PWSTR pPath = EnumCtx->FullPathBuffer;
+
     /* Recurse over all subdirectories */
     if (EnumCtx->Flags & ENUM_RECURSE)
     {
+DEBUG_TMP
+#if 1
+        if (wcslen(pPath) > MAX_PATH-5)
+        {
+            /* NULL-terminate where we're going to append a new
+             * file part, and set it as the current directory */
+            *pFilePart = UNICODE_NULL;
+            SetCurrentDirectoryW(pPath);
+            /* and set the "full path" pointer to where we are
+             * going to set the new file part */
+            pPath = pFilePart;
+        }
+#endif
+
         /* Append '*.*' */
         hRes = StringCchCopyW(pFilePart, cchRemaining, ALL_FILES_PATTERN);
         if (hRes != S_OK)
@@ -177,7 +197,7 @@ EnumFilesWorker(
             return FALSE;
         }
 
-        hFind = FindFirstFileW(EnumCtx->FullPathBuffer, &EnumCtx->findData);
+        hFind = FindFirstFileW(/*EnumCtx->FullPathBuffer*/pPath, &EnumCtx->findData);
         if (hFind == INVALID_HANDLE_VALUE)
         {
             DWORD Error = GetLastError();
@@ -217,7 +237,10 @@ EnumFilesWorker(
             /* Offset to the new file name part */
             offNewFilePart = EnumCtx->cchBuffer - offNewFilePart;
 
+            DEBUG_TMP ++iRecurse;
+            DEBUG_TMP ConPrintf(StdOut, L"Rec %lu: %s\n", iRecurse, EnumCtx->FullPathBuffer);
             bFound |= EnumFilesWorker(EnumCtx, offNewFilePart);
+            DEBUG_TMP --iRecurse;
 
             /* Recalculate the file part pointer and the number of characters
              * remaining: the buffer may have been enlarged and relocated. */
@@ -236,7 +259,7 @@ EnumFilesWorker(
     hRes = StringCchCopyW(pFilePart, cchRemaining, EnumCtx->FileName);
 
     /* Search in the current directory */
-    hFind = FindFirstFileW(EnumCtx->FullPathBuffer, &EnumCtx->findData);
+    hFind = FindFirstFileW(/*EnumCtx->FullPathBuffer*/pPath, &EnumCtx->findData);
     if (hFind == INVALID_HANDLE_VALUE)
         return bFound;
 
@@ -273,6 +296,7 @@ AttribEnumFiles(
     _In_ DWORD fFlags,
     _In_ PATTRIBS_MASKS AttribsMasks)
 {
+    DEBUG_TMP BOOL bRet;
     ENUMFILES_CTX EnumContext = {0};
     size_t offFilePart;
     HRESULT hRes;
@@ -302,7 +326,10 @@ AttribEnumFiles(
         offFilePart++;
     }
 
-    return EnumFilesWorker(&EnumContext, offFilePart);
+    DEBUG_TMP ++iRecurse;
+    bRet = EnumFilesWorker(&EnumContext, offFilePart);
+    DEBUG_TMP --iRecurse;
+    return bRet;
 }
 
 int wmain(int argc, WCHAR *argv[])
@@ -429,6 +456,7 @@ int wmain(int argc, WCHAR *argv[])
         if (*argv[i] == L'/' || *argv[i] == L'+' || *argv[i] == L'-')
             continue;
 
+        DEBUG_TMP FillMemory(szFilePath, sizeof(szFilePath), 'X');
         GetFullPathNameW(argv[i], _countof(szFilePath) - 2, szFilePath, &pszFileName);
         if (pszFileName)
         {
