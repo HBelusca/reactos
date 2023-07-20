@@ -23,7 +23,7 @@ BOOLEAN x86BiosInitialized;
 LONG x86BiosBufferIsAllocated = 0;
 PUCHAR x86BiosMemoryMapping;
 
-/* This the physical address of the bios buffer */
+/* This the physical address of the BIOS buffer */
 ULONG64 x86BiosBufferPhysical;
 
 /* The internal emulator context */
@@ -558,6 +558,55 @@ Quit:
     InterlockedDecrementUL(&HalpBiosCallCount);
     return Success;
 }
+
+// #ifndef X86
+
+// NTHALAPI
+BOOLEAN
+NTAPI
+HalCallBios(
+    _In_ ULONG BiosCommand,
+    _Inout_ PULONG Eax,
+    _Inout_ PULONG Ebx,
+    _Inout_ PULONG Ecx,
+    _Inout_ PULONG Edx,
+    _Inout_ PULONG Esi,
+    _Inout_ PULONG Edi,
+    _Inout_ PULONG Ebp)
+{
+    X86_BIOS_REGISTERS Registers;
+    BOOLEAN Success;
+
+    /* Fill out the BIOS arguments */
+    Registers.Eax = *Eax;
+    // Registers.Ebx = *Ebx;
+    Registers.Ecx = *Ecx;
+    Registers.Edx = *Edx;
+    Registers.Ebx = *Ebx;
+    Registers.Ebp = *Ebp;
+    Registers.Esi = *Esi;
+    Registers.Edi = *Edi;
+    Registers.SegDs = 0;
+    Registers.SegEs = 0;
+
+    /* Call the new API */
+    Success = x86BiosCall(BiosCommand, &Registers);
+
+    /* Return the arguments */
+    *Eax = Registers.Eax;
+    // *Ebx = Registers.Ebx;
+    *Ecx = Registers.Ecx;
+    *Edx = Registers.Edx;
+    *Ebx = Registers.Ebx;
+    *Ebp = Registers.Ebp;
+    *Esi = Registers.Esi;
+    *Edi = Registers.Edi;
+
+    return Success;
+}
+
+// #endif
+
 
 #ifdef _M_AMD64
 BOOLEAN
