@@ -13,7 +13,7 @@
 @ stdcall HalAssignSlotResources(ptr ptr ptr ptr long long long ptr)
 @ stdcall -arch=i386,arm HalBeginSystemInterrupt(long long ptr)
 @ stdcall HalCalibratePerformanceCounter(ptr long long)
-;@ stdcall -arch=x86_64 HalCallBios()
+@ stdcall -arch=x86_64 HalCallBios(long ptr ptr ptr ptr ptr ptr ptr)
 @ fastcall HalClearSoftwareInterrupt(long)
 @ stdcall HalDisableSystemInterrupt(long long)
 @ stdcall HalDisplayString(str)
