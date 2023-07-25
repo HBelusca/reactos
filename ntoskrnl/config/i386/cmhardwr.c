@@ -601,7 +601,7 @@ CmpInitializeMachineDependentConfiguration(IN PLOADER_PARAMETER_BLOCK LoaderBloc
     RtlInitUnicodeString(&SectionName, L"\\Device\\PhysicalMemory");
     InitializeObjectAttributes(&ObjectAttributes,
                                &SectionName,
-                               OBJ_CASE_INSENSITIVE,
+                               OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE,
                                NULL,
                                NULL);
     Status = ZwOpenSection(&SectionHandle,
@@ -640,7 +640,7 @@ CmpInitializeMachineDependentConfiguration(IN PLOADER_PARAMETER_BLOCK LoaderBloc
         VideoRomBase = (*((PULONG)BaseAddress + 0x10) >> 12) & 0xFFFF0;
         VideoRomBase += *((PULONG)BaseAddress + 0x10) & 0xFFF0;
 
-        /* Now get to the actual ROM Start and make sure it's not invalid*/
+        /* Now get to the actual ROM Start and make sure it's not invalid */
         VideoRomBase &= 0xFFFF8000;
         if (VideoRomBase < 0xC0000) VideoRomBase = 0xC0000;
 
@@ -648,16 +648,15 @@ CmpInitializeMachineDependentConfiguration(IN PLOADER_PARAMETER_BLOCK LoaderBloc
         ZwUnmapViewOfSection(NtCurrentProcess(), BaseAddress);
     }
 
-    /* Allocate BIOS Version pp Buffer */
+    /* Allocate BIOS Version Buffer */
     BiosVersion = ExAllocatePoolWithTag(PagedPool, PAGE_SIZE, TAG_CM);
 
-    /* Setup settings to map the 64K BIOS ROM */
-    BaseAddress = 0;
+    /* Map the 64KB BIOS ROM */
+    BaseAddress = NULL;
     ViewSize = 16 * PAGE_SIZE;
     ViewBase.LowPart = 0xF0000;
     ViewBase.HighPart = 0;
 
-    /* Map it */
     Status = ZwMapViewOfSection(SectionHandle,
                                 NtCurrentProcess(),
                                 &BaseAddress,
@@ -782,12 +781,11 @@ CmpInitializeMachineDependentConfiguration(IN PLOADER_PARAMETER_BLOCK LoaderBloc
         ZwUnmapViewOfSection(NtCurrentProcess(), BaseAddress);
     }
 
-    /* Now prepare for Video BIOS Mapping of 32KB */
-    BaseAddress = 0;
+    /* Map the 32KB Video BIOS */
+    BaseAddress = NULL;
     ViewSize = 8 * PAGE_SIZE;
     ViewBase.QuadPart = VideoRomBase;
 
-    /* Map it */
     Status = ZwMapViewOfSection(SectionHandle,
                                 NtCurrentProcess(),
                                 &BaseAddress,
