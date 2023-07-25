@@ -99,7 +99,7 @@ VdmpInitialize(PVOID ControlData)
     /* Open the physical memory section */
     InitializeObjectAttributes(&ObjectAttributes,
                                &PhysMemName,
-                               OBJ_KERNEL_HANDLE,
+                               OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE,
                                NULL,
                                NULL);
     Status = ZwOpenSection(&PhysMemHandle,
@@ -112,9 +112,9 @@ VdmpInitialize(PVOID ControlData)
     }
 
     /* Map the BIOS and device registers into the address space */
+    BaseAddress = NULL;
     Offset.QuadPart = 0;
     ViewSize = PAGE_SIZE;
-    BaseAddress = 0;
     Status = ZwMapViewOfSection(PhysMemHandle,
                                 NtCurrentProcess(),
                                 &BaseAddress,
@@ -142,23 +142,27 @@ VdmpInitialize(PVOID ControlData)
     {
         /* Fail */
         DPRINT1("Couldn't copy first page (%x)\n", Status);
-        ZwClose(PhysMemHandle);
         ZwUnmapViewOfSection(NtCurrentProcess(), BaseAddress);
+        ZwClose(PhysMemHandle);
         _SEH2_YIELD(return _SEH2_GetExceptionCode());
     }
     _SEH2_END;
 
-    /* Close physical memory section handle */
-    ZwClose(PhysMemHandle);
-
     /* Unmap the section */
     Status = ZwUnmapViewOfSection(NtCurrentProcess(), BaseAddress);
+
+    /* Close physical memory section handle.
+     * TODO: We'll need to move that call later once more
+     * VDM initialization will be implemented below... */
+    ZwClose(PhysMemHandle);
 
     if (!NT_SUCCESS(Status))
     {
         DPRINT1("Couldn't unmap the section (%x)\n", Status);
         return Status;
     }
+
+    // TODO: More VDM initialization needed: ROM BIOS, use ControlData, etc.
 
     return STATUS_SUCCESS;
 }
