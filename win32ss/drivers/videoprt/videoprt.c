@@ -573,9 +573,13 @@ Failure:
 VOID
 FASTCALL
 IntAttachToCSRSS(
-    PKPROCESS *CallingProcess,
-    PKAPC_STATE ApcState)
+    _Outptr_ PKPROCESS* CallingProcess,
+    _Out_ PKAPC_STATE ApcState)
 {
+    // FIXME: TODO and return a BOOLEAN
+    // if (!CsrProcess)
+    //     return; // FALSE;
+
     *CallingProcess = (PKPROCESS)PsGetCurrentProcess();
     if (*CallingProcess != CsrProcess)
     {
@@ -586,10 +590,11 @@ IntAttachToCSRSS(
 VOID
 FASTCALL
 IntDetachFromCSRSS(
-    PKPROCESS *CallingProcess,
-    PKAPC_STATE ApcState)
+    _In_ PKPROCESS CallingProcess,
+    _In_ PKAPC_STATE ApcState)
 {
-    if (*CallingProcess != CsrProcess)
+    ASSERT(CsrProcess);
+    if (CallingProcess != CsrProcess)
     {
         KeUnstackDetachProcess(ApcState);
     }
@@ -1184,7 +1189,7 @@ VideoPortGetRomImage(
 
         IntAttachToCSRSS(&CallingProcess, &ApcState);
         RtlCopyMemory(RomImageBuffer, (PUCHAR)0xC0000, Length);
-        IntDetachFromCSRSS(&CallingProcess, &ApcState);
+        IntDetachFromCSRSS(CallingProcess, &ApcState);
 
         return RomImageBuffer;
     }

@@ -33,7 +33,7 @@
 #define IsLowV86Mem(_Seg, _Off) ((((_Seg) << 4) + (_Off)) < (0xa0000))
 
 /* Those two functions below are there so that CSRSS can't access low mem.
- * Expecially, MAKE IT CRASH ON NULL ACCESS */
+ * Especially, MAKE IT CRASH ON NULL ACCESS */
 static
 VOID
 ProtectLowV86Mem(VOID)
@@ -44,7 +44,7 @@ ProtectLowV86Mem(VOID)
     NTSTATUS Status;
     SIZE_T ViewSize = 0xa0000 - PAGE_SIZE;
 
-    /* We should only do that for CSRSS. */
+    /* We should only do that for CSRSS */
     ASSERT(PsGetCurrentProcess() == (PEPROCESS)CsrProcess);
 
     /* Commit (again) the pages, but with PAGE_NOACCESS protection */
@@ -95,6 +95,9 @@ IntInitializeVideoAddressSpace(VOID)
 #ifdef _M_IX86
     CHAR IVTAndBda[1024 + 256];
 #endif // _M_IX86
+
+    /* We should only do that for CSRSS */
+    ASSERT(PsGetCurrentProcess() == (PEPROCESS)CsrProcess);
 
     /* Free the 1MB pre-reserved region. In reality, ReactOS should simply support us mapping the view into the reserved area, but it doesn't. */
     BaseAddress = 0;
@@ -216,12 +219,13 @@ IntInt10AllocateBuffer(
     NTSTATUS Status;
 #ifdef _M_IX86
     PVOID MemoryAddress;
-    PKPROCESS CallingProcess = (PKPROCESS)PsGetCurrentProcess();
+    PKPROCESS CallingProcess;
     KAPC_STATE ApcState;
     SIZE_T Size;
 
     TRACE_(VIDEOPRT, "IntInt10AllocateBuffer\n");
 
+    /* Perform the call in the context of CSRSS */
     IntAttachToCSRSS(&CallingProcess, &ApcState);
 
     Size = *Length;
@@ -236,7 +240,7 @@ IntInt10AllocateBuffer(
     if (!NT_SUCCESS(Status))
     {
         WARN_(VIDEOPRT, "- ZwAllocateVirtualMemory failed\n");
-        IntDetachFromCSRSS(&CallingProcess, &ApcState);
+        IntDetachFromCSRSS(CallingProcess, &ApcState);
         return ERROR_NOT_ENOUGH_MEMORY;
     }
 
@@ -247,19 +251,19 @@ IntInt10AllocateBuffer(
                             &Size,
                             MEM_RELEASE);
         WARN_(VIDEOPRT, "- Unacceptable memory allocated\n");
-        IntDetachFromCSRSS(&CallingProcess, &ApcState);
+        IntDetachFromCSRSS(CallingProcess, &ApcState);
         return ERROR_NOT_ENOUGH_MEMORY;
     }
+
+    IntDetachFromCSRSS(CallingProcess, &ApcState);
 
     *Length = (ULONG)Size;
     *Seg = (USHORT)((ULONG_PTR)MemoryAddress >> 4);
     *Off = (USHORT)((ULONG_PTR)MemoryAddress & 0xF);
 
-    INFO_(VIDEOPRT, "- Segment: %x\n", (ULONG_PTR)MemoryAddress >> 4);
-    INFO_(VIDEOPRT, "- Offset: %x\n", (ULONG_PTR)MemoryAddress & 0xF);
+    INFO_(VIDEOPRT, "- Segment: %x\n", *Seg);
+    INFO_(VIDEOPRT, "- Offset: %x\n", *Off);
     INFO_(VIDEOPRT, "- Length: %x\n", *Length);
-
-    IntDetachFromCSRSS(&CallingProcess, &ApcState);
 
     return NO_ERROR;
 #else
@@ -278,7 +282,7 @@ IntInt10FreeBuffer(
     NTSTATUS Status;
 #ifdef _M_IX86
     PVOID MemoryAddress = (PVOID)((ULONG_PTR)(Seg << 4) | Off);
-    PKPROCESS CallingProcess = (PKPROCESS)PsGetCurrentProcess();
+    PKPROCESS CallingProcess;
     KAPC_STATE ApcState;
     SIZE_T Size = 0;
 
@@ -286,13 +290,15 @@ IntInt10FreeBuffer(
     INFO_(VIDEOPRT, "- Segment: %x\n", Seg);
     INFO_(VIDEOPRT, "- Offset: %x\n", Off);
 
+    /* Perform the call in the context of CSRSS */
     IntAttachToCSRSS(&CallingProcess, &ApcState);
+
     Status = ZwFreeVirtualMemory(NtCurrentProcess(),
                                  &MemoryAddress,
                                  &Size,
                                  MEM_RELEASE);
 
-    IntDetachFromCSRSS(&CallingProcess, &ApcState);
+    IntDetachFromCSRSS(CallingProcess, &ApcState);
 
     return Status;
 #else
@@ -311,7 +317,7 @@ IntInt10ReadMemory(
     IN ULONG Length)
 {
 #ifdef _M_IX86
-    PKPROCESS CallingProcess = (PKPROCESS)PsGetCurrentProcess();
+    PKPROCESS CallingProcess;
     KAPC_STATE ApcState;
 
     TRACE_(VIDEOPRT, "IntInt10ReadMemory\n");
@@ -320,6 +326,7 @@ IntInt10ReadMemory(
     INFO_(VIDEOPRT, "- Buffer: %x\n", Buffer);
     INFO_(VIDEOPRT, "- Length: %x\n", Length);
 
+    /* Perform the call in the context of CSRSS */
     IntAttachToCSRSS(&CallingProcess, &ApcState);
 
     if (IsLowV86Mem(Seg, Off))
@@ -328,7 +335,7 @@ IntInt10ReadMemory(
     if (IsLowV86Mem(Seg, Off))
         ProtectLowV86Mem();
 
-    IntDetachFromCSRSS(&CallingProcess, &ApcState);
+    IntDetachFromCSRSS(CallingProcess, &ApcState);
 
     return NO_ERROR;
 #else
@@ -349,7 +356,7 @@ IntInt10WriteMemory(
     IN ULONG Length)
 {
 #ifdef _M_IX86
-    PKPROCESS CallingProcess = (PKPROCESS)PsGetCurrentProcess();
+    PKPROCESS CallingProcess;
     KAPC_STATE ApcState;
 
     TRACE_(VIDEOPRT, "IntInt10WriteMemory\n");
@@ -358,13 +365,16 @@ IntInt10WriteMemory(
     INFO_(VIDEOPRT, "- Buffer: %x\n", Buffer);
     INFO_(VIDEOPRT, "- Length: %x\n", Length);
 
+    /* Perform the call in the context of CSRSS */
     IntAttachToCSRSS(&CallingProcess, &ApcState);
+
     if (IsLowV86Mem(Seg, Off))
         UnprotectLowV86Mem();
     RtlCopyMemory((PVOID)((ULONG_PTR)(Seg << 4) | Off), Buffer, Length);
     if (IsLowV86Mem(Seg, Off))
         ProtectLowV86Mem();
-    IntDetachFromCSRSS(&CallingProcess, &ApcState);
+
+    IntDetachFromCSRSS(CallingProcess, &ApcState);
 
     return NO_ERROR;
 #else
@@ -387,10 +397,10 @@ IntInt10CallBios(
     CONTEXT BiosContext;
 #endif
     NTSTATUS Status;
-    PKPROCESS CallingProcess = (PKPROCESS)PsGetCurrentProcess();
+    PKPROCESS CallingProcess;
     KAPC_STATE ApcState;
 
-    /* Attach to CSRSS */
+    /* Perform the call in the context of CSRSS */
     IntAttachToCSRSS(&CallingProcess, &ApcState);
 
     /* Clear the context */
@@ -437,14 +447,9 @@ IntInt10CallBios(
     BiosArguments->SegEs = (USHORT)BiosContext.SegEs;
 
     /* Detach and return status */
-    IntDetachFromCSRSS(&CallingProcess, &ApcState);
+    IntDetachFromCSRSS(CallingProcess, &ApcState);
 
-    if (NT_SUCCESS(Status))
-    {
-        return NO_ERROR;
-    }
-
-    return ERROR_INVALID_PARAMETER;
+    return NT_SUCCESS(Status) ? NO_ERROR : ERROR_INVALID_PARAMETER;
 }
 
 /* PUBLIC FUNCTIONS ***********************************************************/
