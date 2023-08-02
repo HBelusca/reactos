@@ -84,7 +84,7 @@ UnprotectLowV86Mem(VOID)
 
 #endif // _M_IX86
 
-#if defined(_M_IX86) || defined(_M_AMD64)
+#if defined(_M_IX86) // || defined(_M_AMD64)
 NTSTATUS
 IntInitializeVideoAddressSpace(VOID)
 {
@@ -211,7 +211,7 @@ NTSTATUS
 IntInitializeVideoAddressSpace(VOID)
 {
     UNIMPLEMENTED;
-    NT_ASSERT(FALSE);
+    // NT_ASSERT(FALSE);
     return STATUS_NOT_IMPLEMENTED;
 }
 #endif
