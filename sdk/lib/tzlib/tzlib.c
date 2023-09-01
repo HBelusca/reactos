@@ -1,13 +1,21 @@
 /*
  * PROJECT:     ReactOS TimeZone Utilities Library
  * LICENSE:     GPL-2.0 (https://spdx.org/licenses/GPL-2.0)
- * PURPOSE:     Provides time-zone utility wrappers around Win32 functions,
- *              that are used by different ReactOS modules such as
- *              timedate.cpl, syssetup.dll.
+ * PURPOSE:     Time-zone utility wrappers around Win32 functions.
  * COPYRIGHT:   Copyright 2004-2005 Eric Kohl
  *              Copyright 2016 Carlo Bramini
- *              Copyright 2020 Hermes Belusca-Maito
+ *              Copyright 2020-2023 Hermès Bélusca-Maïto <hermes.belusca-maito@reactos.org>
  */
+
+/**
+ * @file    tzlib.c
+ * @ingroup TzLib
+ *
+ * @defgroup TzLib  ReactOS TimeZone Utilities Library
+ *
+ * @brief   Provides time-zone utility wrappers around Win32 functions,
+ *          used by different ReactOS modules (timedate.cpl, syssetup.dll)
+ **/
 
 #include <stdlib.h>
 #include <windef.h>
@@ -16,9 +24,19 @@
 
 #include "tzlib.h"
 
+/**
+ * @brief
+ * XXXX
+ *
+ * @param[in,out]   pIndex
+ * xxxxx
+ *
+ * @return
+ * TRUE in case of success, FALSE otherwise.
+ **/
 BOOL
 GetTimeZoneListIndex(
-    IN OUT PULONG pIndex)
+    _Inout_ PULONG pIndex)
 {
     LONG lError;
     HKEY hKey;
@@ -137,17 +155,67 @@ GetTimeZoneListIndex(
     return FALSE;
 }
 
+/**
+ * @brief
+ * Retrieves time-zone data from the registry.
+ *
+ * @param[in]   hZoneKey
+ * A handle to an opened registry sub-key of
+ * HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Time Zones,
+ * that contains data for a particular time-zone.
+ *
+ * @param[out]  Index
+ * Optional pointer to a variable that receives the corresponding
+ * time-zone "Index" registry value.
+ *
+ * @param[out]  TimeZoneInfo
+ * Pointer to a REG_TZI_FORMAT buffer that receives the binary time-zone
+ * data, as stored in the "TZI" registry value.
+ *
+ * @param[out]  Description
+ * Optional pointer to a character buffer that receives the description
+ * for the time-zone.
+ *
+ * @param[in,out]   DescriptionSize
+ * On input, specifies the initial size in bytes of the @p Description buffer.
+ * On output, retrieves the actual string size in bytes stored in the buffer.
+ * This parameter can be NULL only if @p Description is NULL.
+ *
+ * @param[out]  StandardName
+ * Optional pointer to a character buffer that receives the description
+ * for the time-zone's standard time.
+ *
+ * @param[in,out]   StandardNameSize
+ * On input, specifies the initial size in bytes of the @p StandardNameSize buffer.
+ * On output, retrieves the actual string size in bytes stored in the buffer.
+ * This parameter can be NULL only if @p StandardNameSize is NULL.
+ *
+ * @param[out]  DaylightName
+ * Optional pointer to a character buffer that receives the description
+ * for the time-zone's daylight saving time.
+ *
+ * @param[in,out]   DaylightNameSize
+ * On input, specifies the initial size in bytes of the @p DaylightName buffer.
+ * On output, retrieves the actual string size in bytes stored in the buffer.
+ * This parameter can be NULL only if @p DaylightName is NULL.
+ *
+ * @return
+ * ERROR_SUCCESS if success, or a Win32 error code in case of failure.
+ **/
 LONG
 QueryTimeZoneData(
-    IN HKEY hZoneKey,
-    OUT PULONG Index OPTIONAL,
-    OUT PREG_TZI_FORMAT TimeZoneInfo,
-    OUT PWCHAR Description OPTIONAL,
-    IN OUT PULONG DescriptionSize OPTIONAL,
-    OUT PWCHAR StandardName OPTIONAL,
-    IN OUT PULONG StandardNameSize OPTIONAL,
-    OUT PWCHAR DaylightName OPTIONAL,
-    IN OUT PULONG DaylightNameSize OPTIONAL)
+    _In_ HKEY hZoneKey,
+    _Out_opt_ PULONG Index,
+    _Out_ PREG_TZI_FORMAT TimeZoneInfo,
+    _Out_writes_to_opt_(*DescriptionSize, *DescriptionSize)
+        PWCHAR Description,
+    _Inout_opt_ PULONG DescriptionSize,
+    _Out_writes_to_opt_(*StandardNameSize, *StandardNameSize)
+        PWCHAR StandardName,
+    _Inout_opt_ PULONG StandardNameSize,
+    _Out_writes_to_opt_(*DaylightNameSize, *DaylightNameSize)
+        PWCHAR DaylightName,
+    _Inout_opt_ PULONG DaylightNameSize)
 {
     LONG lError;
     DWORD dwValueSize;
@@ -215,14 +283,27 @@ QueryTimeZoneData(
     return ERROR_SUCCESS;
 }
 
-//
-// NOTE: Very similar to the EnumDynamicTimeZoneInformation() function
-// introduced in Windows 8.
-//
+/**
+ * @brief
+ * Enumerates time-zone entries stored in the registry. For each,
+ * a user-provided callback is called with an optional context.
+ *
+ * @param[in]   Callback
+ * A user-provided callback function, invoked for each time-zone entry.
+ *
+ * @param[in]   Context
+ * Optional context passed to the callback function when it is invoked.
+ *
+ * @return  None.
+ *
+ * @note
+ * Very similar to the EnumDynamicTimeZoneInformation() function
+ * introduced in Windows 8.
+ **/
 VOID
 EnumerateTimeZoneList(
-    IN PENUM_TIMEZONE_CALLBACK Callback,
-    IN PVOID Context OPTIONAL)
+    _In_ PENUM_TIMEZONE_CALLBACK Callback,
+    _In_opt_ PVOID Context)
 {
     LONG lError;
     HKEY hZonesKey;
@@ -277,8 +358,13 @@ EnumerateTimeZoneList(
     RegCloseKey(hZonesKey);
 }
 
-// Returns TRUE if AutoDaylight is ON.
-// Returns FALSE if AutoDaylight is OFF.
+/**
+ * @brief
+ * Retrieves the currently-active automatic daylight-time adjustment setting.
+ *
+ * @return
+ * TRUE or FALSE if AutoDaylight is ON or OFF, respectively.
+ **/
 BOOL
 GetAutoDaylight(VOID)
 {
@@ -319,9 +405,18 @@ GetAutoDaylight(VOID)
     return !dwDisabled;
 }
 
+/**
+ * @brief
+ * Enables or disables automatic daylight-time adjustment.
+ *
+ * @param[in]   EnableAutoDaylightTime
+ * Set to TRUE for enabling automatic daylight-time, or FALSE to disable it.
+ *
+ * @return  None.
+ **/
 VOID
 SetAutoDaylight(
-    IN BOOL EnableAutoDaylightTime)
+    _In_ BOOL EnableAutoDaylightTime)
 {
     LONG lError;
     HKEY hKey;

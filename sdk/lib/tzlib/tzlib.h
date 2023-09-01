@@ -2,12 +2,16 @@
  * PROJECT:     ReactOS TimeZone Utilities Library
  * LICENSE:     GPL-2.0 (https://spdx.org/licenses/GPL-2.0)
  * PURPOSE:     Provides time-zone utility wrappers around Win32 functions,
- *              that are used by different ReactOS modules such as
- *              timedate.cpl, syssetup.dll.
+ *              used by different ReactOS modules (timedate.cpl, syssetup.dll)
  * COPYRIGHT:   Copyright 2004-2005 Eric Kohl
  *              Copyright 2016 Carlo Bramini
  *              Copyright 2020 Hermes Belusca-Maito
  */
+
+/**
+ * @file    tzlib.h
+ * @ingroup TzLib
+ **/
 
 #pragma once
 
