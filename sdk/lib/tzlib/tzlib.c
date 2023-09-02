@@ -358,6 +358,22 @@ EnumerateTimeZoneList(
     RegCloseKey(hZonesKey);
 }
 
+static ULONG
+TzGetVersion(VOID)
+{
+    static OSVERSIONINFOW s_VerInfo = {0};
+    static ULONG s_Version = 0;
+
+    if (s_Version == 0)
+    {
+        s_VerInfo.dwOSVersionInfoSize = sizeof(s_VerInfo);
+        GetVersionExW(&s_VerInfo);
+        s_Version = (s_VerInfo.dwMajorVersion << 8) | s_VerInfo.dwMinorVersion;
+    }
+
+    return s_Version;
+}
+
 /**
  * @brief
  * Retrieves the currently-active automatic daylight-time adjustment setting.
@@ -370,6 +386,7 @@ GetAutoDaylight(VOID)
 {
     LONG lError;
     HKEY hKey;
+    PCWSTR pszAutoDaylightDisable;
     DWORD dwType;
     DWORD dwDisabled;
     DWORD dwValueSize;
@@ -382,10 +399,15 @@ GetAutoDaylight(VOID)
     if (lError != ERROR_SUCCESS)
         return FALSE;
 
-    // NOTE: On Vista+: REG_DWORD "DynamicDaylightTimeDisabled"
+    /* Select the correct registry value (OS-dependent) */
+    if (TzGetVersion() < _WIN32_WINNT_VISTA)
+        pszAutoDaylightDisable = L"DisableAutoDaylightTimeSet";
+    else
+        pszAutoDaylightDisable = L"DynamicDaylightTimeDisabled";
+
     dwValueSize = sizeof(dwDisabled);
     lError = RegQueryValueExW(hKey,
-                              L"DisableAutoDaylightTimeSet",
+                              pszAutoDaylightDisable,
                               NULL,
                               &dwType,
                               (LPBYTE)&dwDisabled,
@@ -420,6 +442,7 @@ SetAutoDaylight(
 {
     LONG lError;
     HKEY hKey;
+    PCWSTR pszAutoDaylightDisable;
     DWORD dwDisabled = TRUE;
 
     lError = RegOpenKeyExW(HKEY_LOCAL_MACHINE,
@@ -430,12 +453,17 @@ SetAutoDaylight(
     if (lError != ERROR_SUCCESS)
         return;
 
+    /* Select the correct registry value (OS-dependent) */
+    if (TzGetVersion() < _WIN32_WINNT_VISTA)
+        pszAutoDaylightDisable = L"DisableAutoDaylightTimeSet";
+    else
+        pszAutoDaylightDisable = L"DynamicDaylightTimeDisabled";
+
     if (!EnableAutoDaylightTime)
     {
         /* Auto-Daylight disabled: set the value to TRUE */
-        // NOTE: On Vista+: REG_DWORD "DynamicDaylightTimeDisabled"
         RegSetValueExW(hKey,
-                       L"DisableAutoDaylightTimeSet",
+                       pszAutoDaylightDisable,
                        0,
                        REG_DWORD,
                        (LPBYTE)&dwDisabled,
@@ -444,7 +472,7 @@ SetAutoDaylight(
     else
     {
         /* Auto-Daylight enabled: just delete the value */
-        RegDeleteValueW(hKey, L"DisableAutoDaylightTimeSet");
+        RegDeleteValueW(hKey, pszAutoDaylightDisable);
     }
 
     RegCloseKey(hKey);
