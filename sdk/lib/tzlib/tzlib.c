@@ -43,10 +43,10 @@ GetTimeZoneListIndex(
     DWORD dwType;
     DWORD dwValueSize;
     DWORD Length;
-    LPWSTR Buffer;
-    LPWSTR Ptr, End;
+    PWSTR Buffer;
+    PWSTR Ptr, End;
     BOOL bFound = FALSE;
-    unsigned long iLanguageID;
+    ULONG iLanguageID;
     WCHAR szLanguageIdString[9];
 
     if (*pIndex == -1)
@@ -68,7 +68,7 @@ GetTimeZoneListIndex(
                                   L"Default",
                                   NULL,
                                   NULL,
-                                  (LPBYTE)szLanguageIdString,
+                                  (PBYTE)szLanguageIdString,
                                   &dwValueSize);
         if (lError != ERROR_SUCCESS)
         {
@@ -118,7 +118,7 @@ GetTimeZoneListIndex(
                               L"IndexMapping",
                               NULL,
                               &dwType,
-                              (LPBYTE)Buffer,
+                              (PBYTE)Buffer,
                               &dwValueSize);
 
     RegCloseKey(hKey);
@@ -227,7 +227,7 @@ QueryTimeZoneData(
                                   L"Index",
                                   NULL,
                                   NULL,
-                                  (LPBYTE)Index,
+                                  (PBYTE)Index,
                                   &dwValueSize);
         if (lError != ERROR_SUCCESS)
             *Index = 0;
@@ -239,7 +239,7 @@ QueryTimeZoneData(
                               L"TZI",
                               NULL,
                               NULL,
-                              (LPBYTE)TimeZoneInfo,
+                              (PBYTE)TimeZoneInfo,
                               &dwValueSize);
     if (lError != ERROR_SUCCESS)
         return lError;
@@ -250,7 +250,7 @@ QueryTimeZoneData(
                                   L"Display",
                                   NULL,
                                   NULL,
-                                  (LPBYTE)Description,
+                                  (PBYTE)Description,
                                   DescriptionSize);
         if (lError != ERROR_SUCCESS)
             *Description = 0;
@@ -262,7 +262,7 @@ QueryTimeZoneData(
                                   L"Std",
                                   NULL,
                                   NULL,
-                                  (LPBYTE)StandardName,
+                                  (PBYTE)StandardName,
                                   StandardNameSize);
         if (lError != ERROR_SUCCESS)
             *StandardName = 0;
@@ -274,7 +274,7 @@ QueryTimeZoneData(
                                   L"Dlt",
                                   NULL,
                                   NULL,
-                                  (LPBYTE)DaylightName,
+                                  (PBYTE)DaylightName,
                                   DaylightNameSize);
         if (lError != ERROR_SUCCESS)
             *DaylightName = 0;
@@ -410,7 +410,7 @@ GetAutoDaylight(VOID)
                               pszAutoDaylightDisable,
                               NULL,
                               &dwType,
-                              (LPBYTE)&dwDisabled,
+                              (PBYTE)&dwDisabled,
                               &dwValueSize);
 
     RegCloseKey(hKey);
@@ -466,7 +466,7 @@ SetAutoDaylight(
                        pszAutoDaylightDisable,
                        0,
                        REG_DWORD,
-                       (LPBYTE)&dwDisabled,
+                       (PBYTE)&dwDisabled,
                        sizeof(dwDisabled));
     }
     else
