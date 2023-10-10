@@ -274,8 +274,10 @@ KiInitMachineDependent(VOID)
         DPRINT1("ISR Time Limit not yet supported\n");
     }
 
+#if 0 // FIXME: See https://github.com/reactos/reactos/commit/90e0457d606c7088a3082397cf11c8c94aa1e862
     /* Set CR0 features based on detected CPU */
     KiSetCR0Bits();
+#endif
 }
 
 CODE_SEG("INIT")
@@ -439,6 +441,13 @@ KiInitializeKernel(IN PKPROCESS InitProcess,
     ULONG PageDirectory[2];
     PVOID DpcStack;
     KIRQL DummyIrql;
+
+#if 1 // FIXME: See https://github.com/reactos/reactos/commit/90e0457d606c7088a3082397cf11c8c94aa1e862
+    /* Set CR0 features based on detected CPU */
+    KiSetCR0Bits();
+#endif
+
+__debugbreak();
 
     /* Initialize the Power Management Support for this PRCB */
     PoInitializePrcb(Prcb);
