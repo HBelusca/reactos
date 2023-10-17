@@ -127,6 +127,7 @@ static const struct
     /* { IDD_THEMES, ThemesPageProc, NULL, L"Themes" }, */ /* TODO: */
     { IDD_BACKGROUND, BackgroundPageProc, NULL, L"Desktop" },
     { IDD_SCREENSAVER, ScreenSaverPageProc, NULL, L"Screen Saver" },
+    /*****/ { IDD_SCREENSAVER, ScreenSaverPageProc, NULL, L"ScreenSaver" }, /******/
     { IDD_APPEARANCE, AppearancePageProc, NULL, L"Appearance" },
     { IDD_SETTINGS, SettingsPageProc, SettingsPageCallbackProc, L"Settings" },
 };
@@ -174,7 +175,7 @@ DisplayApplet(HWND hwnd, UINT uMsg, LPARAM wParam, LPARAM lParam)
 
         nPage = _wtoi((PWSTR)lParam);
 
-#if 0
+#if 1
         argv = CommandLineToArgvW((LPCWSTR)lParam, &argc);
 #else
         argv = CommandLineToArgvW(GetCommandLineW(), &argc);
@@ -182,9 +183,9 @@ DisplayApplet(HWND hwnd, UINT uMsg, LPARAM wParam, LPARAM lParam)
 
         if (argv && argc)
         {
-            for (i = 0; i<argc; i++)
+            for (i = 0; i < argc; i++)
             {
-#if 0
+#if 1
                 if (argv[i][0] == L'@')
                     pwszSelectedTab = &argv[i][1];
 #else
@@ -195,11 +196,15 @@ DisplayApplet(HWND hwnd, UINT uMsg, LPARAM wParam, LPARAM lParam)
                     pwszAction = &argv[i][8];
                 else if (wcsncmp(argv[i], L"/file:", 6) == 0)
                     pwszFile = &argv[i][6];
+                /***/
+                else
+                    nPage = _wtoi((PWSTR)lParam);
+                /***/
             }
         }
     }
 
-    if(pwszAction && wcsncmp(pwszAction, L"ActivateMSTheme", 15) == 0)
+    if (pwszAction && wcsncmp(pwszAction, L"ActivateMSTheme", 15) == 0)
     {
         ActivateThemeFile(pwszFile);
         goto cleanup;
