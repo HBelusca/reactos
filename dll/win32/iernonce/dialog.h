@@ -22,10 +22,7 @@ class ProgressDlg : public CDialogImpl<ProgressDlg>
 private:
     INT_PTR m_DialogID;
     HWND m_hListBox;
-    HFONT m_hBoldFont;
-    HBITMAP m_hArrowBmp;
-    BITMAP m_ArrowBmp;
-    INT m_PointedItem;
+    // HBITMAP m_hArrowBmp;
 
 public:
     enum { IDD = IDD_DIALOG };
@@ -36,11 +33,14 @@ public:
 
     BOOL RunDialogBox();
 
-    void CalcTextRect(_In_ LPCWSTR lpText, _Inout_ RECT *pRect);
-
     void ResizeListBoxAndDialog(_In_ int NewHeight);
 
-    BOOL ProcessWindowMessage(_In_ HWND hwnd, _In_ UINT message, _In_ WPARAM wParam,
-                              _In_ LPARAM lParam, _Out_ LRESULT& lResult,
-                              _In_ DWORD dwMsgMapID);
+    BOOL
+    ProcessWindowMessage(
+        _In_ HWND hwnd,
+        _In_ UINT message,
+        _In_ WPARAM wParam,
+        _In_ LPARAM lParam,
+        _Out_ LRESULT& lResult,
+        _In_ DWORD dwMsgMapID);
 };
