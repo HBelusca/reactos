@@ -18,7 +18,6 @@
 #define WINE_STRICT_PROTOTYPES
 #define WIN32_NO_STATUS
 #define WIN32_LEAN_AND_MEAN
-#define _INC_WINDOWS
 #define COM_NO_WINDOWS_H
 #define _WMI_SOURCE_
 #include <aclapi.h>
