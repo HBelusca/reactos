@@ -56,20 +56,18 @@
 // #define REACTOS_SKUS
 
 /*
- * Enable this define for having fancy features
- * in the boot and shutdown screens.
- */
-// #define REACTOS_FANCY_BOOT
-
-/*
  * Enable this define when Inbv will support rotating progress bar.
  */
-#define INBV_ROTBAR_IMPLEMENTED
+#define BOOT_ROTBAR_IMPLEMENTED
+
+#define BOOTANIM_BY_DPC
+// #define REACTOS_FANCY_BOOT
+#include "btanihlp.c"
 
 extern ULONG ProgressBarLeft, ProgressBarTop;
 extern BOOLEAN ShowProgressBar;
 
-#ifdef INBV_ROTBAR_IMPLEMENTED
+#ifdef BOOT_ROTBAR_IMPLEMENTED
 /*
  * Change this to modify progress bar behaviour
  */
@@ -79,8 +77,8 @@ extern BOOLEAN ShowProgressBar;
  * Values for PltRotBarStatus:
  * - PltRotBarStatus == 1, do palette fading-in (done elsewhere in ReactOS);
  * - PltRotBarStatus == 2, do rotation bar animation;
- * - PltRotBarStatus == 3, stop the animation thread.
- * - Any other value is ignored and the animation thread continues to run.
+ * - PltRotBarStatus == 3, stop the animation.
+ * - Any other value is ignored and the animation continues to run.
  */
 typedef enum _ROT_BAR_STATUS
 {
@@ -97,12 +95,12 @@ typedef enum _ROT_BAR_TYPE
     RB_PROGRESS_BAR
 } ROT_BAR_TYPE;
 
-static BOOLEAN RotBarThreadActive = FALSE;
+static BOOLEAN AnimationActive = FALSE;
 static ROT_BAR_TYPE RotBarSelection = RB_UNSPECIFIED;
 static ROT_BAR_STATUS PltRotBarStatus = 0;
 static UCHAR RotBarBuffer[24 * 9];
 static UCHAR RotLineBuffer[SCREEN_WIDTH * 6];
-#endif // INBV_ROTBAR_IMPLEMENTED
+#endif // BOOT_ROTBAR_IMPLEMENTED
 
 
 /* FUNCTIONS *****************************************************************/
@@ -146,8 +144,8 @@ BootAnimInitialize(
  * @return None.
  **/
 VOID
-NTAPI
-BootAnimTickProgressBar(
+// BootAnimTickProgressBar
+BootThemeTickProgressBar(
     _In_ ULONG SubPercentTimes100)
 {
     ULONG FillCount;
@@ -157,11 +155,10 @@ BootAnimTickProgressBar(
            InbvBootDriverInstalled &&
            (InbvGetDisplayState() == INBV_DISPLAY_STATE_OWNED));
 
+    ASSERT(SubPercentTimes100 <= (100 * 100));
+
     /* Compute fill count */
     FillCount = VID_PROGRESS_BAR_WIDTH * SubPercentTimes100 / (100 * 100);
-
-    /* Acquire the lock */
-    InbvAcquireLock();
 
     /* Fill the progress bar */
     VidSolidColorFill(ProgressBarLeft,
@@ -169,56 +166,44 @@ BootAnimTickProgressBar(
                       ProgressBarLeft + FillCount,
                       ProgressBarTop + VID_PROGRESS_BAR_HEIGHT,
                       BV_COLOR_WHITE);
-
-    /* Release the lock */
-    InbvReleaseLock();
 }
 
-#ifdef INBV_ROTBAR_IMPLEMENTED
-static
-VOID
+#ifdef BOOT_ROTBAR_IMPLEMENTED
+VOID // BOOLEAN
 NTAPI
-InbvRotationThread(
-    _In_ PVOID Context)
+BootAnimUpdate(
+    _In_ PBOOT_ANIM_CTX BootAnimCtx)
 {
-    ULONG X, Y, Index, Total;
-    LARGE_INTEGER Delay = {{0}};
+    // Boot animation context variables
+    static ULONG X, Y, Index, Total;
 
-    UNREFERENCED_PARAMETER(Context);
+    /* Unknown unexpected command */
+    ASSERT(PltRotBarStatus < RBS_STATUS_MAX);
 
-    InbvAcquireLock();
-    if (RotBarSelection == RB_SQUARE_CELLS)
+    if (PltRotBarStatus == 0)
     {
-        Index = 0;
+        /*
+         * We are starting the animation, perform first initialization
+         */
+        if (RotBarSelection == RB_SQUARE_CELLS)
+            Index = 0;
+        else
+            Index = 32;
+
+        X = ProgressBarLeft + 2;
+        Y = ProgressBarTop + 2;
     }
     else
     {
-        Index = 32;
-    }
-    X = ProgressBarLeft + 2;
-    Y = ProgressBarTop + 2;
-    InbvReleaseLock();
-
-    while (InbvGetDisplayState() == INBV_DISPLAY_STATE_OWNED)
-    {
-        /* Wait for a bit */
-        KeDelayExecutionThread(KernelMode, FALSE, &Delay);
-
-        InbvAcquireLock();
-
-        /* Unknown unexpected command */
-        ASSERT(PltRotBarStatus < RBS_STATUS_MAX);
-
         if (PltRotBarStatus == RBS_STOP_ANIMATE)
         {
-            /* Stop the thread */
-            InbvReleaseLock();
-            break;
+            /* Stop the animation */
+            return; // return FALSE;
         }
 
         if (RotBarSelection == RB_SQUARE_CELLS)
         {
-            Delay.QuadPart = -800000LL; // 80 ms
+            BootAnimCtx->DelayInMs = 80; // 80 ms
             Total = 18;
             Index %= Total;
 
@@ -249,7 +234,7 @@ InbvRotationThread(
         }
         else if (RotBarSelection == RB_PROGRESS_BAR)
         {
-            Delay.QuadPart = -600000LL; // 60 ms
+            BootAnimCtx->DelayInMs = 60; // 60 ms
             Total = SCREEN_WIDTH;
             Index %= Total;
 
@@ -262,22 +247,20 @@ InbvRotationThread(
             }
             Index += 32;
         }
-
-        InbvReleaseLock();
     }
 
-    PsTerminateSystemThread(STATUS_SUCCESS);
+    return; // TRUE;
 }
 
 CODE_SEG("INIT")
+static
 VOID
-NTAPI
 InbvRotBarInit(VOID)
 {
     PltRotBarStatus = RBS_FADEIN;
     /* Perform other initialization if needed */
 }
-#endif // INBV_ROTBAR_IMPLEMENTED
+#endif // BOOT_ROTBAR_IMPLEMENTED
 
 CODE_SEG("INIT")
 VOID
@@ -285,25 +268,17 @@ NTAPI
 DisplayBootBitmap(
     _In_ BOOLEAN TextMode)
 {
-    PVOID BootCopy = NULL, BootProgress = NULL, BootLogo = NULL, Header = NULL, Footer = NULL;
-
-#ifdef INBV_ROTBAR_IMPLEMENTED
+#ifdef BOOT_ROTBAR_IMPLEMENTED
     UCHAR Buffer[RTL_NUMBER_OF(RotBarBuffer)];
     PVOID Bar = NULL, LineBmp = NULL;
     ROT_BAR_TYPE TempRotBarSelection = RB_UNSPECIFIED;
-    NTSTATUS Status;
-    HANDLE ThreadHandle = NULL;
 #endif
 
-#ifdef REACTOS_SKUS
-    PVOID Text = NULL;
-#endif
-
-#ifdef INBV_ROTBAR_IMPLEMENTED
-    /* Check if the animation thread has already been created */
-    if (RotBarThreadActive)
+#ifdef BOOT_ROTBAR_IMPLEMENTED
+    /* Check if the animation has already been created */
+    if (AnimationActive)
     {
-        /* Yes, just reset the progress bar but keep the thread alive */
+        /* Yes, just reset the progress bar but keep the animation alive */
         InbvAcquireLock();
         RotBarSelection = RB_UNSPECIFIED;
         InbvReleaseLock();
@@ -315,6 +290,8 @@ DisplayBootBitmap(
     /* Check if this is text mode */
     if (TextMode)
     {
+        PVOID Header = NULL, Footer = NULL;
+
         /*
          * Make the kernel resource section temporarily writable,
          * as we are going to change the bitmaps' palette in place.
@@ -370,6 +347,10 @@ DisplayBootBitmap(
     }
     else
     {
+        PVOID BootLogo, BootProgress, BootCopy;
+#ifdef REACTOS_SKUS
+        PVOID Text = NULL;
+#endif
 #ifdef REACTOS_FANCY_BOOT
         /* Decide whether this is a good time to change our logo ;^) */
         BOOLEAN IsXmas = IsXmasTime();
@@ -389,10 +370,9 @@ DisplayBootBitmap(
             SELECT_LOGO_ID(IDB_LOGO_DEFAULT, IsXmas, IDB_LOGO_XMAS));
 
 #ifdef REACTOS_SKUS
-        Text = NULL;
         if (SharedUserData->NtProductType == NtProductWinNt)
         {
-#ifdef INBV_ROTBAR_IMPLEMENTED
+#ifdef BOOT_ROTBAR_IMPLEMENTED
             /* Workstation product, use appropriate status bar color */
             Bar = InbvGetResourceAddress(IDB_BAR_WKSTA);
 #endif
@@ -417,13 +397,13 @@ DisplayBootBitmap(
                     SELECT_LOGO_ID(IDB_SERVER_LOGO, IsXmas, IDB_LOGO_XMAS));
             }
 
-#ifdef INBV_ROTBAR_IMPLEMENTED
+#ifdef BOOT_ROTBAR_IMPLEMENTED
             /* Server product, use appropriate status bar color */
             Bar = InbvGetResourceAddress(IDB_BAR_DEFAULT);
 #endif
         }
 #else // REACTOS_SKUS
-#ifdef INBV_ROTBAR_IMPLEMENTED
+#ifdef BOOT_ROTBAR_IMPLEMENTED
         /* Use default status bar */
         Bar = InbvGetResourceAddress(IDB_BAR_WKSTA);
 #endif
@@ -442,7 +422,7 @@ DisplayBootBitmap(
                           AL_VERTICAL_CENTER,
                           0, 0, 0, 34);
 
-#ifdef INBV_ROTBAR_IMPLEMENTED
+#ifdef BOOT_ROTBAR_IMPLEMENTED
             /* Choose progress bar */
             TempRotBarSelection = ROT_BAR_DEFAULT_MODE;
 #endif
@@ -491,7 +471,7 @@ DisplayBootBitmap(
             BitBltPalette(Text, TRUE, VID_SKU_TEXT_LEFT, VID_SKU_TEXT_TOP);
 #endif
 
-#ifdef INBV_ROTBAR_IMPLEMENTED
+#ifdef BOOT_ROTBAR_IMPLEMENTED
         if ((TempRotBarSelection == RB_SQUARE_CELLS) && Bar)
         {
             /* Save previous screen pixels to buffer */
@@ -524,7 +504,7 @@ DisplayBootBitmap(
             /* Hide the simple progress bar if not used */
             ShowProgressBar = FALSE;
         }
-#endif // INBV_ROTBAR_IMPLEMENTED
+#endif // BOOT_ROTBAR_IMPLEMENTED
 
         /* Restore the kernel resource section protection to be read-only */
         InbvMakeKernelResourceSectionReadOnly();
@@ -532,33 +512,18 @@ DisplayBootBitmap(
         /* Display the boot logo and fade it in */
         BootLogoFadeIn();
 
-#ifdef INBV_ROTBAR_IMPLEMENTED
-        if (!RotBarThreadActive && TempRotBarSelection != RB_UNSPECIFIED)
-        {
-            /* Start the animation thread */
-            Status = PsCreateSystemThread(&ThreadHandle,
-                                          0,
-                                          NULL,
-                                          NULL,
-                                          NULL,
-                                          InbvRotationThread,
-                                          NULL);
-            if (NT_SUCCESS(Status))
-            {
-                /* The thread has started, close the handle as we don't need it */
-                RotBarThreadActive = TRUE;
-                ObCloseHandle(ThreadHandle, KernelMode);
-            }
-        }
-#endif // INBV_ROTBAR_IMPLEMENTED
+#ifdef BOOT_ROTBAR_IMPLEMENTED
+        if (!AnimationActive && TempRotBarSelection != RB_UNSPECIFIED)
+            AnimationActive = InbvAnimationInit(/*BootAnimUpdate,*/ 50);
+#endif // BOOT_ROTBAR_IMPLEMENTED
 
         /* Set filter which will draw text display if needed */
-        InbvInstallDisplayStringFilter(DisplayFilter);
+        InbvInstallDefaultDisplayStringFilter();
     }
 
-#ifdef INBV_ROTBAR_IMPLEMENTED
-    /* Do we have the animation thread? */
-    if (RotBarThreadActive)
+#ifdef BOOT_ROTBAR_IMPLEMENTED
+    /* Do we have the animation running? */
+    if (AnimationActive)
     {
         /* We do, initialize the progress bar */
         InbvAcquireLock();
@@ -569,98 +534,99 @@ DisplayBootBitmap(
 #endif
 }
 
-CODE_SEG("INIT")
+// CODE_SEG("INIT")
 VOID
-NTAPI
-FinalizeBootLogo(VOID)
+BootThemeCleanup(VOID)
 {
-    /* Acquire lock and check the display state */
-    InbvAcquireLock();
+    /* Check the display state */
     if (InbvGetDisplayState() == INBV_DISPLAY_STATE_OWNED)
     {
         /* Clear the screen */
         VidSolidColorFill(0, 0, SCREEN_WIDTH-1, SCREEN_HEIGHT-1, BV_COLOR_BLACK);
     }
 
-    /* Reset progress bar and lock */
-#ifdef INBV_ROTBAR_IMPLEMENTED
+    /* Reset progress bar */
+#ifdef BOOT_ROTBAR_IMPLEMENTED
     PltRotBarStatus = RBS_STOP_ANIMATE;
-    RotBarThreadActive = FALSE;
+    AnimationActive = FALSE;
 #endif
-    InbvReleaseLock();
 }
 
-VOID
-NTAPI
-DisplayShutdownBitmap(VOID)
-{
-    PUCHAR Logo1, Logo2;
+
 #ifdef REACTOS_FANCY_BOOT
-    /* Decide whether this is a good time to change our logo ;^) */
-    BOOLEAN IsXmas = IsXmasTime();
+static inline
+VOID
+DisplayFamousQuote(VOID)
+{
+    InbvDisplayString("\r\"");
+    InbvDisplayString(GetFamousQuote());
+    InbvDisplayString("\"");
+}
 #endif
 
-#if 0
-    /* Is the boot driver installed? */
-    if (!InbvBootDriverInstalled)
-        return;
-#endif
-
-    /* Yes we do, cleanup for shutdown screen */
-    // InbvResetDisplay();
-    InbvInstallDisplayStringFilter(NULL);
-    InbvEnableDisplayString(TRUE);
-    InbvSolidColorFill(0, 0, SCREEN_WIDTH - 1, SCREEN_HEIGHT - 1, BV_COLOR_BLACK);
-    InbvSetScrollRegion(0, 0, SCREEN_WIDTH - 1, SCREEN_HEIGHT - 1);
-
-    /* Display shutdown logo and message */
-    Logo1 = InbvGetResourceAddress(IDB_SHUTDOWN_MSG);
-    Logo2 = InbvGetResourceAddress(
-        SELECT_LOGO_ID(IDB_LOGO_DEFAULT, IsXmas, IDB_LOGO_XMAS));
-
-    if (Logo1 && Logo2)
+BOOLEAN
+BootThemeDisplayShutdownMessage(
+    _In_ BOOLEAN TextMode,
+    _In_opt_ PCSTR Message)
+{
+    if (TextMode)
     {
-        InbvBitBlt(Logo1, VID_SHUTDOWN_MSG_LEFT, VID_SHUTDOWN_MSG_TOP);
+        /* Center the message on screen. This code expects the message
+         * to be 34 characters long, on a 80x25-character screen. */
+        ULONG i;
+        for (i = 0; i < 25; ++i) InbvDisplayString("\r\n");
+        InbvDisplayString("                       ");
 #ifndef REACTOS_FANCY_BOOT
-        InbvBitBlt(Logo2, VID_SHUTDOWN_LOGO_LEFT, VID_SHUTDOWN_LOGO_TOP);
+        return TRUE; // Caller should display the message
 #else
-        /* Draw the logo at the center of the screen */
-        BitBltAligned(Logo2,
-                      FALSE,
-                      AL_HORIZONTAL_CENTER,
-                      AL_VERTICAL_BOTTOM,
-                      0, 0, 0, SCREEN_HEIGHT - VID_SHUTDOWN_MSG_TOP + 16);
-
-        /* We've got a logo shown, change the scroll region to get
-         * the rest of the text down below the shutdown message */
-        InbvSetScrollRegion(0,
-                            VID_SHUTDOWN_MSG_TOP + ((PBITMAPINFOHEADER)Logo1)->biHeight + 32,
-                            SCREEN_WIDTH - 1,
-                            SCREEN_HEIGHT - 1);
+        /* Display the message ourselves */
+        InbvDisplayString((PCHAR)Message);
+        for (i = 0; i < 3; ++i) InbvDisplayString("\r\n");
+        DisplayFamousQuote();
 #endif
     }
+    else
+    {
+        PUCHAR Logo1, Logo2;
+#ifdef REACTOS_FANCY_BOOT
+        /* Decide whether this is a good time to change our logo ;^) */
+        BOOLEAN IsXmas = IsXmasTime();
+#endif
+
+        /* Yes we do, cleanup for shutdown screen */
+        InbvSolidColorFill(0, 0, SCREEN_WIDTH - 1, SCREEN_HEIGHT - 1, BV_COLOR_BLACK);
+        InbvSetScrollRegion(0, 0, SCREEN_WIDTH - 1, SCREEN_HEIGHT - 1);
+
+        /* Display shutdown logo and message */
+        Logo1 = InbvGetResourceAddress(IDB_SHUTDOWN_MSG);
+        Logo2 = InbvGetResourceAddress(
+            SELECT_LOGO_ID(IDB_LOGO_DEFAULT, IsXmas, IDB_LOGO_XMAS));
+
+        if (Logo1 && Logo2)
+        {
+            InbvBitBlt(Logo1, VID_SHUTDOWN_MSG_LEFT, VID_SHUTDOWN_MSG_TOP);
+#ifndef REACTOS_FANCY_BOOT
+            InbvBitBlt(Logo2, VID_SHUTDOWN_LOGO_LEFT, VID_SHUTDOWN_LOGO_TOP);
+#else
+            /* Draw the logo at the center of the screen */
+            BitBltAligned(Logo2,
+                          FALSE,
+                          AL_HORIZONTAL_CENTER,
+                          AL_VERTICAL_BOTTOM,
+                          0, 0, 0, SCREEN_HEIGHT - VID_SHUTDOWN_MSG_TOP + 16);
+
+            /* We've got a logo shown, change the scroll region to get
+             * the rest of the text down below the shutdown message */
+            InbvSetScrollRegion(0,
+                                VID_SHUTDOWN_MSG_TOP + ((PBITMAPINFOHEADER)Logo1)->biHeight + 32,
+                                SCREEN_WIDTH - 1,
+                                SCREEN_HEIGHT - 1);
+#endif
+        }
 
 #ifdef REACTOS_FANCY_BOOT
-    InbvDisplayString("\r\"");
-    InbvDisplayString(GetFamousQuote());
-    InbvDisplayString("\"");
+        DisplayFamousQuote();
 #endif
-}
-
-VOID
-NTAPI
-DisplayShutdownText(VOID)
-{
-    ULONG i;
-
-    for (i = 0; i < 25; ++i) InbvDisplayString("\r\n");
-    InbvDisplayString("                       ");
-    InbvDisplayString("The system may be powered off now.\r\n");
-
-#ifdef REACTOS_FANCY_BOOT
-    for (i = 0; i < 3; ++i) InbvDisplayString("\r\n");
-    InbvDisplayString("\r\"");
-    InbvDisplayString(GetFamousQuote());
-    InbvDisplayString("\"");
-#endif
+    }
+    return FALSE;
 }
