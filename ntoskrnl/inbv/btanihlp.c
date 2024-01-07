@@ -4,15 +4,44 @@
  * PURPOSE:     Boot Theme & Animation - Common Helpers
  * COPYRIGHT:   Copyright 2007 Alex Ionescu (alex.ionescu@reactos.org)
  *              Copyright 2007 Hervé Poussineau (hpoussin@reactos.org)
- *              Copyright 2012-2022 Hermès Bélusca-Maïto
+ *              Copyright 2012-2024 Hermès Bélusca-Maïto
  *              Copyright 2017-2018 Stanislav Motylkov
  *              Copyright 2019-2020 Yaroslav Kibysh
  */
 
-/* INCLUDES ******************************************************************/
+/* FEATURES ******************************************************************/
 
-// #include <ntoskrnl.h>
-// #include "inbv/logo.h"
+/**
+ * This file implement commonly-used helpers for boot themes and animations.
+ * By default, all the common functionality is enabled, unless any of the
+ * following preprocessor symbols are #define'd.
+ *
+ * - To exclude boot-screen fade-in support, add:
+ *
+ *   #define NO_BOOT_FADEIN
+ *
+ * - To exclude advanced bit-blit functions, add:
+ *
+ *   #define NO_BOOT_ADVANCED_BITBLT
+ *
+ * - To exclude boot animation helpers, add:
+ *
+ *   #define NO_BOOT_ANIMATION
+ *
+ * Boot animation is internally implemented either via a system thread
+ * (default implementation), or via a timer DPC. To employ this latter
+ * implementation, add:
+ *
+ *   #define BOOTANIM_BY_DPC
+ *
+ * In addition, optional fancy features for the boot and shutdown screens
+ * can be _enabled_ by adding:
+ *
+ *   #define REACTOS_FANCY_BOOT
+ **/
+
+
+/* INBV RESOURCE SECTION HELPERS *********************************************/
 
 /* See also mm/ARM3/miarm.h */
 #define MM_READONLY     1   // PAGE_READONLY
@@ -22,6 +51,8 @@
  * @brief
  * Make the kernel resource section temporarily writable.
  * Necessary when the theme bitmaps' palette is changed in place.
+ *
+ * @see BitBltPalette(), BitBltAligned()
  **/
 #define InbvMakeKernelResourceSectionWritable() \
     MmChangeKernelResourceSectionProtection(MM_READWRITE)
@@ -34,7 +65,50 @@
     MmChangeKernelResourceSectionProtection(MM_READONLY)
 
 
-/* FADE-IN FUNCTION **********************************************************/
+/* INBV STRING HELPERS *******************************************************/
+
+// Real definition of this variable: see below
+#if !defined(NO_BOOT_ANIMATION) && defined(BOOTANIM_BY_DPC)
+static KTIMER BootAnimTimer;
+#endif
+
+CODE_SEG("INIT")
+VOID
+NTAPI
+DisplayFilter(
+    _Inout_ PCHAR* String)
+{
+    /* Windows hack to skip first dots displayed by AUTOCHK */
+    static BOOLEAN DotHack = TRUE;
+
+    /* If "." is given set *String to empty string */
+    if (DotHack && strcmp(*String, ".") == 0)
+        *String = "";
+
+    if (**String)
+    {
+        DotHack = FALSE;
+
+        /* Remove the filter */
+        InbvInstallDisplayStringFilter(NULL);
+
+        /* Draw text screen */
+#if !defined(NO_BOOT_ANIMATION) && defined(BOOTANIM_BY_DPC)
+        KeCancelTimer(&BootAnimTimer);
+#endif
+        DisplayBootBitmap(TRUE);
+    }
+}
+
+/**
+ * @brief
+ * Set filter which will draw text display if needed.
+ **/
+#define InbvInstallDefaultDisplayStringFilter() \
+    InbvInstallDisplayStringFilter(DisplayFilter)
+
+
+/* GENERIC BOOT BITMAP DEFINITIONS *******************************************/
 
 /** From include/psdk/wingdi.h and bootvid/precomp.h **/
 typedef struct tagRGBQUAD
@@ -64,17 +138,30 @@ typedef struct tagBITMAPINFOHEADER
 } BITMAPINFOHEADER, *PBITMAPINFOHEADER;
 /*******************************/
 
-static RGBQUAD MainPalette[16];
 
+/* FADE-IN HELPERS ***********************************************************/
+
+#ifndef NO_BOOT_FADEIN
+
+C_ASSERT(BV_MAX_COLORS == 16);
+static RGBQUAD MainPalette[BV_MAX_COLORS];
+
+#ifndef PALETTE_FADE_STEPS
 #define PALETTE_FADE_STEPS  12
+#endif
+#ifndef PALETTE_FADE_TIME
 #define PALETTE_FADE_TIME   (15 * 1000) /* 15 ms */
+#endif
 
 /**
  * @brief
  * Caches the palette of the given image.
  * Used for implementing the fade-in effect.
+ *
+ * @param[in]   Image
+ * Pointer to the bitmap image, which starts with a BITMAPINFOHEADER header.
  **/
-/*static*/ VOID
+VOID
 BootLogoCachePalette(
     _In_ PVOID Image)
 {
@@ -85,9 +172,9 @@ BootLogoCachePalette(
 
 /**
  * @brief
- * Displays the boot logo and fades it in.
+ * Displays the boot screen and fades it in.
  **/
-/*static*/ VOID
+VOID
 BootLogoFadeIn(VOID)
 {
     UCHAR PaletteBitmapBuffer[sizeof(BITMAPINFOHEADER) + sizeof(MainPalette)];
@@ -140,8 +227,12 @@ BootLogoFadeIn(VOID)
     }
 }
 
+#endif // NO_BOOT_FADEIN
+
 
 /* BITBLT HELPERS ************************************************************/
+
+#ifndef NO_BOOT_ADVANCED_BITBLT
 
 /*
  * BitBltAligned() alignments
@@ -160,7 +251,26 @@ typedef enum _BBLT_HORZ_ALIGNMENT
     AL_HORIZONTAL_RIGHT
 } BBLT_HORZ_ALIGNMENT;
 
-/*static*/ VOID
+/**
+ * @brief
+ * Bit-blt the given image at given coordinates, keeping or not its palette.
+ *
+ * @param[in]   Image
+ * Pointer to the bitmap image, which starts with a BITMAPINFOHEADER header.
+ *
+ * @param[in]   NoPalette
+ * TRUE if the bitmap palette needs to be removed (zeroed) before bit-blt'ing
+ * the image; FALSE if not. When this parameter is TRUE, the kernel resource
+ * section must be made temporarily writable before using this function
+ * (see InbvMakeKernelResourceSectionWritable()).
+ *
+ * @param[in]   X
+ * @param[in]   Y
+ * Top-left coordinates where the image is bit-blt'ed.
+ *
+ * @see BitBltAligned()
+ **/
+VOID
 BitBltPalette(
     _In_ PVOID Image,
     _In_ BOOLEAN NoPalette,
@@ -168,7 +278,7 @@ BitBltPalette(
     _In_ ULONG Y)
 {
     LPRGBQUAD Palette;
-    RGBQUAD OrigPalette[RTL_NUMBER_OF(MainPalette)];
+    RGBQUAD OrigPalette[BV_MAX_COLORS]; // == RTL_NUMBER_OF(MainPalette);
 
     /* If requested, remove the palette from the image */
     if (NoPalette)
@@ -192,7 +302,35 @@ BitBltPalette(
     }
 }
 
-/*static*/ VOID
+/**
+ * @brief
+ * Bit-blt the given image with specified horizontal and vertical alignment,
+ * keeping or not its palette.
+ *
+ * @param[in]   Image
+ * Pointer to the bitmap image, which starts with a BITMAPINFOHEADER header.
+ *
+ * @param[in]   NoPalette
+ * TRUE if the bitmap palette needs to be removed (zeroed) before bit-blt'ing
+ * the image; FALSE if not. When this parameter is TRUE, the kernel resource
+ * section must be made temporarily writable before using this function
+ * (see InbvMakeKernelResourceSectionWritable()).
+ *
+ * @param[in]   HorizontalAlignment
+ * The horizontal alignment mode specified by a BBLT_HORZ_ALIGNMENT enumeration.
+ *
+ * @param[in]   VerticalAlignment
+ * The vertical alignment mode specified by a BBLT_VERT_ALIGNMENT enumeration.
+ *
+ * @param[in]   MarginLeft
+ * @param[in]   MarginTop
+ * @param[in]   MarginRight
+ * @param[in]   MarginBottom
+ * The screen margins relative to which the image is to be aligned.
+ *
+ * @see BitBltPalette()
+ **/
+VOID
 BitBltAligned(
     _In_ PVOID Image,
     _In_ BOOLEAN NoPalette,
@@ -250,44 +388,193 @@ BitBltAligned(
     BitBltPalette(Image, NoPalette, X, Y);
 }
 
-/* FUNCTIONS *****************************************************************/
+#endif // NO_BOOT_ADVANCED_BITBLT
 
-CODE_SEG("INIT")
-/*static*/
+
+/* ANIMATION HELPERS *********************************************************/
+
+#ifndef NO_BOOT_ANIMATION
+
+#ifdef BOOTANIM_BY_DPC
+static KDPC BootAnimDpc;
+static KTIMER BootAnimTimer;
+#endif
+typedef struct _BOOT_ANIM_CTX
+{
+    ULONG DelayInMs; // Delay between each animation frame in milliseconds
+    BOOLEAN Terminate;
+    PVOID AnimContext;
+} BOOT_ANIM_CTX, *PBOOT_ANIM_CTX;
+static BOOT_ANIM_CTX BootAnimCtx;
+
+typedef
+VOID // BOOLEAN
+(NTAPI BOOT_ANIM_UPDATE)(
+    _In_ PBOOT_ANIM_CTX BootAnimCtx);
+
+// static BOOT_ANIM_UPDATE BootAnimUpdate = NULL;
+BOOT_ANIM_UPDATE BootAnimUpdate;
+
+#ifndef BOOTANIM_BY_DPC
+
+static
 VOID
 NTAPI
-DisplayFilter(
-    _Inout_ PCHAR* String)
+InbvAnimThread(
+    _In_ PVOID Context)
 {
-    /* Windows hack to skip first dots displayed by AUTOCHK */
-    static BOOLEAN DotHack = TRUE;
+    PBOOT_ANIM_CTX BootAnimCtx = (PBOOT_ANIM_CTX)Context;
+    ULONG CurrentDelay = 0;
+    LARGE_INTEGER Delay = {{0}};
 
-    /* If "." is given set *String to empty string */
-    if (DotHack && strcmp(*String, ".") == 0)
-        *String = "";
-
-    if (**String)
+    // InbvCheckDisplayOwnership();
+    while (InbvGetDisplayState() == INBV_DISPLAY_STATE_OWNED)
     {
-        DotHack = FALSE;
+        /* If the delay was changed, update it */
+        if (CurrentDelay != BootAnimCtx->DelayInMs)
+        {
+            Delay.QuadPart = -(BootAnimCtx->DelayInMs * 10000LL); // Timeout is in 100 nanoseconds
+            CurrentDelay = BootAnimCtx->DelayInMs;
+        }
 
-        /* Remove the filter */
-        InbvInstallDisplayStringFilter(NULL);
+        // /* Wait for a bit */
+        // KeDelayExecutionThread(KernelMode, FALSE, &Delay);
 
-        /* Draw text screen */
-        DisplayBootBitmap(TRUE);
+        /* Do one animation step */
+        InbvAcquireLock();
+        BootAnimUpdate(BootAnimCtx);
+        InbvReleaseLock();
+
+        /* Check whether the animation thread must terminate */
+        if (BootAnimCtx->Terminate)
+            break; /* Stop the thread */
+
+        /* Wait for a bit */
+        KeDelayExecutionThread(KernelMode, FALSE, &Delay);
+    }
+
+    PsTerminateSystemThread(STATUS_SUCCESS);
+}
+
+#else
+
+static
+VOID
+NTAPI
+InbvAnimDpc(
+    _In_ PKDPC Dpc,
+    _In_ PVOID Context,
+    _In_ PVOID SystemArgument1,
+    _In_ PVOID SystemArgument2)
+{
+    PBOOT_ANIM_CTX BootAnimCtx = (PBOOT_ANIM_CTX)Context;
+    ULONG CurrentDelay = BootAnimCtx->DelayInMs;
+
+    UNREFERENCED_PARAMETER(Dpc);
+    UNREFERENCED_PARAMETER(SystemArgument1);
+    UNREFERENCED_PARAMETER(SystemArgument2);
+
+    // InbvCheckDisplayOwnership();
+    if (InbvGetDisplayState() == INBV_DISPLAY_STATE_OWNED)
+    {
+        /* Do one animation step */
+        InbvAcquireLock();
+        BootAnimUpdate(BootAnimCtx);
+        InbvReleaseLock();
+
+        /* Check whether the animation timer must stop */
+        if (BootAnimCtx->Terminate)
+            goto Quit; /* Stop the thread */
+
+        /* If the timer delay was changed, reschedule it */
+        if (CurrentDelay != BootAnimCtx->DelayInMs)
+        {
+            LARGE_INTEGER Timeout;
+
+            Timeout.QuadPart = BootAnimCtx->DelayInMs * 10000LL; // Timeout is in 100 nanoseconds
+            KeSetTimerEx(&BootAnimTimer, Timeout, BootAnimCtx->DelayInMs, &BootAnimDpc);
+        }
+    }
+    else
+    {
+Quit:
+        KeCancelTimer(&BootAnimTimer);
     }
 }
 
-#if 0
-/* Set filter which will draw text display if needed */
-InbvInstallDisplayStringFilter(DisplayFilter);
+#endif // !BOOTANIM_BY_DPC
+
+BOOLEAN
+NTAPI
+InbvAnimationInit( // BootAnimStart // InbvAnimStart
+    // _In_ BOOT_ANIM_UPDATE AnimUpdate,
+    _In_ ULONG DelayInMs)
+{
+#ifndef BOOTANIM_BY_DPC
+    NTSTATUS Status;
+    HANDLE ThreadHandle = NULL;
+#else
+    LARGE_INTEGER Timeout;
 #endif
 
+    ASSERT(KeGetCurrentIrql() <= DISPATCH_LEVEL);
+
+    BootAnimCtx.DelayInMs = DelayInMs;
+    BootAnimCtx.Terminate = FALSE;
+    BootAnimCtx.AnimContext = NULL;
+
+#ifndef BOOTANIM_BY_DPC
+    /* Start the animation thread */
+    Status = PsCreateSystemThread(&ThreadHandle,
+                                  0,
+                                  NULL,
+                                  NULL,
+                                  NULL,
+                                  InbvAnimThread,
+                                  &BootAnimCtx);
+    if (!NT_SUCCESS(Status))
+        return FALSE;
+
+    /* The thread has started, close the handle as we don't need it */
+    ObCloseHandle(ThreadHandle, KernelMode);
+
+#else
+
+    /* Initialize a timer triggering a DPC routine */
+    KeInitializeDpc(&BootAnimDpc, InbvAnimDpc, &BootAnimCtx);
+    KeInitializeTimer(&BootAnimTimer);
+
+    Timeout.QuadPart = DelayInMs * 10000LL; // Timeout is in 100 nanoseconds
+    KeSetTimerEx(&BootAnimTimer, Timeout, DelayInMs, &BootAnimDpc);
+#endif // !BOOTANIM_BY_DPC
+
+    return TRUE;
+}
+
+#if 0
+VOID
+NTAPI
+InbvAnimationStop(VOID)
+{
+    BootAnimCtx.Terminate = TRUE;
+#ifdef BOOTANIM_BY_DPC
+    KeCancelTimer(&BootAnimTimer);
+#endif
+}
+#endif // 0
+
+#endif // NO_BOOT_ANIMATION
+
+
+/* FANCY-BOOT HELPERS ********************************************************/
 
 #ifdef REACTOS_FANCY_BOOT
 
-/* Returns TRUE if this is Christmas time, or FALSE if not */
-/*static*/ BOOLEAN
+/**
+ * @brief
+ * Returns TRUE if this is Christmas time, or FALSE if not.
+ **/
+BOOLEAN
 IsXmasTime(VOID)
 {
     LARGE_INTEGER SystemTime;
@@ -303,19 +590,12 @@ IsXmasTime(VOID)
     return ((Time.Month == 12) && (20 <= Time.Day) && (Time.Day <= 31));
 }
 
-#define SELECT_LOGO_ID(LogoIdDefault, AlternateCond, LogoIdAlternate) \
-    ((AlternateCond) ? (LogoIdAlternate) : (LogoIdDefault))
-
-#else
-
-#define SELECT_LOGO_ID(LogoIdDefault, AlternateCond, LogoIdAlternate) \
-    (LogoIdDefault)
-
-#endif // REACTOS_FANCY_BOOT
-
-
-#ifdef REACTOS_FANCY_BOOT
-/*static*/ PCH
+/**
+ * @brief
+ * Returns a pointer to a "famous quote" string taken randomly
+ * from a predefined list.
+ **/
+PCH
 GetFamousQuote(VOID)
 {
     static const PCH FamousLastWords[] =
@@ -418,11 +698,17 @@ GetFamousQuote(VOID)
     return FamousLastWords[Now.LowPart % RTL_NUMBER_OF(FamousLastWords)];
 }
 
+#endif // REACTOS_FANCY_BOOT
 
-#if 0
-    InbvDisplayString("\r\"");
-    InbvDisplayString(GetFamousQuote());
-    InbvDisplayString("\"");
-#endif
+
+#ifdef REACTOS_FANCY_BOOT
+
+#define SELECT_LOGO_ID(LogoIdDefault, AlternateCond, LogoIdAlternate) \
+    ((AlternateCond) ? (LogoIdAlternate) : (LogoIdDefault))
+
+#else
+
+#define SELECT_LOGO_ID(LogoIdDefault, AlternateCond, LogoIdAlternate) \
+    (LogoIdDefault)
 
 #endif // REACTOS_FANCY_BOOT
