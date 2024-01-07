@@ -19,14 +19,14 @@ BootAnimInitialize(
     _In_ ULONG Count);
 
 VOID
-NTAPI
-BootAnimTickProgressBar(
+// BootAnimTickProgressBar
+BootThemeTickProgressBar(
     _In_ ULONG SubPercentTimes100);
 
-CODE_SEG("INIT")
-VOID
-NTAPI
-InbvRotBarInit(VOID);
+// VOID
+// NTAPI
+// BootAnimTickProgressBar(
+//     _In_ ULONG SubPercentTimes100);
 
 CODE_SEG("INIT")
 VOID
@@ -41,8 +41,5 @@ FinalizeBootLogo(VOID);
 
 VOID
 NTAPI
-DisplayShutdownBitmap(VOID);
-
-VOID
-NTAPI
-DisplayShutdownText(VOID);
+DisplayShutdownMessage( // or "Screen"
+    _In_ BOOLEAN TextMode); // _In_ POWER_ACTION PowerAction

@@ -153,19 +153,22 @@ PopShutdownHandler(VOID)
     KeRaiseIrqlToDpcLevel();
     _disable();
 
-    /* Do we have boot video */
+    /* Do we have boot video? */
     if (InbvIsBootDriverInstalled())
     {
         /* Yes we do, cleanup for shutdown screen */
-        if (!InbvCheckDisplayOwnership()) InbvAcquireDisplayOwnership();
+        if (!InbvCheckDisplayOwnership())
+            InbvAcquireDisplayOwnership();
         InbvResetDisplay();
-        // InbvEnableDisplayString(TRUE);
-        DisplayShutdownBitmap();
+        InbvInstallDisplayStringFilter(NULL);
+        InbvEnableDisplayString(TRUE);
+
+        DisplayShutdownMessage(FALSE);
     }
     else
     {
         /* Do it in text-mode */
-        DisplayShutdownText();
+        DisplayShutdownMessage(TRUE);
     }
 
     /* Hang the system */
