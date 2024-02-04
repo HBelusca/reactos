@@ -91,6 +91,7 @@ BootThemeDisplayShutdownMessage(
 
 // #include "btani2k3.c"
 #include "btani2k.c"
+// #include "btanint4.c"
 
 
 /* FUNCTIONS *****************************************************************/
