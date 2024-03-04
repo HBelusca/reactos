@@ -181,4 +181,100 @@ VOID
 NoUiDrawMenu(
     _In_ PUI_MENU_INFO MenuInfo)
 {
+    ULONG i;
+
+    /* Show the menu header */
+    if (MenuInfo->MenuHeader)
+    {
+        printf("%s\n", MenuInfo->MenuHeader);
+        // UiVtbl.DrawText(0,
+        //                 MenuInfo->Top - 2,
+        //                 MenuInfo->MenuHeader,
+        //                 ATTR(UiMenuFgColor, UiMenuBgColor));
+    }
+
+    // /* Draw the menu box */
+    // TuiDrawMenuBox(MenuInfo);
+
+    /* Draw each menu item */
+    for (i = 0; i < MenuInfo->MenuItemCount; ++i)
+    {
+        // TuiDrawMenuItem(MenuInfo, i);
+        ULONG MenuItemNumber = i;
+        CHAR MenuLineText[80];
+
+
+        /* If this is a separator */
+        if (MenuInfo->MenuItemList[MenuItemNumber] == NULL)
+        {
+            /* Make it a separator line and use menu colors */
+            RtlZeroMemory(MenuLineText, sizeof(MenuLineText));
+            RtlFillMemory(MenuLineText, sizeof(MenuLineText), 0xC4);
+
+            // /* Draw the item */
+            // UiDrawText(MenuInfo->Left + 1,
+            //            MenuInfo->Top + 1 + MenuItemNumber,
+            //            MenuLineText,
+            //            ATTR(UiMenuFgColor, UiMenuBgColor));
+            printf("%s\n", MenuLineText);
+
+            /* We are done */
+            //return;
+            continue;
+        }
+
+        /* This is not a separator */
+        ASSERT(MenuInfo->MenuItemList[MenuItemNumber]);
+
+        /* Format the item text string */
+        RtlStringCbPrintfA(MenuLineText, sizeof(MenuLineText),
+                           "[%lu] %s",
+                           MenuItemNumber,
+                           MenuInfo->MenuItemList[MenuItemNumber]);
+
+        // if (MenuItemNumber == MenuInfo->SelectedMenuItem)
+        // {
+        //     /* If this is the selected item, use the selected colors */
+        //     Attribute = ATTR(UiSelectedTextColor, UiSelectedTextBgColor);
+        // }
+        // else
+        // {
+        //     /* Normal item colors */
+        //     Attribute = ATTR(UiTextColor, UiMenuBgColor);
+        // }
+
+        // /* Draw the item */
+        // UiDrawText(MenuInfo->Left + 1,
+        //            MenuInfo->Top + 1 + MenuItemNumber,
+        //            MenuLineText,
+        //            Attribute);
+        printf("%s\n", MenuLineText);
+    }
+
+    // /* Now tell the user how to choose */
+    // UiVtbl.DrawText(0,
+    //                 MenuInfo->Bottom + 1,
+    //                 "Use \x18 and \x19 to move the highlight to your choice.",
+    //                 ATTR(UiMenuFgColor, UiMenuBgColor));
+    // UiVtbl.DrawText(0,
+    //                 MenuInfo->Bottom + 2,
+    //                 "Press ENTER to choose.",
+    //                 ATTR(UiMenuFgColor, UiMenuBgColor));
+
+    /* And show the menu footer */
+    if (MenuInfo->MenuFooter)
+    {
+        printf("%s\n", MenuInfo->MenuHeader);
+        // UiVtbl.DrawText(0,
+        //                 UiScreenHeight - 4,
+        //                 MenuInfo->MenuFooter,
+        //                 ATTR(UiMenuFgColor, UiMenuBgColor));
+    }
+
+    /* Display the boot options if needed */
+    if (MenuInfo->ShowBootOptions)
+        DisplayBootTimeOptions();
+
+    /* And prompt the user */
+    printf("Your choice: ");
 }
