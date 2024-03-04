@@ -13,6 +13,33 @@
 
 /* GLOBALS ********************************************************************/
 
+#if 0
+static UI_MENU_ITEMS OptionsMenuList[] =
+{
+    {"Safe Mode",                       {SAFEBOOT,          BOOT_LOGGING,   "SAFEBOOT:MINIMAL SOS NOGUIBOOT"}},
+    {"Safe Mode with Networking",       {SAFEBOOT_NETWORK,  BOOT_LOGGING,   "SAFEBOOT:NETWORK SOS NOGUIBOOT"}},
+    {"Safe Mode with Command Prompt",   {SAFEBOOT_ALTSHELL, BOOT_LOGGING,   "SAFEBOOT:MINIMAL(ALTERNATESHELL) SOS NOGUIBOOT"}},
+
+    {NULL, NULL},
+
+    {"Enable Boot Logging",             {0,                 BOOT_LOGGING,   NULL}},
+    {"Enable VGA Mode",                 {0,                 BOOT_VGA_MODE,  NULL}},
+    {"Last Known Good Configuration",   {LKG_CONFIG,        0,              NULL}},
+    {"Directory Services Restore Mode", {SAFEBOOT_DSREPAIR, 0,              "SAFEBOOT:DSREPAIR SOS"}},
+    {"Debugging Mode",                  {0,                 BOOT_DEBUGGING, NULL}},
+
+    {NULL, NULL},
+
+    {"Start ReactOS normally",          {NO_OPTION, 0, NULL}},
+#ifdef HAS_OPTION_MENU_EDIT_CMDLINE
+    {"Edit Boot Command Line (F10)", NULL},
+#endif
+#ifdef HAS_OPTION_MENU_REBOOT
+    {"Reboot", NULL},
+#endif
+};
+#endif
+
 static const PCSTR OptionsMenuList[] =
 {
     "Safe Mode",
