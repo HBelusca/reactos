@@ -208,6 +208,7 @@ MenuNTOptions(
                               sizeof(OperatingSystem->AdvBootOptsDesc));
 }
 
+// ApplyBootTimeOptions
 VOID
 AppendBootTimeOptions(
     _Inout_z_bytecount_(BootOptionsSize)
