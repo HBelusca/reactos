@@ -763,7 +763,7 @@ LoadReactOSSetup(
     AppendBootTimeOptions(UserBootOptions, sizeof(UserBootOptions));
 
     /* Post-process the boot options */
-    NtLdrNormalizeOptions(UserBootOptions, sizeof(UserBootOptions));
+    NtLdrNormalizeOptions(UserBootOptions);
     BootOptions = UserBootOptions;
     TRACE("BootOptions(2): '%s'\n", BootOptions);
 

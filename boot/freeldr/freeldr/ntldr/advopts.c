@@ -40,7 +40,7 @@ static UI_MENU_ITEMS OptionsMenuList[] =
 };
 #endif
 
-static const PCSTR OptionsMenuList[] =
+static PCSTR OptionsMenuList[] =
 {
     "Safe Mode",
     "Safe Mode with Networking",

@@ -948,21 +948,17 @@ WinLdrInitErrataInf(
 }
 
 
-static
 VOID
 NtLdrNormalizeOptions(
-    _Inout_z_bytecount_(OptionsSize) // BufferSize
-         PSTR Options, // LoadOptions
-    _In_ SIZE_T OptionsSize)
+    _Inout_ PSTR Options)
 {
-    PCHAR NewOptions;
-
-    // TODO: Use a better algorithm...
-
-    /* Strip the '/' switch symbol in front of each option */
-    NewOptions = Options;
+    /* Strip the '/' switch symbol in front of each option,
+     * copying up to (and including) the NULL-terminator. */
+    PCHAR NewOptions = Options;
     do
     {
+        // TODO: If previous character was not space, just replace
+        // the first '/' by a space instead of shifting the strings.
         while (*Options == '/')
             ++Options;
 
@@ -1104,7 +1100,7 @@ LoadAndBootWindows(
     AppendBootTimeOptions(BootOptions, sizeof(BootOptions));
 
     /* Post-process the boot options */
-    NtLdrNormalizeOptions(BootOptions, sizeof(BootOptions));
+    NtLdrNormalizeOptions(BootOptions);
     TRACE("BootOptions(2): '%s'\n", BootOptions);
 
     /* Check if a RAM disk file was given */

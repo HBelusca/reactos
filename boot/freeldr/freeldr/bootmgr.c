@@ -52,12 +52,12 @@ typedef struct _OS_LOADING_METHOD
 {
     PCSTR BootType;
     EDIT_OS_ENTRY_PROC EditOsEntry;
-    OS_MENU_PROC OsMenu;
+    OS_MENU_PROC OsMenu OPTIONAL;
     ARC_ENTRY_POINT OsLoader;
 } OS_LOADING_METHOD, *POS_LOADING_METHOD;
 
-static const
-OS_LOADING_METHOD OSLoadingMethods[] =
+static const OS_LOADING_METHOD
+OSLoadingMethods[] =
 {
     {"ReactOSSetup", EditCustomBootReactOSSetup, DoNTOptionsMenu, LoadReactOSSetup},
 
@@ -78,7 +78,7 @@ OS_LOADING_METHOD OSLoadingMethods[] =
 
 /* FUNCTIONS ******************************************************************/
 
-static POS_LOADING_METHOD
+static const OS_LOADING_METHOD*
 GetOSLoadingMethod(
     _In_ ULONG_PTR SectionId)
 {
@@ -216,7 +216,7 @@ LoadOperatingSystem(
     _In_ OperatingSystemItem* OperatingSystem)
 {
     ULONG_PTR SectionId = OperatingSystem->SectionId;
-    POS_LOADING_METHOD OSLoadingMethod;
+    const OS_LOADING_METHOD* OSLoadingMethod;
     ULONG Argc;
     PCHAR* Argv;
 
@@ -224,6 +224,12 @@ LoadOperatingSystem(
     OSLoadingMethod = GetOSLoadingMethod(SectionId);
     if (!OSLoadingMethod)
         return;
+    ASSERT(OSLoadingMethod->OsLoader);
+
+    /* Build the ARC-compatible argument vector */
+    Argv = BuildArgvForOsLoader(OperatingSystem->LoadIdentifier, SectionId, &Argc);
+    if (!Argv)
+        return; // Unexpected failure.
 
 #ifdef _M_IX86
 #ifndef UEFIBOOT
@@ -231,11 +237,6 @@ LoadOperatingSystem(
     DriveMapMapDrivesInSection(SectionId);
 #endif
 #endif
-
-    /* Build the ARC-compatible argument vector */
-    Argv = BuildArgvForOsLoader(OperatingSystem->LoadIdentifier, SectionId, &Argc);
-    if (!Argv)
-        return; // Unexpected failure.
 
     /* Start the OS loader */
     OSLoadingMethod->OsLoader(Argc, Argv, NULL);
@@ -248,10 +249,13 @@ EditOperatingSystemEntry(
     _Inout_ OperatingSystemItem* OperatingSystem)
 {
     /* Find the suitable OS entry editor and open it */
-    POS_LOADING_METHOD OSLoadingMethod =
+    const OS_LOADING_METHOD* OSLoadingMethod =
         GetOSLoadingMethod(OperatingSystem->SectionId);
     if (OSLoadingMethod)
+    {
+        ASSERT(OSLoadingMethod->EditOsEntry);
         OSLoadingMethod->EditOsEntry(OperatingSystem);
+    }
 }
 #endif // HAS_OPTION_MENU_EDIT_CMDLINE
 
@@ -305,9 +309,9 @@ MainBootMenuKeyPressFilter(
     case KEY_F8:
     {
         /* Find the suitable OS menu procedure and display it */
-        POS_LOADING_METHOD OSLoadingMethod =
+        const OS_LOADING_METHOD* OSLoadingMethod =
             GetOSLoadingMethod(OperatingSystem->SectionId);
-        if (OSLoadingMethod)
+        if (OSLoadingMethod && OSLoadingMethod->OsMenu)
             OSLoadingMethod->OsMenu(OperatingSystem);
         return TRUE;
     }

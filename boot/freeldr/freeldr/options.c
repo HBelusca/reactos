@@ -9,10 +9,11 @@
 /* INCLUDES *******************************************************************/
 
 #include <freeldr.h>
+#include <debug.h>
 
 /* GLOBALS ********************************************************************/
 
-static const PCSTR OptionsMenuList[] =
+static PCSTR OptionsMenuList[] =
 {
     "FreeLdr debugging",
 
@@ -29,7 +30,7 @@ static const PCSTR OptionsMenuList[] =
 #endif
 };
 
-static const PCSTR FrldrDbgMsg =
+static PCSTR FrldrDbgMsg =
 "Enable FreeLdr debug channels\n"
 "Acceptable syntax: [level1]#channel1[,[level2]#channel2]\n"
 "level can be one of: trace,warn,fixme,err\n"

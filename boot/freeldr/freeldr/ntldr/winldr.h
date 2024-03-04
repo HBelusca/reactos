@@ -100,6 +100,10 @@ NtLdrOutputLoadMsg(
     _In_ PCSTR FileName,
     _In_opt_ PCSTR Description);
 
+VOID
+NtLdrNormalizeOptions(
+    _Inout_ PSTR Options);
+
 PVOID WinLdrLoadModule(PCSTR ModuleName, PULONG Size,
                        TYPE_OF_MEMORY MemoryType);
 

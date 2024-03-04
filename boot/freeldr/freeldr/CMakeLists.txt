@@ -75,6 +75,7 @@ list(APPEND FREELDR_BOOTMGR_SOURCE
 
 list(APPEND FREELDR_NTLDR_SOURCE
     ${REACTOS_SOURCE_DIR}/ntoskrnl/config/cmboot.c
+    ntldr/advopts.c
     ntldr/conversion.c
     ntldr/registry.c
     ntldr/winldr.c
