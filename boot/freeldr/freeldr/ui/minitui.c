@@ -185,8 +185,8 @@ MiniTuiDrawMenu(
 {
     ULONG i;
 
-    /* Draw the backdrop */
-    UiDrawBackdrop();
+    // /* Draw the backdrop */
+    // UiDrawBackdrop();
 
     /* No GUI status bar text, just minimal text. Show the menu header. */
     if (MenuInfo->MenuHeader)
@@ -223,12 +223,6 @@ MiniTuiDrawMenu(
                         UiScreenHeight - 4,
                         MenuInfo->MenuFooter,
                         ATTR(UiMenuFgColor, UiMenuBgColor));
-    }
-
-    /* Display the boot options if needed */
-    if (MenuInfo->ShowBootOptions)
-    {
-        DisplayBootTimeOptions();
     }
 
     VideoCopyOffScreenBufferToVRAM();

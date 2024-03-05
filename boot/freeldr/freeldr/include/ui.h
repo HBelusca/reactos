@@ -202,7 +202,6 @@ typedef struct tagUI_MENU_INFO
 {
     PCSTR   MenuHeader;
     PCSTR   MenuFooter;
-    BOOLEAN ShowBootOptions;
 
     PCSTR*  MenuItemList;
     ULONG   MenuItemCount;
@@ -227,7 +226,6 @@ BOOLEAN
 UiDisplayMenu(
     IN PCSTR MenuHeader,
     IN PCSTR MenuFooter OPTIONAL,
-    IN BOOLEAN ShowBootOptions,
     IN PCSTR MenuItemList[],
     IN ULONG MenuItemCount,
     IN ULONG DefaultMenuItem,
@@ -284,7 +282,6 @@ typedef struct tagUIVTBL
     BOOLEAN (*DisplayMenu)(
         IN PCSTR MenuHeader,
         IN PCSTR MenuFooter OPTIONAL,
-        IN BOOLEAN ShowBootOptions,
         IN PCSTR MenuItemList[],
         IN ULONG MenuItemCount,
         IN ULONG DefaultMenuItem,

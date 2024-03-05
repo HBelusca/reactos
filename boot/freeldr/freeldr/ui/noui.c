@@ -163,7 +163,6 @@ BOOLEAN
 NoUiDisplayMenu(
     IN PCSTR MenuHeader,
     IN PCSTR MenuFooter OPTIONAL,
-    IN BOOLEAN ShowBootOptions,
     IN PCSTR MenuItemList[],
     IN ULONG MenuItemCount,
     IN ULONG DefaultMenuItem,
@@ -270,10 +269,6 @@ NoUiDrawMenu(
         //                 MenuInfo->MenuFooter,
         //                 ATTR(UiMenuFgColor, UiMenuBgColor));
     }
-
-    /* Display the boot options if needed */
-    if (MenuInfo->ShowBootOptions)
-        DisplayBootTimeOptions();
 
     /* And prompt the user */
     printf("Your choice: ");

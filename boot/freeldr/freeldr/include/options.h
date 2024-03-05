@@ -20,4 +20,7 @@
 #pragma once
 
 VOID DoOptionsMenu(IN OperatingSystemItem* OperatingSystem);
-VOID DisplayBootTimeOptions(VOID);
+
+VOID
+DisplayBootTimeOptions(
+    _In_ OperatingSystemItem* OperatingSystem);

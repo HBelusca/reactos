@@ -55,7 +55,6 @@ DoOptionsMenu(
     ULONG SelectedMenuItem;
 
     if (!UiDisplayMenu("Select an option:", NULL,
-                       FALSE,
                        OptionsMenuList,
                        RTL_NUMBER_OF(OptionsMenuList),
                        0, -1,
@@ -67,8 +66,8 @@ DoOptionsMenu(
         return;
     }
 
-    /* Clear the backdrop */
-    UiDrawBackdrop();
+    // /* Clear the backdrop */
+    // UiDrawBackdrop();
 
     switch (SelectedMenuItem)
     {

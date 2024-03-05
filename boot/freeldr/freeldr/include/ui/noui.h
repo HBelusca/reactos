@@ -87,7 +87,6 @@ BOOLEAN
 NoUiDisplayMenu(
     IN PCSTR MenuHeader,
     IN PCSTR MenuFooter OPTIONAL,
-    IN BOOLEAN ShowBootOptions,
     IN PCSTR MenuItemList[],
     IN ULONG MenuItemCount,
     IN ULONG DefaultMenuItem,

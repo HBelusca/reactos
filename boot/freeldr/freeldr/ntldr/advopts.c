@@ -136,12 +136,11 @@ DoNTOptionsMenu(
     CHAR MenuTitle[260];
 
     RtlStringCbPrintfA(MenuTitle, sizeof(MenuTitle),
-                       "Advanced options for: %s\n"
-                       "Select an option:",
+                       "Advanced options for: %s" /*"\n"
+                       "Select an option:"*/,
                        OperatingSystem->LoadIdentifier);
 
     if (!UiDisplayMenu(MenuTitle, NULL,
-                       TRUE,
                        OptionsMenuList,
                        RTL_NUMBER_OF(OptionsMenuList),
                        10, // Use "Start ReactOS normally" as default; see the switch below.
@@ -154,8 +153,8 @@ DoNTOptionsMenu(
         return;
     }
 
-    /* Clear the backdrop */
-    UiDrawBackdrop();
+    // /* Clear the backdrop */
+    // UiDrawBackdrop();
 
     switch (SelectedMenuItem)
     {
