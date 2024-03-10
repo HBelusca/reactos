@@ -35,12 +35,21 @@
 static UCHAR DbgChannels[DBG_CHANNELS_COUNT];
 
 #define SCREEN  1
-#define RS232   2
-#define BOCHS   4
+
+#ifndef MY_WIN32
+    #define RS232   2
+    #define BOCHS   4
+#else
+    #define WIN32DBG    2
+#endif
 
 #define BOCHS_OUTPUT_PORT   0xE9
 
+#ifndef MY_WIN32
 ULONG DebugPort = RS232;
+#else
+ULONG DebugPort = WIN32DBG;
+#endif
 
 /* Serial debug connection */
 #include <cportlib/uartinfo.h>
@@ -123,6 +132,7 @@ DebugInit(
             PortString += CONST_STR_LEN("SCREEN");
             DebugPort |= SCREEN;
         }
+#ifndef MY_WIN32
         else if (_strnicmp(PortString, "BOCHS", CONST_STR_LEN("BOCHS")) == 0)
         {
             PortString += CONST_STR_LEN("BOCHS");
@@ -149,6 +159,13 @@ DebugInit(
                     ComPortAddress = UlongToPtr(Value);
             }
         }
+#else
+        else if (_strnicmp(PortString, "COM", CONST_STR_LEN("COM")) == 0)
+        {
+            PortString += CONST_STR_LEN("COM");
+            DebugPort |= WIN32DBG;
+        }
+#endif
 
         PortString = strstr(PortString, "DEBUGPORT");
    }
@@ -172,19 +189,24 @@ DebugInit(
 Done:
     Initialized = TRUE;
 
+#ifndef MY_WIN32
     /* Try to initialize the port; if it fails, remove the corresponding flag */
     if (DebugPort & RS232)
     {
         if (!Rs232PortInitialize(ComPortAddress, ComPortBaudRate))
             DebugPort &= ~RS232;
     }
+#endif
 }
 
-VOID DebugPrintChar(UCHAR Character)
+static VOID
+DebugPrintChar(
+    _In_ UCHAR Character)
 {
     if (Character == '\n')
         DebugStartOfLine = TRUE;
 
+#ifndef MY_WIN32
     if (DebugPort & RS232)
     {
         if (Character == '\n')
@@ -196,6 +218,13 @@ VOID DebugPrintChar(UCHAR Character)
     {
         WRITE_PORT_UCHAR((PUCHAR)BOCHS_OUTPUT_PORT, Character);
     }
+#else
+    // if (DebugPort & WIN32DBG)
+    // {
+    //     CHAR str[2] = {Character, '\0'};
+    //     OutputDebugStringA(str);
+    // }
+#endif
     if (DebugPort & SCREEN)
     {
         MachConsPutChar(Character);
@@ -227,6 +256,13 @@ DbgPrint(const char *Format, ...)
     ptr = Buffer;
     while (Length--)
         DebugPrintChar(*ptr++);
+#ifdef MY_WIN32
+    /* Directly output the string */
+    if (DebugPort & WIN32DBG)
+    {
+        OutputDebugStringA(Buffer);
+    }
+#endif
 
     return 0;
 }
@@ -235,8 +271,8 @@ VOID
 DbgPrint2(ULONG Mask, ULONG Level, const char *File, ULONG Line, char *Format, ...)
 {
     va_list ap;
+    char* ptr;
     char Buffer[2096];
-    char *ptr = Buffer;
 
     /* Mask out unwanted debug messages */
     if (!(DbgChannels[Mask] & Level) && !(Level & DBG_DEFAULT_LEVELS))
@@ -272,10 +308,18 @@ DbgPrint2(ULONG Mask, ULONG Level, const char *File, ULONG Line, char *Format, .
     vsprintf(Buffer, Format, ap);
     va_end(ap);
 
+    ptr = Buffer;
     while (*ptr)
     {
         DebugPrintChar(*ptr++);
     }
+#ifdef MY_WIN32
+    /* Directly output the string */
+    if (DebugPort & WIN32DBG)
+    {
+        OutputDebugStringA(Buffer);
+    }
+#endif
 }
 
 VOID

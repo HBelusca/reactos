@@ -198,10 +198,12 @@ LoadAndBootSector(
     UiUnInitialize("Booting...");
     IniCleanup();
 
+#ifndef MY_WIN32
 #ifndef UEFIBOOT
     /* Boot the loaded sector code */
     ChainLoadBiosBootSectorCode(BiosDriveNumber, PartitionNumber);
 #endif
+#endif /* MY_WIN32 */
     /* Must not return! */
     return ESUCCESS;
 }

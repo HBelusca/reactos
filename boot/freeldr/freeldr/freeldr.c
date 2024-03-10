@@ -101,10 +101,12 @@ VOID __cdecl BootMain(IN PCCH CmdLine)
 
     TRACE("BootMain() called.\n");
 
+#ifndef MY_WIN32
 #ifndef UEFIBOOT
     /* Check if the CPU is new enough */
     FrLdrCheckCpuCompatibility(); // FIXME: Should be done inside MachInit!
 #endif
+#endif /* MY_WIN32 */
 
     /* UI pre-initialization */
     if (!UiInitialize(FALSE))
@@ -136,11 +138,13 @@ VOID __cdecl BootMain(IN PCCH CmdLine)
         goto Quit;
     }
 
+#if !defined(MY_WIN32) && !defined(UEFIBOOT)
     /* Launch second stage loader */
     if (LaunchSecondStageLoader() != ESUCCESS)
-    {
         UiMessageBoxCritical("Unable to load second stage loader.");
-    }
+#else
+    RunLoader();
+#endif
 
 Quit:
     /* If we reach this point, something went wrong before, therefore reboot */

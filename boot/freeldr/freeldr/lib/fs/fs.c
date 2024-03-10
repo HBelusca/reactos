@@ -25,6 +25,13 @@
 #include <debug.h>
 DBG_DEFAULT_CHANNEL(FILESYSTEM);
 
+#ifdef MY_WIN32
+/* win32.c */
+const DEVVTBL*
+Win32Mount(
+    _In_ ULONG DeviceId);
+#endif
+
 /* GLOBALS ********************************************************************/
 
 #define TAG_DEVICE_NAME 'NDsF'
@@ -58,6 +65,9 @@ typedef const DEVVTBL* (*PFS_MOUNT)(ULONG DeviceId);
 
 PFS_MOUNT FileSystems[] =
 {
+#ifdef MY_WIN32
+    Win32Mount,
+#endif
 #ifndef _M_ARM
     IsoMount,
 #endif
@@ -68,8 +78,10 @@ PFS_MOUNT FileSystems[] =
     ExtMount,
 #endif
 #if defined(_M_IX86) || defined(_M_AMD64)
+#ifndef MY_WIN32
 #ifndef UEFIBOOT
     PxeMount,
+#endif
 #endif
 #endif
 };
