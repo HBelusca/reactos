@@ -35,24 +35,101 @@
 
 /* Public headers */
 #ifdef __REACTOS__
+
+//#include <stdio.h>
+#include <stdlib.h>
+//#include <ctype.h>
+
+#ifndef MY_WIN32
+
 #include <ntddk.h>
 #include <ntifs.h>
 #include <ioaccess.h>
 #include <arc/arc.h>
-#include <ketypes.h>
-#include <mmtypes.h>
 #include <ndk/asm.h>
+#include <ndk/ketypes.h>
+#include <ndk/mmtypes.h>
 #include <ndk/rtlfuncs.h>
 #include <ndk/ldrtypes.h>
 #include <ndk/halfuncs.h>
-#include <stdlib.h>
-#include <stdio.h>
-#include <ctype.h>
 #include <ntdddisk.h>
 #include <internal/hal.h>
 #include <drivers/pci/pci.h>
 #include <winerror.h>
 #include <ntstrsafe.h>
+
+#else
+
+#include <ntstatus.h>
+#define WIN32_LEAN_AND_MEAN
+#define WIN32_NO_STATUS
+#include <windef.h>
+#include <winbase.h>
+#undef CreateDirectory
+
+#if 0
+    #include <ntddk.h>
+    //#define NTOS_MODE_USER
+    //#include <ndk/rtlfuncs.h>
+    #include <ndk/rtltypes.h>
+    #include <ndk/ldrtypes.h>
+
+    //#include <ntdef.h>
+    //#include <winnt.h>
+    #include <mmtypes.h>
+#else
+    #ifndef __REACTOS__
+    //#include <winternl.h>
+    //#include <devioctl.h>
+    //#include <ntdddisk.h>
+    #else
+    #include <ndk/iofuncs.h>
+    #include <ndk/obfuncs.h>
+    #include <ndk/rtlfuncs.h>
+    #endif
+    //#include <ndk/mmtypes.h>
+#endif
+
+/* See xdk/mmtypes.h included in WDK */
+typedef ULONG_PTR PFN_NUMBER, *PPFN_NUMBER;
+#include <arc/arc.h>
+#define KSEG0_BASE  __ImageBase // HACK since we compile here in user-mode
+
+// #include <ntdddisk.h> // For PARTITION_STYLE_BRFR
+#include <winioctl.h> // for replacing ntdddisk.h
+#define PARTITION_STYLE_BRFR 128
+typedef struct _DEVICE_OBJECT DEVICE_OBJECT, *PDEVICE_OBJECT;
+//typedef PVOID PDEVICE_OBJECT;
+
+PVOID
+NTAPI
+ExAllocatePool(
+    _In_ POOL_TYPE PoolType,
+    _In_ SIZE_T NumberOfBytes);
+
+PVOID
+NTAPI
+ExAllocatePoolWithTag(
+    _In_ POOL_TYPE PoolType,
+    _In_ SIZE_T NumberOfBytes,
+    _In_ ULONG Tag);
+
+VOID
+NTAPI
+ExFreePool(
+    _Pre_notnull_ PVOID P);
+
+VOID
+NTAPI
+ExFreePoolWithTag(
+    _Pre_notnull_ PVOID P,
+    _In_ ULONG Tag);
+
+#include <drivers/pci/pci.h>
+#include <ntstrsafe.h>
+
+#endif // MY_WIN32
+
 #else
 #include <ntsup.h>
 #endif

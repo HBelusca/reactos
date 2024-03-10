@@ -23,10 +23,14 @@
 #include <debug.h>
 DBG_DEFAULT_CHANNEL(MEMORY);
 
-PVOID    PageLookupTableAddress = NULL;
-PFN_NUMBER TotalPagesInLookupTable = 0;
+
+/**
+ * Adaptation of meminit.c
+ **/
+
+PVOID PageLookupTableAddress = NULL;
+PFN_NUMBER TotalPagesInLookupTable = 0; // Used in lib/cache/cache.c
 PFN_NUMBER FreePagesInLookupTable = 0;
-PFN_NUMBER LastFreePageHint = 0;
 PFN_NUMBER MmLowestPhysicalPage = 0xFFFFFFFF;
 PFN_NUMBER MmHighestPhysicalPage = 0;
 
@@ -341,6 +345,7 @@ BOOLEAN MmInitializeMemoryManager(VOID)
     }
 #endif
 
+#if 0
     // Find address for the page lookup table
     TotalPagesInLookupTable = MmGetAddressablePageCountIncludingHoles();
     PageLookupTableAddress = MmFindLocationForPageLookupTable(TotalPagesInLookupTable);
@@ -362,347 +367,209 @@ BOOLEAN MmInitializeMemoryManager(VOID)
 
     FreePagesInLookupTable = MmCountFreePagesInLookupTable(PageLookupTableAddress,
                                                         TotalPagesInLookupTable);
+#endif
 
     MmInitializeHeap(PageLookupTableAddress);
 
     TRACE("Memory Manager initialized. 0x%x pages available.\n", FreePagesInLookupTable);
 
-
     return TRUE;
 }
 
 
-PFN_NUMBER MmGetPageNumberFromAddress(PVOID Address)
-{
-    return ((ULONG_PTR)Address) / MM_PAGE_SIZE;
-}
 
-PFN_NUMBER MmGetAddressablePageCountIncludingHoles(VOID)
-{
-    const FREELDR_MEMORY_DESCRIPTOR* MemoryDescriptor = NULL;
-    PFN_NUMBER PageCount;
+/**
+ * Adaptation of mm.c
+ **/
 
-    //
-    // Go through the whole memory map to get max address
-    //
-    while ((MemoryDescriptor = ArcGetMemoryDescriptor(MemoryDescriptor)) != NULL)
+
+#if DBG
+VOID    DumpMemoryAllocMap(VOID);
+#endif // DBG
+
+PFN_NUMBER LoaderPagesSpanned = 0;
+
+PVOID MmAllocateMemoryWithType(SIZE_T MemorySize, TYPE_OF_MEMORY MemoryType)
+{
+    PFN_NUMBER PagesNeeded;
+    // PFN_NUMBER FirstFreePageFromEnd;
+    PVOID MemPointer;
+
+    if (MemorySize == 0)
     {
-        //
-        // Check if we got a higher end page address
-        //
-        if (MemoryDescriptor->BasePage + MemoryDescriptor->PageCount > MmHighestPhysicalPage)
-        {
-            //
-            // Yes, remember it if this is real memory
-            //
-            if (MemoryDescriptor->MemoryType == LoaderFree)
-                MmHighestPhysicalPage = MemoryDescriptor->BasePage + MemoryDescriptor->PageCount;
-        }
-
-        //
-        // Check if we got a higher (usable) start page address
-        //
-        if (MemoryDescriptor->BasePage < MmLowestPhysicalPage)
-        {
-            //
-            // Yes, remember it if this is real memory
-            //
-            MmLowestPhysicalPage = MemoryDescriptor->BasePage;
-        }
+        WARN("MmAllocateMemory() called for 0 bytes. Returning NULL.\n");
+        UiMessageBoxCritical("Memory allocation failed: MmAllocateMemory() called for 0 bytes.");
+        return NULL;
     }
 
-    TRACE("lo/hi %lx %lx\n", MmLowestPhysicalPage, MmHighestPhysicalPage);
-    PageCount = MmHighestPhysicalPage - MmLowestPhysicalPage;
-    TRACE("MmGetAddressablePageCountIncludingHoles() returning 0x%x\n", PageCount);
-    return PageCount;
-}
+    MemorySize = ROUND_UP(MemorySize, 4);
 
-PVOID MmFindLocationForPageLookupTable(PFN_NUMBER TotalPageCount)
-{
-    const FREELDR_MEMORY_DESCRIPTOR* MemoryDescriptor = NULL;
-    SIZE_T PageLookupTableSize;
-    PFN_NUMBER RequiredPages;
-    PFN_NUMBER CandidateBasePage = 0;
-    PFN_NUMBER CandidatePageCount = 0;
-    PFN_NUMBER PageLookupTableEndPage;
-    PVOID PageLookupTableMemAddress;
+    // Find out how many blocks it will take to
+    // satisfy this allocation
+    PagesNeeded = ROUND_UP(MemorySize, MM_PAGE_SIZE) / MM_PAGE_SIZE;
 
-    // Calculate how much pages we need to keep the page lookup table
-    PageLookupTableSize = TotalPageCount * sizeof(PAGE_LOOKUP_TABLE_ITEM);
-    RequiredPages = PageLookupTableSize / MM_PAGE_SIZE;
-
-    // Search the highest memory block big enough to contain lookup table
-    while ((MemoryDescriptor = ArcGetMemoryDescriptor(MemoryDescriptor)) != NULL)
+    MemPointer = VirtualAlloc(NULL, MemorySize, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE /*PAGE_EXECUTE_READWRITE*/);
+    if (!MemPointer)
     {
-        // Continue, if memory is not free
-        if (MemoryDescriptor->MemoryType != LoaderFree) continue;
-
-        // Continue, if the block is not big enough
-        if (MemoryDescriptor->PageCount < RequiredPages) continue;
-
-        // Continue, if it is not at a higher address than previous address
-        if (MemoryDescriptor->BasePage < CandidateBasePage) continue;
-
-        // Continue, if the address is too high
-        if (MemoryDescriptor->BasePage + RequiredPages >= MM_MAX_PAGE_LOADER) continue;
-
-        // Memory block is more suitable than the previous one
-        CandidateBasePage = MemoryDescriptor->BasePage;
-        CandidatePageCount = MemoryDescriptor->PageCount;
+        ERR("Memory allocation failed in MmAllocateMemory(). Not enough free memory to allocate %d bytes.\n", MemorySize);
+        UiMessageBoxCritical("Memory allocation failed: out of memory.");
+        return NULL;
     }
 
-    // Calculate the end address for the lookup table
-    PageLookupTableEndPage = min(CandidateBasePage + CandidatePageCount,
-                                 MM_MAX_PAGE_LOADER);
+    // FreePagesInLookupTable -= PagesNeeded;
 
-    // Calculate the virtual address
-    PageLookupTableMemAddress = (PVOID)((PageLookupTableEndPage * PAGE_SIZE)
-                                        - PageLookupTableSize);
+    TRACE("Allocated %d bytes (%d pages) of memory (type %ld)\n" /* "starting at page 0x%lx.\n" */,
+          MemorySize, PagesNeeded, MemoryType /*, FirstFreePageFromEnd*/);
+    TRACE("Memory allocation pointer: 0x%x\n", MemPointer);
 
-    TRACE("MmFindLocationForPageLookupTable() returning 0x%x\n", PageLookupTableMemAddress);
+    // Update LoaderPagesSpanned count
+    if ((((ULONG_PTR)MemPointer + MemorySize + PAGE_SIZE - 1) >> PAGE_SHIFT) > LoaderPagesSpanned)
+        LoaderPagesSpanned = (((ULONG_PTR)MemPointer + MemorySize + PAGE_SIZE - 1) >> PAGE_SHIFT);
 
-    return PageLookupTableMemAddress;
+    // Now return the pointer
+    return MemPointer;
 }
 
-VOID MmInitPageLookupTable(PVOID PageLookupTable, PFN_NUMBER TotalPageCount)
+PVOID MmAllocateMemoryAtAddress(SIZE_T MemorySize, PVOID DesiredAddress, TYPE_OF_MEMORY MemoryType)
 {
-    const FREELDR_MEMORY_DESCRIPTOR* MemoryDescriptor = NULL;
-    PFN_NUMBER PageLookupTableStartPage;
-    PFN_NUMBER PageLookupTablePageCount;
+    PFN_NUMBER PagesNeeded;
+    PFN_NUMBER StartPageNumber;
+    PVOID MemPointer;
 
-    TRACE("MmInitPageLookupTable()\n");
-
-    // Mark every page as allocated initially
-    // We will go through and mark pages again according to the memory map
-    // But this will mark any holes not described in the map as allocated
-    MmMarkPagesInLookupTable(PageLookupTable, MmLowestPhysicalPage, TotalPageCount, LoaderFirmwarePermanent);
-
-    // Parse the whole memory map
-    while ((MemoryDescriptor = ArcGetMemoryDescriptor(MemoryDescriptor)) != NULL)
+    if (MemorySize == 0)
     {
-        // Mark used pages in the lookup table
-
-        if (MemoryDescriptor->BasePage + MemoryDescriptor->PageCount <= TotalPageCount)
-        {
-            TRACE("Marking pages 0x%lx-0x%lx as type %s\n",
-                  MemoryDescriptor->BasePage,
-                  MemoryDescriptor->BasePage + MemoryDescriptor->PageCount,
-                  MmGetSystemMemoryMapTypeString(MemoryDescriptor->MemoryType));
-            MmMarkPagesInLookupTable(PageLookupTable,
-                                     MemoryDescriptor->BasePage,
-                                     MemoryDescriptor->PageCount,
-                                     MemoryDescriptor->MemoryType);
-        }
-        else
-            TRACE("Ignoring pages 0x%lx-0x%lx (%s)\n",
-                  MemoryDescriptor->BasePage,
-                  MemoryDescriptor->BasePage + MemoryDescriptor->PageCount,
-                  MmGetSystemMemoryMapTypeString(MemoryDescriptor->MemoryType));
+        WARN("MmAllocateMemoryAtAddress() called for 0 bytes. Returning NULL.\n");
+        UiMessageBoxCritical("Memory allocation failed: MmAllocateMemoryAtAddress() called for 0 bytes.");
+        return NULL;
     }
 
-    // Mark the pages that the lookup table occupies as reserved
-    PageLookupTableStartPage = MmGetPageNumberFromAddress(PageLookupTable);
-    PageLookupTablePageCount = MmGetPageNumberFromAddress((PVOID)((ULONG_PTR)PageLookupTable + ROUND_UP(TotalPageCount * sizeof(PAGE_LOOKUP_TABLE_ITEM), MM_PAGE_SIZE))) - PageLookupTableStartPage;
-    TRACE("Marking the page lookup table pages as reserved StartPage: 0x%x PageCount: 0x%x\n", PageLookupTableStartPage, PageLookupTablePageCount);
-    MmMarkPagesInLookupTable(PageLookupTable, PageLookupTableStartPage, PageLookupTablePageCount, LoaderFirmwareTemporary);
+    // Find out how many blocks it will take to
+    // satisfy this allocation
+    PagesNeeded = ROUND_UP(MemorySize, MM_PAGE_SIZE) / MM_PAGE_SIZE;
+
+    // Get the starting page number
+    // StartPageNumber = MmGetPageNumberFromAddress(DesiredAddress);
+    StartPageNumber = (ULONG_PTR)DesiredAddress / MM_PAGE_SIZE;
+
+    MemPointer = VirtualAlloc(DesiredAddress, MemorySize, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE /*PAGE_EXECUTE_READWRITE*/);
+    if (!MemPointer)
+    {
+        ERR("Memory allocation failed in MmAllocateMemory(). Not enough free memory to allocate %d bytes.\n", MemorySize);
+        UiMessageBoxCritical("Memory allocation failed: out of memory.");
+        return NULL;
+    }
+
+    // FreePagesInLookupTable -= PagesNeeded;
+
+    TRACE("Allocated %d bytes (%d pages) of memory starting at page %d.\n", MemorySize, PagesNeeded, StartPageNumber);
+    TRACE("Memory allocation pointer: 0x%x\n", MemPointer);
+
+    // Update LoaderPagesSpanned count
+    if ((((ULONG_PTR)MemPointer + MemorySize + PAGE_SIZE - 1) >> PAGE_SHIFT) > LoaderPagesSpanned)
+        LoaderPagesSpanned = (((ULONG_PTR)MemPointer + MemorySize + PAGE_SIZE - 1) >> PAGE_SHIFT);
+
+    // Now return the pointer
+    return MemPointer;
 }
 
-VOID MmMarkPagesInLookupTable(PVOID PageLookupTable, PFN_NUMBER StartPage, PFN_NUMBER PageCount, TYPE_OF_MEMORY PageAllocated)
+VOID MmSetMemoryType(PVOID MemoryAddress, SIZE_T MemorySize, TYPE_OF_MEMORY NewType)
 {
-    PPAGE_LOOKUP_TABLE_ITEM RealPageLookupTable = (PPAGE_LOOKUP_TABLE_ITEM)PageLookupTable;
-    PFN_NUMBER Index;
-    TRACE("MmMarkPagesInLookupTable()\n");
-
-    /* Validate the range */
-    if ((StartPage < MmLowestPhysicalPage) ||
-        ((StartPage + PageCount - 1) > MmHighestPhysicalPage))
-    {
-        ERR("Memory (0x%lx:0x%lx) outside of lookup table! Valid range: 0x%lx-0x%lx.\n",
-            StartPage, PageCount, MmLowestPhysicalPage, MmHighestPhysicalPage);
-        return;
-    }
-
-    StartPage -= MmLowestPhysicalPage;
-    for (Index=StartPage; Index<(StartPage+PageCount); Index++)
-    {
 #if 0
-        if ((Index <= (StartPage + 16)) || (Index >= (StartPage+PageCount-16)))
-        {
-            TRACE("Index = 0x%x StartPage = 0x%x PageCount = 0x%x\n", Index, StartPage, PageCount);
-        }
+    PFN_NUMBER PagesNeeded;
+    PFN_NUMBER StartPageNumber;
+
+    // Find out how many blocks it will take to
+    // satisfy this allocation
+    PagesNeeded = ROUND_UP(MemorySize, MM_PAGE_SIZE) / MM_PAGE_SIZE;
+
+    // Get the starting page number
+    StartPageNumber = MmGetPageNumberFromAddress(MemoryAddress);
+
+    // Set new type for these pages
+    MmAllocatePagesInLookupTable(PageLookupTableAddress, StartPageNumber, PagesNeeded, NewType);
 #endif
-        RealPageLookupTable[Index].PageAllocated = PageAllocated;
-        RealPageLookupTable[Index].PageAllocationLength = (PageAllocated != LoaderFree) ? 1 : 0;
-    }
-    TRACE("MmMarkPagesInLookupTable() Done\n");
 }
 
-VOID MmAllocatePagesInLookupTable(PVOID PageLookupTable, PFN_NUMBER StartPage, PFN_NUMBER PageCount, TYPE_OF_MEMORY MemoryType)
+PVOID MmAllocateHighestMemoryBelowAddress(SIZE_T MemorySize, PVOID DesiredAddress, TYPE_OF_MEMORY MemoryType)
 {
-    PPAGE_LOOKUP_TABLE_ITEM        RealPageLookupTable = (PPAGE_LOOKUP_TABLE_ITEM)PageLookupTable;
-    PFN_NUMBER                    Index;
+#if 0
+    PFN_NUMBER PagesNeeded;
+    PFN_NUMBER FirstFreePageFromEnd;
+    PFN_NUMBER DesiredAddressPageNumber;
+    PVOID MemPointer;
 
-    StartPage -= MmLowestPhysicalPage;
-    for (Index=StartPage; Index<(StartPage+PageCount); Index++)
+    if (MemorySize == 0)
     {
-        RealPageLookupTable[Index].PageAllocated = MemoryType;
-        RealPageLookupTable[Index].PageAllocationLength = (Index == StartPage) ? PageCount : 0;
+        WARN("MmAllocateHighestMemoryBelowAddress() called for 0 bytes. Returning NULL.\n");
+        UiMessageBoxCritical("Memory allocation failed: MmAllocateHighestMemoryBelowAddress() called for 0 bytes.");
+        return NULL;
     }
+
+    // Find out how many blocks it will take to
+    // satisfy this allocation
+    PagesNeeded = ROUND_UP(MemorySize, MM_PAGE_SIZE) / MM_PAGE_SIZE;
+
+    // Get the page number for their desired address
+    DesiredAddressPageNumber = (ULONG_PTR)DesiredAddress / MM_PAGE_SIZE;
+
+    // If we don't have enough available mem
+    // then return NULL
+    if (FreePagesInLookupTable < PagesNeeded)
+    {
+        ERR("Memory allocation failed in MmAllocateHighestMemoryBelowAddress(). Not enough free memory to allocate %d bytes.\n", MemorySize);
+        UiMessageBoxCritical("Memory allocation failed: out of memory.");
+        return NULL;
+    }
+
+    FirstFreePageFromEnd = MmFindAvailablePagesBeforePage(PageLookupTableAddress, TotalPagesInLookupTable, PagesNeeded, DesiredAddressPageNumber);
+
+    if (FirstFreePageFromEnd == 0)
+    {
+        ERR("Memory allocation failed in MmAllocateHighestMemoryBelowAddress(). Not enough free memory to allocate %d bytes.\n", MemorySize);
+        UiMessageBoxCritical("Memory allocation failed: out of memory.");
+        return NULL;
+    }
+
+    MmAllocatePagesInLookupTable(PageLookupTableAddress, FirstFreePageFromEnd, PagesNeeded, MemoryType);
+
+    FreePagesInLookupTable -= PagesNeeded;
+    MemPointer = (PVOID)((ULONG_PTR)FirstFreePageFromEnd * MM_PAGE_SIZE);
+
+    TRACE("Allocated %d bytes (%d pages) of memory starting at page %d.\n", MemorySize, PagesNeeded, FirstFreePageFromEnd);
+    TRACE("Memory allocation pointer: 0x%x\n", MemPointer);
+
+    // Update LoaderPagesSpanned count
+    if ((((ULONG_PTR)MemPointer + MemorySize) >> PAGE_SHIFT) > LoaderPagesSpanned)
+        LoaderPagesSpanned = (((ULONG_PTR)MemPointer + MemorySize) >> PAGE_SHIFT);
+
+    // Now return the pointer
+    return MemPointer;
+#else
+    ERR("MmAllocateHighestMemoryBelowAddress(MemorySize 0x%x, DesiredAddress 0x%p, MemoryType %lu) is UNIMPLEMENTED\n",
+        MemorySize, DesiredAddress, MemoryType);
+    return NULL;
+#endif
 }
 
-PFN_NUMBER MmCountFreePagesInLookupTable(PVOID PageLookupTable, PFN_NUMBER TotalPageCount)
+VOID MmFreeMemory(PVOID MemoryPointer)
 {
-    PPAGE_LOOKUP_TABLE_ITEM        RealPageLookupTable = (PPAGE_LOOKUP_TABLE_ITEM)PageLookupTable;
-    PFN_NUMBER                            Index;
-    PFN_NUMBER                            FreePageCount;
-
-    FreePageCount = 0;
-    for (Index=0; Index<TotalPageCount; Index++)
-    {
-        if (RealPageLookupTable[Index].PageAllocated == LoaderFree)
-        {
-            FreePageCount++;
-        }
-    }
-
-    return FreePageCount;
+    BOOL Success = VirtualFree(MemoryPointer, 0, MEM_RELEASE);
+    ASSERT(Success);
 }
 
-PFN_NUMBER MmFindAvailablePages(PVOID PageLookupTable, PFN_NUMBER TotalPageCount, PFN_NUMBER PagesNeeded, BOOLEAN FromEnd)
+#if DBG
+VOID DumpMemoryAllocMap(VOID)
 {
-    PPAGE_LOOKUP_TABLE_ITEM RealPageLookupTable = (PPAGE_LOOKUP_TABLE_ITEM)PageLookupTable;
-    PFN_NUMBER AvailablePagesSoFar;
-    PFN_NUMBER Index;
-
-    if (LastFreePageHint > TotalPageCount)
-    {
-        LastFreePageHint = TotalPageCount;
-    }
-
-    AvailablePagesSoFar = 0;
-    if (FromEnd)
-    {
-        /* Allocate "high" (from end) pages */
-        for (Index=LastFreePageHint-1; Index>0; Index--)
-        {
-            if (RealPageLookupTable[Index].PageAllocated != LoaderFree)
-            {
-                AvailablePagesSoFar = 0;
-                continue;
-            }
-            else
-            {
-                AvailablePagesSoFar++;
-            }
-
-            if (AvailablePagesSoFar >= PagesNeeded)
-            {
-                return Index + MmLowestPhysicalPage;
-            }
-        }
-    }
-    else
-    {
-        TRACE("Alloc low memory, LastFreePageHint 0x%x, TPC 0x%x\n", LastFreePageHint, TotalPageCount);
-        /* Allocate "low" pages */
-        for (Index=1; Index < LastFreePageHint; Index++)
-        {
-            if (RealPageLookupTable[Index].PageAllocated != LoaderFree)
-            {
-                AvailablePagesSoFar = 0;
-                continue;
-            }
-            else
-            {
-                AvailablePagesSoFar++;
-            }
-
-            if (AvailablePagesSoFar >= PagesNeeded)
-            {
-                return Index - AvailablePagesSoFar + 1 + MmLowestPhysicalPage;
-            }
-        }
-    }
-
-    return 0;
+    ERR("WIN32: MM: Dumping memory map is NOT SUPPORTED\n");
 }
+#endif // DBG
 
-PFN_NUMBER MmFindAvailablePagesBeforePage(PVOID PageLookupTable, PFN_NUMBER TotalPageCount, PFN_NUMBER PagesNeeded, PFN_NUMBER LastPage)
+PPAGE_LOOKUP_TABLE_ITEM MmGetMemoryMap(PFN_NUMBER *NoEntries)
 {
-    PPAGE_LOOKUP_TABLE_ITEM        RealPageLookupTable = (PPAGE_LOOKUP_TABLE_ITEM)PageLookupTable;
-    PFN_NUMBER                    AvailablePagesSoFar;
-    PFN_NUMBER                    Index;
+    PPAGE_LOOKUP_TABLE_ITEM RealPageLookupTable = (PPAGE_LOOKUP_TABLE_ITEM)PageLookupTableAddress;
 
-    if (LastPage > TotalPageCount)
-    {
-        return MmFindAvailablePages(PageLookupTable, TotalPageCount, PagesNeeded, TRUE);
-    }
+    *NoEntries = TotalPagesInLookupTable;
 
-    AvailablePagesSoFar = 0;
-    for (Index=LastPage-1; Index>0; Index--)
-    {
-        if (RealPageLookupTable[Index].PageAllocated != LoaderFree)
-        {
-            AvailablePagesSoFar = 0;
-            continue;
-        }
-        else
-        {
-            AvailablePagesSoFar++;
-        }
-
-        if (AvailablePagesSoFar >= PagesNeeded)
-        {
-            return Index + MmLowestPhysicalPage;
-        }
-    }
-
-    return 0;
+    return RealPageLookupTable;
 }
 
-VOID MmUpdateLastFreePageHint(PVOID PageLookupTable, PFN_NUMBER TotalPageCount)
-{
-    PPAGE_LOOKUP_TABLE_ITEM        RealPageLookupTable = (PPAGE_LOOKUP_TABLE_ITEM)PageLookupTable;
-    PFN_NUMBER                            Index;
-
-    for (Index=TotalPageCount-1; Index>0; Index--)
-    {
-        if (RealPageLookupTable[Index].PageAllocated == LoaderFree)
-        {
-            LastFreePageHint = Index + 1 + MmLowestPhysicalPage;
-            break;
-        }
-    }
-}
-
-BOOLEAN MmAreMemoryPagesAvailable(PVOID PageLookupTable, PFN_NUMBER TotalPageCount, PVOID PageAddress, PFN_NUMBER PageCount)
-{
-    PPAGE_LOOKUP_TABLE_ITEM        RealPageLookupTable = (PPAGE_LOOKUP_TABLE_ITEM)PageLookupTable;
-    PFN_NUMBER                            StartPage;
-    PFN_NUMBER                            Index;
-
-    StartPage = MmGetPageNumberFromAddress(PageAddress);
-
-    if (StartPage < MmLowestPhysicalPage) return FALSE;
-
-    StartPage -= MmLowestPhysicalPage;
-
-    // Make sure they aren't trying to go past the
-    // end of available memory
-    if ((StartPage + PageCount) > TotalPageCount)
-    {
-        return FALSE;
-    }
-
-    for (Index = StartPage; Index < (StartPage + PageCount); Index++)
-    {
-        // If this page is allocated then there obviously isn't
-        // memory available so return FALSE
-        if (RealPageLookupTable[Index].PageAllocated != LoaderFree)
-        {
-            return FALSE;
-        }
-    }
-
-    return TRUE;
-}

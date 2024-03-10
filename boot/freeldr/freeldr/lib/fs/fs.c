@@ -25,6 +25,13 @@
 #include <debug.h>
 DBG_DEFAULT_CHANNEL(FILESYSTEM);
 
+#ifdef MY_WIN32
+/* win32.c */
+const DEVVTBL*
+Win32Mount(
+    _In_ ULONG DeviceId);
+#endif
+
 /* GLOBALS ********************************************************************/
 
 #define TAG_DEVICE_NAME 'NDsF'
@@ -146,6 +153,10 @@ ARC_STATUS ArcOpen(CHAR* Path, OPENMODE OpenMode, ULONG* FileId)
                 }
 
                 /* Try to detect the file system */
+#ifdef MY_WIN32
+                FileData[DeviceId].FileFuncTable = Win32Mount(DeviceId);
+                if (!FileData[DeviceId].FileFuncTable)
+#endif
 #ifndef _M_ARM
                 FileData[DeviceId].FileFuncTable = IsoMount(DeviceId);
                 if (!FileData[DeviceId].FileFuncTable)
@@ -160,9 +171,11 @@ ARC_STATUS ArcOpen(CHAR* Path, OPENMODE OpenMode, ULONG* FileId)
                     FileData[DeviceId].FileFuncTable = Ext2Mount(DeviceId);
 #endif
 #if defined(_M_IX86) || defined(_M_AMD64)
+#ifndef MY_WIN32
 #ifndef UEFIBOOT
                 if (!FileData[DeviceId].FileFuncTable)
                     FileData[DeviceId].FileFuncTable = PxeMount(DeviceId);
+#endif
 #endif
 #endif
                 if (!FileData[DeviceId].FileFuncTable)

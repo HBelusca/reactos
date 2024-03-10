@@ -51,10 +51,12 @@ VOID __cdecl BootMain(IN PCCH CmdLine)
 
     TRACE("BootMain() called.\n");
 
+#ifndef MY_WIN32
 #ifndef UEFIBOOT
     /* Check if the CPU is new enough */
     FrLdrCheckCpuCompatibility(); // FIXME: Should be done inside MachInit!
 #endif
+#endif /* MY_WIN32 */
 
     /* UI pre-initialization */
     if (!UiInitialize(FALSE))
@@ -73,6 +75,7 @@ VOID __cdecl BootMain(IN PCCH CmdLine)
     /* Initialize I/O subsystem */
     FsInit();
 
+    // FIXME: Here we may need to do a platform-specific action...
     RunLoader();
 
 Quit:
