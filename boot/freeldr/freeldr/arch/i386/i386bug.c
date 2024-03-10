@@ -3,6 +3,73 @@
 
 #include <debug.h>
 
+#ifdef MY_WIN32
+typedef struct _KTRAP_FRAME
+{
+    ULONG DbgEbp;
+    ULONG DbgEip;
+    ULONG DbgArgMark;
+    ULONG DbgArgPointer;
+    ULONG TempSegCs;
+    ULONG TempEsp;
+    ULONG Dr0;
+    ULONG Dr1;
+    ULONG Dr2;
+    ULONG Dr3;
+    ULONG Dr6;
+    ULONG Dr7;
+    ULONG SegGs;
+    ULONG SegEs;
+    ULONG SegDs;
+    ULONG Edx;
+    ULONG Ecx;
+    ULONG Eax;
+    ULONG PreviousPreviousMode;
+    struct _EXCEPTION_REGISTRATION_RECORD FAR *ExceptionList;
+    ULONG SegFs;
+    ULONG Edi;
+    ULONG Esi;
+    ULONG Ebx;
+    ULONG Ebp;
+    ULONG ErrCode;
+    ULONG Eip;
+    ULONG SegCs;
+    ULONG EFlags;
+    ULONG HardwareEsp;
+    ULONG HardwareSegSs;
+    ULONG V86Es;
+    ULONG V86Ds;
+    ULONG V86Fs;
+    ULONG V86Gs;
+} KTRAP_FRAME, *PKTRAP_FRAME;
+
+typedef struct _DESCRIPTOR
+{
+    USHORT Pad;
+    USHORT Limit;
+    ULONG Base;
+} KDESCRIPTOR, *PKDESCRIPTOR;
+
+typedef struct _KSPECIAL_REGISTERS
+{
+    ULONG Cr0;
+    ULONG Cr2;
+    ULONG Cr3;
+    ULONG Cr4;
+    ULONG KernelDr0;
+    ULONG KernelDr1;
+    ULONG KernelDr2;
+    ULONG KernelDr3;
+    ULONG KernelDr6;
+    ULONG KernelDr7;
+    KDESCRIPTOR Gdtr;
+    KDESCRIPTOR Idtr;
+    USHORT Tr;
+    USHORT Ldtr;
+    ULONG Reserved[6];
+} KSPECIAL_REGISTERS, *PKSPECIAL_REGISTERS;
+#endif
+
 typedef struct _FRAME
 {
     struct _FRAME* Next;
@@ -221,9 +288,14 @@ FrLdrBugCheckWithMessage(
     PrintTextV(Format, argptr);
     va_end(argptr);
 
+#ifndef MY_WIN32
     _disable();
     __halt();
+#endif
     for (;;);
+#ifdef MY_WIN32
+    ExitProcess(0xDEADBEEF);
+#endif
 }
 
 void
@@ -250,9 +322,14 @@ FrLdrBugCheckEx(
     PrintText("Bug Information:\n    %p\n    %p\n    %p\n    %p\n    %p\n\n",
               BugCheckInfo[0], BugCheckInfo[1], BugCheckInfo[2], BugCheckInfo[3], BugCheckInfo[4]);
 
+#ifndef MY_WIN32
     _disable();
     __halt();
+#endif
     for (;;);
+#ifdef MY_WIN32
+    ExitProcess(0xDEADBEEF);
+#endif
 }
 
 void

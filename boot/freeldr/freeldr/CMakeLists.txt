@@ -138,3 +138,6 @@ include(pcat.cmake)
 if(NOT ARCH STREQUAL "i386" OR NOT (SARCH STREQUAL "pc98" OR SARCH STREQUAL "xbox"))
     include(uefi.cmake)
 endif()
+
+## The Win32 Emulation tester
+include(win32.cmake)

@@ -44,6 +44,50 @@ EditCustomBootNTOS(
     EditCustomBootReactOS(OperatingSystem, FALSE);
 }
 
+#ifdef MY_WIN32
+
+static ARC_STATUS
+LoadReactOSSetup(
+    _In_ ULONG Argc,
+    _In_ PCHAR Argv[],
+    _In_ PCHAR Envp[])
+{
+    ERR("WIN32: LoadReactOSSetup not supported\n");
+    return EINVAL;
+}
+
+static ARC_STATUS
+LoadAndBootDevice(
+    _In_ ULONG Argc,
+    _In_ PCHAR Argv[],
+    _In_ PCHAR Envp[])
+{
+    ERR("WIN32: LoadAndBootDevice not supported\n");
+    return EINVAL;
+}
+
+static ARC_STATUS
+LoadAndBootLinux(
+    _In_ ULONG Argc,
+    _In_ PCHAR Argv[],
+    _In_ PCHAR Envp[])
+{
+    ERR("WIN32: LoadAndBootLinux not supported\n");
+    return EINVAL;
+}
+
+static ARC_STATUS
+LoadAndBootWindows(
+    _In_ ULONG Argc,
+    _In_ PCHAR Argv[],
+    _In_ PCHAR Envp[])
+{
+    ERR("WIN32: LoadAndBootWindows not supported\n");
+    return EINVAL;
+}
+
+#endif /* MY_WIN32 */
+
 typedef struct _OS_LOADING_METHOD
 {
     PCSTR BootType;
@@ -227,10 +271,12 @@ LoadOperatingSystem(
         return; // Unexpected failure.
 
 #ifdef _M_IX86
+#ifndef MY_WIN32
 #ifndef UEFIBOOT
     /* Install the drive mapper according to this section drive mappings */
     DriveMapMapDrivesInSection(SectionId);
 #endif
+#endif /* MY_WIN32 */
 #endif
 
     /* Start the OS loader */
@@ -317,6 +363,7 @@ VOID RunLoader(VOID)
         return;
     }
 
+#ifndef MY_WIN32
 #ifdef _M_IX86
 #ifndef UEFIBOOT
     /* Load additional SCSI driver (if any) */
@@ -326,6 +373,7 @@ VOID RunLoader(VOID)
     }
 #endif
 #endif
+#endif /* MY_WIN32 */
 
     if (!IniFileInitialize())
     {
