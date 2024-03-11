@@ -426,6 +426,9 @@ VOID RunLoader(VOID)
     /* Find all the message box settings and run them */
     UiShowMessageBoxesInSection(SectionId);
 
+    // /* Redraw the backdrop */
+    // UiDrawBackdrop();
+
     for (;;)
     {
         ULONG_PTR Result;
@@ -467,14 +470,13 @@ VOID RunLoader(VOID)
         default:
             /* Load the chosen operating system */
             LoadOperatingSystem(&OperatingSystemList[SelectedOperatingSystem]);
-        }
-
-        /* If we get there, the OS loader failed. As it may have
-         * messed up the display, re-initialize the UI. */
+            /* If we get there, the OS loader failed. As it may have
+             * messed up the display, re-initialize the UI. */
 #ifndef _M_ARM
-        UiVtbl.UnInitialize();
+            UiVtbl.UnInitialize();
 #endif
-        UiInitialize(TRUE);
+            UiInitialize(TRUE);
+        }
     }
 
 Reboot:
