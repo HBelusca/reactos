@@ -324,21 +324,20 @@ GetTimeOut(
 
 BOOLEAN
 MainBootMenuKeyPressFilter(
-    IN ULONG KeyPress,
-    IN ULONG SelectedMenuItem,
-    IN PVOID Context OPTIONAL)
+    _In_ ULONG KeyPress,
+    _Out_ PULONG_PTR ReturnValue/*,
+    _In_ ULONG SelectedItem,
+    _In_opt_ PVOID Context*/)
 {
     switch (KeyPress)
     {
     case KEY_F8:
-        DoOptionsMenu(&((OperatingSystemItem*)Context)[SelectedMenuItem]);
-        return TRUE;
-
 #ifdef HAS_OPTION_MENU_EDIT_CMDLINE
     case KEY_F10:
-        EditOperatingSystemEntry(&((OperatingSystemItem*)Context)[SelectedMenuItem]);
-        return TRUE;
 #endif
+        /* We handle these keys, return them to the caller */
+        *ReturnValue = KeyPress;
+        return TRUE;
 
     default:
         /* We didn't handle the key */
@@ -353,7 +352,6 @@ VOID RunLoader(VOID)
     ULONG     OperatingSystemCount;
     OperatingSystemItem* OperatingSystemList;
     PCSTR*    OperatingSystemDisplayNames;
-    ULONG     DefaultOperatingSystem;
     ULONG     SelectedOperatingSystem;
     ULONG     i;
 
@@ -403,7 +401,7 @@ VOID RunLoader(VOID)
 
     OperatingSystemList = InitOperatingSystemList(SectionId,
                                                   &OperatingSystemCount,
-                                                  &DefaultOperatingSystem);
+                                                  &SelectedOperatingSystem);
     if (!OperatingSystemList)
     {
         UiMessageBox("Unable to read operating systems section in freeldr.ini.\nPress ENTER to reboot.");
@@ -430,28 +428,46 @@ VOID RunLoader(VOID)
 
     for (;;)
     {
+        ULONG_PTR Result;
+
         /* Show the operating system list menu */
-        if (!UiDisplayScreen("Please select the operating system to start:",
-                             "For troubleshooting and advanced startup options for "
-                                 "ReactOS, press F8.",
-                             TRUE,
-                             OperatingSystemDisplayNames,
-                             OperatingSystemCount,
-                             DefaultOperatingSystem,
-                             TimeOut,
-                             &SelectedOperatingSystem,
-                             FALSE,
-                             MainBootMenuKeyPressFilter,
-                             OperatingSystemList))
+        Result = UiDisplayScreen("Please select the operating system to start:",
+                                 "For troubleshooting and advanced startup options for "
+                                     "ReactOS, press F8.",
+                                 TRUE,
+                                 OperatingSystemDisplayNames,
+                                 OperatingSystemCount,
+                                 SelectedOperatingSystem,
+                                 TimeOut,
+                                 &SelectedOperatingSystem,
+                                 FALSE,
+                                 MainBootMenuKeyPressFilter,
+                                 NULL /*OperatingSystemList*/);
+        if (!Result)
         {
+            /* The user pressed ESC */
             UiMessageBox("Press ENTER to reboot.");
             goto Reboot;
         }
 
         TimeOut = -1;
 
-        /* Load the chosen operating system */
-        LoadOperatingSystem(&OperatingSystemList[SelectedOperatingSystem]);
+        switch (Result)
+        {
+        case KEY_F8:
+            DoOptionsMenu(&OperatingSystemList[SelectedOperatingSystem]);
+            continue;
+
+#ifdef HAS_OPTION_MENU_EDIT_CMDLINE
+        case KEY_F10:
+            EditOperatingSystemEntry(&OperatingSystemList[SelectedOperatingSystem]);
+            continue;
+#endif
+
+        default:
+            /* Load the chosen operating system */
+            LoadOperatingSystem(&OperatingSystemList[SelectedOperatingSystem]);
+        }
 
         /* If we get there, the OS loader failed. As it may have
          * messed up the display, re-initialize the UI. */

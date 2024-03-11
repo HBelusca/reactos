@@ -22,7 +22,7 @@ UiProcessMenuKeyboardEvent(
     _In_ PUI_MENU_INFO MenuInfo,
     _In_ ULONG KeyEvent);
 
-BOOLEAN
+ULONG_PTR
 UiDisplayMenuEx(
     _Inout_ PUI_MENU_INFO MenuInfo/*,
     _Out_ PULONG SelectedItem,
@@ -69,7 +69,7 @@ UiDisplayMenuEx(
     return TRUE;
 }
 
-BOOLEAN
+ULONG_PTR
 UiDisplayMenu(
     _In_ PCSTR ItemList[],
     _In_ ULONG ItemCount,

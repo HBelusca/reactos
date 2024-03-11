@@ -159,7 +159,7 @@ UiProcessMenuKeyboardEvent(
 TuiCalcMenuBoxSize(
     _Inout_ PUI_MENU_INFO MenuInfo);
 
-BOOLEAN
+ULONG_PTR
 UiDisplayScreen(
     _In_opt_ PCSTR Header,
     _In_opt_ PCSTR Footer,
@@ -175,15 +175,15 @@ UiDisplayScreen(
 {
     UI_SCREEN_INFO ScreenInfo;
     UI_MENU_INFO MenuInfo;
+    ULONG_PTR Result = TRUE;
+    ULONG KeyPress;
     ULONG LastClockSecond;
     ULONG CurrentClockSecond;
-    ULONG KeyPress;
 
     /*
      * Before taking any default action if there is no timeout,
      * check whether the supplied key filter callback function
-     * may handle a specific user keypress. If it does, the
-     * timeout is cancelled.
+     * may handle a specific user keypress.
      */
     if (!TimeOut && KeyPressFilter && MachConsKbHit())
     {
@@ -192,15 +192,10 @@ UiDisplayScreen(
         if (KeyPress == KEY_EXTENDED)
             KeyPress = MachConsGetCh();
 
-        /*
-         * Call the supplied key filter callback function
-         * to see if it is going to handle this keypress.
-         */
-        if (KeyPressFilter(KeyPress, DefaultItem, Context))
-        {
-            /* It processed the key character, cancel the timeout */
-            TimeOut = -1;
-        }
+        /* Call the supplied key filter callback function */
+        KeyPressFilter(KeyPress, &Result/*, DefaultItem, Context*/);
+        /* Fall back to the case below to either perform the
+         * default action, or to return the handled command */
     }
 
     /* Check if there is no timeout */
@@ -209,7 +204,7 @@ UiDisplayScreen(
         /* Return the default selected item */
         if (SelectedItem)
             *SelectedItem = DefaultItem;
-        return TRUE;
+        return Result;
     }
 
     /* Setup the UI_MENU_INFO structure */
@@ -252,33 +247,30 @@ UiDisplayScreen(
             /* Check if the timeout is not already complete */
             if (ScreenInfo.TimeOut != -1)
             {
-                /* Cancel it and remove it */
+                /* Cancel and remove it */
                 ScreenInfo.TimeOut = -1;
                 UiDrawTimeout(&ScreenInfo);
             }
 
-            /*
-             * Call the supplied key filter callback function
-             * to see if it is going to handle this keypress.
-             */
+            /* Call the supplied key filter callback function
+             * to see if it is going to handle this keypress */
             if (KeyPressFilter &&
-                KeyPressFilter(KeyPress, MenuInfo.SelectedItem, ScreenInfo.Context))
+                KeyPressFilter(KeyPress, &Result/*, MenuInfo.SelectedItem, ScreenInfo.Context*/))
             {
-                /* It processed the key character, so redraw the screen */
-                UiVtbl.DrawScreen(&ScreenInfo);
+                /* It processed the key, so exit the loop and return
+                 * both the selected item and the handled command */
+                break;
             }
-            else
-            {
-                /* Check for ENTER or ESC */
-                if (KeyPress == KEY_ENTER) break;
-                if (CanEscape && KeyPress == KEY_ESC) return FALSE;
 
-                /* Process key presses for menu */
-                if (UiProcessMenuKeyboardEvent(&MenuInfo, KeyPress))
-                {
-                    /* Key handled, update the video buffer */
-                    VideoCopyOffScreenBufferToVRAM();
-                }
+            /* Check for ENTER or ESC */
+            if (KeyPress == KEY_ENTER) break;
+            if (CanEscape && (KeyPress == KEY_ESC)) return FALSE;
+
+            /* Process key presses for menu */
+            if (UiProcessMenuKeyboardEvent(&MenuInfo, KeyPress))
+            {
+                /* Key handled, update the video buffer */
+                VideoCopyOffScreenBufferToVRAM();
             }
         }
 
@@ -314,7 +306,7 @@ UiDisplayScreen(
     /* Return the selected item */
     if (SelectedItem)
         *SelectedItem = MenuInfo.SelectedItem;
-    return TRUE;
+    return Result;
 }
 
 #if 0

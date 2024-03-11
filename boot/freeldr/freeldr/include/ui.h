@@ -232,9 +232,10 @@ typedef struct _UI_SCREEN_INFO
 typedef
 BOOLEAN
 (*UiKeyPressFilterCallback)(
-    IN ULONG KeyPress,
-    IN ULONG SelectedItem,
-    IN PVOID Context OPTIONAL);
+    _In_ ULONG KeyPress,
+    _Out_ PULONG_PTR ReturnValue/*,
+    _In_ ULONG SelectedItem,
+    _In_opt_ PVOID Context*/);
 
 VOID
 UiDrawTimeout(
@@ -246,7 +247,7 @@ UiDisplayMenuEx(
     _Out_ PULONG SelectedItem,
     _In_ BOOLEAN CanEscape*/);
 
-BOOLEAN
+ULONG_PTR
 UiDisplayMenu(
     _In_ PCSTR ItemList[],
     _In_ ULONG ItemCount,
@@ -258,7 +259,7 @@ VOID
 UiDrawMenu(
     _In_ PUI_MENU_INFO MenuInfo);
 
-BOOLEAN
+ULONG_PTR
 UiDisplayScreen(
     _In_opt_ PCSTR Header,
     _In_opt_ PCSTR Footer,
