@@ -22,6 +22,64 @@ UiProcessMenuKeyboardEvent(
     _In_ PUI_MENU_INFO MenuInfo,
     _In_ ULONG KeyEvent);
 
+// UI_EVENT_PROC
+static ULONG_PTR
+NTAPI
+UiMenuProc(
+    _In_ PVOID UiContext,
+    /**/_In_opt_ PVOID UserContext,/**/
+    _In_ UI_EVENT Event,
+    _In_ ULONG_PTR EventParam)
+{
+    switch (Event)
+    {
+    case UiKeyPress:
+    {
+        PUI_MENU_INFO MenuInfo = (PUI_MENU_INFO)UserContext;
+        ULONG KeyPress = (ULONG)EventParam;
+        // BOOLEAN Extended = !!(EventParam & 0x0100);
+
+        /* Filter out the extended flag */
+        KeyPress &= ~0x0100;
+
+#if 0
+        /* Check for ENTER or ESC */
+        if (KeyPress == KEY_ENTER)
+        {
+            UiEndUi(UiContext, TRUE);
+            return TRUE;
+        }
+        else if (MenuInfo->CanEscape && (KeyPress == KEY_ESC))
+        {
+            UiEndUi(UiContext, FALSE);
+            return TRUE;
+        }
+        else
+#endif
+        /* Process the key */
+        if (UiProcessMenuKeyboardEvent(MenuInfo, KeyPress))
+        {
+            /* Key handled, redraw */
+            UiRedraw(UiContext);
+        }
+
+        return TRUE;
+    }
+
+    case UiPaint:
+    {
+        // PUI_MENU_INFO MenuInfo = (PUI_MENU_INFO)UserContext;
+        break;
+    }
+
+    default:
+        break;
+    }
+
+    /* Perform default action */
+    return FALSE;
+}
+
 ULONG_PTR
 UiDisplayMenuEx(
     _Inout_ PUI_MENU_INFO MenuInfo/*,
@@ -36,6 +94,10 @@ UiDisplayMenuEx(
     UiDrawMenu(MenuInfo);
 
 #if 0
+    Result = UiDispatch(UiMenuProc, MenuInfo);
+    if (!Result)
+        return FALSE;
+
     /* Process keys */
     while (TRUE)
     {

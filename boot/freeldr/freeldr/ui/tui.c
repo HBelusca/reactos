@@ -183,7 +183,7 @@ TuiDrawCenteredText(
             Y = RealTop;
             LastIndex++;
             Temp[0] = TextString[Index];
-            Temp[1] = 0;
+            Temp[1] = ANSI_NULL;
             TuiDrawText(X, Y, Temp, Attr);
         }
     }
@@ -541,6 +541,111 @@ TuiTextToFillStyle(
     }
 
     return LIGHT_FILL;
+}
+
+
+/* UI Helpers that may be promoted to ui.h one day ***************************/
+
+/*
+ * Private UI descriptor
+ */
+typedef struct _UI_PRIVATE_CONTEXT
+{
+    PVOID UserContext; //< User-specific context given at initialization time.
+    ULONG_PTR RetVal;  //< Return value to set when quitting the UI.
+    struct {
+        BOOLEAN Quit    : 1; //< TRUE to quit the UI; FALSE by default.
+        BOOLEAN DoPaint : 1; //< TRUE when a paint operation needs to be done.
+    };
+} UI_PRIVATE_CONTEXT, *PUI_PRIVATE_CONTEXT;
+
+VOID // BOOLEAN
+UiEndUi(
+    _In_ PVOID UiContext,
+    _In_ ULONG_PTR Result)
+{
+    PUI_PRIVATE_CONTEXT context = (PUI_PRIVATE_CONTEXT)UiContext;
+    context->Quit = TRUE;
+    context->RetVal = Result;
+}
+
+ULONG_PTR
+UiDispatch(
+    _In_ UI_EVENT_PROC EventProc,
+    _In_opt_ PVOID InitParam)
+{
+    UI_PRIVATE_CONTEXT uiContext = {InitParam, -1, {FALSE, TRUE}};
+    ULONG LastClockSecond;
+    ULONG CurrentClockSecond;
+    ULONG KeyEvent; // High byte: extended (TRUE/FALSE); Low byte: key.
+
+    /* Start the timer */
+    LastClockSecond = 0; // ArcGetRelativeTime();
+    /***/TuiUpdateDateTime();/***/
+
+    // TODO: UI initialization?
+    uiContext.RetVal = 0;
+    uiContext.DoPaint = TRUE; // Force initial repaint
+
+    /* Process events */
+    while (!uiContext.Quit) // or do { ... } while (!uiContext.Quit); ??
+    {
+        /* Now do the actual repaint and reset the flag */
+        if (uiContext.DoPaint)
+        {
+            EventProc((PVOID)&uiContext, /**/InitParam,/**/ UiPaint, 0);
+            VideoCopyOffScreenBufferToVRAM();
+            uiContext.DoPaint = FALSE;
+        }
+
+        /* Check for key presses */
+        if (MachConsKbHit())
+        {
+            /* Get the key (get the extended key if needed) */
+            KeyEvent = MachConsGetCh();
+            if (KeyEvent == KEY_EXTENDED)
+            {
+                KeyEvent = MachConsGetCh();
+                KeyEvent |= 0x0100; // Set extended flag.
+            }
+
+            EventProc((PVOID)&uiContext, /**/InitParam,/**/ UiKeyPress, (ULONG_PTR)KeyEvent);
+            if (uiContext.Quit)
+                break;
+        }
+
+        MachHwIdle();
+
+        /* Get the updated time, and check if more than a second has elapsed */
+        CurrentClockSecond = ArcGetRelativeTime();
+        if (CurrentClockSecond != LastClockSecond)
+        {
+            /* Update the time information */
+            LastClockSecond = CurrentClockSecond;
+
+            // FIXME: Theme-specific
+            /* Update the date & time */
+            TuiUpdateDateTime();
+            uiContext.DoPaint = TRUE; // UiRedraw(&uiContext);
+
+            EventProc((PVOID)&uiContext, /**/InitParam,/**/ UiTimer, 0);
+        }
+
+        // MachHwIdle();
+    }
+
+    // TODO: UI termination?
+
+    return uiContext.RetVal;
+}
+
+VOID // BOOLEAN
+UiRedraw(
+    _In_ PVOID UiContext)
+{
+    PUI_PRIVATE_CONTEXT context = (PUI_PRIVATE_CONTEXT)UiContext;
+    context->DoPaint = TRUE;
+    // Do more things?
 }
 
 /* EOF */

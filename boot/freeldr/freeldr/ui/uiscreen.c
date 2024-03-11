@@ -159,6 +159,112 @@ UiProcessMenuKeyboardEvent(
 TuiCalcMenuBoxSize(
     _Inout_ PUI_MENU_INFO MenuInfo);
 
+// UI_EVENT_PROC
+static ULONG_PTR
+NTAPI
+UiScreenProc(
+    _In_ PVOID UiContext,
+    /**/_In_opt_ PVOID UserContext,/**/
+    _In_ UI_EVENT Event,
+    _In_ ULONG_PTR EventParam)
+{
+    switch (Event)
+    {
+    case UiKeyPress:
+    {
+        PUI_SCREEN_INFO ScreenInfo = (PUI_SCREEN_INFO)UserContext;
+        ULONG_PTR Result = TRUE;
+        ULONG KeyPress = (ULONG)EventParam;
+        // BOOLEAN Extended = !!(EventParam & 0x0100);
+
+        /* Filter out the extended flag */
+        KeyPress &= ~0x0100;
+
+        /* Check if the timeout is not already complete */
+        if (ScreenInfo->TimeOut != -1)
+        {
+            /* Cancel and remove it */
+            ScreenInfo->TimeOut = -1;
+            UiDrawTimeout(ScreenInfo);
+            UiRedraw(UiContext);
+        }
+
+        //
+        // FIXME: Do this via custom user-specified UI proc?
+        //
+        /* Call the supplied key filter callback function
+         * to see if it is going to handle this keypress */
+        if (ScreenInfo->KeyPressFilter &&
+            ScreenInfo->KeyPressFilter(KeyPress, &Result/*, ScreenInfo->Menu->SelectedItem, ScreenInfo->Context*/))
+        {
+            /* It processed the key, so exit the screen and return
+             * both the selected item and the handled command */
+            UiEndUi(UiContext, Result);
+            return TRUE;
+        }
+        //
+        // In what follows is the default key processing...
+        //
+
+        /* Check for ENTER or ESC */
+        if (KeyPress == KEY_ENTER)
+        {
+            UiEndUi(UiContext, TRUE);
+            return TRUE;
+        }
+        else if (ScreenInfo->CanEscape && (KeyPress == KEY_ESC))
+        {
+            UiEndUi(UiContext, FALSE);
+            return TRUE;
+        }
+        else
+        /* Process key presses for menu */
+        if (UiProcessMenuKeyboardEvent(ScreenInfo->Menu, KeyPress))
+        {
+            /* Key handled, redraw */
+            UiRedraw(UiContext);
+        }
+
+        return TRUE;
+    }
+
+    case UiPaint:
+    {
+        // PUI_SCREEN_INFO ScreenInfo = (PUI_SCREEN_INFO)UserContext;
+        break;
+    }
+
+    case UiTimer:
+    {
+        PUI_SCREEN_INFO ScreenInfo = (PUI_SCREEN_INFO)UserContext;
+
+        // FIXME: Theme-specific
+        /* Update the date & time */
+        TuiUpdateDateTime();
+
+        /* If there is a countdown, update it */
+        if (ScreenInfo->TimeOut > 0)
+        {
+            ScreenInfo->TimeOut--;
+            UiDrawTimeout(ScreenInfo);
+            UiRedraw(UiContext);
+        }
+        else if (ScreenInfo->TimeOut == 0)
+        {
+            /* A timeout occurred, exit the menu */
+            UiEndUi(UiContext, TRUE);
+            return TRUE;
+        }
+    }
+
+    default:
+        break;
+    }
+
+    /* Perform default action */
+    return FALSE;
+}
+
 ULONG_PTR
 UiDisplayScreen(
     _In_opt_ PCSTR Header,
@@ -176,9 +282,6 @@ UiDisplayScreen(
     UI_SCREEN_INFO ScreenInfo;
     UI_MENU_INFO MenuInfo;
     ULONG_PTR Result = TRUE;
-    ULONG KeyPress;
-    ULONG LastClockSecond;
-    ULONG CurrentClockSecond;
 
     /*
      * Before taking any default action if there is no timeout,
@@ -188,7 +291,7 @@ UiDisplayScreen(
     if (!TimeOut && KeyPressFilter && MachConsKbHit())
     {
         /* Get the key */
-        KeyPress = MachConsGetCh();
+        ULONG KeyPress = MachConsGetCh();
         if (KeyPress == KEY_EXTENDED)
             KeyPress = MachConsGetCh();
 
@@ -219,7 +322,9 @@ UiDisplayScreen(
     ScreenInfo.ShowBootOptions = ShowBootOptions;
     ScreenInfo.Menu = &MenuInfo;
     ScreenInfo.TimeOut = TimeOut;
+    ScreenInfo.CanEscape = CanEscape;
     ScreenInfo.Context = Context;
+    ScreenInfo.KeyPressFilter = KeyPressFilter;
 
     // FIXME: Theme-specific
     /* Calculate the size of the menu box */
@@ -228,80 +333,9 @@ UiDisplayScreen(
     // UiDrawTimeout(&ScreenInfo);
     UiVtbl.DrawScreen(&ScreenInfo);
 
-    VideoCopyOffScreenBufferToVRAM();
-
-    /* Get the current second of time */
-    LastClockSecond = ArcGetTime()->Second;
-
-    /* Process keys */
-    while (TRUE)
-    {
-        /* Check for a keypress */
-        if (MachConsKbHit())
-        {
-            /* Get the key */
-            KeyPress = MachConsGetCh();
-            if (KeyPress == KEY_EXTENDED)
-                KeyPress = MachConsGetCh();
-
-            /* Check if the timeout is not already complete */
-            if (ScreenInfo.TimeOut != -1)
-            {
-                /* Cancel and remove it */
-                ScreenInfo.TimeOut = -1;
-                UiDrawTimeout(&ScreenInfo);
-            }
-
-            /* Call the supplied key filter callback function
-             * to see if it is going to handle this keypress */
-            if (KeyPressFilter &&
-                KeyPressFilter(KeyPress, &Result/*, MenuInfo.SelectedItem, ScreenInfo.Context*/))
-            {
-                /* It processed the key, so exit the loop and return
-                 * both the selected item and the handled command */
-                break;
-            }
-
-            /* Check for ENTER or ESC */
-            if (KeyPress == KEY_ENTER) break;
-            if (CanEscape && (KeyPress == KEY_ESC)) return FALSE;
-
-            /* Process key presses for menu */
-            if (UiProcessMenuKeyboardEvent(&MenuInfo, KeyPress))
-            {
-                /* Key handled, update the video buffer */
-                VideoCopyOffScreenBufferToVRAM();
-            }
-        }
-
-        /* Get the updated time, and check if more than a second has elapsed */
-        CurrentClockSecond = ArcGetTime()->Second;
-        if (CurrentClockSecond != LastClockSecond)
-        {
-            /* Update the time information */
-            LastClockSecond = CurrentClockSecond;
-
-            // FIXME: Theme-specific
-            /* Update the date & time */
-            TuiUpdateDateTime();
-
-            /* If there is a countdown, update it */
-            if (ScreenInfo.TimeOut > 0)
-            {
-                ScreenInfo.TimeOut--;
-                UiDrawTimeout(&ScreenInfo);
-            }
-            else if (ScreenInfo.TimeOut == 0)
-            {
-                /* A timeout occurred, exit this loop and return selection */
-                VideoCopyOffScreenBufferToVRAM();
-                break;
-            }
-            VideoCopyOffScreenBufferToVRAM();
-        }
-
-        MachHwIdle();
-    }
+    Result = UiDispatch(UiScreenProc, &ScreenInfo);
+    if (!Result)
+        return FALSE;
 
     /* Return the selected item */
     if (SelectedItem)

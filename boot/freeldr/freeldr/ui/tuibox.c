@@ -75,7 +75,7 @@ TuiDrawMsgBoxCommon(
     {
         if ((MessageText[i] == '\n') || (MessageText[i] == ANSI_NULL))
         {
-            temp[j] = 0;
+            temp[j] = ANSI_NULL;
             j = 0;
             UiDrawText(x1 + 2, y1 + 1 + curline, temp,
                        ATTR(UiMessageBoxFgColor, UiMessageBoxBgColor));
@@ -86,6 +86,29 @@ TuiDrawMsgBoxCommon(
             temp[j++] = MessageText[i];
         }
     }
+}
+
+// UI_EVENT_PROC
+static ULONG_PTR
+NTAPI
+TuiMsgBoxProc(
+    _In_ PVOID UiContext,
+    /**/_In_opt_ PVOID UserContext,/**/
+    _In_ UI_EVENT Event,
+    _In_ ULONG_PTR EventParam)
+{
+    if (Event == UiKeyPress)
+    {
+        CHAR key = (CHAR)EventParam;
+        if ((key == KEY_ENTER) || (key == KEY_SPACE) || (key == KEY_ESC))
+        {
+            UiEndUi(UiContext, 0);
+            return TRUE;
+        }
+    }
+
+    /* Perform default action */
+    return FALSE;
 }
 
 VOID
@@ -109,7 +132,6 @@ TuiMessageBoxCritical(
     _In_ PCSTR MessageText)
 {
     SMALL_RECT BoxRect;
-    CHAR key;
 
     /* Draw the common parts of the message box */
     TuiDrawMsgBoxCommon(MessageText, &BoxRect);
@@ -123,40 +145,204 @@ TuiMessageBoxCritical(
     /* Draw status text */
     UiDrawStatusText("Press ENTER to continue");
 
-    VideoCopyOffScreenBufferToVRAM();
+    UiDispatch(TuiMsgBoxProc, NULL);
+}
 
-    for (;;)
+typedef struct _TUI_EDIT_CONTEXT
+{
+    PCHAR Buffer;   //< Text buffer
+    ULONG Length;   //< Text buffer size  // --> rename to BufferLength ?
+    ULONG TextLength;   //< Current text length
+    ULONG TextPosition; //< Current text position where the cursor points to
+
+    ULONG Line;     //< Top/Bottom coordinate of the edit box
+    ULONG StartX;   //< Left coordinate of the edit box
+    ULONG EndX;     //< Right coordinate of the edit box
+    ULONG CursorX;  //< Horizontal cursor coordinate (vertical coordinate given by 'Line')
+    ULONG TextDisplayIndex;
+} TUI_EDIT_CONTEXT, *PTUI_EDIT_CONTEXT;
+
+// UI_EVENT_PROC
+static ULONG_PTR
+NTAPI
+TuiEditBoxProc(
+    _In_ PVOID UiContext,
+    /**/_In_opt_ PVOID UserContext,/**/
+    _In_ UI_EVENT Event,
+    _In_ ULONG_PTR EventParam)
+{
+    switch (Event)
     {
-        if (MachConsKbHit())
-        {
-            key = MachConsGetCh();
-            if (key == KEY_EXTENDED)
-                key = MachConsGetCh();
+    case UiKeyPress:
+    {
+        PTUI_EDIT_CONTEXT editCtx = (PTUI_EDIT_CONTEXT)UserContext;
+        CHAR key = (CHAR)EventParam;
+        BOOLEAN Extended = !!(EventParam & 0x0100);
 
-            if ((key == KEY_ENTER) || (key == KEY_SPACE) || (key == KEY_ESC))
-                break;
+        /* Default MsgBox control */
+        if (key == KEY_ENTER)
+        {
+            UiEndUi(UiContext, TRUE);
+            return TRUE;
+        }
+        else if (key == KEY_ESC)
+        {
+            UiEndUi(UiContext, FALSE);
+            return TRUE;
+        }
+        else
+        /* Enter the text. Please keep in mind that the default input mode
+         * of the edit boxes is in insertion mode, that is, you can insert
+         * text without erasing the existing one. */
+        if (key == KEY_BACKSPACE) // Remove a character
+        {
+            if ( (editCtx->TextLength > 0) && (editCtx->TextPosition > 0) &&
+                 (editCtx->TextPosition <= editCtx->TextLength) )
+            {
+                editCtx->TextPosition--;
+                memmove(editCtx->Buffer + editCtx->TextPosition,
+                        editCtx->Buffer + editCtx->TextPosition + 1,
+                        editCtx->TextLength - editCtx->TextPosition);
+                editCtx->TextLength--;
+                editCtx->Buffer[editCtx->TextLength] = ANSI_NULL;
+                UiRedraw(UiContext);
+            }
+            else
+            {
+                MachBeep();
+            }
+        }
+        else if (Extended && key == KEY_DELETE) // Remove a character
+        {
+            if ( (editCtx->TextLength > 0) &&
+                 (editCtx->TextPosition < editCtx->TextLength) )
+            {
+                memmove(editCtx->Buffer + editCtx->TextPosition,
+                        editCtx->Buffer + editCtx->TextPosition + 1,
+                        editCtx->TextLength - editCtx->TextPosition);
+                editCtx->TextLength--;
+                editCtx->Buffer[editCtx->TextLength] = ANSI_NULL;
+                UiRedraw(UiContext);
+            }
+            else
+            {
+                MachBeep();
+            }
+        }
+        else if (Extended && key == KEY_HOME) // Go to the start of the buffer
+        {
+            editCtx->TextPosition = 0;
+            UiRedraw(UiContext);
+        }
+        else if (Extended && key == KEY_END) // Go to the end of the buffer
+        {
+            editCtx->TextPosition = editCtx->TextLength;
+            UiRedraw(UiContext);
+        }
+        else if (Extended && key == KEY_RIGHT) // Go right
+        {
+            if (editCtx->TextPosition < editCtx->TextLength)
+            {
+                editCtx->TextPosition++;
+                UiRedraw(UiContext);
+            }
+            else
+            {
+                MachBeep();
+            }
+        }
+        else if (Extended && key == KEY_LEFT) // Go left
+        {
+            if (editCtx->TextPosition > 0)
+            {
+                editCtx->TextPosition--;
+                UiRedraw(UiContext);
+            }
+            else
+            {
+                MachBeep();
+            }
+        }
+        else if (!Extended) // Add this key to the buffer
+        {
+            if ( (editCtx->TextLength   < editCtx->Length - 1) &&
+                 (editCtx->TextPosition < editCtx->Length - 1) )
+            {
+                memmove(editCtx->Buffer + editCtx->TextPosition + 1,
+                        editCtx->Buffer + editCtx->TextPosition,
+                        editCtx->TextLength - editCtx->TextPosition);
+                editCtx->Buffer[editCtx->TextPosition] = key;
+                editCtx->TextPosition++;
+                editCtx->TextLength++;
+                editCtx->Buffer[editCtx->TextLength] = ANSI_NULL;
+                UiRedraw(UiContext);
+            }
+            else
+            {
+                MachBeep();
+            }
+        }
+        else
+        {
+            MachBeep();
         }
 
-        TuiUpdateDateTime();
-
-        VideoCopyOffScreenBufferToVRAM();
-
-        MachHwIdle();
+        return TRUE;
     }
+
+    case UiPaint:
+    {
+        PTUI_EDIT_CONTEXT editCtx = (PTUI_EDIT_CONTEXT)UserContext;
+
+        // TODO Improve: Detect whether it's just the cursor that moves,
+        // and not the text (i.e. TextDisplayIndex), in which case we
+        // don't need to redraw everything.
+
+        /* Draw the edit box background */
+        UiFillArea(editCtx->StartX,
+                   editCtx->Line,
+                   editCtx->EndX,
+                   editCtx->Line,
+                   ' ', ATTR(UiEditBoxTextColor, UiEditBoxBgColor));
+
+        /* Draw the text */
+        if (editCtx->TextPosition > (editCtx->EndX - editCtx->StartX))
+        {
+            editCtx->TextDisplayIndex = editCtx->TextPosition - (editCtx->EndX - editCtx->StartX);
+            editCtx->CursorX = editCtx->EndX;
+        }
+        else
+        {
+            editCtx->TextDisplayIndex = 0;
+            editCtx->CursorX = editCtx->StartX + editCtx->TextPosition;
+        }
+        UiDrawText2(editCtx->StartX,
+                    editCtx->Line,
+                    editCtx->EndX - editCtx->StartX + 1,
+                    &editCtx->Buffer[editCtx->TextDisplayIndex],
+                    ATTR(UiEditBoxTextColor, UiEditBoxBgColor));
+
+        /* Move the cursor */
+        MachVideoSetTextCursorPosition(editCtx->CursorX, editCtx->Line);
+
+        break;
+    }
+
+    default:
+        break;
+    }
+
+    /* Perform default action */
+    return FALSE;
 }
 
 BOOLEAN TuiEditBox(PCSTR MessageText, PCHAR EditTextBuffer, ULONG Length)
 {
-    CHAR    key;
-    BOOLEAN Extended;
-    INT     EditBoxLine;
-    ULONG   EditBoxStartX, EditBoxEndX;
-    INT     EditBoxCursorX;
-    ULONG   EditBoxTextLength, EditBoxTextPosition;
-    INT     EditBoxTextDisplayIndex;
-    BOOLEAN ReturnCode;
     SMALL_RECT BoxRect;
     PVOID ScreenBuffer;
+    BOOLEAN ReturnCode;
+
+    TUI_EDIT_CONTEXT editCtx = {EditTextBuffer, Length, 0, 0};
 
     /* Save the screen contents */
     ScreenBuffer = TuiSaveScreen();
@@ -164,160 +350,23 @@ BOOLEAN TuiEditBox(PCSTR MessageText, PCHAR EditTextBuffer, ULONG Length)
     /* Draw the common parts of the message box */
     TuiDrawMsgBoxCommon(MessageText, &BoxRect);
 
-    EditBoxTextLength = (ULONG)strlen(EditTextBuffer);
-    EditBoxTextLength = min(EditBoxTextLength, Length - 1);
-    EditBoxTextPosition = 0;
-    EditBoxLine = BoxRect.Bottom - 2;
-    EditBoxStartX = BoxRect.Left + 3;
-    EditBoxEndX = BoxRect.Right - 3;
-
-    // Draw the edit box background and the text
-    UiFillArea(EditBoxStartX, EditBoxLine, EditBoxEndX, EditBoxLine, ' ', ATTR(UiEditBoxTextColor, UiEditBoxBgColor));
-    UiDrawText2(EditBoxStartX, EditBoxLine, EditBoxEndX - EditBoxStartX + 1, EditTextBuffer, ATTR(UiEditBoxTextColor, UiEditBoxBgColor));
-
-    // Show the cursor
-    EditBoxCursorX = EditBoxStartX;
-    MachVideoSetTextCursorPosition(EditBoxCursorX, EditBoxLine);
-    MachVideoHideShowTextCursor(TRUE);
-
-    // Draw status text
+    /* Draw status text */
     UiDrawStatusText("Press ENTER to continue, or ESC to cancel");
 
-    VideoCopyOffScreenBufferToVRAM();
+    editCtx.TextLength = (ULONG)strlen(EditTextBuffer);
+    editCtx.TextLength = min(editCtx.TextLength, Length - 1);
+    editCtx.TextPosition = 0;
+    editCtx.Line = BoxRect.Bottom - 2;
+    editCtx.StartX = BoxRect.Left + 3;
+    editCtx.EndX = BoxRect.Right - 3;
 
-    //
-    // Enter the text. Please keep in mind that the default input mode
-    // of the edit boxes is in insertion mode, that is, you can insert
-    // text without erasing the existing one.
-    //
-    for (;;)
-    {
-        if (MachConsKbHit())
-        {
-            Extended = FALSE;
-            key = MachConsGetCh();
-            if (key == KEY_EXTENDED)
-            {
-                Extended = TRUE;
-                key = MachConsGetCh();
-            }
+    /* Show the cursor */
+    editCtx.CursorX = editCtx.StartX;
+    MachVideoHideShowTextCursor(TRUE);
 
-            if (key == KEY_ENTER)
-            {
-                ReturnCode = TRUE;
-                break;
-            }
-            else if (key == KEY_ESC)
-            {
-                ReturnCode = FALSE;
-                break;
-            }
-            else if (key == KEY_BACKSPACE) // Remove a character
-            {
-                if ( (EditBoxTextLength > 0) && (EditBoxTextPosition > 0) &&
-                     (EditBoxTextPosition <= EditBoxTextLength) )
-                {
-                    EditBoxTextPosition--;
-                    memmove(EditTextBuffer + EditBoxTextPosition,
-                            EditTextBuffer + EditBoxTextPosition + 1,
-                            EditBoxTextLength - EditBoxTextPosition);
-                    EditBoxTextLength--;
-                    EditTextBuffer[EditBoxTextLength] = 0;
-                }
-                else
-                {
-                    MachBeep();
-                }
-            }
-            else if (Extended && key == KEY_DELETE) // Remove a character
-            {
-                if ( (EditBoxTextLength > 0) &&
-                     (EditBoxTextPosition < EditBoxTextLength) )
-                {
-                    memmove(EditTextBuffer + EditBoxTextPosition,
-                            EditTextBuffer + EditBoxTextPosition + 1,
-                            EditBoxTextLength - EditBoxTextPosition);
-                    EditBoxTextLength--;
-                    EditTextBuffer[EditBoxTextLength] = 0;
-                }
-                else
-                {
-                    MachBeep();
-                }
-            }
-            else if (Extended && key == KEY_HOME) // Go to the start of the buffer
-            {
-                EditBoxTextPosition = 0;
-            }
-            else if (Extended && key == KEY_END) // Go to the end of the buffer
-            {
-                EditBoxTextPosition = EditBoxTextLength;
-            }
-            else if (Extended && key == KEY_RIGHT) // Go right
-            {
-                if (EditBoxTextPosition < EditBoxTextLength)
-                    EditBoxTextPosition++;
-                else
-                    MachBeep();
-            }
-            else if (Extended && key == KEY_LEFT) // Go left
-            {
-                if (EditBoxTextPosition > 0)
-                    EditBoxTextPosition--;
-                else
-                    MachBeep();
-            }
-            else if (!Extended) // Add this key to the buffer
-            {
-                if ( (EditBoxTextLength   < Length - 1) &&
-                     (EditBoxTextPosition < Length - 1) )
-                {
-                    memmove(EditTextBuffer + EditBoxTextPosition + 1,
-                            EditTextBuffer + EditBoxTextPosition,
-                            EditBoxTextLength - EditBoxTextPosition);
-                    EditTextBuffer[EditBoxTextPosition] = key;
-                    EditBoxTextPosition++;
-                    EditBoxTextLength++;
-                    EditTextBuffer[EditBoxTextLength] = 0;
-                }
-                else
-                {
-                    MachBeep();
-                }
-            }
-            else
-            {
-                MachBeep();
-            }
-        }
+    ReturnCode = (BOOLEAN)UiDispatch(TuiEditBoxProc, &editCtx);
 
-        // Draw the edit box background
-        UiFillArea(EditBoxStartX, EditBoxLine, EditBoxEndX, EditBoxLine, ' ', ATTR(UiEditBoxTextColor, UiEditBoxBgColor));
-
-        // Fill the text in
-        if (EditBoxTextPosition > (EditBoxEndX - EditBoxStartX))
-        {
-            EditBoxTextDisplayIndex = EditBoxTextPosition - (EditBoxEndX - EditBoxStartX);
-            EditBoxCursorX = EditBoxEndX;
-        }
-        else
-        {
-            EditBoxTextDisplayIndex = 0;
-            EditBoxCursorX = EditBoxStartX + EditBoxTextPosition;
-        }
-        UiDrawText2(EditBoxStartX, EditBoxLine, EditBoxEndX - EditBoxStartX + 1, &EditTextBuffer[EditBoxTextDisplayIndex], ATTR(UiEditBoxTextColor, UiEditBoxBgColor));
-
-        // Move the cursor
-        MachVideoSetTextCursorPosition(EditBoxCursorX, EditBoxLine);
-
-        TuiUpdateDateTime();
-
-        VideoCopyOffScreenBufferToVRAM();
-
-        MachHwIdle();
-    }
-
-    // Hide the cursor again
+    /* Hide the cursor again */
     MachVideoHideShowTextCursor(FALSE);
 
     /* Restore the screen contents */

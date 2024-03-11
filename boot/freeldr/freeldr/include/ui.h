@@ -201,6 +201,14 @@ VOID    UiFadeOut(VOID);                                        // Fades the scr
 
 /* Menu Functions ************************************************************/
 
+typedef
+BOOLEAN
+(*UiKeyPressFilterCallback)(
+    _In_ ULONG KeyPress,
+    _Out_ PULONG_PTR ReturnValue/*,
+    _In_ ULONG SelectedItem,
+    _In_opt_ PVOID Context*/);
+
 typedef struct _UI_MENU_INFO
 {
     PCSTR* ItemList;
@@ -221,7 +229,9 @@ typedef struct _UI_SCREEN_INFO
 
     PUI_MENU_INFO Menu;
     LONG  TimeOut;
+    BOOLEAN CanEscape;
     PVOID Context;
+    UiKeyPressFilterCallback KeyPressFilter;
 
     ULONG Left;
     ULONG Top;
@@ -229,19 +239,11 @@ typedef struct _UI_SCREEN_INFO
     ULONG Bottom;
 } UI_SCREEN_INFO, *PUI_SCREEN_INFO;
 
-typedef
-BOOLEAN
-(*UiKeyPressFilterCallback)(
-    _In_ ULONG KeyPress,
-    _Out_ PULONG_PTR ReturnValue/*,
-    _In_ ULONG SelectedItem,
-    _In_opt_ PVOID Context*/);
-
 VOID
 UiDrawTimeout(
     _In_ PUI_SCREEN_INFO ScreenInfo);
 
-BOOLEAN
+ULONG_PTR
 UiDisplayMenuEx(
     _Inout_ PUI_MENU_INFO MenuInfo/*,
     _Out_ PULONG SelectedItem,
@@ -370,6 +372,37 @@ extern UIVTBL UiVtbl;
 #define D_HORZ  0xCD    // Double horizontal line
 #define VERT    0xB3    // Single vertical line
 #define D_VERT  0xBA    // Double vertical line
+
+
+/* UI Helpers ****************************************************************/
+
+typedef enum _UI_EVENT
+{
+    UiPaint,
+    UiKeyPress,
+    UiTimer,
+} UI_EVENT, *PUI_EVENT;
+
+typedef ULONG_PTR
+(NTAPI* UI_EVENT_PROC)(
+    _In_ PVOID UiContext,
+    /**/_In_opt_ PVOID UserContext,/**/
+    _In_ UI_EVENT Event,
+    _In_ ULONG_PTR EventParam);
+
+VOID // BOOLEAN
+UiEndUi(
+    _In_ PVOID UiContext,
+    _In_ ULONG_PTR Result);
+
+ULONG_PTR
+UiDispatch(
+    _In_ UI_EVENT_PROC EventProc,
+    _In_opt_ PVOID InitParam);
+
+VOID // BOOLEAN
+UiRedraw(
+    _In_ PVOID UiContext);
 
 
 /* THEME HEADERS *************************************************************/
