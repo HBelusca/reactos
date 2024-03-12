@@ -345,6 +345,53 @@ MainBootMenuKeyPressFilter(
     }
 }
 
+// UI_EVENT_PROC
+static ULONG_PTR
+NTAPI
+BootMenuProc(
+    _In_ PVOID UiContext,
+    /**/_In_opt_ PVOID UserContext,/**/
+    _In_ UI_EVENT Event,
+    _In_ ULONG_PTR EventParam)
+{
+    switch (Event)
+    {
+    case UiKeyPress:
+    {
+        CHAR KeyPress = (CHAR)EventParam;
+
+        switch (KeyPress)
+        {
+        case KEY_F8:
+#ifdef HAS_OPTION_MENU_EDIT_CMDLINE
+        case KEY_F10:
+#endif
+            /* We handle these keys, return them to the caller */
+            UiEndUi(UiContext, KeyPress);
+            return TRUE;
+        }
+
+        /* We don't handle the key */
+        break;
+    }
+
+    case UiMenuSelect:
+    {
+        OperatingSystemItem* osList = (OperatingSystemItem*)UserContext;
+        ULONG SelectedMenuItem = (ULONG)EventParam;
+
+        // osList[SelectedOperatingSystem];
+
+        // /* Display the boot options for the selected boot entry */
+        // DisplayBootTimeOptions();
+        break;
+    }
+    }
+
+    /* Perform default action */
+    return FALSE;
+}
+
 VOID RunLoader(VOID)
 {
     ULONG_PTR SectionId;

@@ -381,6 +381,7 @@ typedef enum _UI_EVENT
     UiPaint,
     UiKeyPress,
     UiTimer,
+    UiMenuSelect,
 } UI_EVENT, *PUI_EVENT;
 
 typedef ULONG_PTR
