@@ -10,6 +10,7 @@
 
 /* GLOBALS ********************************************************************/
 
+BOOLEAN UiMinimal = TRUE;
 ULONG UiScreenWidth;
 ULONG UiScreenHeight;
 UCHAR UiMenuFgColor = COLOR_GRAY;

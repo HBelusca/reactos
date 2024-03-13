@@ -59,8 +59,22 @@ VOID OptionMenuCustomBoot(VOID)
     ULONG SelectedMenuItem;
     OperatingSystemItem OperatingSystem;
 
-    if (!UiDisplayScreen("Please choose a boot method:", NULL,
-                         FALSE,
+    /* Redraw the backdrop */
+    UiDrawBackdrop();
+
+    if (UiMinimal)
+    {
+        /* No GUI status bar text, just minimal text */
+        PCSTR MenuHeader = "Please choose a boot method:";
+
+        /* Show the menu header */
+        UiVtbl.DrawText(0,
+                        2, // MenuInfo->Top - 2,
+                        MenuHeader,
+                        ATTR(UiMenuFgColor, UiMenuBgColor));
+    }
+
+    if (!UiDisplayScreen(// "Please choose a boot method:", NULL,
                          CustomBootMenuList,
                          RTL_NUMBER_OF(CustomBootMenuList),
                          0, -1,

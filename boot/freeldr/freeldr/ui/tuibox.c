@@ -97,7 +97,7 @@ TuiMsgBoxProc(
     _In_ UI_EVENT Event,
     _In_ ULONG_PTR EventParam)
 {
-    if (Event == UiKeyPress)
+    if (Event == UI_KeyPress)
     {
         CHAR key = (CHAR)EventParam;
         if ((key == KEY_ENTER) || (key == KEY_SPACE) || (key == KEY_ESC))
@@ -173,7 +173,7 @@ TuiEditBoxProc(
 {
     switch (Event)
     {
-    case UiKeyPress:
+    case UI_KeyPress:
     {
         PTUI_EDIT_CONTEXT editCtx = (PTUI_EDIT_CONTEXT)UserContext;
         CHAR key = (CHAR)EventParam;
@@ -290,7 +290,7 @@ TuiEditBoxProc(
         return TRUE;
     }
 
-    case UiPaint:
+    case UI_Paint:
     {
         PTUI_EDIT_CONTEXT editCtx = (PTUI_EDIT_CONTEXT)UserContext;
 

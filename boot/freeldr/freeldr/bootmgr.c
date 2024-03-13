@@ -322,29 +322,6 @@ GetTimeOut(
     return TimeOut;
 }
 
-BOOLEAN
-MainBootMenuKeyPressFilter(
-    _In_ ULONG KeyPress,
-    _Out_ PULONG_PTR ReturnValue/*,
-    _In_ ULONG SelectedItem,
-    _In_opt_ PVOID Context*/)
-{
-    switch (KeyPress)
-    {
-    case KEY_F8:
-#ifdef HAS_OPTION_MENU_EDIT_CMDLINE
-    case KEY_F10:
-#endif
-        /* We handle these keys, return them to the caller */
-        *ReturnValue = KeyPress;
-        return TRUE;
-
-    default:
-        /* We didn't handle the key */
-        return FALSE;
-    }
-}
-
 // UI_EVENT_PROC
 static ULONG_PTR
 NTAPI
@@ -356,7 +333,7 @@ BootMenuProc(
 {
     switch (Event)
     {
-    case UiKeyPress:
+    case UI_KeyPress:
     {
         CHAR KeyPress = (CHAR)EventParam;
 
@@ -375,15 +352,39 @@ BootMenuProc(
         break;
     }
 
-    case UiMenuSelect:
+    case UI_MenuSelect:
     {
         OperatingSystemItem* osList = (OperatingSystemItem*)UserContext;
         ULONG SelectedMenuItem = (ULONG)EventParam;
+        OperatingSystemItem* OperatingSystem;
+        const OS_LOADING_METHOD* OSLoadingMethod;
 
-        // osList[SelectedOperatingSystem];
+        if (SelectedMenuItem == -1)
+            break;
+
+        OperatingSystem = &osList[SelectedMenuItem];
+
+        /* Find the suitable OS menu procedure and display it */
+        OSLoadingMethod = GetOSLoadingMethod(OperatingSystem->SectionId);
+        if (!OSLoadingMethod)
+            break;
 
         // /* Display the boot options for the selected boot entry */
-        // DisplayBootTimeOptions();
+        // OSLoadingMethod->OsMenu(OperatingSystem);
+        // Below is a test replacement for the function call above.
+        if (_strnicmp("Windows", OSLoadingMethod->BootType, 7) == 0)
+        {
+            /* Display the chosen boot options */
+            DisplayBootTimeOptions();
+        }
+        else
+        {
+            /* Quick-clear the area */
+            UiFillArea(0, UiScreenHeight - 2,
+                       UiScreenWidth - 1, UiScreenHeight - 2,
+                       ' ',
+                       ATTR(COLOR_LIGHTBLUE, UiMenuBgColor));
+        }
         break;
     }
     }
@@ -473,26 +474,45 @@ VOID RunLoader(VOID)
     /* Find all the message box settings and run them */
     UiShowMessageBoxesInSection(SectionId);
 
-    // /* Redraw the backdrop */
-    // UiDrawBackdrop();
-
     for (;;)
     {
         ULONG_PTR Result;
 
+        /* Redraw the backdrop */
+        UiDrawBackdrop();
+
+        if (UiMinimal)
+        {
+            /* No GUI status bar text, just minimal text */
+            PCSTR MenuHeader = "Please select the operating system to start:";
+            PCSTR MenuFooter = "For troubleshooting and advanced startup options for "
+                                   "ReactOS, press F8.";
+
+            /* Show the menu header */
+            UiVtbl.DrawText(0,
+                            2, // MenuInfo->Top - 2,
+                            MenuHeader,
+                            ATTR(UiMenuFgColor, UiMenuBgColor));
+
+            /* And show the menu footer */
+            UiVtbl.DrawText(0,
+                            UiScreenHeight - 4,
+                            MenuFooter,
+                            ATTR(UiMenuFgColor, UiMenuBgColor));
+        }
+
         /* Show the operating system list menu */
-        Result = UiDisplayScreen("Please select the operating system to start:",
-                                 "For troubleshooting and advanced startup options for "
-                                     "ReactOS, press F8.",
-                                 TRUE,
+        Result = UiDisplayScreen(// "Please select the operating system to start:",
+                                 // "For troubleshooting and advanced startup options for "
+                                 //     "ReactOS, press F8.",
                                  OperatingSystemDisplayNames,
                                  OperatingSystemCount,
                                  SelectedOperatingSystem,
                                  TimeOut,
                                  &SelectedOperatingSystem,
                                  FALSE,
-                                 MainBootMenuKeyPressFilter,
-                                 NULL /*OperatingSystemList*/);
+                                 BootMenuProc,
+                                 OperatingSystemList);
         if (!Result)
         {
             /* The user pressed ESC */

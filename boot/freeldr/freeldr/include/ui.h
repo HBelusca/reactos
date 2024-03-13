@@ -22,6 +22,8 @@
 extern ULONG UiScreenWidth;             // Screen Width
 extern ULONG UiScreenHeight;            // Screen Height
 
+extern BOOLEAN UiMinimal;               // Whether to use a minimal console-like UI
+
 extern UCHAR UiStatusBarFgColor;        // Status bar foreground color
 extern UCHAR UiStatusBarBgColor;        // Status bar background color
 extern UCHAR UiBackdropFgColor;         // Backdrop foreground color
@@ -201,20 +203,15 @@ VOID    UiFadeOut(VOID);                                        // Fades the scr
 
 /* Menu Functions ************************************************************/
 
-typedef
-BOOLEAN
-(*UiKeyPressFilterCallback)(
-    _In_ ULONG KeyPress,
-    _Out_ PULONG_PTR ReturnValue/*,
-    _In_ ULONG SelectedItem,
-    _In_opt_ PVOID Context*/);
-
-typedef struct _UI_MENU_INFO
+typedef struct _UI_MENU_INFO // _UI_MENU
 {
     PCSTR* ItemList;
     ULONG  ItemCount;
     ULONG  SelectedItem;
+    PVOID  Context;
+    /*UI_EVENT_PROC*/ PVOID EventProc;
 
+    // TODO: Use SMALL_RECT ?
     ULONG Left;
     ULONG Top;
     ULONG Right;
@@ -223,16 +220,16 @@ typedef struct _UI_MENU_INFO
 
 typedef struct _UI_SCREEN_INFO
 {
-    PCSTR   Header;
-    PCSTR   Footer;
-    BOOLEAN ShowBootOptions;
+    // PCSTR   Header;
+    // PCSTR   Footer;
 
     PUI_MENU_INFO Menu;
     LONG  TimeOut;
     BOOLEAN CanEscape;
     PVOID Context;
-    UiKeyPressFilterCallback KeyPressFilter;
+    /*UI_EVENT_PROC*/ PVOID EventProc;
 
+    // TODO: Use SMALL_RECT ?
     ULONG Left;
     ULONG Top;
     ULONG Right;
@@ -263,16 +260,15 @@ UiDrawMenu(
 
 ULONG_PTR
 UiDisplayScreen(
-    _In_opt_ PCSTR Header,
-    _In_opt_ PCSTR Footer,
-    _In_ BOOLEAN ShowBootOptions,
+    // _In_opt_ PCSTR Header,
+    // _In_opt_ PCSTR Footer,
     _In_ PCSTR ItemList[],
     _In_ ULONG ItemCount,
     _In_ ULONG DefaultItem,
     _In_ LONG TimeOut,
     _Out_ PULONG SelectedItem,
     _In_ BOOLEAN CanEscape,
-    _In_opt_ UiKeyPressFilterCallback KeyPressFilter,
+    _In_opt_ /*UI_EVENT_PROC*/ PVOID EventProc,
     _In_opt_ PVOID Context);
 
 ///////////////////////////////////////////////////////////////////////////////////////
@@ -378,10 +374,12 @@ extern UIVTBL UiVtbl;
 
 typedef enum _UI_EVENT
 {
-    UiPaint,
-    UiKeyPress,
-    UiTimer,
-    UiMenuSelect,
+    UI_Initialize,  // UI_Create
+    UI_Terminate,   // UI_Destroy
+    UI_Paint,
+    UI_KeyPress,
+    UI_Timer,
+    UI_MenuSelect,
 } UI_EVENT, *PUI_EVENT;
 
 typedef ULONG_PTR
@@ -404,6 +402,13 @@ UiDispatch(
 VOID // BOOLEAN
 UiRedraw(
     _In_ PVOID UiContext);
+
+ULONG_PTR
+UiSendMsg(
+    _In_ PVOID UiContext,
+    /**/_In_opt_ PVOID UserContext,/**/
+    _In_ UI_EVENT Event,
+    _In_ ULONG_PTR EventParam);
 
 
 /* THEME HEADERS *************************************************************/

@@ -89,20 +89,72 @@ static BOOLEAN DebuggingMode = FALSE;
 
 /* FUNCTIONS ******************************************************************/
 
+// UI_EVENT_PROC
+static ULONG_PTR
+NTAPI
+OptionsMenuProc(
+    _In_ PVOID UiContext,
+    /**/_In_opt_ PVOID UserContext,/**/
+    _In_ UI_EVENT Event,
+    _In_ ULONG_PTR EventParam)
+{
+    switch (Event)
+    {
+    case UI_Initialize:
+    {
+        OperatingSystemItem* OperatingSystem = (OperatingSystemItem*)UserContext;
+        DBG_UNREFERENCED_PARAMETER(OperatingSystem);
+
+        /* Display the boot options for the selected boot entry */
+        /* Display the chosen boot options */
+        // OSLoadingMethod->OsMenu(OperatingSystem);
+        DisplayBootTimeOptions();
+        break;
+    }
+    }
+
+    /* Perform default action */
+    return FALSE;
+}
+
 VOID DoOptionsMenu(IN OperatingSystemItem* OperatingSystem)
 {
     ULONG SelectedMenuItem;
     CHAR  DebugChannelString[100];
 
-    if (!UiDisplayScreen("Select an option:", NULL,
-                         TRUE,
+    /* Redraw the backdrop */
+    UiDrawBackdrop();
+
+    if (UiMinimal)
+    {
+        /* No GUI status bar text, just minimal text */
+        PCSTR MenuHeader = "Select an option:";
+
+        /* Show extra title */
+        UiVtbl.DrawText(0,
+                        1,
+                        "Advanced boot options for: ",
+                        ATTR(UiMenuFgColor, UiMenuBgColor));
+        UiVtbl.DrawText(strlen("Advanced boot options for: "),
+                        1,
+                        OperatingSystem->LoadIdentifier,
+                        ATTR(UiTitleBoxFgColor, UiMenuBgColor));
+
+        /* Show the menu header */
+        UiVtbl.DrawText(0,
+                        2, // MenuInfo->Top - 2,
+                        MenuHeader,
+                        ATTR(UiMenuFgColor, UiMenuBgColor));
+    }
+
+    if (!UiDisplayScreen(// "Select an option:", NULL,
                          OptionsMenuList,
                          RTL_NUMBER_OF(OptionsMenuList),
                          11, // Use "Start ReactOS normally" as default; see the switch below.
                          -1,
                          &SelectedMenuItem,
                          TRUE,
-                         NULL, NULL))
+                         OptionsMenuProc, OperatingSystem))
     {
         /* The user pressed ESC */
         return;

@@ -402,8 +402,8 @@ FullTuiDrawScreen(
 {
     PUI_MENU_INFO MenuInfo = ScreenInfo->Menu;
 
-    /* Draw the backdrop */
-    UiDrawBackdrop();
+    // /* Draw the backdrop */
+    // UiDrawBackdrop();
 
     if (MenuInfo)
     {
@@ -415,10 +415,6 @@ FullTuiDrawScreen(
 
     UiDrawTimeout(ScreenInfo);
     TuiUpdateDateTime();
-
-    /* Display the boot options if needed */
-    if (ScreenInfo->ShowBootOptions)
-        DisplayBootTimeOptions();
 }
 
 const UIVTBL TuiVtbl =

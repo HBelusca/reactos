@@ -22,6 +22,8 @@
 #include <debug.h>
 DBG_DEFAULT_CHANNEL(UI);
 
+BOOLEAN UiMinimal = FALSE;      // Whether to use a minimal console-like UI
+
 UCHAR UiStatusBarFgColor;       // Status bar foreground color
 UCHAR UiStatusBarBgColor;       // Status bar background color
 UCHAR UiBackdropFgColor;        // Backdrop foreground color
@@ -91,8 +93,7 @@ UIVTBL UiVtbl =
 
 BOOLEAN UiInitialize(BOOLEAN ShowUi)
 {
-    VIDEODISPLAYMODE UiDisplayMode; // Tells us if we are in text or graphics mode
-    BOOLEAN UiMinimal = FALSE;      // Tells us if we are using a minimal console-like UI
+    VIDEODISPLAYMODE UiDisplayMode; // Text or graphics mode
     ULONG_PTR SectionId;
     ULONG Depth;
     CHAR  SettingText[260];

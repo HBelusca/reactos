@@ -30,8 +30,8 @@ TuiDrawTimeoutString(
 
     if (UiCenterMenu)
     {
-        /* In boxed menu mode, pad on the left with blanks and box border;
-         * otherwise, pad over all the box length until its right edge */
+        /* In boxed menu mode, pad on the left with blanks and box border,
+         * otherwise, pad over all the box length until its right edge. */
         TuiFillArea(0,
                     MenuInfo->Bottom,
                     UiMenuBox
@@ -76,7 +76,7 @@ TuiDrawTimeoutString(
         }
 
         /* Pad on the right with blanks, to erase
-         * characters when the string length decreases */
+         * characters when the string length decreases. */
         TuiFillArea(Length,
                     MenuInfo->Bottom + 4,
                     Length ? (Length + 1) : (UiScreenWidth - 1),
@@ -168,12 +168,84 @@ UiScreenProc(
     _In_ UI_EVENT Event,
     _In_ ULONG_PTR EventParam)
 {
+    PUI_SCREEN_INFO ScreenInfo = (PUI_SCREEN_INFO)UserContext;
+
+    /* Call the user-specific custom event procedure */
+    if (ScreenInfo->EventProc)
+    {
+        ULONG_PTR Result;
+        Result = ((UI_EVENT_PROC)ScreenInfo->EventProc)(
+                    UiContext, /**/ScreenInfo->Context,/**/
+                    Event, EventParam);
+
+        /* Return now if it handled the event */
+        if (Result)
+            return Result;
+    }
+
     switch (Event)
     {
-    case UiKeyPress:
+    case UI_Initialize:
     {
-        PUI_SCREEN_INFO ScreenInfo = (PUI_SCREEN_INFO)UserContext;
-        ULONG_PTR Result = TRUE;
+        /* Check if there is no timeout */
+        if (!ScreenInfo->TimeOut)
+        {
+            /* Schedule a screen exit. The return value
+             * can be overridden by the custom proc below. */
+            UiEndUi(UiContext, TRUE);
+        }
+
+        /*
+         * Before taking any default action if there is no timeout,
+         * check whether the supplied key filter callback function
+         * may handle a specific user keypress.
+         */
+        if (!ScreenInfo->TimeOut && ScreenInfo->EventProc && MachConsKbHit())
+        {
+            /* Get the key */
+            ULONG KeyPress = MachConsGetCh();
+            if (KeyPress == KEY_EXTENDED)
+            {
+                KeyPress = MachConsGetCh();
+                KeyPress |= 0x0100; // Set extended flag.
+            }
+
+            /* Call the custom event procedure */
+            // EventProc(KeyPress, &Result/*, DefaultItem, Context*/);
+            ((UI_EVENT_PROC)ScreenInfo->EventProc)(UiContext, /**/ScreenInfo->Context,/**/
+                                       UI_KeyPress, (ULONG_PTR)KeyPress);
+            /* Fall back to the case below to either perform the
+             * default action, or to return the handled command */
+        }
+
+        /* Check if there is no timeout */
+        if (!ScreenInfo->TimeOut)
+        {
+            /* Exit the menu and return the default selected item */
+            // UiEndUi(UiContext, TRUE /* Should be the return value from the proc */);
+            return TRUE;
+        }
+
+
+        // FIXME: Theme-specific
+        /* Calculate the size of the menu box */
+        TuiCalcMenuBoxSize(ScreenInfo->Menu); // HACK: Investigate...
+
+        // TODO: Investigate: See UI_Paint
+        /* Redraw the screen */
+        // (void)UiDisplayMenuEx(ScreenInfo->Menu/*, SelectedItem, CanEscape*/);
+        // UiDrawTimeout(ScreenInfo);
+        UiVtbl.DrawScreen(ScreenInfo);
+
+        /* Send the UI_MenuSelect notification */
+        UiSendMsg(UiContext, /**/UserContext,/**/
+                  UI_MenuSelect, (ULONG_PTR)ScreenInfo->Menu->SelectedItem);
+        break;
+    }
+
+    case UI_KeyPress:
+    {
+        // ULONG_PTR Result = TRUE;
         ULONG KeyPress = (ULONG)EventParam;
         // BOOLEAN Extended = !!(EventParam & 0x0100);
 
@@ -189,22 +261,27 @@ UiScreenProc(
             UiRedraw(UiContext);
         }
 
+#if 0
         //
         // FIXME: Do this via custom user-specified UI proc?
         //
         /* Call the supplied key filter callback function
          * to see if it is going to handle this keypress */
-        if (ScreenInfo->KeyPressFilter &&
-            ScreenInfo->KeyPressFilter(KeyPress, &Result/*, ScreenInfo->Menu->SelectedItem, ScreenInfo->Context*/))
+        if (ScreenInfo->EventProc &&
+            // ScreenInfo->KeyPressFilter(KeyPress, &Result/*, ScreenInfo->Menu->SelectedItem, ScreenInfo->Context*/)
+            ((UI_EVENT_PROC)ScreenInfo->EventProc)(UiContext, /**/ScreenInfo->Context,/**/
+                                       UI_KeyPress, (ULONG_PTR)KeyPress)
+            )
         {
             /* It processed the key, so exit the screen and return
              * both the selected item and the handled command */
-            UiEndUi(UiContext, Result);
+            // UiEndUi(UiContext, Result);
             return TRUE;
         }
         //
         // In what follows is the default key processing...
         //
+#endif
 
         /* Check for ENTER or ESC */
         if (KeyPress == KEY_ENTER)
@@ -222,22 +299,23 @@ UiScreenProc(
         if (UiProcessMenuKeyboardEvent(ScreenInfo->Menu, KeyPress))
         {
             /* Key handled, redraw */
+            UiSendMsg(UiContext, /**/UserContext,/**/
+                      UI_MenuSelect, (ULONG_PTR)ScreenInfo->Menu->SelectedItem);
             UiRedraw(UiContext);
         }
 
         return TRUE;
     }
 
-    case UiPaint:
+    case UI_Paint:
     {
-        // PUI_SCREEN_INFO ScreenInfo = (PUI_SCREEN_INFO)UserContext;
+        // /* Redraw the screen */
+        // UiVtbl.DrawScreen(ScreenInfo);
         break;
     }
 
-    case UiTimer:
+    case UI_Timer:
     {
-        PUI_SCREEN_INFO ScreenInfo = (PUI_SCREEN_INFO)UserContext;
-
         // FIXME: Theme-specific
         /* Update the date & time */
         TuiUpdateDateTime();
@@ -267,36 +345,41 @@ UiScreenProc(
 
 ULONG_PTR
 UiDisplayScreen(
-    _In_opt_ PCSTR Header,
-    _In_opt_ PCSTR Footer,
-    _In_ BOOLEAN ShowBootOptions,
+    // _In_opt_ PCSTR Header,
+    // _In_opt_ PCSTR Footer,
     _In_ PCSTR ItemList[],
     _In_ ULONG ItemCount,
     _In_ ULONG DefaultItem,
     _In_ LONG TimeOut,
     _Out_ PULONG SelectedItem,
     _In_ BOOLEAN CanEscape,
-    _In_opt_ UiKeyPressFilterCallback KeyPressFilter,
+    _In_opt_ /*UI_EVENT_PROC*/ PVOID EventProc,
     _In_opt_ PVOID Context)
 {
     UI_SCREEN_INFO ScreenInfo;
     UI_MENU_INFO MenuInfo;
     ULONG_PTR Result = TRUE;
 
+#if 0 // Deprecated now...
+
     /*
      * Before taking any default action if there is no timeout,
      * check whether the supplied key filter callback function
      * may handle a specific user keypress.
      */
-    if (!TimeOut && KeyPressFilter && MachConsKbHit())
+    if (!TimeOut && EventProc && MachConsKbHit())
     {
         /* Get the key */
         ULONG KeyPress = MachConsGetCh();
         if (KeyPress == KEY_EXTENDED)
+        {
             KeyPress = MachConsGetCh();
+            KeyPress |= 0x0100; // Set extended flag.
+        }
 
-        /* Call the supplied key filter callback function */
-        KeyPressFilter(KeyPress, &Result/*, DefaultItem, Context*/);
+        /* Call the custom event procedure */
+        // EventProc(KeyPress, &Result/*, DefaultItem, Context*/);
+        ((UI_EVENT_PROC)EventProc)((PVOID)&uiContext, /**/Context,/**/ UI_KeyPress, (ULONG_PTR)KeyPress);
         /* Fall back to the case below to either perform the
          * default action, or to return the handled command */
     }
@@ -310,6 +393,8 @@ UiDisplayScreen(
         return Result;
     }
 
+#endif
+
     /* Setup the UI_MENU_INFO structure */
     MenuInfo.ItemList = ItemList;
     MenuInfo.ItemCount = ItemCount;
@@ -317,21 +402,23 @@ UiDisplayScreen(
     // MenuInfo.Context = Context;
 
     /* Setup the UI_SCREEN_INFO structure */
-    ScreenInfo.Header = Header;
-    ScreenInfo.Footer = Footer;
-    ScreenInfo.ShowBootOptions = ShowBootOptions;
+    // ScreenInfo.Header = Header;
+    // ScreenInfo.Footer = Footer;
     ScreenInfo.Menu = &MenuInfo;
     ScreenInfo.TimeOut = TimeOut;
     ScreenInfo.CanEscape = CanEscape;
     ScreenInfo.Context = Context;
-    ScreenInfo.KeyPressFilter = KeyPressFilter;
+    ScreenInfo.EventProc = EventProc;
 
-    // FIXME: Theme-specific
-    /* Calculate the size of the menu box */
-    TuiCalcMenuBoxSize(&MenuInfo); // HACK: Investigate...
-    // (void)UiDisplayMenuEx(&MenuInfo/*, SelectedItem, CanEscape*/);
-    // UiDrawTimeout(&ScreenInfo);
-    UiVtbl.DrawScreen(&ScreenInfo);
+    // // FIXME: Now done in UI_Initialize
+    // // FIXME: Theme-specific
+    // /* Calculate the size of the menu box */
+    // TuiCalcMenuBoxSize(&MenuInfo); // HACK: Investigate...
+
+    // // FIXME: Now done in UI_Paint
+    // // (void)UiDisplayMenuEx(&MenuInfo/*, SelectedItem, CanEscape*/);
+    // // UiDrawTimeout(&ScreenInfo);
+    // UiVtbl.DrawScreen(&ScreenInfo);
 
     Result = UiDispatch(UiScreenProc, &ScreenInfo);
     if (!Result)

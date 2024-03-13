@@ -201,17 +201,8 @@ MiniTuiDrawScreen(
 {
     PUI_MENU_INFO MenuInfo = ScreenInfo->Menu;
 
-    /* Draw the backdrop */
-    UiDrawBackdrop();
-
-    /* No GUI status bar text, just minimal text. Show the screen header. */
-    if (ScreenInfo->Header)
-    {
-        UiVtbl.DrawText(0,
-                        MenuInfo ? MenuInfo->Top - 2 : 2,
-                        ScreenInfo->Header,
-                        ATTR(UiMenuFgColor, UiMenuBgColor));
-    }
+    // /* Draw the backdrop */
+    // UiDrawBackdrop();
 
     if (MenuInfo)
     {
@@ -228,21 +219,8 @@ MiniTuiDrawScreen(
                         ATTR(UiMenuFgColor, UiMenuBgColor));
     }
 
-    /* And show the screen footer */
-    if (ScreenInfo->Footer)
-    {
-        UiVtbl.DrawText(0,
-                        UiScreenHeight - 4,
-                        ScreenInfo->Footer,
-                        ATTR(UiMenuFgColor, UiMenuBgColor));
-    }
-
     UiDrawTimeout(ScreenInfo);
     TuiUpdateDateTime();
-
-    /* Display the boot options if needed */
-    if (ScreenInfo->ShowBootOptions)
-        DisplayBootTimeOptions();
 }
 
 const UIVTBL MiniTuiVtbl =

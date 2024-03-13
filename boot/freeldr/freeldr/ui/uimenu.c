@@ -31,11 +31,29 @@ UiMenuProc(
     _In_ UI_EVENT Event,
     _In_ ULONG_PTR EventParam)
 {
+    PUI_MENU_INFO MenuInfo = (PUI_MENU_INFO)UserContext;
+
     switch (Event)
     {
-    case UiKeyPress:
+    case UI_Initialize:
     {
-        PUI_MENU_INFO MenuInfo = (PUI_MENU_INFO)UserContext;
+        // FIXME: Theme-specific
+        /* Calculate the size of the menu box */
+        TuiCalcMenuBoxSize(MenuInfo); // HACK: Investigate...
+
+        // TODO: Investigate: See UI_Paint
+        /* Redraw the menu */
+        // (void)UiDisplayMenuEx(MenuInfo/*, SelectedItem, CanEscape*/);
+        UiDrawMenu(MenuInfo);
+
+        /* Send the UI_MenuSelect notification */
+        UiSendMsg(UiContext, /**/UserContext,/**/
+                  UI_MenuSelect, (ULONG_PTR)MenuInfo->SelectedItem);
+        break;
+    }
+
+    case UI_KeyPress:
+    {
         ULONG KeyPress = (ULONG)EventParam;
         // BOOLEAN Extended = !!(EventParam & 0x0100);
 
@@ -66,9 +84,10 @@ UiMenuProc(
         return TRUE;
     }
 
-    case UiPaint:
+    case UI_Paint:
     {
-        // PUI_MENU_INFO MenuInfo = (PUI_MENU_INFO)UserContext;
+        // /* Redraw the menu */
+        // UiDrawMenu(MenuInfo);
         break;
     }
 
@@ -86,12 +105,14 @@ UiDisplayMenuEx(
     _Out_ PULONG SelectedItem,
     _In_ BOOLEAN CanEscape*/)
 {
-    // FIXME: Theme-specific
-    /* Calculate the size of the menu box */
-    TuiCalcMenuBoxSize(MenuInfo);
+    // // FIXME: Now done in UI_Initialize
+    // // FIXME: Theme-specific
+    // /* Calculate the size of the menu box */
+    // TuiCalcMenuBoxSize(MenuInfo);
 
-    /* Draw the menu */
-    UiDrawMenu(MenuInfo);
+    // // FIXME: Now done in UI_Paint
+    // /* Draw the menu */
+    // UiDrawMenu(MenuInfo);
 
 #if 0
     Result = UiDispatch(UiMenuProc, MenuInfo);

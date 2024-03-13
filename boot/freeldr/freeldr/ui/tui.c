@@ -552,6 +552,7 @@ TuiTextToFillStyle(
 typedef struct _UI_PRIVATE_CONTEXT
 {
     PVOID UserContext; //< User-specific context given at initialization time.
+    UI_EVENT_PROC EventProc; //< UI event procedure.
     ULONG_PTR RetVal;  //< Return value to set when quitting the UI.
     struct {
         BOOLEAN Quit    : 1; //< TRUE to quit the UI; FALSE by default.
@@ -574,18 +575,22 @@ UiDispatch(
     _In_ UI_EVENT_PROC EventProc,
     _In_opt_ PVOID InitParam)
 {
-    UI_PRIVATE_CONTEXT uiContext = {InitParam, -1, {FALSE, TRUE}};
+    UI_PRIVATE_CONTEXT uiContext = {InitParam, EventProc, -1, {FALSE, TRUE}};
     ULONG LastClockSecond;
     ULONG CurrentClockSecond;
     ULONG KeyEvent; // High byte: extended (TRUE/FALSE); Low byte: key.
 
+    /* Create/initialize the UI */
+    EventProc(&uiContext, /**/InitParam,/**/ UI_Initialize, (ULONG_PTR)InitParam);
+    if (uiContext.Quit)
+        goto Quit;
+
+    uiContext.RetVal = 0;
+    uiContext.DoPaint = TRUE; // Force initial repaint
+
     /* Start the timer */
     LastClockSecond = 0; // ArcGetRelativeTime();
     /***/TuiUpdateDateTime();/***/
-
-    // TODO: UI initialization?
-    uiContext.RetVal = 0;
-    uiContext.DoPaint = TRUE; // Force initial repaint
 
     /* Process events */
     while (!uiContext.Quit) // or do { ... } while (!uiContext.Quit); ??
@@ -593,7 +598,7 @@ UiDispatch(
         /* Now do the actual repaint and reset the flag */
         if (uiContext.DoPaint)
         {
-            EventProc((PVOID)&uiContext, /**/InitParam,/**/ UiPaint, 0);
+            EventProc(&uiContext, /**/InitParam,/**/ UI_Paint, 0);
             VideoCopyOffScreenBufferToVRAM();
             uiContext.DoPaint = FALSE;
         }
@@ -609,7 +614,7 @@ UiDispatch(
                 KeyEvent |= 0x0100; // Set extended flag.
             }
 
-            EventProc((PVOID)&uiContext, /**/InitParam,/**/ UiKeyPress, (ULONG_PTR)KeyEvent);
+            EventProc(&uiContext, /**/InitParam,/**/ UI_KeyPress, (ULONG_PTR)KeyEvent);
             if (uiContext.Quit)
                 break;
         }
@@ -628,14 +633,15 @@ UiDispatch(
             TuiUpdateDateTime();
             uiContext.DoPaint = TRUE; // UiRedraw(&uiContext);
 
-            EventProc((PVOID)&uiContext, /**/InitParam,/**/ UiTimer, 0);
+            EventProc(&uiContext, /**/InitParam,/**/ UI_Timer, 0);
         }
 
         // MachHwIdle();
     }
 
-    // TODO: UI termination?
-
+    /* Terminate/destroy the UI */
+    EventProc(&uiContext, /**/InitParam,/**/ UI_Terminate, 0);
+Quit:
     return uiContext.RetVal;
 }
 
@@ -646,6 +652,17 @@ UiRedraw(
     PUI_PRIVATE_CONTEXT context = (PUI_PRIVATE_CONTEXT)UiContext;
     context->DoPaint = TRUE;
     // Do more things?
+}
+
+ULONG_PTR
+UiSendMsg(
+    _In_ PVOID UiContext,
+    /**/_In_opt_ PVOID UserContext,/**/
+    _In_ UI_EVENT Event,
+    _In_ ULONG_PTR EventParam)
+{
+    PUI_PRIVATE_CONTEXT context = (PUI_PRIVATE_CONTEXT)UiContext;
+    return context->EventProc(UiContext, /**/UserContext,/**/ Event, EventParam);
 }
 
 /* EOF */
