@@ -1,9 +1,8 @@
 /*
- * COPYRIGHT:       See COPYING in the top level directory
- * PROJECT:         FreeLoader
- * FILE:            boot/freeldr/freeldr/ui/noui.c
- * PURPOSE:         No Text UI interface
- * PROGRAMMERS:     Hervé Poussineau
+ * PROJECT:     FreeLoader
+ * LICENSE:     GPL-2.0-or-later (https://spdx.org/licenses/GPL-2.0-or-later)
+ * PURPOSE:     "No-Text" UI interface
+ * COPYRIGHT:   Copyright 2007 Hervé Poussineau <hpoussin@reactos.org>
  */
 
 #include <freeldr.h>
@@ -182,3 +181,5 @@ NoUiDrawMenu(
     _In_ PUI_MENU_INFO MenuInfo)
 {
 }
+
+/* EOF */

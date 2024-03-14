@@ -65,10 +65,12 @@ list(APPEND FREELDR_BOOTMGR_SOURCE
     options.c
     oslist.c
     ui/directui.c
+    ui/fulltui.c
     # ui/gui.c
     ui/minitui.c
     ui/noui.c
     ui/tui.c
+    ui/tuibox.c
     ui/tuimenu.c
     ui/ui.c
     ui/video.c)

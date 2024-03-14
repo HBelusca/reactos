@@ -1,10 +1,10 @@
 /*
- * COPYRIGHT:       See COPYING in the top level directory
- * PROJECT:         FreeLoader
- * FILE:            boot/freeldr/freeldr/ui/tuimenu.c
- * PURPOSE:         Text UI Menu Functions
- * PROGRAMMERS:     Alex Ionescu (alex@relsoft.net)
- *                  Brian Palmer (brianp@sginet.com)
+ * PROJECT:     FreeLoader
+ * LICENSE:     GPL-2.0-or-later (https://spdx.org/licenses/GPL-2.0-or-later)
+ * PURPOSE:     Text UI Menu Functions
+ * COPYRIGHT:   Copyright 1998-2003 Brian Palmer <brianp@sginet.com>
+ *              Copyright 2005 Alex Ionescu <alex.ionescu@reactos.org>
+ *              Copyright 2012-2024 Hermès Bélusca-Maïto <hermes.belusca-maito@reactos.org>
  */
 
 /* INCLUDES ******************************************************************/
@@ -185,38 +185,6 @@ TuiCalcMenuBoxSize(
     /* The other margins are the same */
     MenuInfo->Right = MenuInfo->Left + Width;
     MenuInfo->Bottom = MenuInfo->Top + Height;
-}
-
-VOID
-TuiDrawMenu(
-    _In_ PUI_MENU_INFO MenuInfo)
-{
-    ULONG i;
-
-    // FIXME: Theme-specific
-    /* Draw the backdrop */
-    UiDrawBackdrop();
-
-    /* Draw the menu box */
-    TuiDrawMenuBox(MenuInfo);
-
-    /* Draw each line of the menu */
-    for (i = 0; i < MenuInfo->MenuItemCount; ++i)
-    {
-        TuiDrawMenuItem(MenuInfo, i);
-    }
-
-    // FIXME: Theme-specific
-    /* Update the status bar */
-    UiVtbl.DrawStatusText("Use \x18 and \x19 to select, then press ENTER.");
-
-    /* Display the boot options if needed */
-    if (MenuInfo->ShowBootOptions)
-    {
-        DisplayBootTimeOptions();
-    }
-
-    VideoCopyOffScreenBufferToVRAM();
 }
 
 static VOID

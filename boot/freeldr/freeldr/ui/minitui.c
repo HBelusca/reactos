@@ -1,10 +1,10 @@
 /*
- * COPYRIGHT:       See COPYING in the top level directory
- * PROJECT:         FreeLoader
- * FILE:            boot/freeldr/freeldr/ui/minitui.c
- * PURPOSE:         Mini Text UI interface
- * PROGRAMMERS:     Brian Palmer <brianp@sginet.com>
- *                  Hervé Poussineau
+ * PROJECT:     FreeLoader
+ * LICENSE:     GPL-2.0-or-later (https://spdx.org/licenses/GPL-2.0-or-later)
+ * PURPOSE:     "Mini" Text UI interface
+ * COPYRIGHT:   Copyright 1998-2003 Brian Palmer <brianp@sginet.com>
+ *              Copyright 2007 Hervé Poussineau <hpoussin@reactos.org>
+ *              Copyright 2022-2024 Hermès Bélusca-Maïto <hermes.belusca-maito@reactos.org>
  */
 
 #include <freeldr.h>
@@ -13,10 +13,11 @@
 // #define NTLDR_PROGRESSBAR
 // #define BTMGR_PROGRESSBAR /* Default style */
 
-BOOLEAN MiniTuiInitialize(VOID)
+static BOOLEAN
+MiniTuiInitialize(VOID)
 {
-    /* Initialize main TUI */
-    if (!TuiInitialize())
+    /* Initialize full TUI */
+    if (!FullTuiInitialize())
         return FALSE;
 
     /* Override default settings with "Mini" TUI Theme */
@@ -53,7 +54,8 @@ BOOLEAN MiniTuiInitialize(VOID)
     return TRUE;
 }
 
-VOID MiniTuiDrawBackdrop(VOID)
+static VOID
+MiniTuiDrawBackdrop(VOID)
 {
     /* Fill in a black background */
     TuiFillArea(0, 0, UiScreenWidth - 1, UiScreenHeight - 1,
@@ -64,12 +66,13 @@ VOID MiniTuiDrawBackdrop(VOID)
     VideoCopyOffScreenBufferToVRAM();
 }
 
-VOID MiniTuiDrawStatusText(PCSTR StatusText)
+static VOID
+MiniTuiDrawStatusText(PCSTR StatusText)
 {
     /* Minimal UI doesn't have a status bar */
 }
 
-/*static*/ VOID
+static VOID
 MiniTuiSetProgressBarText(
     _In_ PCSTR ProgressText)
 {
@@ -107,7 +110,7 @@ MiniTuiSetProgressBarText(
                         ProgressString, ATTR(UiTextColor, UiMenuBgColor));
 }
 
-/*static*/ VOID
+static VOID
 MiniTuiTickProgressBar(
     _In_ ULONG SubPercentTimes100)
 {
@@ -143,7 +146,15 @@ MiniTuiTickProgressBar(
     VideoCopyOffScreenBufferToVRAM();
 }
 
-VOID
+static VOID
+MiniTuiDrawProgressBar(
+    _In_ ULONG Left,
+    _In_ ULONG Top,
+    _In_ ULONG Right,
+    _In_ ULONG Bottom,
+    _In_ PCSTR ProgressText);
+
+static VOID
 MiniTuiDrawProgressBarCenter(
     _In_ PCSTR ProgressText)
 {
@@ -168,7 +179,7 @@ MiniTuiDrawProgressBarCenter(
     MiniTuiDrawProgressBar(Left, Top, Right, Bottom, ProgressText);
 }
 
-VOID
+static VOID
 MiniTuiDrawProgressBar(
     _In_ ULONG Left,
     _In_ ULONG Top,
@@ -237,7 +248,7 @@ MiniTuiDrawMenu(
 const UIVTBL MiniTuiVtbl =
 {
     MiniTuiInitialize,
-    TuiUnInitialize,
+    FullTuiUnInitialize,
     MiniTuiDrawBackdrop,
     TuiFillArea,
     TuiDrawShadow,
@@ -262,3 +273,4 @@ const UIVTBL MiniTuiVtbl =
     MiniTuiDrawMenu,
 };
 
+/* EOF */

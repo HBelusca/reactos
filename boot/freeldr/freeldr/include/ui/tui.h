@@ -21,6 +21,8 @@
 
 /* GENERIC TUI UTILS *********************************************************/
 
+/* Textual User Interface Functions ******************************************/
+
 INT
 TuiPrintf(
     _In_ PCSTR Format, ...);
@@ -30,16 +32,54 @@ TuiTruncateStringEllipsis(
     _Inout_z_ PSTR StringText,
     _In_ ULONG MaxChars);
 
-#define TUI_TITLE_BOX_CHAR_HEIGHT    5
+/* Draws text at coordinates specified */
+VOID
+TuiDrawText(
+    _In_ ULONG X,
+    _In_ ULONG Y,
+    _In_ PCSTR Text,
+    _In_ UCHAR Attr);
 
-/* Textual User Interface Functions ******************************************/
+/* Draws text at coordinates specified */
+VOID
+TuiDrawText2(
+    _In_ ULONG X,
+    _In_ ULONG Y,
+    _In_opt_ ULONG MaxNumChars,
+    _In_reads_or_z_(MaxNumChars) PCSTR Text,
+    _In_ UCHAR Attr);
 
-BOOLEAN    TuiInitialize(VOID);                                    // Initialize User-Interface
-VOID    TuiUnInitialize(VOID);                                    // Un-initialize User-Interface
+/* Draws centered text at the coordinates specified and clips the edges */
+VOID
+TuiDrawCenteredText(
+    _In_ ULONG Left,
+    _In_ ULONG Top,
+    _In_ ULONG Right,
+    _In_ ULONG Bottom,
+    _In_ PCSTR TextString,
+    _In_ UCHAR Attr);
 
-VOID    TuiDrawBackdrop(VOID);                                    // Fills the entire screen with a backdrop
-VOID    TuiFillArea(ULONG Left, ULONG Top, ULONG Right, ULONG Bottom, CHAR FillChar, UCHAR Attr /* Color Attributes */);    // Fills the area specified with FillChar and Attr
-VOID    TuiDrawShadow(ULONG Left, ULONG Top, ULONG Right, ULONG Bottom);    // Draws a shadow on the bottom and right sides of the area specified
+/* Fills the area specified with FillChar and Attr */
+VOID TuiFillArea(ULONG Left, ULONG Top, ULONG Right, ULONG Bottom, CHAR FillChar, UCHAR Attr /* Color Attributes */);
+
+/* Saves the screen so that it can be restored later */
+_Ret_maybenull_
+__drv_allocatesMem(Mem)
+PUCHAR
+TuiSaveScreen(VOID);
+
+/* Restores the screen from a previous save */
+VOID
+TuiRestoreScreen(
+    _In_opt_ __drv_freesMem(Mem) PUCHAR Buffer);
+
+/* Initialize User-Interface */
+BOOLEAN TuiInitialize(VOID);
+/* Un-initialize User-Interface */
+VOID TuiUnInitialize(VOID);
+
+/* Draws a shadow on the bottom and right sides of the area specified */
+VOID TuiDrawShadow(ULONG Left, ULONG Top, ULONG Right, ULONG Bottom);
 
 /* Draws a box around the area specified */
 VOID
@@ -72,46 +112,25 @@ TuiDrawBoxBottomLine(
     _In_ UCHAR HorzStyle,
     _In_ UCHAR Attr);
 
-/* Draws text at coordinates specified */
-VOID
-TuiDrawText(
-    _In_ ULONG X,
-    _In_ ULONG Y,
-    _In_ PCSTR Text,
-    _In_ UCHAR Attr);
+/* Converts the text color into its equivalent color value */
+UCHAR
+TuiTextToColor(
+    _In_ PCSTR ColorText);
 
-/* Draws text at coordinates specified */
-VOID
-TuiDrawText2(
-    _In_ ULONG X,
-    _In_ ULONG Y,
-    _In_opt_ ULONG MaxNumChars,
-    _In_reads_or_z_(MaxNumChars) PCSTR Text,
-    _In_ UCHAR Attr);
+/* Converts the text fill into its equivalent fill value */
+UCHAR
+TuiTextToFillStyle(
+    _In_ PCSTR FillStyleText);
 
-/* Draws centered text at the coordinates specified and clips the edges */
-VOID
-TuiDrawCenteredText(
-    _In_ ULONG Left,
-    _In_ ULONG Top,
-    _In_ ULONG Right,
-    _In_ ULONG Bottom,
-    _In_ PCSTR TextString,
-    _In_ UCHAR Attr);
 
-VOID    TuiDrawStatusText(PCSTR StatusText);                    // Draws text at the very bottom line on the screen
-VOID    TuiUpdateDateTime(VOID);                                // Updates the date and time
+/* Textual User Interface Functions ******************************************/
 
-/* Saves the screen so that it can be restored later */
-_Ret_maybenull_
-__drv_allocatesMem(Mem)
-PUCHAR
-TuiSaveScreen(VOID);
+#define TUI_TITLE_BOX_CHAR_HEIGHT    5
 
-/* Restores the screen from a previous save */
-VOID
-TuiRestoreScreen(
-    _In_opt_ __drv_freesMem(Mem) PUCHAR Buffer);
+BOOLEAN FullTuiInitialize(VOID);    // Initialize User-Interface
+VOID FullTuiUnInitialize(VOID);     // Un-initialize User-Interface
+
+VOID TuiUpdateDateTime(VOID);       // Updates the date and time
 
 /* Displays a message box on the screen with an ok button */
 VOID
@@ -123,18 +142,12 @@ VOID
 TuiMessageBoxCritical(
     _In_ PCSTR MessageText);
 
-BOOLEAN    TuiEditBox(PCSTR MessageText, PCHAR EditTextBuffer, ULONG Length);
-UCHAR    TuiTextToColor(PCSTR ColorText);                        // Converts the text color into it's equivalent color value
-UCHAR    TuiTextToFillStyle(PCSTR FillStyleText);                // Converts the text fill into it's equivalent fill value
+BOOLEAN TuiEditBox(PCSTR MessageText, PCHAR EditTextBuffer, ULONG Length);
 
-VOID    TuiFadeInBackdrop(VOID);                                // Draws the backdrop and fades the screen in
-VOID    TuiFadeOut(VOID);                                        // Fades the screen out
+VOID TuiFadeInBackdrop(VOID);   // Draws the backdrop and fades the screen in
+VOID TuiFadeOut(VOID);          // Fades the screen out
 
 /* Menu Functions ************************************************************/
-
-VOID
-TuiDrawMenu(
-    _In_ PUI_MENU_INFO MenuInfo);
 
 VOID
 TuiDrawMenuBox(

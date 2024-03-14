@@ -1,40 +1,13 @@
 /*
- * COPYRIGHT:       See COPYING in the top level directory
- * PROJECT:         FreeLoader
- * FILE:            boot/freeldr/freeldr/include/ui/minitui.h
- * PURPOSE:         Mini Text UI interface header
- * PROGRAMMERS:     Hervé Poussineau
+ * PROJECT:     FreeLoader
+ * LICENSE:     GPL-2.0-or-later (https://spdx.org/licenses/GPL-2.0-or-later)
+ * PURPOSE:     "Mini" Text UI interface
+ * COPYRIGHT:   Copyright 2007 Hervé Poussineau <hpoussin@reactos.org>
  */
 
 #pragma once
 
 /* Textual User Interface Functions ******************************************/
-
-VOID MiniTuiDrawBackdrop(VOID);
-VOID MiniTuiDrawStatusText(PCSTR StatusText);
-
-VOID
-MiniTuiSetProgressBarText(
-    _In_ PCSTR ProgressText);
-
-VOID
-MiniTuiTickProgressBar(
-    _In_ ULONG SubPercentTimes100);
-
-/* Draws the progress bar showing nPos percent filled */
-VOID
-MiniTuiDrawProgressBarCenter(
-    _In_ PCSTR ProgressText);
-
-/* Draws the progress bar showing nPos percent filled */
-VOID
-MiniTuiDrawProgressBar(
-    _In_ ULONG Left,
-    _In_ ULONG Top,
-    _In_ ULONG Right,
-    _In_ ULONG Bottom,
-    _In_ PCSTR ProgressText);
-
 /* Menu Functions ************************************************************/
 
 VOID
@@ -42,3 +15,5 @@ MiniTuiDrawMenu(
     _In_ PUI_MENU_INFO MenuInfo);
 
 extern const UIVTBL MiniTuiVtbl;
+
+/* EOF */
