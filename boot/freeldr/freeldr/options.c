@@ -94,22 +94,19 @@ VOID DoOptionsMenu(IN OperatingSystemItem* OperatingSystem)
     ULONG SelectedMenuItem;
     CHAR  DebugChannelString[100];
 
-    if (!UiDisplayMenu("Select an option:", NULL,
-                       TRUE,
-                       OptionsMenuList,
-                       sizeof(OptionsMenuList) / sizeof(OptionsMenuList[0]),
-                       11, // Use "Start ReactOS normally" as default; see the switch below.
-                       -1,
-                       &SelectedMenuItem,
-                       TRUE,
-                       NULL, NULL))
+    if (!UiDisplayScreen("Select an option:", NULL,
+                         TRUE,
+                         OptionsMenuList,
+                         RTL_NUMBER_OF(OptionsMenuList),
+                         11, // Use "Start ReactOS normally" as default; see the switch below.
+                         -1,
+                         &SelectedMenuItem,
+                         TRUE,
+                         NULL, NULL))
     {
         /* The user pressed ESC */
         return;
     }
-
-    /* Clear the backdrop */
-    UiDrawBackdrop();
 
     switch (SelectedMenuItem)
     {

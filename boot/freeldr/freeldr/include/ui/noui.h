@@ -88,8 +88,14 @@ VOID NoUiFadeOut(VOID);
 
 /* Menu Functions ************************************************************/
 
+#if 0
 VOID
 NoUiDrawMenu(
     _In_ PUI_MENU_INFO MenuInfo);
+#endif
+
+VOID
+NoUiDrawScreen(
+    _In_ PUI_SCREEN_INFO ScreenInfo);
 
 /* EOF */

@@ -126,7 +126,6 @@ FullTuiDrawBackdrop(VOID)
 
     /* Update the date & time */
     TuiUpdateDateTime();
-    VideoCopyOffScreenBufferToVRAM();
 }
 
 static VOID
@@ -350,6 +349,7 @@ FullTuiFadeInBackdrop(VOID)
 
     // Draw the backdrop and title box
     FullTuiDrawBackdrop();
+    VideoCopyOffScreenBufferToVRAM();
 
     if (UiUseSpecialEffects && ! MachVideoIsPaletteFixed() && TuiFadePalette != NULL)
     {
@@ -388,25 +388,37 @@ VOID TuiFadeOut(VOID)
 
 }
 
+#if 0
 static VOID
 FullTuiDrawMenu(
     _In_ PUI_MENU_INFO MenuInfo)
 {
-    // FIXME: Theme-specific
+}
+#endif
+
+static VOID
+FullTuiDrawScreen(
+    _In_ PUI_SCREEN_INFO ScreenInfo)
+{
+    PUI_MENU_INFO MenuInfo = ScreenInfo->Menu;
+
     /* Draw the backdrop */
     UiDrawBackdrop();
 
-    UiDrawMenu(MenuInfo);
+    if (MenuInfo)
+    {
+        UiDrawMenu(MenuInfo);
 
-    // FIXME: Theme-specific
-    /* Update the status bar */
-    UiVtbl.DrawStatusText("Use \x18 and \x19 to select, then press ENTER.");
+        /* Update the status bar */
+        UiVtbl.DrawStatusText("Use \x18 and \x19 to select, then press ENTER.");
+    }
+
+    UiDrawTimeout(ScreenInfo);
+    TuiUpdateDateTime();
 
     /* Display the boot options if needed */
-    if (MenuInfo->ShowBootOptions)
+    if (ScreenInfo->ShowBootOptions)
         DisplayBootTimeOptions();
-
-    VideoCopyOffScreenBufferToVRAM();
 }
 
 const UIVTBL TuiVtbl =
@@ -433,7 +445,8 @@ const UIVTBL TuiVtbl =
     TuiTextToFillStyle,
     FullTuiFadeInBackdrop,
     TuiFadeOut,
-    FullTuiDrawMenu,
+    // FullTuiDrawMenu,
+    FullTuiDrawScreen
 };
 
 /* EOF */

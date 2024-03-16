@@ -85,7 +85,8 @@ UIVTBL UiVtbl =
     NoUiTextToFillStyle,
     NoUiFadeInBackdrop,
     NoUiFadeOut,
-    NoUiDrawMenu,
+    // NoUiDrawMenu,
+    NoUiDrawScreen
 };
 
 BOOLEAN UiInitialize(BOOLEAN ShowUi)

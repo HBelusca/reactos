@@ -91,9 +91,17 @@ UCHAR GuiTextToFillStyle(PCSTR FillStyleText)
     return 0;
 }
 
+#if 0
 VOID
 GuiDrawMenu(
     _In_ PUI_MENU_INFO MenuInfo)
+{
+}
+#endif
+
+static VOID
+GuiDrawScreen(
+    _In_ PUI_SCREEN_INFO ScreenInfo)
 {
 }
 
@@ -120,7 +128,8 @@ const UIVTBL GuiVtbl =
     GuiTextToFillStyle,
     GuiFadeInBackdrop,
     GuiFadeOut,
-    GuiDrawMenu,
+    // GuiDrawMenu,
+    GuiDrawScreen
     */
     NULL, NULL, NULL, NULL, NULL, NULL, NULL,
     NULL, NULL, NULL, NULL, NULL, NULL, NULL,

@@ -430,22 +430,19 @@ VOID RunLoader(VOID)
 
     for (;;)
     {
-        /* Redraw the backdrop */
-        UiDrawBackdrop();
-
         /* Show the operating system list menu */
-        if (!UiDisplayMenu("Please select the operating system to start:",
-                           "For troubleshooting and advanced startup options for "
-                               "ReactOS, press F8.",
-                           TRUE,
-                           OperatingSystemDisplayNames,
-                           OperatingSystemCount,
-                           DefaultOperatingSystem,
-                           TimeOut,
-                           &SelectedOperatingSystem,
-                           FALSE,
-                           MainBootMenuKeyPressFilter,
-                           OperatingSystemList))
+        if (!UiDisplayScreen("Please select the operating system to start:",
+                             "For troubleshooting and advanced startup options for "
+                                 "ReactOS, press F8.",
+                             TRUE,
+                             OperatingSystemDisplayNames,
+                             OperatingSystemCount,
+                             DefaultOperatingSystem,
+                             TimeOut,
+                             &SelectedOperatingSystem,
+                             FALSE,
+                             MainBootMenuKeyPressFilter,
+                             OperatingSystemList))
         {
             UiMessageBox("Press ENTER to reboot.");
             goto Reboot;

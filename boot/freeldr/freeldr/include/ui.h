@@ -201,52 +201,76 @@ VOID    UiFadeOut(VOID);                                        // Fades the scr
 
 /* Menu Functions ************************************************************/
 
-typedef struct tagUI_MENU_INFO
+typedef struct _UI_MENU_INFO
+{
+    PCSTR* ItemList;
+    ULONG  ItemCount;
+    ULONG  SelectedItem;
+
+    ULONG Left;
+    ULONG Top;
+    ULONG Right;
+    ULONG Bottom;
+} UI_MENU_INFO, *PUI_MENU_INFO;
+
+typedef struct _UI_SCREEN_INFO
 {
     PCSTR   Header;
     PCSTR   Footer;
     BOOLEAN ShowBootOptions;
 
-    PCSTR*  ItemList;
-    ULONG   ItemCount;
-    LONG    TimeOut;
-    ULONG   SelectedItem;
-    PVOID   Context;
+    PUI_MENU_INFO Menu;
+    LONG  TimeOut;
+    PVOID Context;
 
-    ULONG   Left;
-    ULONG   Top;
-    ULONG   Right;
-    ULONG   Bottom;
-} UI_MENU_INFO, *PUI_MENU_INFO;
+    ULONG Left;
+    ULONG Top;
+    ULONG Right;
+    ULONG Bottom;
+} UI_SCREEN_INFO, *PUI_SCREEN_INFO;
 
 typedef
 BOOLEAN
-(*UiMenuKeyPressFilterCallback)(
+(*UiKeyPressFilterCallback)(
     IN ULONG KeyPress,
     IN ULONG SelectedItem,
     IN PVOID Context OPTIONAL);
 
 VOID
-UiDrawMenuTimeout(
-    _In_ PUI_MENU_INFO MenuInfo);
+UiDrawTimeout(
+    _In_ PUI_SCREEN_INFO ScreenInfo);
+
+BOOLEAN
+UiDisplayMenuEx(
+    _Inout_ PUI_MENU_INFO MenuInfo/*,
+    _Out_ PULONG SelectedItem,
+    _In_ BOOLEAN CanEscape*/);
+
+BOOLEAN
+UiDisplayMenu(
+    _In_ PCSTR ItemList[],
+    _In_ ULONG ItemCount,
+    _In_ ULONG DefaultItem/*,
+    _Out_ PULONG SelectedItem,
+    _In_ BOOLEAN CanEscape*/);
 
 VOID
 UiDrawMenu(
     _In_ PUI_MENU_INFO MenuInfo);
 
 BOOLEAN
-UiDisplayMenu(
-    IN PCSTR Header,
-    IN PCSTR Footer OPTIONAL,
-    IN BOOLEAN ShowBootOptions,
-    IN PCSTR ItemList[],
-    IN ULONG ItemCount,
-    IN ULONG DefaultItem,
-    IN LONG TimeOut,
-    OUT PULONG SelectedItem,
-    IN BOOLEAN CanEscape,
-    IN UiMenuKeyPressFilterCallback KeyPressFilter OPTIONAL,
-    IN PVOID Context OPTIONAL);
+UiDisplayScreen(
+    _In_opt_ PCSTR Header,
+    _In_opt_ PCSTR Footer,
+    _In_ BOOLEAN ShowBootOptions,
+    _In_ PCSTR ItemList[],
+    _In_ ULONG ItemCount,
+    _In_ ULONG DefaultItem,
+    _In_ LONG TimeOut,
+    _Out_ PULONG SelectedItem,
+    _In_ BOOLEAN CanEscape,
+    _In_opt_ UiKeyPressFilterCallback KeyPressFilter,
+    _In_opt_ PVOID Context);
 
 ///////////////////////////////////////////////////////////////////////////////////////
 //
@@ -292,7 +316,10 @@ typedef struct tagUIVTBL
     VOID (*FadeInBackdrop)(VOID);
     VOID (*FadeOut)(VOID);
 
-    VOID (*DrawMenu)(PUI_MENU_INFO MenuInfo);
+    // VOID (*DrawMenu)(PUI_MENU_INFO MenuInfo);
+
+    VOID (*DrawScreen)(
+        _In_ PUI_SCREEN_INFO ScreenInfo);
 } UIVTBL, *PUIVTBL;
 
 VOID UiInit(const char *CmdLine);

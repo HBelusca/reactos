@@ -59,14 +59,14 @@ VOID OptionMenuCustomBoot(VOID)
     ULONG SelectedMenuItem;
     OperatingSystemItem OperatingSystem;
 
-    if (!UiDisplayMenu("Please choose a boot method:", NULL,
-                       FALSE,
-                       CustomBootMenuList,
-                       RTL_NUMBER_OF(CustomBootMenuList),
-                       0, -1,
-                       &SelectedMenuItem,
-                       TRUE,
-                       NULL, NULL))
+    if (!UiDisplayScreen("Please choose a boot method:", NULL,
+                         FALSE,
+                         CustomBootMenuList,
+                         RTL_NUMBER_OF(CustomBootMenuList),
+                         0, -1,
+                         &SelectedMenuItem,
+                         TRUE,
+                         NULL, NULL))
     {
         /* The user pressed ESC */
         return;

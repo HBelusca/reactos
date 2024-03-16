@@ -61,79 +61,6 @@ TuiCalcMenuBoxSize(
 }
 
 VOID
-TuiDrawTimeoutString(
-    _In_ PUI_MENU_INFO MenuInfo,
-    _In_ PCHAR LineText,
-    _In_ ULONG Length)
-{
-    /**
-     * How to pad/fill:
-     *
-     *  Center  Box     What to do:
-     *  0       0 or 1  Pad on the right with blanks.
-     *  1       0       Pad on the left with blanks.
-     *  1       1       Pad on the left with blanks + box bottom border.
-     **/
-
-    if (UiCenterMenu)
-    {
-        /* In boxed menu mode, pad on the left with blanks and box border;
-         * otherwise, pad over all the box length until its right edge */
-        TuiFillArea(0,
-                    MenuInfo->Bottom,
-                    UiMenuBox
-                        ? MenuInfo->Left - 1 /* Left side of the box bottom */
-                        : MenuInfo->Right,   /* Left side + all box length  */
-                    MenuInfo->Bottom,
-                    UiBackdropFillStyle,
-                    ATTR(UiBackdropFgColor, UiBackdropBgColor));
-
-        if (UiMenuBox)
-        {
-            /* Fill with box bottom border */
-            TuiDrawBoxBottomLine(MenuInfo->Left,
-                                 MenuInfo->Bottom,
-                                 MenuInfo->Right,
-                                 D_VERT,
-                                 D_HORZ,
-                                 ATTR(UiMenuFgColor, UiMenuBgColor));
-
-            /* In centered boxed menu mode, the timeout string
-             * does not go past the right border, in principle... */
-        }
-
-        if (Length > 0)
-        {
-            /* Display the timeout at the bottom-right part of the menu */
-            UiDrawText(MenuInfo->Right - Length - 1,
-                       MenuInfo->Bottom,
-                       LineText,
-                       ATTR(UiMenuFgColor, UiMenuBgColor));
-        }
-    }
-    else
-    {
-        if (Length > 0)
-        {
-            /* Display the timeout under the menu directly */
-            UiDrawText(0,
-                       MenuInfo->Bottom + 4,
-                       LineText,
-                       ATTR(UiMenuFgColor, UiMenuBgColor));
-        }
-
-        /* Pad on the right with blanks, to erase
-         * characters when the string length decreases */
-        TuiFillArea(Length,
-                    MenuInfo->Bottom + 4,
-                    Length ? (Length + 1) : (UiScreenWidth - 1),
-                    MenuInfo->Bottom + 4,
-                    UiBackdropFillStyle,
-                    ATTR(UiBackdropFgColor, UiBackdropBgColor));
-    }
-}
-
-VOID
 TuiDrawMenuBox(
     _In_ PUI_MENU_INFO MenuInfo)
 {
@@ -151,10 +78,6 @@ TuiDrawMenuBox(
                   TRUE,     // Shadow
                   ATTR(UiMenuFgColor, UiMenuBgColor));
     }
-
-    /* Update the date & time */
-    TuiUpdateDateTime();
-    UiDrawMenuTimeout(MenuInfo);
 }
 
 VOID

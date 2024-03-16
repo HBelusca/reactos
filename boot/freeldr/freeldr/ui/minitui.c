@@ -61,9 +61,6 @@ MiniTuiDrawBackdrop(VOID)
     TuiFillArea(0, 0, UiScreenWidth - 1, UiScreenHeight - 1,
                 UiBackdropFillStyle,
                 ATTR(UiBackdropFgColor, UiBackdropBgColor));
-
-    /* Update the screen buffer */
-    VideoCopyOffScreenBufferToVRAM();
 }
 
 static VOID
@@ -190,48 +187,62 @@ MiniTuiDrawProgressBar(
     UiInitProgressBar(Left, Top, Right, Bottom, ProgressText);
 }
 
-VOID
+#if 0
+static VOID
 MiniTuiDrawMenu(
     _In_ PUI_MENU_INFO MenuInfo)
 {
+}
+#endif
+
+static VOID
+MiniTuiDrawScreen(
+    _In_ PUI_SCREEN_INFO ScreenInfo)
+{
+    PUI_MENU_INFO MenuInfo = ScreenInfo->Menu;
+
     /* Draw the backdrop */
     UiDrawBackdrop();
 
-    /* No GUI status bar text, just minimal text. Show the menu header. */
-    if (MenuInfo->Header)
+    /* No GUI status bar text, just minimal text. Show the screen header. */
+    if (ScreenInfo->Header)
     {
         UiVtbl.DrawText(0,
-                        MenuInfo->Top - 2,
-                        MenuInfo->Header,
+                        MenuInfo ? MenuInfo->Top - 2 : 2,
+                        ScreenInfo->Header,
                         ATTR(UiMenuFgColor, UiMenuBgColor));
     }
 
-    UiDrawMenu(MenuInfo);
+    if (MenuInfo)
+    {
+        UiDrawMenu(MenuInfo);
 
-    /* Now tell the user how to choose */
-    UiVtbl.DrawText(0,
-                    MenuInfo->Bottom + 1,
-                    "Use \x18 and \x19 to move the highlight to your choice.",
-                    ATTR(UiMenuFgColor, UiMenuBgColor));
-    UiVtbl.DrawText(0,
-                    MenuInfo->Bottom + 2,
-                    "Press ENTER to choose.",
-                    ATTR(UiMenuFgColor, UiMenuBgColor));
+        /* Now tell the user how to choose */
+        UiVtbl.DrawText(0,
+                        MenuInfo->Bottom + 1,
+                        "Use \x18 and \x19 to move the highlight to your choice.",
+                        ATTR(UiMenuFgColor, UiMenuBgColor));
+        UiVtbl.DrawText(0,
+                        MenuInfo->Bottom + 2,
+                        "Press ENTER to choose.",
+                        ATTR(UiMenuFgColor, UiMenuBgColor));
+    }
 
-    /* And show the menu footer */
-    if (MenuInfo->Footer)
+    /* And show the screen footer */
+    if (ScreenInfo->Footer)
     {
         UiVtbl.DrawText(0,
                         UiScreenHeight - 4,
-                        MenuInfo->Footer,
+                        ScreenInfo->Footer,
                         ATTR(UiMenuFgColor, UiMenuBgColor));
     }
 
-    /* Display the boot options if needed */
-    if (MenuInfo->ShowBootOptions)
-        DisplayBootTimeOptions();
+    UiDrawTimeout(ScreenInfo);
+    TuiUpdateDateTime();
 
-    VideoCopyOffScreenBufferToVRAM();
+    /* Display the boot options if needed */
+    if (ScreenInfo->ShowBootOptions)
+        DisplayBootTimeOptions();
 }
 
 const UIVTBL MiniTuiVtbl =
@@ -258,7 +269,8 @@ const UIVTBL MiniTuiVtbl =
     TuiTextToFillStyle,
     MiniTuiDrawBackdrop, /* no FadeIn */
     TuiFadeOut,
-    MiniTuiDrawMenu,
+    // MiniTuiDrawMenu,
+    MiniTuiDrawScreen
 };
 
 /* EOF */
