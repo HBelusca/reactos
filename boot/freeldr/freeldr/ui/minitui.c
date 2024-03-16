@@ -194,28 +194,19 @@ VOID
 MiniTuiDrawMenu(
     _In_ PUI_MENU_INFO MenuInfo)
 {
-    ULONG i;
-
     /* Draw the backdrop */
     UiDrawBackdrop();
 
     /* No GUI status bar text, just minimal text. Show the menu header. */
-    if (MenuInfo->MenuHeader)
+    if (MenuInfo->Header)
     {
         UiVtbl.DrawText(0,
                         MenuInfo->Top - 2,
-                        MenuInfo->MenuHeader,
+                        MenuInfo->Header,
                         ATTR(UiMenuFgColor, UiMenuBgColor));
     }
 
-    /* Draw the menu box */
-    TuiDrawMenuBox(MenuInfo);
-
-    /* Draw each line of the menu */
-    for (i = 0; i < MenuInfo->MenuItemCount; ++i)
-    {
-        TuiDrawMenuItem(MenuInfo, i);
-    }
+    UiDrawMenu(MenuInfo);
 
     /* Now tell the user how to choose */
     UiVtbl.DrawText(0,
@@ -228,19 +219,17 @@ MiniTuiDrawMenu(
                     ATTR(UiMenuFgColor, UiMenuBgColor));
 
     /* And show the menu footer */
-    if (MenuInfo->MenuFooter)
+    if (MenuInfo->Footer)
     {
         UiVtbl.DrawText(0,
                         UiScreenHeight - 4,
-                        MenuInfo->MenuFooter,
+                        MenuInfo->Footer,
                         ATTR(UiMenuFgColor, UiMenuBgColor));
     }
 
     /* Display the boot options if needed */
     if (MenuInfo->ShowBootOptions)
-    {
         DisplayBootTimeOptions();
-    }
 
     VideoCopyOffScreenBufferToVRAM();
 }
@@ -269,7 +258,6 @@ const UIVTBL MiniTuiVtbl =
     TuiTextToFillStyle,
     MiniTuiDrawBackdrop, /* no FadeIn */
     TuiFadeOut,
-    TuiDisplayMenu,
     MiniTuiDrawMenu,
 };
 

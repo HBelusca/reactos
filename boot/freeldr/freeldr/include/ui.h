@@ -203,14 +203,14 @@ VOID    UiFadeOut(VOID);                                        // Fades the scr
 
 typedef struct tagUI_MENU_INFO
 {
-    PCSTR   MenuHeader;
-    PCSTR   MenuFooter;
+    PCSTR   Header;
+    PCSTR   Footer;
     BOOLEAN ShowBootOptions;
 
-    PCSTR*  MenuItemList;
-    ULONG   MenuItemCount;
-    LONG    MenuTimeRemaining;
-    ULONG   SelectedMenuItem;
+    PCSTR*  ItemList;
+    ULONG   ItemCount;
+    LONG    TimeOut;
+    ULONG   SelectedItem;
     PVOID   Context;
 
     ULONG   Left;
@@ -223,19 +223,27 @@ typedef
 BOOLEAN
 (*UiMenuKeyPressFilterCallback)(
     IN ULONG KeyPress,
-    IN ULONG SelectedMenuItem,
+    IN ULONG SelectedItem,
     IN PVOID Context OPTIONAL);
+
+VOID
+UiDrawMenuTimeout(
+    _In_ PUI_MENU_INFO MenuInfo);
+
+VOID
+UiDrawMenu(
+    _In_ PUI_MENU_INFO MenuInfo);
 
 BOOLEAN
 UiDisplayMenu(
-    IN PCSTR MenuHeader,
-    IN PCSTR MenuFooter OPTIONAL,
+    IN PCSTR Header,
+    IN PCSTR Footer OPTIONAL,
     IN BOOLEAN ShowBootOptions,
-    IN PCSTR MenuItemList[],
-    IN ULONG MenuItemCount,
-    IN ULONG DefaultMenuItem,
-    IN LONG MenuTimeOut,
-    OUT PULONG SelectedMenuItem,
+    IN PCSTR ItemList[],
+    IN ULONG ItemCount,
+    IN ULONG DefaultItem,
+    IN LONG TimeOut,
+    OUT PULONG SelectedItem,
     IN BOOLEAN CanEscape,
     IN UiMenuKeyPressFilterCallback KeyPressFilter OPTIONAL,
     IN PVOID Context OPTIONAL);
@@ -283,19 +291,6 @@ typedef struct tagUIVTBL
     UCHAR (*TextToFillStyle)(PCSTR FillStyleText);
     VOID (*FadeInBackdrop)(VOID);
     VOID (*FadeOut)(VOID);
-
-    BOOLEAN (*DisplayMenu)(
-        IN PCSTR MenuHeader,
-        IN PCSTR MenuFooter OPTIONAL,
-        IN BOOLEAN ShowBootOptions,
-        IN PCSTR MenuItemList[],
-        IN ULONG MenuItemCount,
-        IN ULONG DefaultMenuItem,
-        IN LONG MenuTimeOut,
-        OUT PULONG SelectedMenuItem,
-        IN BOOLEAN CanEscape,
-        IN UiMenuKeyPressFilterCallback KeyPressFilter OPTIONAL,
-        IN PVOID Context OPTIONAL);
 
     VOID (*DrawMenu)(PUI_MENU_INFO MenuInfo);
 } UIVTBL, *PUIVTBL;

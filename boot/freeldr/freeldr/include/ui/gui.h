@@ -60,18 +60,4 @@ UCHAR    GuiTextToFillStyle(PCSTR FillStyleText);                // Converts the
 
 /* Menu Functions ************************************************************/
 
-BOOLEAN
-GuiDisplayMenu(
-    IN PCSTR MenuHeader,
-    IN PCSTR MenuFooter OPTIONAL,
-    IN BOOLEAN ShowBootOptions,
-    IN PCSTR MenuItemList[],
-    IN ULONG MenuItemCount,
-    IN ULONG DefaultMenuItem,
-    IN LONG MenuTimeOut,
-    OUT PULONG SelectedMenuItem,
-    IN BOOLEAN CanEscape,
-    IN UiMenuKeyPressFilterCallback KeyPressFilter OPTIONAL,
-    IN PVOID Context OPTIONAL);
-
 extern const UIVTBL GuiVtbl;

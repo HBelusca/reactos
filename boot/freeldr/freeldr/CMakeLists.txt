@@ -73,6 +73,7 @@ list(APPEND FREELDR_BOOTMGR_SOURCE
     ui/tuibox.c
     ui/tuimenu.c
     ui/ui.c
+    ui/uimenu.c
     ui/video.c)
 
 list(APPEND FREELDR_NTLDR_SOURCE

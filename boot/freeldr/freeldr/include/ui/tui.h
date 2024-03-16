@@ -156,21 +156,7 @@ TuiDrawMenuBox(
 VOID
 TuiDrawMenuItem(
     _In_ PUI_MENU_INFO MenuInfo,
-    _In_ ULONG MenuItemNumber);
-
-BOOLEAN
-TuiDisplayMenu(
-    IN PCSTR MenuHeader,
-    IN PCSTR MenuFooter OPTIONAL,
-    IN BOOLEAN ShowBootOptions,
-    IN PCSTR MenuItemList[],
-    IN ULONG MenuItemCount,
-    IN ULONG DefaultMenuItem,
-    IN LONG MenuTimeOut,
-    OUT PULONG SelectedMenuItem,
-    IN BOOLEAN CanEscape,
-    IN UiMenuKeyPressFilterCallback KeyPressFilter OPTIONAL,
-    IN PVOID Context OPTIONAL);
+    _In_ ULONG ItemIndex);
 
 /*
  * Definitions for corners, depending on HORZ and VERT

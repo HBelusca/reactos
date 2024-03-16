@@ -392,20 +392,11 @@ static VOID
 FullTuiDrawMenu(
     _In_ PUI_MENU_INFO MenuInfo)
 {
-    ULONG i;
-
     // FIXME: Theme-specific
     /* Draw the backdrop */
     UiDrawBackdrop();
 
-    /* Draw the menu box */
-    TuiDrawMenuBox(MenuInfo);
-
-    /* Draw each line of the menu */
-    for (i = 0; i < MenuInfo->MenuItemCount; ++i)
-    {
-        TuiDrawMenuItem(MenuInfo, i);
-    }
+    UiDrawMenu(MenuInfo);
 
     // FIXME: Theme-specific
     /* Update the status bar */
@@ -413,9 +404,7 @@ FullTuiDrawMenu(
 
     /* Display the boot options if needed */
     if (MenuInfo->ShowBootOptions)
-    {
         DisplayBootTimeOptions();
-    }
 
     VideoCopyOffScreenBufferToVRAM();
 }
@@ -444,7 +433,6 @@ const UIVTBL TuiVtbl =
     TuiTextToFillStyle,
     FullTuiFadeInBackdrop,
     TuiFadeOut,
-    TuiDisplayMenu,
     FullTuiDrawMenu,
 };
 

@@ -85,7 +85,6 @@ UIVTBL UiVtbl =
     NoUiTextToFillStyle,
     NoUiFadeInBackdrop,
     NoUiFadeOut,
-    NoUiDisplayMenu,
     NoUiDrawMenu,
 };
 
@@ -599,26 +598,6 @@ UiShowMessageBoxesInArgv(
         /* Free the memory */
         FrLdrTempFree(MessageBoxText, TAG_UI_TEXT);
     }
-}
-
-BOOLEAN
-UiDisplayMenu(
-    IN PCSTR MenuHeader,
-    IN PCSTR MenuFooter OPTIONAL,
-    IN BOOLEAN ShowBootOptions,
-    IN PCSTR MenuItemList[],
-    IN ULONG MenuItemCount,
-    IN ULONG DefaultMenuItem,
-    IN LONG MenuTimeOut,
-    OUT PULONG SelectedMenuItem,
-    IN BOOLEAN CanEscape,
-    IN UiMenuKeyPressFilterCallback KeyPressFilter OPTIONAL,
-    IN PVOID Context OPTIONAL)
-{
-    return UiVtbl.DisplayMenu(MenuHeader, MenuFooter, ShowBootOptions,
-                              MenuItemList, MenuItemCount, DefaultMenuItem,
-                              MenuTimeOut, SelectedMenuItem, CanEscape,
-                              KeyPressFilter, Context);
 }
 
 VOID UiFadeInBackdrop(VOID)

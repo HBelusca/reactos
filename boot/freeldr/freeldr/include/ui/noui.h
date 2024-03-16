@@ -88,20 +88,6 @@ VOID NoUiFadeOut(VOID);
 
 /* Menu Functions ************************************************************/
 
-BOOLEAN
-NoUiDisplayMenu(
-    IN PCSTR MenuHeader,
-    IN PCSTR MenuFooter OPTIONAL,
-    IN BOOLEAN ShowBootOptions,
-    IN PCSTR MenuItemList[],
-    IN ULONG MenuItemCount,
-    IN ULONG DefaultMenuItem,
-    IN LONG MenuTimeOut,
-    OUT PULONG SelectedMenuItem,
-    IN BOOLEAN CanEscape,
-    IN UiMenuKeyPressFilterCallback KeyPressFilter OPTIONAL,
-    IN PVOID Context OPTIONAL);
-
 VOID
 NoUiDrawMenu(
     _In_ PUI_MENU_INFO MenuInfo);

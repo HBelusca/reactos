@@ -91,6 +91,12 @@ UCHAR GuiTextToFillStyle(PCSTR FillStyleText)
     return 0;
 }
 
+VOID
+GuiDrawMenu(
+    _In_ PUI_MENU_INFO MenuInfo)
+{
+}
+
 const UIVTBL GuiVtbl =
 {
     /*
@@ -114,7 +120,6 @@ const UIVTBL GuiVtbl =
     GuiTextToFillStyle,
     GuiFadeInBackdrop,
     GuiFadeOut,
-    GuiDisplayMenu,
     GuiDrawMenu,
     */
     NULL, NULL, NULL, NULL, NULL, NULL, NULL,

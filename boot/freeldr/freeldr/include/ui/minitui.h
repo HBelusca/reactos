@@ -7,12 +7,7 @@
 
 #pragma once
 
-/* Textual User Interface Functions ******************************************/
 /* Menu Functions ************************************************************/
-
-VOID
-MiniTuiDrawMenu(
-    _In_ PUI_MENU_INFO MenuInfo);
 
 extern const UIVTBL MiniTuiVtbl;
 

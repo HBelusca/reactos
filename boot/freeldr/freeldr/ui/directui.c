@@ -127,38 +127,4 @@ UiShowMessageBoxesInArgv(
     return;
 }
 
-VOID
-UiDrawMenu(
-    _In_ PUI_MENU_INFO MenuInfo)
-{
-    MiniTuiDrawMenu(MenuInfo);
-}
-
-BOOLEAN
-UiDisplayMenu(
-    IN PCSTR MenuHeader,
-    IN PCSTR MenuFooter OPTIONAL,
-    IN BOOLEAN ShowBootOptions,
-    IN PCSTR MenuItemList[],
-    IN ULONG MenuItemCount,
-    IN ULONG DefaultMenuItem,
-    IN LONG MenuTimeOut,
-    OUT PULONG SelectedMenuItem,
-    IN BOOLEAN CanEscape,
-    IN UiMenuKeyPressFilterCallback KeyPressFilter OPTIONAL,
-    IN PVOID Context OPTIONAL)
-{
-    return TuiDisplayMenu(MenuHeader,
-                          MenuFooter,
-                          ShowBootOptions,
-                          MenuItemList,
-                          MenuItemCount,
-                          DefaultMenuItem,
-                          MenuTimeOut,
-                          SelectedMenuItem,
-                          CanEscape,
-                          KeyPressFilter,
-                          Context);
-}
-
 #endif // _M_ARM
