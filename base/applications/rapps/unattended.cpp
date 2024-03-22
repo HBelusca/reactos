@@ -350,8 +350,12 @@ ParseCmdAndExecute(LPWSTR lpCmdLine, BOOL bIsFirstLaunch, int nCmdShow)
     // RAPPS is launched without options or APPWIZ mode is requested
     if (argc == 1 || bAppwizMode)
     {
-        // Check whether the RAPPS MainWindow is already launched in another process
-        HANDLE hMutex;
+        HANDLE hMutex = NULL;
+
+        // Check whether the RAPPS MainWindow is already launched
+        // in another process only in non-APPWIZ mode.
+        if (bAppwizMode)
+            goto startMainWindow;
 
         hMutex = CreateMutexW(NULL, FALSE, szWindowClass);
         if (!hMutex || (GetLastError() == ERROR_ALREADY_EXISTS))
@@ -379,6 +383,7 @@ ParseCmdAndExecute(LPWSTR lpCmdLine, BOOL bIsFirstLaunch, int nCmdShow)
             }
         }
 
+startMainWindow:
         CMainWindow wnd(&db, bAppwizMode);
         MainWindowLoop(&wnd, nCmdShow);
 
