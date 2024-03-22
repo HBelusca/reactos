@@ -82,7 +82,11 @@ CSideTreeView::~CSideTreeView()
 
 // **** CMainWindow ****
 
-CMainWindow::CMainWindow(CAppDB *db, BOOL bAppwiz) : m_ClientPanel(NULL), m_Db(db), m_bAppwizMode(bAppwiz), SelectedEnumType(ENUM_ALL_INSTALLED)
+CMainWindow::CMainWindow(CAppDB *db, BOOL bAppwiz) :
+    m_ClientPanel(NULL),
+    m_Db(db),
+    m_bAppwizMode(bAppwiz),
+    SelectedEnumType(ENUM_ALL_INSTALLED)
 {
 }
 
@@ -453,8 +457,8 @@ CMainWindow::ProcessWindowMessage(HWND hwnd, UINT Msg, WPARAM wParam, LPARAM lPa
                 }
                 break;
             }
+            break;
         }
-        break;
 
         case WM_SIZE:
             OnSize(hwnd, wParam, lParam);
@@ -478,8 +482,8 @@ CMainWindow::ProcessWindowMessage(HWND hwnd, UINT Msg, WPARAM wParam, LPARAM lPa
             /* Forward WM_SYSCOLORCHANGE to common controls */
             m_ApplicationView->SendMessageW(WM_SYSCOLORCHANGE, wParam, lParam);
             m_TreeView->SendMessageW(WM_SYSCOLORCHANGE, wParam, lParam);
+            break;
         }
-        break;
 
         case WM_SETTINGCHANGE:
             if (wParam == SPI_SETNONCLIENTMETRICS || wParam == SPI_SETICONMETRICS)
@@ -662,8 +666,7 @@ CMainWindow::UpdateApplicationsList(AppsCategories EnumType, BOOL bReload, BOOL 
         CheckAvailable();
 
     BOOL TryRestoreSelection = SelectedEnumType == EnumType;
-    if (SelectedEnumType != EnumType)
-        SelectedEnumType = EnumType;
+    SelectedEnumType = EnumType;
 
     CApplicationView::RESTORELISTSELECTION RestoreSelection;
     if (TryRestoreSelection)
@@ -678,7 +681,8 @@ CMainWindow::UpdateApplicationsList(AppsCategories EnumType, BOOL bReload, BOOL 
         if (bReload)
             m_Db->UpdateInstalled();
 
-        // set the display type of application-view. this will remove all the item in application-view too.
+        // Set the display type of the application-view.
+        // This will also remove all the items in it.
         m_ApplicationView->SetDisplayAppType(AppViewTypeInstalledApps);
 
         CAtlList<CAppInfo *> List;
@@ -693,10 +697,11 @@ CMainWindow::UpdateApplicationsList(AppsCategories EnumType, BOOL bReload, BOOL 
         if (bReload)
             m_Db->UpdateAvailable();
 
-        // set the display type of application-view. this will remove all the item in application-view too.
+        // Set the display type of the application-view.
+        // This will also remove all the items in it.
         m_ApplicationView->SetDisplayAppType(AppViewTypeAvailableApps);
 
-        // enum available softwares
+        // Enumerate available software
         if (EnumType == ENUM_CAT_SELECTED)
         {
             AddApplicationsToView(m_Selected);
@@ -710,7 +715,7 @@ CMainWindow::UpdateApplicationsList(AppsCategories EnumType, BOOL bReload, BOOL 
     }
     else
     {
-        ATLASSERT(0 && "This should be unreachable!");
+        ATLASSERT(FALSE && "This should be unreachable!");
     }
 
     if (TryRestoreSelection)

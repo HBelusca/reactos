@@ -1361,7 +1361,7 @@ CAppsListView::GetFocusedItemData()
     INT item = GetSelectionMark();
     if (item == -1)
     {
-        return (PVOID)0;
+        return NULL;
     }
     return (PVOID)GetItemData(item);
 }
@@ -1403,13 +1403,12 @@ CAppsListView::SetDisplayAppType(APPLICATION_VIEW_TYPE AppType)
     if (g_DefaultPackageIconILIdx == -1)
         g_DefaultPackageIconILIdx = I_IMAGENONE;
 
-    // add new columns
+    // Add columns to the ListView.
     CStringW szText;
     switch (AppType)
     {
         case AppViewTypeInstalledApps:
-
-            /* Add columns to ListView */
+        {
             szText.LoadStringW(IDS_APP_NAME);
             AddColumn(ColumnCount++, szText, 368, LVCFMT_LEFT);
 
@@ -1424,10 +1423,10 @@ CAppsListView::SetDisplayAppType(APPLICATION_VIEW_TYPE AppType)
             // Disable checkboxes
             ShowCheckboxes(false);
             break;
+        }
 
         case AppViewTypeAvailableApps:
-
-            /* Add columns to ListView */
+        {
             szText.LoadStringW(IDS_APP_NAME);
             AddColumn(ColumnCount++, szText, 250, LVCFMT_LEFT);
 
@@ -1440,6 +1439,7 @@ CAppsListView::SetDisplayAppType(APPLICATION_VIEW_TYPE AppType)
             // Enable checkboxes
             ShowCheckboxes(true);
             break;
+        }
 
         default:
             break;
@@ -1674,8 +1674,8 @@ CApplicationView::ProcessWindowMessage(
                         break;
                 }
             }
+            break;
         }
-        break;
 
         case WM_SYSCOLORCHANGE:
         {
@@ -1684,8 +1684,8 @@ CApplicationView::ProcessWindowMessage(
             m_AppsInfo->SendMessageW(WM_SYSCOLORCHANGE, wParam, lParam);
             m_Toolbar->SendMessageW(WM_SYSCOLORCHANGE, wParam, lParam);
             m_ComboBox->SendMessageW(WM_SYSCOLORCHANGE, wParam, lParam);
+            break;
         }
-        break;
 
         case WM_SIZE:
         {
@@ -1696,8 +1696,8 @@ CApplicationView::ProcessWindowMessage(
         case WM_COMMAND:
         {
             OnCommand(wParam, lParam);
+            break;
         }
-        break;
 
         case WM_CONTEXTMENU:
         {
@@ -1720,8 +1720,8 @@ CApplicationView::ProcessWindowMessage(
                     return TRUE;
                 }
             }
+            break;
         }
-        break;
     }
     return FALSE;
 }
@@ -1821,14 +1821,14 @@ CApplicationView::OnSize(HWND hwnd, WPARAM wParam, LPARAM lParam)
     m_Toolbar->AutoSize();
 
     /* Automatically hide captions */
-    DWORD dToolbarTreshold = m_Toolbar->GetMaxButtonsWidth();
+    DWORD dToolbarThreshold = m_Toolbar->GetMaxButtonsWidth();
     DWORD dSearchbarMargin = (LOWORD(lParam) - m_SearchBar->m_Width - m_ComboBox->m_Width - TOOLBAR_PADDING * 2);
 
-    if (dSearchbarMargin > dToolbarTreshold)
+    if (dSearchbarMargin > dToolbarThreshold)
     {
         m_Toolbar->ShowButtonCaption(true);
     }
-    else if (dSearchbarMargin < dToolbarTreshold)
+    else if (dSearchbarMargin < dToolbarThreshold)
     {
         m_Toolbar->ShowButtonCaption(false);
     }
@@ -2022,7 +2022,7 @@ CApplicationView::SetDisplayAppType(APPLICATION_VIEW_TYPE AppType)
     ApplicationViewType = AppType;
     m_AppsInfo->SetWelcomeText(m_MainWindow->m_bAppwizMode);
 
-    HMENU hMenu = ::GetMenu(m_hWnd);
+    HMENU hMenu = GetMenu();
     switch (AppType)
     {
         case AppViewTypeInstalledApps:
@@ -2071,7 +2071,7 @@ CApplicationView::SetWatermark(const CStringW &Text)
     m_ListView->SetWatermark(Text);
 }
 
-void
+VOID
 CApplicationView::CheckAll()
 {
     m_ListView->CheckAll();
@@ -2146,8 +2146,7 @@ CApplicationView::ItemGetFocus(LPVOID CallbackParam)
 
         if (ApplicationViewType == AppViewTypeInstalledApps)
         {
-            HMENU hMenu = ::GetMenu(m_hWnd);
-
+            HMENU hMenu = GetMenu();
             BOOL CanModify = Info->CanModify();
 
             EnableMenuItem(hMenu, ID_MODIFY, CanModify ? MF_ENABLED : MF_GRAYED);
