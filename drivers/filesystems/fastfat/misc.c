@@ -519,7 +519,7 @@ VfatCheckForDismount(
         {
             Fcb = DeviceExt->RootFcb;
             CcUninitializeCacheMap(Fcb->FileObject,
-                                   &Zero,
+                                   NULL, // &Zero,
                                    NULL);
             ObDereferenceObject(Fcb->FileObject);
             DeviceExt->RootFcb = NULL;
@@ -530,7 +530,7 @@ VfatCheckForDismount(
             Fcb = DeviceExt->VolumeFcb;
 #ifndef VOLUME_IS_NOT_CACHED_WORK_AROUND_IT
             CcUninitializeCacheMap(Fcb->FileObject,
-                                   &Zero,
+                                   NULL, // &Zero,
                                    NULL);
             ObDereferenceObject(Fcb->FileObject);
 #endif
@@ -541,7 +541,7 @@ VfatCheckForDismount(
         {
             Fcb = DeviceExt->FATFileObject->FsContext;
             CcUninitializeCacheMap(DeviceExt->FATFileObject,
-                                   &Zero,
+                                   NULL, // &Zero,
                                    NULL);
             DeviceExt->FATFileObject->FsContext = NULL;
             ObDereferenceObject(DeviceExt->FATFileObject);

@@ -8,13 +8,14 @@
 #include "precomp.h"
 #include <ntddscsi.h>
 
+#include "bootcode.h"
 #include "partlist.h"
 #include "fsutil.h"
 
 #define NDEBUG
 #include <debug.h>
 
-//#define DUMP_PARTITION_TABLE
+#define DUMP_PARTITION_TABLE
 
 #include <pshpack1.h>
 
@@ -25,6 +26,8 @@ typedef struct _REG_DISK_MOUNT_INFO
 } REG_DISK_MOUNT_INFO, *PREG_DISK_MOUNT_INFO;
 
 #include <poppack.h>
+
+static BOOTCODE MbrBootCode = {L"\\loader\\dosmbr.bin", NULL, 0};
 
 
 /* HELPERS FOR PARTITION TYPES **********************************************/

@@ -21,6 +21,15 @@ VfatCommonCloseFile(
     PDEVICE_EXTENSION DeviceExt,
     PVFATFCB pFcb)
 {
+    if (BooleanFlagOn(pFcb->Flags, FCB_IS_FAT))
+        DPRINT1("Ignoring $$FAT$$ in VfatCommonCloseFile()\n");
+
+    if (BooleanFlagOn(pFcb->Flags, FCB_IS_VOLUME))
+        DPRINT1("Ignoring $$Volume$$ in VfatCommonCloseFile()\n");
+
+    if (pFcb == DeviceExt->RootFcb)
+        DPRINT1("Closing ROOT in VfatCommonCloseFile()\n");
+
     /* Nothing to do for volumes or for the FAT file object */
     if (BooleanFlagOn(pFcb->Flags, FCB_IS_FAT | FCB_IS_VOLUME))
     {

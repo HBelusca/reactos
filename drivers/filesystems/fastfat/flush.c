@@ -24,7 +24,16 @@ VfatFlushFile(
     IO_STATUS_BLOCK IoStatus;
     NTSTATUS Status;
 
-    DPRINT("VfatFlushFile(DeviceExt %p, Fcb %p) for '%wZ'\n", DeviceExt, Fcb, &Fcb->PathNameU);
+    DPRINT1("VfatFlushFile(DeviceExt %p, Fcb %p) for '%wZ'\n", DeviceExt, Fcb, &Fcb->PathNameU);
+
+    if (BooleanFlagOn(Fcb->Flags, FCB_IS_FAT))
+        DPRINT1("Flushing $$FAT$$ in VfatFlushFile()\n");
+
+    if (BooleanFlagOn(Fcb->Flags, FCB_IS_VOLUME))
+        DPRINT1("Flushing $$Volume$$ in VfatFlushFile()\n");
+
+    if (Fcb == DeviceExt->RootFcb)
+        DPRINT1("Flushing ROOT in VfatFlushFile()\n");
 
     CcFlushCache(&Fcb->SectionObjectPointers, NULL, 0, &IoStatus);
     if (IoStatus.Status == STATUS_INVALID_PARAMETER)
@@ -106,6 +115,13 @@ VfatFlushVolume(
     ExAcquireResourceExclusiveLite(&DeviceExt->FatResource, TRUE);
     Status = VfatFlushFile(DeviceExt, Fcb);
     ExReleaseResourceLite(&DeviceExt->FatResource);
+
+#if 1
+    Fcb = VolumeFcb;
+    ExAcquireResourceExclusiveLite(&Fcb->MainResource, TRUE);
+    Status = VfatFlushFile(DeviceExt, Fcb);
+    ExReleaseResourceLite (&Fcb->MainResource);
+#endif
 
     /* Prepare an IRP to flush device buffers */
     Irp = IoBuildSynchronousFsdRequest(IRP_MJ_FLUSH_BUFFERS,

@@ -83,6 +83,15 @@ VfatCleanupFile(
             VfatUpdateEntry (DeviceExt, pFcb);
         }
 
+        if (BooleanFlagOn(pFcb->Flags, FCB_IS_FAT))
+            DPRINT1("Handling $$FAT$$ in VfatCleanupFile(1)\n");
+
+        if (BooleanFlagOn(pFcb->Flags, FCB_IS_VOLUME))
+            DPRINT1("Handling $$Volume$$ in VfatCleanupFile(1)\n");
+
+        if (pFcb == DeviceExt->RootFcb)
+            DPRINT1("Handling ROOT in VfatCleanupFile(1)\n");
+
         if (BooleanFlagOn(pFcb->Flags, FCB_DELETE_PENDING) &&
             pFcb->OpenHandleCount == 0)
         {
@@ -95,6 +104,16 @@ VfatCleanupFile(
             {
                 PFILE_OBJECT tmpFileObject;
                 tmpFileObject = pFcb->FileObject;
+
+                if (BooleanFlagOn(pFcb->Flags, FCB_IS_FAT))
+                    DPRINT1("Handling $$FAT$$ in VfatCleanupFile(2)\n");
+
+                if (BooleanFlagOn(pFcb->Flags, FCB_IS_VOLUME))
+                    DPRINT1("Handling $$Volume$$ in VfatCleanupFile(2)\n");
+
+                if (pFcb == DeviceExt->RootFcb)
+                    DPRINT1("Handling ROOT in VfatCleanupFile(2)\n");
+
                 if (tmpFileObject != NULL)
                 {
                     pFcb->FileObject = NULL;
