@@ -38,14 +38,17 @@ UCHAR   DriveMapGetBiosDriveNumber(PCSTR DeviceName);   // Returns a BIOS drive 
 
 VOID
 DriveMapMapDrivesInSection(
-    IN ULONG_PTR SectionId);
+    _In_ ULONG_PTR SectionId);
 
-VOID DriveMapInstallInt13Handler(PDRIVE_MAP_LIST DriveMap); // Installs the int 13h handler for the drive mapper
-VOID DriveMapRemoveInt13Handler(VOID);                      // Removes a previously installed int 13h drive map handler
+VOID
+DriveMapInstallInt13Handler(
+    _In_ PDRIVE_MAP_LIST DriveMap);
 
-extern PVOID            DriveMapInt13HandlerStart;
-extern PVOID            DriveMapInt13HandlerEnd;
-extern ULONG            DriveMapOldInt13HandlerAddress;
-extern DRIVE_MAP_LIST   DriveMapInt13HandlerMapList;
+VOID DriveMapRemoveInt13Handler(VOID);
+
+extern PVOID DriveMapInt13HandlerStart;
+extern PVOID DriveMapInt13HandlerEnd;
+extern ULONG DriveMapOldInt13HandlerAddress;
+extern DRIVE_MAP_LIST DriveMapInt13HandlerMapList;
 
 #endif // _M_IX86
