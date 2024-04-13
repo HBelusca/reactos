@@ -87,8 +87,8 @@ PcGetTime(VOID)
         if (!INT386_SUCCESS(Regs)) continue;
 
         TimeInfo.Hour = BCD_INT(Regs.b.ch);
-        TimeInfo.Minute = BCD_INT(Regs.b.cl);
-        TimeInfo.Second = BCD_INT(Regs.b.dh);
+        TimeInfo.Minutes = BCD_INT(Regs.b.cl);
+        TimeInfo.Seconds = BCD_INT(Regs.b.dh);
 
         break;
     }
