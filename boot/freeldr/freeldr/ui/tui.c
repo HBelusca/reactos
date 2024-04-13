@@ -559,8 +559,8 @@ VOID TuiUpdateDateTime(VOID)
         TimeInfo->Month < 1 || 12 < TimeInfo->Month ||
         TimeInfo->Day < 1 || 31 < TimeInfo->Day ||
         23 < TimeInfo->Hour ||
-        59 < TimeInfo->Minute ||
-        59 < TimeInfo->Second)
+        59 < TimeInfo->Minutes ||
+        59 < TimeInfo->Seconds)
     {
         /* This happens on QEmu sometimes. We just skip updating. */
         return;
@@ -603,8 +603,8 @@ VOID TuiUpdateDateTime(VOID)
     RtlStringCbPrintfA(Buffer, sizeof(Buffer),
                        "  %d:%02d:%02d %s",
                        TimeInfo->Hour,
-                       TimeInfo->Minute,
-                       TimeInfo->Second,
+                       TimeInfo->Minutes,
+                       TimeInfo->Seconds,
                        PMHour ? "PM" : "AM");
 
     /* Draw the time */

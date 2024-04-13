@@ -205,14 +205,14 @@ InitOperatingSystemList(
                 RtlStringCbPrintfA(SettingName, sizeof(SettingName),
                                    "BootSectorFile%u%u%u%u%u%u",
                                    TimeInfo->Year, TimeInfo->Day, TimeInfo->Month,
-                                   TimeInfo->Hour, TimeInfo->Minute, TimeInfo->Second);
+                                   TimeInfo->Hour, TimeInfo->Minutes, TimeInfo->Seconds);
             }
             else if (_stricmp(BootType, "Windows") == 0)
             {
                 RtlStringCbPrintfA(SettingName, sizeof(SettingName),
                                    "Windows%u%u%u%u%u%u",
                                    TimeInfo->Year, TimeInfo->Day, TimeInfo->Month,
-                                   TimeInfo->Hour, TimeInfo->Minute, TimeInfo->Second);
+                                   TimeInfo->Hour, TimeInfo->Minutes, TimeInfo->Seconds);
             }
             else
             {

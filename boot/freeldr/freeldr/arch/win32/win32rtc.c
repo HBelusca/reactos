@@ -20,9 +20,9 @@ Win32GetTime(VOID)
     TimeInfo.Year  = time.wYear;
     TimeInfo.Month = time.wMonth;
     TimeInfo.Day   = time.wDay;
-    TimeInfo.Hour   = time.wHour;
-    TimeInfo.Minute = time.wMinute;
-    TimeInfo.Second = time.wSecond;
+    TimeInfo.Hour    = time.wHour;
+    TimeInfo.Minutes = time.wMinute;
+    TimeInfo.Seconds = time.wSecond;
     return &TimeInfo;
 }
 

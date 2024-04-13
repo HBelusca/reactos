@@ -46,8 +46,8 @@ XboxGetTime(VOID)
         ;
     }
 
-    TimeInfo.Second = BCD_INT(HalpQueryCMOS(0));
-    TimeInfo.Minute = BCD_INT(HalpQueryCMOS(2));
+    TimeInfo.Seconds = BCD_INT(HalpQueryCMOS(0));
+    TimeInfo.Minutes = BCD_INT(HalpQueryCMOS(2));
     TimeInfo.Hour = BCD_INT(HalpQueryCMOS(4));
     TimeInfo.Day = BCD_INT(HalpQueryCMOS(7));
     TimeInfo.Month = BCD_INT(HalpQueryCMOS(8));

@@ -94,7 +94,7 @@ TuiDisplayMenu(
     UiVtbl.DrawMenu(&MenuInformation);
 
     /* Get the current second of time */
-    LastClockSecond = ArcGetTime()->Second;
+    LastClockSecond = ArcGetTime()->Seconds;
 
     /* Process keys */
     while (TRUE)
@@ -107,7 +107,7 @@ TuiDisplayMenu(
         if (CanEscape && KeyPress == KEY_ESC) return FALSE;
 
         /* Get the updated time, and check if more than a second has elapsed */
-        CurrentClockSecond = ArcGetTime()->Second;
+        CurrentClockSecond = ArcGetTime()->Seconds;
         if (CurrentClockSecond != LastClockSecond)
         {
             /* Update the time information */

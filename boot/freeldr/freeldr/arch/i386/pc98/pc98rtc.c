@@ -31,8 +31,8 @@ Pc98GetTime(VOID)
     TimeInfo.Month = BCD_INT(SysTime[1] >> 4);
     TimeInfo.Day = BCD_INT(SysTime[2]);
     TimeInfo.Hour = BCD_INT(SysTime[3]);
-    TimeInfo.Minute = BCD_INT(SysTime[4]);
-    TimeInfo.Second = BCD_INT(SysTime[5]);
+    TimeInfo.Minutes = BCD_INT(SysTime[4]);
+    TimeInfo.Seconds = BCD_INT(SysTime[5]);
     if (TimeInfo.Year >= 80)
         TimeInfo.Year += 1900;
     else

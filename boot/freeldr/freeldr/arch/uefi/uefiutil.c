@@ -31,8 +31,8 @@ UefiGetTime(VOID)
     TimeInfo.Month = time.Month;
     TimeInfo.Day = time.Day;
     TimeInfo.Hour = time.Hour;
-    TimeInfo.Minute = time.Minute;
-    TimeInfo.Second = time.Second;
+    TimeInfo.Minutes = time.Minute;
+    TimeInfo.Seconds = time.Second;
     return &TimeInfo;
 }
 

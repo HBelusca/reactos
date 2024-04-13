@@ -36,7 +36,7 @@ ArcGetRelativeTime(VOID)
     ULONG ret;
 
     TimeInfo = ArcGetTime();
-    ret = ((TimeInfo->Hour * 24) + TimeInfo->Minute) * 60 + TimeInfo->Second;
+    ret = ((TimeInfo->Hour * 24) + TimeInfo->Minutes) * 60 + TimeInfo->Seconds;
     return ret;
 }
 
