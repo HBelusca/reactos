@@ -33,6 +33,7 @@ Pc98GetTime(VOID)
     TimeInfo.Hour = BCD_INT(SysTime[3]);
     TimeInfo.Minutes = BCD_INT(SysTime[4]);
     TimeInfo.Seconds = BCD_INT(SysTime[5]);
+    TimeInfo.Milliseconds = 0;
     if (TimeInfo.Year >= 80)
         TimeInfo.Year += 1900;
     else

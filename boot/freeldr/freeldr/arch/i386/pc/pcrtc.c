@@ -83,6 +83,7 @@ PcGetTime(VOID)
         TimeInfo.Hour = BCD_INT(Regs.b.ch);
         TimeInfo.Minutes = BCD_INT(Regs.b.cl);
         TimeInfo.Seconds = BCD_INT(Regs.b.dh);
+        TimeInfo.Milliseconds = 0;
 
         break;
     }
