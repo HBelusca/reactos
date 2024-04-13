@@ -74,6 +74,8 @@ typedef enum _OPENMODE
     CreateDirectory,
 } OPENMODE;
 
+/* Name in ARC specification: COMPONENT_FLAG */
+// See also DEVICE_FLAGS in ntddk.h
 typedef enum _IDENTIFIER_FLAG
 {
     Failed = 0x01,
@@ -85,6 +87,7 @@ typedef enum _IDENTIFIER_FLAG
     Output = 0x40
 } IDENTIFIER_FLAG;
 
+/* Name in ARC specification: COMPONENT_CLASS */
 typedef enum _CONFIGURATION_CLASS
 {
     SystemClass,
@@ -97,6 +100,7 @@ typedef enum _CONFIGURATION_CLASS
     MaximumClass
 } CONFIGURATION_CLASS;
 
+/* Name in ARC specification: COMPONENT_TYPE */
 // CONFIGURATION_TYPE is also defined in ntddk.h
 #ifndef _ARC_DDK_
 typedef enum _CONFIGURATION_TYPE
@@ -146,6 +150,7 @@ typedef enum _CONFIGURATION_TYPE
 } CONFIGURATION_TYPE, *PCONFIGURATION_TYPE;
 #endif /* _ARC_DDK_ */
 
+/* Name in ARC specification: COMPONENT */
 typedef struct _CONFIGURATION_COMPONENT
 {
     CONFIGURATION_CLASS Class;
@@ -203,6 +208,7 @@ typedef enum _TYPE_OF_MEMORY
     LoaderMaximum
 } TYPE_OF_MEMORY;
 
+/* Name in ARC specification: MEMORYTYPE */
 typedef enum _MEMORY_TYPE
 {
     MemoryExceptionBlock,
@@ -223,10 +229,12 @@ typedef struct _TIMEINFO
     USHORT Month;
     USHORT Day;
     USHORT Hour;
-    USHORT Minute;
-    USHORT Second;
+    USHORT Minutes;
+    USHORT Seconds;
+    USHORT Milliseconds;
 } TIMEINFO;
 
+/* Name in ARC specification: MEMORYDESCRIPTOR */
 typedef struct _MEMORY_DESCRIPTOR
 {
     MEMORY_TYPE MemoryType;
@@ -568,7 +576,9 @@ typedef struct _LOADER_PARAMETER_BLOCK
     FIRMWARE_INFORMATION_LOADER_BLOCK FirmwareInformation;
 } LOADER_PARAMETER_BLOCK, *PLOADER_PARAMETER_BLOCK;
 
-typedef int CONFIGTYPE;
+typedef CONFIGURATION_TYPE CONFIGTYPE;
+#define ARC_NAME_MAX    32
+
 typedef struct tagFILEINFORMATION
 {
     LARGE_INTEGER StartingAddress;
@@ -577,7 +587,7 @@ typedef struct tagFILEINFORMATION
     CONFIGTYPE Type;
     ULONG FileNameLength;
     UCHAR Attributes;
-    CHAR Filename[32];
+    CHAR Filename[ARC_NAME_MAX];
 } FILEINFORMATION;
 
 typedef
