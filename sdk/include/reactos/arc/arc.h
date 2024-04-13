@@ -83,6 +83,8 @@ typedef enum _FILEATTRIBUTES
     DeleteFile = 0x20
 } FILEATTRIBUTES;
 
+/* Name in ARC specification: COMPONENT_FLAG */
+// See also DEVICE_FLAGS in ntddk.h
 typedef enum _IDENTIFIER_FLAG
 {
     Failed = 0x01,
@@ -94,6 +96,7 @@ typedef enum _IDENTIFIER_FLAG
     Output = 0x40
 } IDENTIFIER_FLAG;
 
+/* Name in ARC specification: COMPONENT_CLASS */
 typedef enum _CONFIGURATION_CLASS
 {
     SystemClass,
@@ -106,6 +109,7 @@ typedef enum _CONFIGURATION_CLASS
     MaximumClass
 } CONFIGURATION_CLASS;
 
+/* Name in ARC specification: COMPONENT_TYPE */
 // CONFIGURATION_TYPE is also defined in ntddk.h
 #ifndef _ARC_DDK_
 typedef enum _CONFIGURATION_TYPE
@@ -155,6 +159,7 @@ typedef enum _CONFIGURATION_TYPE
 } CONFIGURATION_TYPE, *PCONFIGURATION_TYPE;
 #endif /* _ARC_DDK_ */
 
+/* Name in ARC specification: COMPONENT */
 typedef struct _CONFIGURATION_COMPONENT
 {
     CONFIGURATION_CLASS Class;
@@ -201,10 +206,12 @@ typedef struct _TIMEINFO
     USHORT Month;
     USHORT Day;
     USHORT Hour;
-    USHORT Minute;
-    USHORT Second;
+    USHORT Minutes;
+    USHORT Seconds;
+    USHORT Milliseconds;
 } TIMEINFO;
 
+/* Name in ARC specification: MEMORYTYPE */
 typedef enum _MEMORY_TYPE
 {
     MemoryExceptionBlock,
@@ -219,6 +226,7 @@ typedef enum _MEMORY_TYPE
     MemoryMaximum
 } MEMORY_TYPE;
 
+/* Name in ARC specification: MEMORYDESCRIPTOR */
 typedef struct _MEMORY_DESCRIPTOR
 {
     MEMORY_TYPE MemoryType;
@@ -226,15 +234,18 @@ typedef struct _MEMORY_DESCRIPTOR
     PFN_NUMBER PageCount;
 } MEMORY_DESCRIPTOR, *PMEMORY_DESCRIPTOR;
 
+typedef CONFIGURATION_TYPE CONFIGTYPE;
+#define ARC_NAME_MAX    32
+
 typedef struct _FILEINFORMATION
 {
     LARGE_INTEGER StartingAddress;
     LARGE_INTEGER EndingAddress;
     LARGE_INTEGER CurrentAddress;
-    CONFIGURATION_TYPE Type;
+    CONFIGURATION_TYPE Type; // CONFIGTYPE
     ULONG FileNameLength;
     UCHAR Attributes;
-    CHAR FileName[32];
+    CHAR FileName[ARC_NAME_MAX];
 } FILEINFORMATION;
 
 typedef
