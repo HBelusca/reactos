@@ -33,6 +33,7 @@ UefiGetTime(VOID)
     TimeInfo.Hour = time.Hour;
     TimeInfo.Minutes = time.Minute;
     TimeInfo.Seconds = time.Second;
+    TimeInfo.Milliseconds = time.Nanosecond / 1000000;
     return &TimeInfo;
 }
 

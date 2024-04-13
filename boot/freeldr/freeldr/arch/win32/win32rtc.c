@@ -25,6 +25,7 @@ Win32GetTime(VOID)
     TimeInfo.Hour    = time.wHour;
     TimeInfo.Minutes = time.wMinute;
     TimeInfo.Seconds = time.wSecond;
+    TimeInfo.Milliseconds = time.wMilliseconds;
     return &TimeInfo;
 }
 
