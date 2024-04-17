@@ -160,9 +160,5 @@ PPC98_DISK_DRIVE
 Pc98DiskDriveNumberToDrive(
     _In_ UCHAR DriveNumber);
 
-ULONG
-Pc98GetBootSectorLoadAddress(
-    _In_ UCHAR DriveNumber);
-
 /* hwdisk.c */
 BOOLEAN PcInitializeBootDevices(VOID);
