@@ -1,6 +1,23 @@
-Changes in v3.0+ (01/05/2015) (hbelusca)
 
-- Remove support for special value "LiveCD" of SystemPath option
+Changes in v3.3.0 (04/20/2024) (hbelusca)
+
+- Deprecate "Drive" and "Partition" boot types, merged with "BootSector" type.
+- Deprecate "BootDrive" and "BootPartition" values, merged with "BootPath".
+
+Changes in v3.0+
+
+- (03/19/2023) (darkfire01)
+  Add support for UEFI boot.
+- (03/19/2022) (vgalnt) (08/17/2023) (sdever)
+  Add support booting from NTFS partitions.
+- (11/10/2019) (disean)
+  Add ARC-emulation support for NEC PC-98 series.
+- (yy/xx/2019) (binarymaster)
+  Fix XBOX support.
+- (11/10/2018) (extravert-ir)
+  Implement BTRFS support.
+- (01/05/2015) (hbelusca)
+  Remove support for special value "LiveCD" of SystemPath option
   for loading ReactOS since now we treat non-ARC SystemPath as
   a path relative to the boot path.
 
