@@ -150,7 +150,6 @@ ULONG Pc98DiskGetCacheableBlockCount(UCHAR DriveNumber);
 UCHAR Pc98GetFloppyCount(VOID);
 PPC98_DISK_DRIVE Pc98DiskDriveNumberToDrive(IN UCHAR DriveNumber);
 
-ULONG Pc98GetBootSectorLoadAddress(IN UCHAR DriveNumber);
 VOID Pc98DiskPrepareForReactOS(VOID);
 
 /* hwdisk.c */

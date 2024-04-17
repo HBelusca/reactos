@@ -178,10 +178,6 @@ int __cdecl Int386(int ivec, REGS* in, REGS* out);
 // If CF is set then the call failed (usually)
 #define INT386_SUCCESS(regs)    ((regs.x.eflags & EFLAGS_CF) == 0)
 
-VOID __cdecl ChainLoadBiosBootSectorCode(
-    IN UCHAR BootDrive OPTIONAL,
-    IN ULONG BootPartition OPTIONAL);
-
 VOID __cdecl Relocator16Boot(
     IN REGS*  In,
     IN USHORT StackSegment,

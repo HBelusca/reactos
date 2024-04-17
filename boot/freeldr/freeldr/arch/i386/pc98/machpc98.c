@@ -40,65 +40,6 @@ Pc98PrepareForReactOS(VOID)
     DebugDisableScreenPort();
 }
 
-ULONG
-Pc98GetBootSectorLoadAddress(IN UCHAR DriveNumber)
-{
-    PPC98_DISK_DRIVE DiskDrive;
-
-    DiskDrive = Pc98DiskDriveNumberToDrive(DriveNumber);
-    if (!DiskDrive)
-    {
-        ERR("Failed to get drive 0x%x\n", DriveNumber);
-        return 0x1FC00;
-    }
-
-    if (((DiskDrive->DaUa & 0xF0) == 0x30) ||
-        ((DiskDrive->DaUa & 0xF0) == 0xB0))
-    {
-        /* 1.44 MB floppy */
-        return 0x1FE00;
-    }
-    else if (DiskDrive->Type & DRIVE_FDD)
-    {
-        return 0x1FC00;
-    }
-
-    return 0x1F800;
-}
-
-VOID __cdecl ChainLoadBiosBootSectorCode(
-    IN UCHAR BootDrive OPTIONAL,
-    IN ULONG BootPartition OPTIONAL)
-{
-    REGS Regs;
-    PPC98_DISK_DRIVE DiskDrive;
-    USHORT LoadAddress;
-    UCHAR DriveNumber = BootDrive ? BootDrive : FrldrBootDrive;
-
-    DiskDrive = Pc98DiskDriveNumberToDrive(DriveNumber);
-    if (!DiskDrive)
-    {
-        ERR("Failed to get drive 0x%x\n", DriveNumber);
-        return;
-    }
-
-    LoadAddress = (USHORT)(Pc98GetBootSectorLoadAddress(DriveNumber) >> 4);
-
-    RtlZeroMemory(&Regs, sizeof(Regs));
-    Regs.w.ax = DiskDrive->DaUa;
-    Regs.w.si = LoadAddress;
-    Regs.w.es = LoadAddress;
-    *(PUCHAR)MEM_DISK_BOOT = DiskDrive->DaUa;
-
-    Pc98VideoClearScreen(ATTR(COLOR_WHITE, COLOR_BLACK));
-
-    Relocator16Boot(&Regs,
-                    /* Stack segment:pointer */
-                    0x0020, 0x00FF,
-                    /* Code segment:pointer */
-                    LoadAddress, 0x0000);
-}
-
 static BOOLEAN
 Pc98ArchTest(VOID)
 {
