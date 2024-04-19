@@ -132,6 +132,39 @@ WarnDeprecated(
         "on the official ReactOS Mattermost server <chat.reactos.org>.",
         msgString);
 }
+
+BOOLEAN
+ConvertDeprecatedBootDrivePart(
+    _In_ ULONG_PTR SectionId,
+    _Out_ PSTR PathBuffer,
+    _In_ ULONG BufferSize)
+{
+    ULONG length;
+
+    if (BufferSize <= 0)
+        return FALSE;
+    *PathBuffer = ANSI_NULL;
+
+    /* Retrieve the boot drive */
+    if (!IniReadSettingByName(SectionId, "BootDrive", PathBuffer, BufferSize))
+        return FALSE;
+    length = (ULONG)strlen(PathBuffer);
+    PathBuffer += length;
+    BufferSize -= length;
+
+    /* Try to retrieve the boot partition */
+    if (BufferSize > 2)
+    {
+        *PathBuffer = ANSI_NULL;
+        if (IniReadSettingByName(SectionId, "BootPartition", &PathBuffer[1], BufferSize - 1)
+            && PathBuffer[1])
+        {
+            /* We got one, add a separator before it */
+            *PathBuffer = ',';
+        }
+    }
+    return TRUE;
+}
 #endif // HAS_DEPRECATED_OPTIONS
 
 static const OS_LOADING_METHOD*
@@ -235,7 +268,7 @@ BuildArgvForOsLoader(
 
     /* Calculate the total size needed for the string buffer of the argument vector */
     Size = 0;
-    /* i == 0: Program name */
+    /* i == 0: Program name: "OSLoader=" */
     // TODO: Provide one in the future...
     /* i == 1: SystemPartition : from where FreeLdr has been started */
     Size += (strlen("SystemPartition=") + strlen(FrLdrBootPath) + 1) * sizeof(CHAR);
@@ -323,18 +356,54 @@ LoadOperatingSystem(
         return;
     ASSERT(OSLoadingMethod->OsLoader);
 
+////
+#ifdef HAS_DEPRECATED_OPTIONS
+    {
+    /* If no "BootPath" value exist, but the DEPRECATED "BootDrive" or
+     * "BootPartition" values are there, convert them to a "BootPath" */
+    CHAR BootPath[200] = "";
+    IniReadSettingByName(SectionId, "BootPath", BootPath, sizeof(BootPath));
+    if (!*BootPath && ConvertDeprecatedBootDrivePart(SectionId, BootPath, sizeof(BootPath)))
+    {
+        /* They exist, display the deprecation warning message */
+        WarnDeprecated(
+            "The 'BootDrive' and 'BootPartition' values are no longer\n"
+            "supported and will be removed in future FreeLoader versions.\n"
+            "\n"
+            "Please edit FREELDR.INI to replace all occurrences of\n"
+            "\n"
+            "  BootDrive=dev#             to:\n"
+            "  BootPartition=part#      ------>      BootDrive=dev#,part#");
+
+        /* Do the ARC mapping now */
+        if (!ExpandPath(BootPath, sizeof(BootPath)))
+        {
+            UiMessageBox("Invalid BootDrive/Partition value: %s", BootPath);
+            // return FALSE;
+        }
+
+        /* Modify or reset the BootPath. If reset, BootSectorFile
+         * will be relative to the default system partition. */
+        IniModifySettingValue(SectionId, "BootPath", BootPath);
+
+        /* Deprecate the other values */
+        IniModifySettingValue(SectionId, "BootDrive", "");
+        IniModifySettingValue(SectionId, "BootPartition", "");
+    }
+    }
+#endif // HAS_DEPRECATED_OPTIONS
+////
+
     /* Build the ARC-compatible argument vector */
     Argv = BuildArgvForOsLoader(OperatingSystem->LoadIdentifier, SectionId, &Argc);
     if (!Argv)
         return; // Unexpected failure.
 
 #ifdef _M_IX86
-#ifndef MY_WIN32
 #ifndef UEFIBOOT
     /* Install the drive mapper according to this section drive mappings */
     DriveMapMapDrivesInSection(SectionId);
 #endif
-#endif /* MY_WIN32 */
 #endif
 
     /* Start the OS loader */

@@ -35,14 +35,14 @@ EditCustomBootSector(
 
 VOID
 EditCustomBootLinux(
-    IN OUT OperatingSystemItem* OperatingSystem);
+    _Inout_ OperatingSystemItem* OperatingSystem);
 
 #endif /* _M_IX86 || _M_AMD64 */
 
 VOID
 EditCustomBootReactOS(
-    IN OUT OperatingSystemItem* OperatingSystem,
-    IN BOOLEAN IsSetup);
+    _Inout_ OperatingSystemItem* OperatingSystem,
+    _In_ BOOLEAN IsSetup);
 
 #ifdef HAS_OPTION_MENU_REBOOT
 VOID OptionMenuReboot(VOID);

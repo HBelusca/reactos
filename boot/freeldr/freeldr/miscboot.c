@@ -234,7 +234,6 @@ LoadAndBootSector(
     ULONG LoadAddress;
     ULONG FileId;
     ULONG BytesRead;
-    CHAR ArcPath[MAX_PATH];
 
 #if DBG
     /* Ensure the boot type is the one expected */
@@ -249,58 +248,22 @@ LoadAndBootSector(
     /* Find all the message box settings and run them */
     UiShowMessageBoxesInArgv(Argc, Argv);
 
-    /*
-     * Check whether we have a "BootPath" value (takes precedence
-     * over both "BootDrive" and "BootPartition").
-     */
+    /* Check whether we have a "BootPath" value. If we don't have one,
+     * fall back to using the system partition as default path. */
     BootPath = GetArgumentValue(Argc, Argv, "BootPath");
     if (!BootPath || !*BootPath)
-    {
-        /* We don't have one, check whether we use "BootDrive" and "BootPartition" */
-
-        /* Retrieve the boot drive (optional, fall back to using default path otherwise) */
-        ArgValue = GetArgumentValue(Argc, Argv, "BootDrive");
-        if (ArgValue && *ArgValue)
-        {
-            BiosDriveNumber = DriveMapGetBiosDriveNumber(ArgValue);
-
-            /* Retrieve the boot partition (optional, fall back to zero otherwise) */
-            PartitionNumber = 0;
-            ArgValue = GetArgumentValue(Argc, Argv, "BootPartition");
-            if (ArgValue && *ArgValue)
-                PartitionNumber = atoi(ArgValue);
-        }
-        else
-        {
-            /* Fall back to using the system partition as default path */
-            BootPath = GetArgumentValue(Argc, Argv, "SystemPartition");
-        }
-    }
+        BootPath = GetArgumentValue(Argc, Argv, "SystemPartition");
 
     /*
-     * The ARC "BootPath" value takes precedence over
-     * both the BiosDriveNumber and PartitionNumber options.
+     * Retrieve the BIOS drive and partition numbers; verify also that the
+     * path is "valid" in the sense that it must not contain any file name.
      */
-    if (BootPath && *BootPath)
+    FileName = NULL;
+    if (!DissectArcPath(BootPath, &FileName, &BiosDriveNumber, &PartitionNumber) ||
+        (FileName && *FileName))
     {
-        /*
-         * Retrieve the BIOS drive and partition numbers; verify also that the
-         * path is "valid" in the sense that it must not contain any file name.
-         */
-        FileName = NULL;
-        if (!DissectArcPath(BootPath, &FileName, &BiosDriveNumber, &PartitionNumber) ||
-            (FileName && *FileName))
-        {
-            UiMessageBox("Currently unsupported BootPath value:\n%s", BootPath);
-            return EINVAL;
-        }
-    }
-    else
-    {
-        /* We don't have one, so construct the corresponding ARC path */
-        ConstructArcPath(ArcPath, "", BiosDriveNumber, PartitionNumber);
-        *strrchr(ArcPath, '\\') = ANSI_NULL; // Trim the trailing path separator.
-        BootPath = ArcPath;
+        UiMessageBox("Currently unsupported BootPath value:\n%s", BootPath);
+        return EINVAL;
     }
 
     FileName = NULL;

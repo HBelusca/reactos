@@ -72,9 +72,13 @@ if(ARCH STREQUAL "i386")
     ## list(APPEND WIN32LDR_COMMON_ASM_SOURCE
     ##     arch/uefi/i386/uefiasm.S
     ##     arch/i386/i386trap.S)
+    list(APPEND WIN32LDR_ARC_SOURCE
+        arch/i386/drivemap.c)
 elseif(ARCH STREQUAL "amd64")
     ## list(APPEND WIN32LDR_COMMON_ASM_SOURCE
     ##     arch/uefi/amd64/uefiasm.S)
+    list(APPEND WIN32LDR_ARC_SOURCE
+        arch/i386/drivemap.c)
 elseif(ARCH STREQUAL "arm")
     list(APPEND WIN32LDR_ARC_SOURCE
         arch/arm/macharm.c

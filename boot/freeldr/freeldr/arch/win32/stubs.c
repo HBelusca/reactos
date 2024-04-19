@@ -10,20 +10,10 @@
 #include <debug.h>
 DBG_DEFAULT_CHANNEL(WARNING);
 
-#ifndef _M_ARM
-/* TODO: Handle this with custom Disk / partition setup */
-UCHAR
-DriveMapGetBiosDriveNumber(PCSTR DeviceName)
-{
-    return 0;
-}
-#endif
-
 VOID
 StallExecutionProcessor(ULONG Microseconds)
 {
 }
-
 
 PFREELDR_MEMORY_DESCRIPTOR
 Win32MemGetMemoryMap(

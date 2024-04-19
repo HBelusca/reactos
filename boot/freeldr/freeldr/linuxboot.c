@@ -96,7 +96,6 @@ LoadAndBootLinux(
     ULONG LinuxKernel = 0;
     ULONG LinuxInitrdFile = 0;
     FILEINFORMATION FileInfo;
-    CHAR ArcPath[MAX_PATH];
 
 #if DBG
     /* Ensure the boot type is the one expected */
@@ -121,45 +120,18 @@ LoadAndBootLinux(
     /* Find all the message box settings and run them */
     UiShowMessageBoxesInArgv(Argc, Argv);
 
-    /*
-     * Check whether we have a "BootPath" value (takes precedence
-     * over both "BootDrive" and "BootPartition").
-     */
+    /* Check whether we have a "BootPath" value. If we don't have one,
+     * fall back to using the system partition as default path. */
     BootPath = GetArgumentValue(Argc, Argv, "BootPath");
     if (!BootPath || !*BootPath)
-    {
-        /* We don't have one, check whether we use "BootDrive" and "BootPartition" */
+        BootPath = GetArgumentValue(Argc, Argv, "SystemPartition");
 
-        /* Retrieve the boot drive (optional, fall back to using default path otherwise) */
-        ArgValue = GetArgumentValue(Argc, Argv, "BootDrive");
-        if (ArgValue && *ArgValue)
-        {
-            UCHAR DriveNumber = DriveMapGetBiosDriveNumber(ArgValue);
-
-            /* Retrieve the boot partition (not optional and cannot be zero) */
-            ULONG PartitionNumber = 0;
-            ArgValue = GetArgumentValue(Argc, Argv, "BootPartition");
-            if (ArgValue && *ArgValue)
-                PartitionNumber = atoi(ArgValue);
-            if (PartitionNumber == 0)
-            {
-                UiMessageBox("Boot partition cannot be 0!");
-                goto LinuxBootFailed;
-                // return EINVAL;
-            }
-
-            /* Construct the corresponding ARC path */
-            ConstructArcPath(ArcPath, "", DriveNumber, PartitionNumber);
-            *strrchr(ArcPath, '\\') = ANSI_NULL; // Trim the trailing path separator.
-
-            BootPath = ArcPath;
-        }
-        else
-        {
-            /* Fall back to using the system partition as default path */
-            BootPath = GetArgumentValue(Argc, Argv, "SystemPartition");
-        }
-    }
+    // if (PartitionNumber == 0)
+    // {
+    //     UiMessageBox("Boot partition cannot be 0!");
+    //     goto LinuxBootFailed;
+    //     // return EINVAL;
+    // }
 
     /* Get the kernel name */
     LinuxKernelName = GetArgumentValue(Argc, Argv, "Kernel");
