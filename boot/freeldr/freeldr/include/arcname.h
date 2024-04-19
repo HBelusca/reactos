@@ -1,48 +1,42 @@
 /*
- *  FreeLoader
- *  Copyright (C) 1998-2003  Brian Palmer  <brianp@sginet.com>
- *
- *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version.
- *
- *  This program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License along
- *  with this program; if not, write to the Free Software Foundation, Inc.,
- *  51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * PROJECT:     FreeLoader
+ * LICENSE:     GPL-2.0-or-later (https://spdx.org/licenses/GPL-2.0-or-later)
+ * PURPOSE:     ARC path dissector - For BIOS drives only
+ * COPYRIGHT:   Copyright 2001 Eric Kohl <eric.kohl@reactos.org>
+ *              Copyright 2010 Hervé Poussineau  <hpoussin@reactos.org>
  */
 
 #pragma once
 
-///////////////////////////////////////////////////////////////////////////////////////
-//
-// ARC Path Functions
-//
-///////////////////////////////////////////////////////////////////////////////////////
-
 BOOLEAN
 DissectArcPath(
-    IN  PCSTR ArcPath,
-    OUT PCSTR* Path OPTIONAL,
-    OUT PUCHAR DriveNumber,
-    OUT PULONG PartitionNumber);
+    _In_ PCSTR ArcPath,
+    _Out_opt_ PCSTR* Path,
+    _Out_ PUCHAR DriveNumber,
+    _Out_ PULONG PartitionNumber);
 
 BOOLEAN
 DissectArcPath2(
-    IN  PCSTR ArcPath,
-    OUT PULONG x,
-    OUT PULONG y,
-    OUT PULONG z,
-    OUT PULONG Partition,
-    OUT PULONG PathSyntax);
+    _In_ PCSTR ArcPath,
+    _Out_ PULONG x,
+    _Out_ PULONG y,
+    _Out_ PULONG z,
+    _Out_ PULONG Partition,
+    _Out_ PULONG PathSyntax);
 
-VOID ConstructArcPath(PCHAR ArcPath, PCHAR SystemFolder, UCHAR Disk, ULONG Partition);
 
-#if 0
-UCHAR ConvertArcNameToBiosDriveNumber(PCHAR ArcPath);
-#endif
+/* pathmap.c -- FIXME: Move to its own header */
+
+BOOLEAN
+DriveStrToNumber(
+    _In_ PCSTR DriveString,
+    _Out_opt_ PCSTR* Trailing,
+    _Out_ PUCHAR DriveType,
+    _Out_ PULONG DriveNumber,
+    _Out_opt_ PULONG PartitionNumber,
+    _Out_opt_ PULONG HwDriveNumber);
+
+BOOLEAN
+ExpandPath(
+    _Inout_ PSTR PathBuffer,
+    _In_ ULONG Size);

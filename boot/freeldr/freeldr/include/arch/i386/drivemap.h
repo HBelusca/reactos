@@ -29,26 +29,23 @@ typedef struct
 } DRIVE_MAP_LIST, *PDRIVE_MAP_LIST;
 #include <poppack.h>
 
-#endif // _M_IX86
-
-BOOLEAN DriveMapIsValidDriveString(PCSTR DriveString);  // Checks the drive string ("hd0") for validity
-UCHAR   DriveMapGetBiosDriveNumber(PCSTR DeviceName);   // Returns a BIOS drive number for any given device name (e.g. 0x80 for 'hd0')
-
-#ifdef _M_IX86
-
-VOID
-DriveMapMapDrivesInSection(
-    _In_ ULONG_PTR SectionId);
-
-VOID
-DriveMapInstallInt13Handler(
-    _In_ PDRIVE_MAP_LIST DriveMap);
-
-VOID DriveMapRemoveInt13Handler(VOID);
-
+/* Used by drvmap.S */
 extern PVOID DriveMapInt13HandlerStart;
 extern PVOID DriveMapInt13HandlerEnd;
 extern ULONG DriveMapOldInt13HandlerAddress;
 extern DRIVE_MAP_LIST DriveMapInt13HandlerMapList;
 
+VOID
+DriveMapMapDrivesInSection(
+    _In_ ULONG_PTR SectionId);
+
 #endif // _M_IX86
+
+#if (defined(_M_IX86) || defined(_M_AMD64)) && !defined(UEFIBOOT)
+BOOLEAN
+DriveToBIOSNumber(
+    _Inout_ PUCHAR DriveType,
+    _In_ ULONG DriveNumber,
+    _Out_ PUCHAR BiosDriveNumber,
+    _Inout_opt_ PULONG PartitionNumber);
+#endif /* (_M_IX86 || _M_AMD64) && !UEFIBOOT */

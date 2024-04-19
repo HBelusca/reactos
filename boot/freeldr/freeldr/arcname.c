@@ -1,32 +1,46 @@
 /*
- *  FreeLoader - arcname.c
- *
- *  Copyright (C) 2001  Brian Palmer  <brianp@sginet.com>
- *  Copyright (C) 2001  Eric Kohl
- *
- *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version.
- *
- *  This program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License along
- *  with this program; if not, write to the Free Software Foundation, Inc.,
- *  51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * PROJECT:     FreeLoader
+ * LICENSE:     GPL-2.0-or-later (https://spdx.org/licenses/GPL-2.0-or-later)
+ * PURPOSE:     ARC path dissector - For BIOS drives only
+ * COPYRIGHT:   Copyright 2001 Eric Kohl <eric.kohl@reactos.org>
+ *              Copyright 2010 Hervé Poussineau  <hpoussin@reactos.org>
  */
 
 #include <freeldr.h>
 
+// HACK: Temp HACK, should be instead added to the CMake script!
+#include "pathmap.c"
+
+/**
+ * @brief
+ * Split a given ARC path and return a corresponding BIOS drive and
+ * partition number. Optionally, return the sub-path part as well.
+ *
+ * @param[in]   ArcPath
+ * The ARC path to split into its components.
+ *
+ * @param[out]  Path
+ * Optional pointer to a variable that receives the sub-path part of
+ * the given ARC path.
+ *
+ * @param[out]  DriveNumber
+ * The BIOS drive number.
+ *
+ * @param[out]  PartitionNumber
+ * The BIOS partition number for the drive.
+ *
+ * @return
+ * TRUE if the splitting was successful, FALSE if not.
+ **/
+//
+// ArcPathToHwDriveNumbers
+//
 BOOLEAN
 DissectArcPath(
-    IN  PCSTR ArcPath,
-    OUT PCSTR* Path OPTIONAL,
-    OUT PUCHAR DriveNumber,
-    OUT PULONG PartitionNumber)
+    _In_ PCSTR ArcPath,
+    _Out_opt_ PCSTR* Path,
+    _Out_ PUCHAR DriveNumber,
+    _Out_ PULONG PartitionNumber)
 {
     PCCH p;
 
@@ -53,7 +67,7 @@ DissectArcPath(
     {
         /*
          * Floppy disk path:
-         *  multi(0)disk(0)fdisk(x)\path
+         * multi(0)disk(0)fdisk(x)[\path]
          */
         p = p + 6;
         *DriveNumber = atoi(p);
@@ -66,8 +80,8 @@ DissectArcPath(
     else if (_strnicmp(p, "cdrom(", 6) == 0)
     {
         /*
-         * Cdrom path:
-         *  multi(0)disk(0)cdrom(x)\path
+         * CD-ROM disk path:
+         * multi(0)disk(0)cdrom(x)[\path]
          */
         p = p + 6;
         *DriveNumber = atoi(p) + 0x80;
@@ -81,7 +95,7 @@ DissectArcPath(
     {
         /*
          * Hard disk path:
-         *  multi(0)disk(0)rdisk(x)[partition(y)][\path]
+         * multi(0)disk(0)rdisk(x)[partition(y)][\path]
          */
         p = p + 6;
         *DriveNumber = atoi(p) + 0x80;
@@ -119,12 +133,12 @@ DissectArcPath(
 /* PathSyntax: scsi() = 0, multi() = 1, ramdisk() = 2 */
 BOOLEAN
 DissectArcPath2(
-    IN  PCSTR ArcPath,
-    OUT PULONG x,
-    OUT PULONG y,
-    OUT PULONG z,
-    OUT PULONG Partition,
-    OUT PULONG PathSyntax)
+    _In_ PCSTR ArcPath,
+    _Out_ PULONG x,
+    _Out_ PULONG y,
+    _Out_ PULONG z,
+    _Out_ PULONG Partition,
+    _Out_ PULONG PathSyntax)
 {
     /* Detect ramdisk() */
     if (_strnicmp(ArcPath, "ramdisk(0)", 10) == 0)
@@ -172,71 +186,4 @@ DissectArcPath2(
     return FALSE;
 }
 
-VOID ConstructArcPath(PCHAR ArcPath, PCHAR SystemFolder, UCHAR Disk, ULONG Partition)
-{
-    char    tmp[50];
-
-    strcpy(ArcPath, "multi(0)disk(0)");
-
-    if (Disk < 0x80)
-    {
-        /*
-         * Floppy disk path:
-         *  multi(0)disk(0)fdisk(x)\path
-         */
-        sprintf(tmp, "fdisk(%d)", (int) Disk);
-        strcat(ArcPath, tmp);
-    }
-    else
-    {
-        /*
-         * Hard disk path:
-         *  multi(0)disk(0)rdisk(x)partition(y)\path
-         */
-        sprintf(tmp, "rdisk(%d)partition(%d)", (int) (Disk - 0x80), (int) Partition);
-        strcat(ArcPath, tmp);
-    }
-
-    if (SystemFolder[0] == '\\' || SystemFolder[0] == '/')
-    {
-        strcat(ArcPath, SystemFolder);
-    }
-    else
-    {
-        strcat(ArcPath, "\\");
-        strcat(ArcPath, SystemFolder);
-    }
-}
-
-#if 0
-UCHAR ConvertArcNameToBiosDriveNumber(PCHAR ArcPath)
-{
-    char *    p;
-    UCHAR        DriveNumber = 0;
-
-    if (_strnicmp(ArcPath, "multi(0)disk(0)", 15) != 0)
-        return 0;
-
-    p = ArcPath + 15;
-    if (_strnicmp(p, "fdisk(", 6) == 0)
-    {
-        /*
-         * Floppy disk path:
-         *  multi(0)disk(0)fdisk(x)\path
-         */
-        p = p + 6;
-        DriveNumber = atoi(p);
-    }
-    else if (_strnicmp(p, "rdisk(", 6) == 0)
-    {
-        /*
-         * Hard disk path:
-         *  multi(0)disk(0)rdisk(x)partition(y)\path
-         */
-        p = p + 6;
-        DriveNumber = atoi(p) + 0x80;
-    }
-
-    return DriveNumber;
-}
-#endif
+/* EOF */

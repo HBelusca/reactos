@@ -31,84 +31,190 @@ ULONG DriveMapHandlerSegOff  = 0;  // Segment:offset style address of the drive 
 
 #endif // _M_IX86
 
-BOOLEAN DriveMapIsValidDriveString(PCSTR DriveString)
+#if defined(_M_IX86) || defined(_M_AMD64)
+
+/**
+ * @brief
+ * Given a drive type and drive number, usually retrieved from a
+ * previous call to DriveStrToNumber(), retrieve a corresponding
+ * BIOS drive number. Optionally adjusts the partition number too.
+ *
+ * @param[in,out]   DriveType
+ * Recognized drive type. If DriveType == 0, the function attempts
+ * to recalculate the type, based on the drive number.
+ *
+ * @param[in]   DriveNumber
+ * Drive number. The following limits apply for it to be mapped
+ * to a BIOS drive number:
+ * - Floppy disks:
+ *   DriveType == 0 and 0 <= DriveNumber < 0x80, or
+ *   DriveType == 'f' and 0 <= DriveNumber < 127;
+ *
+ * - Hard disks:
+ *   DriveType == 0 and 0x80 <= DriveNumber, or
+ *   DriveType == 'h' and 0 <= DriveNumber < 127;
+ *
+ * - CD-ROMs: DriveType == 'c' and 0 <= DriveNumber < 127.
+ *
+ * - Single ramdisk:
+ *   DriveType == 0 and DriveNumber == 0x49, or
+ *   DriveType == 'r' and DriveNumber == 0.
+ *
+ * @param[out]  BiosDriveNumber
+ * Corresponding BIOS drive number.
+ *
+ * @param[in,out]   PartitionNumber
+ * Optional drive partition number (or zero if none).
+ *
+ * @return  TRUE if successful, FALSE if not.
+ * @see DriveStrToNumber().
+ **/
+BOOLEAN
+DriveToBIOSNumber(
+    _Inout_ PUCHAR DriveType,
+    _In_ ULONG DriveNumber,
+    _Out_ PUCHAR BiosDriveNumber,
+    _Inout_opt_ PULONG PartitionNumber)
 {
-    ULONG Index;
-
-    // Now verify that the user has given us appropriate strings
-    if ((strlen(DriveString) < 3) ||
-        ((DriveString[0] != 'f') && (DriveString[0] != 'F') &&
-         (DriveString[0] != 'h') && (DriveString[0] != 'H')) ||
-        ((DriveString[1] != 'd') && (DriveString[1] != 'D')))
+    /* Check the BIOS-specific limits */
+    switch (*DriveType)
     {
-        return FALSE;
-    }
-
-    // Now verify that the user has given us appropriate numbers
-    // Make sure that only numeric characters were given
-    for (Index = 2; Index < strlen(DriveString); Index++)
+    case 'f': // Floppy disk
     {
-        if (DriveString[Index] < '0' || DriveString[Index] > '9')
-        {
+        if (DriveNumber > 0x7F)
             return FALSE;
-        }
+        // /* Floppies always have one single partition */
+        // if (PartitionNumber)
+        //     *PartitionNumber = 1;
+        // HACK: Exclude drive 0x49 (reserved for ramdisk, see below)
+        if (DriveNumber == 0x49)
+            return FALSE;
+        break;
     }
-
-    // Now make sure that they are not outrageous values (i.e. hd90874)
-    if ((atoi(&DriveString[2]) < 0) || (atoi(&DriveString[2]) > 0xff))
+    case 'h': // Hard disk
     {
+        if (DriveNumber > 0x7F)
+            return FALSE;
+        /* It's a hard disk, set the high bit */
+        DriveNumber |= 0x80;
+        break;
+    }
+    case 'c': // CD-ROM
+    {
+        if (DriveNumber > 0x7F)
+            return FALSE;
+        /* CD-ROMs get a BIOS drive number > 0x80 */
+        DriveNumber += 0x80;
+        // FIXME: Find the actual corresponding CD-ROM drive
+        // /* CD-ROMs always have one single partition (at least...) */
+        // if (PartitionNumber)
+        //     *PartitionNumber = 1;
+        break;
+    }
+    case 'r': // Ramdisk
+    {
+        if (DriveNumber != 0)
+            return FALSE;
+        DriveNumber = 0x49; // Magic value for ramdisk
+        break;
+    }
+    case 0: // Not yet determined
+    {
+        if (DriveNumber > 0xFF)
+            return FALSE;
+        if (DriveNumber == 0x49)
+        {
+            /* The ramdisk */
+            *DriveType = 'r';
+        }
+        else if (DriveNumber <= 0x7F)
+        {
+            /* This is a floppy disk */
+            *DriveType = 'f';
+            /* Floppies always have one single partition */
+            if (PartitionNumber)
+                *PartitionNumber = 1;
+        }
+        else
+        {
+            /* Assume this is a hard disk */
+            *DriveType = 'h';
+        }
+        break;
+    }
+    default:
+        ASSERT(FALSE);
         return FALSE;
     }
 
+    *BiosDriveNumber = (UCHAR)DriveNumber;
     return TRUE;
 }
 
-UCHAR DriveMapGetBiosDriveNumber(PCSTR DeviceName)
-{
-    UCHAR BiosDriveNumber = 0;
-
-    TRACE("DriveMapGetBiosDriveNumber(%s)\n", DeviceName);
-
-    // If they passed in a number string then just
-    // convert it to decimal and return it
-    if (DeviceName[0] >= '0' && DeviceName[0] <= '9')
-    {
-        return (UCHAR)strtoul(DeviceName, NULL, 0);
-    }
-
-    // Convert the drive number string into a number
-    // 'hd1' = 1
-    BiosDriveNumber = atoi(&DeviceName[2]);
-
-    // If it's a hard disk then set the high bit
-    if ((DeviceName[0] == 'h' || DeviceName[0] == 'H') &&
-        (DeviceName[1] == 'd' || DeviceName[1] == 'D'))
-    {
-        BiosDriveNumber |= 0x80;
-    }
-
-    return BiosDriveNumber;
-}
+#endif /* _M_IX86 || _M_AMD64 */
 
 #ifdef _M_IX86
+
+/**
+ * @brief
+ * Returns a BIOS drive number for any given drive name (e.g. 0x80 for 'hd0')
+ * NOTE: We can only map floppy or hard disks, so check only for such types.
+ **/
+static BOOLEAN
+DriveMapGetBiosDriveNumber(
+    _In_ PCSTR DriveString,
+    _Out_ PUCHAR BiosDriveNumber)
+{
+    PCSTR Trailing = NULL;
+    UCHAR DriveType;
+    ULONG DriveNumber, HwDriveNumber;
+
+    *BiosDriveNumber = 0;
+
+    if (!DriveStrToNumber(DriveString,
+                          &Trailing,
+                          &DriveType,
+                          &DriveNumber,
+                          NULL,
+                          &HwDriveNumber) /*||
+        !DriveToBIOSNumber(&DriveType,
+                           DriveNumber,
+                           BiosDriveNumber,
+                           NULL)*/ ||
+        (Trailing && *Trailing))
+    {
+        return FALSE;
+    }
+    if ((DriveType != 'f') && (DriveType != 'h'))
+        return FALSE;
+
+    *BiosDriveNumber = (UCHAR)HwDriveNumber;
+    return TRUE;
+}
+
+static VOID
+DriveMapInstallInt13Handler(
+    _In_ PDRIVE_MAP_LIST DriveMap);
+
+static VOID
+DriveMapRemoveInt13Handler(VOID);
 
 VOID
 DriveMapMapDrivesInSection(
     _In_ ULONG_PTR SectionId)
 {
-    CHAR  SettingName[80];
-    CHAR  SettingValue[80];
-    CHAR  Drive1[80];
-    CHAR  Drive2[80];
+    DRIVE_MAP_LIST DriveMapList;
     ULONG SectionItemCount;
     ULONG Index;
-    ULONG Index2;
-    DRIVE_MAP_LIST DriveMapList;
+    PCHAR Drive1, Drive2, sep;
+    UCHAR BiosDriveNum1, BiosDriveNum2;
+    CHAR SettingName[80];
+    CHAR SettingValue[80];
 
     if (SectionId == 0)
         return;
 
-    RtlZeroMemory(&DriveMapList, sizeof(DRIVE_MAP_LIST));
+    RtlZeroMemory(&DriveMapList, sizeof(DriveMapList));
 
     /* Get the number of items in this section */
     SectionItemCount = IniGetNumSectionItems(SectionId);
@@ -132,27 +238,20 @@ DriveMapMapDrivesInSection(
                     continue;
                 }
 
-                RtlZeroMemory(Drive1, 80);
-                RtlZeroMemory(Drive2, 80);
-
-                strcpy(Drive1, SettingValue);
-
-                /* Parse the setting value and separate a string
-                 * "hd0,hd1" into two strings "hd0" and "hd1" */
-                for (Index2 = 0; Index2 < strlen(Drive1); Index2++)
-                {
-                    /* Check if this is the separator character (comma: ',') */
-                    if (Drive1[Index2] == ',')
-                    {
-                        Drive1[Index2] = '\0';
-                        strcpy(Drive2, &Drive1[Index2+1]);
-                        break;
-                    }
-                }
+                /* Split the value of the form "hd0,hd1" into two strings
+                 * "hd0" and "hd1" at the separator character (comma: ',') */
+                Drive1 = SettingValue;
+                Drive2 = sep = strchr(SettingValue, ',');
+                if (Drive2) *Drive2++ = ANSI_NULL;
 
                 /* Make sure we got good values before we add them to the map */
-                if (!DriveMapIsValidDriveString(Drive1) || !DriveMapIsValidDriveString(Drive2))
+                if (!sep ||
+                    !DriveMapGetBiosDriveNumber(Drive1, &BiosDriveNum1) ||
+                    !DriveMapGetBiosDriveNumber(Drive2, &BiosDriveNum2))
                 {
+                    /* Restore the separator for showing the error */
+                    if (sep) *sep = ',';
+
                     UiMessageBox("Error in DriveMap setting in section [%s]:\n\n%s=%s",
                                  ((PINI_SECTION)SectionId)->SectionName,
                                  SettingName, SettingValue);
@@ -160,16 +259,17 @@ DriveMapMapDrivesInSection(
                 }
 
                 /* Add them to the map */
-                DriveMapList.DriveMap[(DriveMapList.DriveMapCount * 2)] = DriveMapGetBiosDriveNumber(Drive1);
-                DriveMapList.DriveMap[(DriveMapList.DriveMapCount * 2)+1] = DriveMapGetBiosDriveNumber(Drive2);
+                DriveMapList.DriveMap[(DriveMapList.DriveMapCount * 2)  ] = BiosDriveNum1;
+                DriveMapList.DriveMap[(DriveMapList.DriveMapCount * 2)+1] = BiosDriveNum2;
                 DriveMapList.DriveMapCount++;
 
                 TRACE("Mapping BIOS drive 0x%x to drive 0x%x\n",
-                      DriveMapGetBiosDriveNumber(Drive1), DriveMapGetBiosDriveNumber(Drive2));
+                      BiosDriveNum1, BiosDriveNum2);
             }
         }
     }
 
+#ifndef MY_WIN32
     if (DriveMapList.DriveMapCount)
     {
         TRACE("Installing Int13 drive map for %d drives.\n", DriveMapList.DriveMapCount);
@@ -180,12 +280,15 @@ DriveMapMapDrivesInSection(
         TRACE("Removing any previously installed Int13 drive map.\n");
         DriveMapRemoveInt13Handler();
     }
+#endif /* MY_WIN32 */
 }
+
+#ifndef MY_WIN32
 
 /**
  * @brief   Installs the INT 13h handler for the drive mapper.
  **/
-VOID
+static VOID
 DriveMapInstallInt13Handler(
     _In_ PDRIVE_MAP_LIST DriveMap)
 {
@@ -213,7 +316,7 @@ DriveMapInstallInt13Handler(
     }
 
     /* Copy the drive map structure to the proper place */
-    RtlCopyMemory(&DriveMapInt13HandlerMapList, DriveMap, sizeof(DRIVE_MAP_LIST));
+    RtlCopyMemory(&DriveMapInt13HandlerMapList, DriveMap, sizeof(*DriveMap));
 
     /* Set the address of the BIOS INT 13h handler */
     DriveMapOldInt13HandlerAddress = OldInt13HandlerAddress;
@@ -233,7 +336,8 @@ DriveMapInstallInt13Handler(
 /**
  * @brief   Removes a previously installed INT 13h drive map handler.
  **/
-VOID DriveMapRemoveInt13Handler(VOID)
+static VOID
+DriveMapRemoveInt13Handler(VOID)
 {
     PULONG  RealModeIVT = (PULONG)UlongToPtr(0x00000000);
     PUSHORT BiosLowMemorySize = (PUSHORT)UlongToPtr(0x00000413);
@@ -255,5 +359,7 @@ VOID DriveMapRemoveInt13Handler(VOID)
         DriveMapInstalled = FALSE;
     }
 }
+
+#endif /* MY_WIN32 */
 
 #endif // _M_IX86
