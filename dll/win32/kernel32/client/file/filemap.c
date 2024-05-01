@@ -15,6 +15,62 @@
 
 /* FUNCTIONS ******************************************************************/
 
+#if 0
+////////////
+
+https://stackoverflow.com/questions/44101966/adding-new-bytes-to-memory-mapped-file
+and
+https://stackoverflow.com/questions/55066654/resize-a-memory-mapped-file-on-windows-without-invalidating-pointers
+
+
+https://raw.githubusercontent.com/winsiderss/systeminformer/3913215c12f07a8a468feaafd7bbc47e637516d4/phnt/include/ntmmapi.h
+and
+ReactOS' sdk/include/xdk/mmtypes.h
+
+https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-mapviewoffileexnuma
+
+https://learn.microsoft.com/en-us/windows/win32/memory/memory-protection-constants
+
+
+AllocationType     Can be one of:
+
+    MEM_COMMIT
+    MEM_RESERVE
+
+Protect     Page protection. Can be one of:
+
+    PAGE_NOACCESS
+    PAGE_READONLY
+    PAGE_READWRITE
+    PAGE_WRITECOPY
+    PAGE_EXECUTE
+    PAGE_EXECUTE_READ
+    PAGE_EXECUTE_READWRITE
+    PAGE_EXECUTE_WRITECOPY
+    PAGE_GUARD
+    PAGE_NOCACHE
+    PAGE_WRITECOMBINE
+
+
+===============
+
+
+#define FILE_MAP_WRITE            SECTION_MAP_WRITE
+#define FILE_MAP_READ             SECTION_MAP_READ
+#define FILE_MAP_ALL_ACCESS       SECTION_ALL_ACCESS
+
+#define FILE_MAP_EXECUTE          SECTION_MAP_EXECUTE_EXPLICIT  // not included in FILE_MAP_ALL_ACCESS
+
+#define FILE_MAP_COPY             0x00000001
+
+#define FILE_MAP_RESERVE          0x80000000    // PAGE_REVERT_TO_FILE_MAP
+#define FILE_MAP_TARGETS_INVALID  0x40000000    // PAGE_TARGETS_INVALID
+#define FILE_MAP_LARGE_PAGES      0x20000000    // MEM_LARGE_PAGES ??
+
+////////////
+#endif
+
+
 /*
  * @implemented
  */
@@ -50,46 +106,43 @@ CreateFileMappingW(HANDLE hFile,
                    LPCWSTR lpName)
 {
     NTSTATUS Status;
+    ULONG Attributes;
+    ACCESS_MASK DesiredAccess;
     HANDLE SectionHandle;
     OBJECT_ATTRIBUTES LocalAttributes;
     POBJECT_ATTRIBUTES ObjectAttributes;
     UNICODE_STRING SectionName;
-    ACCESS_MASK DesiredAccess;
     LARGE_INTEGER LocalSize;
     PLARGE_INTEGER SectionSize = NULL;
-    ULONG Attributes;
-
-    /* Set default access */
-    DesiredAccess = STANDARD_RIGHTS_REQUIRED | SECTION_QUERY | SECTION_MAP_READ;
 
     /* Get the attributes for the actual allocation and cleanup flProtect */
-    Attributes = flProtect & (SEC_FILE | SEC_IMAGE | SEC_RESERVE | SEC_NOCACHE | SEC_COMMIT | SEC_LARGE_PAGES);
+    // NOTE: Windows 8.x adds SEC_WRITECOMBINE to the list.
+    Attributes = flProtect & (SEC_FILE | SEC_IMAGE | SEC_RESERVE | SEC_COMMIT | SEC_NOCACHE | SEC_LARGE_PAGES);
     flProtect ^= Attributes;
 
     /* If the caller didn't say anything, assume SEC_COMMIT */
     if (!Attributes) Attributes = SEC_COMMIT;
 
-    /* Now check if the caller wanted write access */
+    /* Now set the default access and add those for the required protection */
+    DesiredAccess = STANDARD_RIGHTS_REQUIRED | SECTION_QUERY | SECTION_MAP_READ;
     if (flProtect == PAGE_READWRITE)
     {
-        /* Give it */
         DesiredAccess |= SECTION_MAP_WRITE;
     }
     else if (flProtect == PAGE_EXECUTE_READWRITE)
     {
-        /* Give it */
         DesiredAccess |= (SECTION_MAP_WRITE | SECTION_MAP_EXECUTE);
     }
     else if (flProtect == PAGE_EXECUTE_READ)
     {
-        /* Give it */
         DesiredAccess |= SECTION_MAP_EXECUTE;
     }
     else if ((flProtect == PAGE_EXECUTE_WRITECOPY) &&
              (NtCurrentPeb()->OSMajorVersion >= 6))
     {
-        /* Give it */
-        DesiredAccess |= (SECTION_MAP_WRITE | SECTION_MAP_EXECUTE);
+        // FIXME for https://github.com/reactos/reactos/commit/85f9842aab1720168883a1c36ad0f11b35832123
+        // DesiredAccess |= (SECTION_MAP_WRITE | SECTION_MAP_EXECUTE);
+        DesiredAccess |= SECTION_MAP_EXECUTE;
     }
     else if ((flProtect != PAGE_READONLY) && (flProtect != PAGE_WRITECOPY))
     {
@@ -102,8 +155,8 @@ CreateFileMappingW(HANDLE hFile,
 
     /* Now convert the object attributes */
     ObjectAttributes = BaseFormatObjectAttributes(&LocalAttributes,
-                                                    lpFileMappingAttributes,
-                                                    lpName ? &SectionName : NULL);
+                                                  lpFileMappingAttributes,
+                                                  lpName ? &SectionName : NULL);
 
     /* Check if we got a size */
     if (dwMaximumSizeLow || dwMaximumSizeHigh)
@@ -169,8 +222,9 @@ MapViewOfFileEx(HANDLE hFileMappingObject,
     NTSTATUS Status;
     LARGE_INTEGER SectionOffset;
     SIZE_T ViewSize;
+    PVOID ViewBase;
+    ULONG AllocationType;
     ULONG Protect;
-    LPVOID ViewBase;
 
     /* Convert the offset */
     SectionOffset.LowPart = dwFileOffsetLow;
@@ -180,8 +234,25 @@ MapViewOfFileEx(HANDLE hFileMappingObject,
     ViewBase = lpBaseAddress;
     ViewSize = dwNumberOfBytesToMap;
 
+    // NOTE: Windows 8.x stuff:
+    AllocationType = 0;
+    if (dwDesiredAccess & FILE_MAP_RESERVE)
+        AllocationType |= MEM_RESERVE;
+    if (dwDesiredAccess & FILE_MAP_LARGE_PAGES)
+        AllocationType |= MEM_LARGE_PAGES;
+
+    // TODO Windows 8.x: In principle here we should filter
+    // dwDesiredAccess &= ~FILE_MAP_TARGETS_INVALID;
+    // in order to get the equalities below working.
+
     /* Convert flags to NT Protection Attributes */
-    if (dwDesiredAccess == FILE_MAP_COPY)
+    if ((dwDesiredAccess == (FILE_MAP_COPY | FILE_MAP_EXECUTE)) &&
+        (NtCurrentPeb()->OSMajorVersion >= 6))
+    {
+        // Addendum to https://github.com/reactos/reactos/commit/85f9842aab1720168883a1c36ad0f11b35832123
+        Protect = PAGE_EXECUTE_WRITECOPY;
+    }
+    else if (dwDesiredAccess == FILE_MAP_COPY)
     {
         Protect = PAGE_WRITECOPY;
     }
@@ -199,6 +270,10 @@ MapViewOfFileEx(HANDLE hFileMappingObject,
     {
         Protect = PAGE_NOACCESS;
     }
+    // NOTE: Windows 8.x stuff:
+    // TODO: Should be done with the unfiltered dwDesiredAccess
+    if (dwDesiredAccess & FILE_MAP_TARGETS_INVALID)
+        Protect |= PAGE_TARGETS_INVALID;
 
     /* Map the section */
     Status = NtMapViewOfSection(hFileMappingObject,
@@ -209,7 +284,7 @@ MapViewOfFileEx(HANDLE hFileMappingObject,
                                 &SectionOffset,
                                 &ViewSize,
                                 ViewShare,
-                                0,
+                                AllocationType,
                                 Protect);
     if (!NT_SUCCESS(Status))
     {
