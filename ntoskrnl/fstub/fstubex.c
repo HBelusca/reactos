@@ -1839,29 +1839,26 @@ IoGetBootDiskInformation(IN OUT PBOOTDISK_INFORMATION BootDiskInformation,
     PDEVICE_OBJECT DeviceObject;
     UNICODE_STRING DeviceStringW;
     IO_STATUS_BLOCK IoStatusBlock;
-    CHAR Buffer[128], ArcBuffer[128];
+    WCHAR Buffer[128];
+    CHAR ArcBuffer[128];
     BOOLEAN SingleDisk, IsBootDiskInfoEx;
     PARC_DISK_SIGNATURE ArcDiskSignature;
     PARC_DISK_INFORMATION ArcDiskInformation;
     PARTITION_INFORMATION_EX PartitionInformation;
     PDRIVE_LAYOUT_INFORMATION_EX DriveLayout = NULL;
     ULONG DiskCount, DiskNumber, Signature, PartitionNumber;
-    ANSI_STRING ArcBootString, ArcSystemString, DeviceStringA, ArcNameStringA;
+    ANSI_STRING ArcBootString, ArcSystemString, ArcNameStringA;
     extern PLOADER_PARAMETER_BLOCK IopLoaderBlock;
 
     PAGED_CODE();
 
     /* Get loader block. If it's null, we come too late */
     if (!IopLoaderBlock)
-    {
         return STATUS_TOO_LATE;
-    }
 
     /* Check buffer size */
     if (Size < sizeof(BOOTDISK_INFORMATION))
-    {
         return STATUS_INVALID_PARAMETER;
-    }
 
     /* Init some useful stuff:
      * Get ARC disks information
@@ -1881,32 +1878,23 @@ IoGetBootDiskInformation(IN OUT PBOOTDISK_INFORMATION BootDiskInformation,
 
     /* If no disk, return success */
     if (DiskCount == 0)
-    {
         return STATUS_SUCCESS;
-    }
 
     /* Now, browse all disks */
     for (DiskNumber = 0; DiskNumber < DiskCount; DiskNumber++)
     {
         /* Create the device name */
-        sprintf(Buffer, "\\Device\\Harddisk%lu\\Partition0", DiskNumber);
-        RtlInitAnsiString(&DeviceStringA, Buffer);
-        Status = RtlAnsiStringToUnicodeString(&DeviceStringW, &DeviceStringA, TRUE);
-        if (!NT_SUCCESS(Status))
-        {
-            continue;
-        }
+        swprintf(Buffer, L"\\Device\\Harddisk%lu\\Partition0", DiskNumber);
+        RtlInitUnicodeString(&DeviceStringW, Buffer);
 
         /* Get its device object */
         Status = IoGetDeviceObjectPointer(&DeviceStringW,
                                           FILE_READ_ATTRIBUTES,
                                           &FileObject,
                                           &DeviceObject);
-        RtlFreeUnicodeString(&DeviceStringW);
+        RtlInitEmptyUnicodeString(&DeviceStringW, NULL, 0);
         if (!NT_SUCCESS(Status))
-        {
             continue;
-        }
 
         /* Prepare for getting disk geometry */
         KeInitializeEvent(&Event, NotificationEvent, FALSE);
@@ -1939,22 +1927,17 @@ IoGetBootDiskInformation(IN OUT PBOOTDISK_INFORMATION BootDiskInformation,
         }
 
         /* Read partition table */
-        Status = IoReadPartitionTableEx(DeviceObject,
-                                        &DriveLayout);
+        Status = IoReadPartitionTableEx(DeviceObject, &DriveLayout);
 
         /* FileObject, you can go! */
         ObDereferenceObject(FileObject);
 
         if (!NT_SUCCESS(Status))
-        {
             continue;
-        }
 
         /* Ensure we have at least 512 bytes per sector */
         if (DiskGeometry.BytesPerSector < 512)
-        {
             DiskGeometry.BytesPerSector = 512;
-        }
 
         /* Now, for each ARC disk, try to find the matching */
         for (NextEntry = ArcDiskInformation->DiskSignatureListHead.Flink;
@@ -1976,27 +1959,20 @@ IoGetBootDiskInformation(IN OUT PBOOTDISK_INFORMATION BootDiskInformation,
                  (DriveLayout->PartitionStyle == PARTITION_STYLE_MBR)) ||
                 IopVerifyDiskSignature(DriveLayout, ArcDiskSignature, &Signature))
             {
-                /* Create ARC name */
-                sprintf(ArcBuffer, "\\ArcName\\%s", ArcDiskSignature->ArcName);
-                RtlInitAnsiString(&ArcNameStringA, ArcBuffer);
+                // /* Create ARC name */ // TODO: Unused
+                // sprintf(ArcBuffer, "\\ArcName\\%s", ArcDiskSignature->ArcName);
+                // RtlInitAnsiString(&ArcNameStringA, ArcBuffer);
 
                 /* Browse all partitions */
                 for (PartitionNumber = 1; PartitionNumber <= DriveLayout->PartitionCount; PartitionNumber++)
                 {
                     /* Create its device name */
-                    sprintf(Buffer, "\\Device\\Harddisk%lu\\Partition%lu", DiskNumber, PartitionNumber);
-                    RtlInitAnsiString(&DeviceStringA, Buffer);
-                    Status = RtlAnsiStringToUnicodeString(&DeviceStringW, &DeviceStringA, TRUE);
-                    if (!NT_SUCCESS(Status))
-                    {
-                        continue;
-                    }
+                    swprintf(Buffer, L"\\Device\\Harddisk%lu\\Partition%lu", DiskNumber, PartitionNumber);
+                    RtlInitUnicodeString(&DeviceStringW, Buffer);
 
                     /* If IopVerifyDiskSignature returned no signature, take the one from DriveLayout */
                     if (!Signature)
-                    {
                         Signature = DriveLayout->Mbr.Signature;
-                    }
 
                     /* Create partial ARC name */
                     sprintf(ArcBuffer, "%spartition(%lu)", ArcDiskSignature->ArcName, PartitionNumber);
@@ -2014,10 +1990,7 @@ IoGetBootDiskInformation(IN OUT PBOOTDISK_INFORMATION BootDiskInformation,
                                                           &FileObject,
                                                           &DeviceObject);
                         if (!NT_SUCCESS(Status))
-                        {
-                            RtlFreeUnicodeString(&DeviceStringW);
                             continue;
-                        }
 
                         /* And call the drive to get information about partition */
                         KeInitializeEvent(&Event, NotificationEvent, FALSE);
@@ -2033,11 +2006,10 @@ IoGetBootDiskInformation(IN OUT PBOOTDISK_INFORMATION BootDiskInformation,
                         if (!Irp)
                         {
                             ObDereferenceObject(FileObject);
-                            RtlFreeUnicodeString(&DeviceStringW);
                             continue;
                         }
 
-                        /* Call & wait if needed */
+                        /* Call and wait if needed */
                         Status = IoCallDriver(DeviceObject, Irp);
                         if (Status == STATUS_PENDING)
                         {
@@ -2047,14 +2019,13 @@ IoGetBootDiskInformation(IN OUT PBOOTDISK_INFORMATION BootDiskInformation,
                         if (!NT_SUCCESS(Status))
                         {
                             ObDereferenceObject(FileObject);
-                            RtlFreeUnicodeString(&DeviceStringW);
                             continue;
                         }
 
                         /* We get partition offset as demanded and return it */
                         BootDiskInformation->BootPartitionOffset = PartitionInformation.StartingOffset.QuadPart;
 
-                        /* If called passed a BOOTDISK_INFORMATION_EX structure, give more intel */
+                        /* If called passed a BOOTDISK_INFORMATION_EX structure, give more info */
                         if (IsBootDiskInfoEx)
                         {
                             /* Is partition style MBR or GPT? */
@@ -2085,10 +2056,7 @@ IoGetBootDiskInformation(IN OUT PBOOTDISK_INFORMATION BootDiskInformation,
                                                           &FileObject,
                                                           &DeviceObject);
                         if (!NT_SUCCESS(Status))
-                        {
-                            RtlFreeUnicodeString(&DeviceStringW);
                             continue;
-                        }
 
                         /* And call the drive to get information about partition */
                         KeInitializeEvent(&Event, NotificationEvent, FALSE);
@@ -2104,11 +2072,10 @@ IoGetBootDiskInformation(IN OUT PBOOTDISK_INFORMATION BootDiskInformation,
                         if (!Irp)
                         {
                             ObDereferenceObject(FileObject);
-                            RtlFreeUnicodeString(&DeviceStringW);
                             continue;
                         }
 
-                        /* Call & wait if needed */
+                        /* Call and wait if needed */
                         Status = IoCallDriver(DeviceObject, Irp);
                         if (Status == STATUS_PENDING)
                         {
@@ -2118,14 +2085,13 @@ IoGetBootDiskInformation(IN OUT PBOOTDISK_INFORMATION BootDiskInformation,
                         if (!NT_SUCCESS(Status))
                         {
                             ObDereferenceObject(FileObject);
-                            RtlFreeUnicodeString(&DeviceStringW);
                             continue;
                         }
 
                         /* We get partition offset as demanded and return it */
                         BootDiskInformation->SystemPartitionOffset = PartitionInformation.StartingOffset.QuadPart;
 
-                        /* If called passed a BOOTDISK_INFORMATION_EX structure, give more intel */
+                        /* If called passed a BOOTDISK_INFORMATION_EX structure, give more info */
                         if (IsBootDiskInfoEx)
                         {
                             /* Is partition style MBR or GPT? */
@@ -2143,9 +2109,6 @@ IoGetBootDiskInformation(IN OUT PBOOTDISK_INFORMATION BootDiskInformation,
                         /* Dereference FileObject */
                         ObDereferenceObject(FileObject);
                     }
-
-                    /* Release device string */
-                    RtlFreeUnicodeString(&DeviceStringW);
                 }
             }
         }

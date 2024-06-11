@@ -104,20 +104,17 @@ ExpCreateSystemRootLink(IN PLOADER_PARAMETER_BLOCK LoaderBlock)
     OBJECT_ATTRIBUTES ObjectAttributes;
     HANDLE LinkHandle;
     NTSTATUS Status;
-    ANSI_STRING AnsiName;
     CHAR Buffer[256];
     ANSI_STRING TargetString;
     UNICODE_STRING TargetName;
 
-    /* Initialize the ArcName tree */
+    /* Create the ArcName tree */
     RtlInitUnicodeString(&LinkName, L"\\ArcName");
     InitializeObjectAttributes(&ObjectAttributes,
                                &LinkName,
                                OBJ_CASE_INSENSITIVE | OBJ_PERMANENT,
                                NULL,
                                SePublicDefaultUnrestrictedSd);
-
-    /* Create it */
     Status = NtCreateDirectoryObject(&LinkHandle,
                                      DIRECTORY_ALL_ACCESS,
                                      &ObjectAttributes);
@@ -130,15 +127,13 @@ ExpCreateSystemRootLink(IN PLOADER_PARAMETER_BLOCK LoaderBlock)
     /* Close the LinkHandle */
     NtClose(LinkHandle);
 
-    /* Initialize the Device tree */
+    /* Create the Device tree */
     RtlInitUnicodeString(&LinkName, L"\\Device");
     InitializeObjectAttributes(&ObjectAttributes,
                                &LinkName,
                                OBJ_CASE_INSENSITIVE | OBJ_PERMANENT,
                                NULL,
                                SePublicDefaultUnrestrictedSd);
-
-    /* Create it */
     Status = NtCreateDirectoryObject(&LinkHandle,
                                      DIRECTORY_ALL_ACCESS,
                                      &ObjectAttributes);
@@ -151,48 +146,45 @@ ExpCreateSystemRootLink(IN PLOADER_PARAMETER_BLOCK LoaderBlock)
     /* Close the LinkHandle */
     ObCloseHandle(LinkHandle, KernelMode);
 
-    /* Create the system root symlink name */
-    RtlInitAnsiString(&AnsiName, "\\SystemRoot");
-    Status = RtlAnsiStringToUnicodeString(&LinkName, &AnsiName, TRUE);
-    if (!NT_SUCCESS(Status))
-    {
-        /* Failed */
-        KeBugCheckEx(SYMBOLIC_INITIALIZATION_FAILED, Status, 3, 0, 0);
-    }
+// See: https://dl.gi.de/server/api/core/bitstreams/68abb85c-09b1-40d6-bd2d-f9515ada6b93/content
+// "Post-mortem path correlation based on the NT Object Manager in Windows 1x systems"
+// (Dominic Helfer, Felix Rothe, and Ronny Bodach)
+#if (NTDDI_VERSION >= NTDDI_WIN8)
+    // TODO: Create "\\Device\\BootDevice" symlink to "\\ArcName\\%s", LoaderBlock->ArcBootDeviceName.
+#endif
 
-    /* Initialize the attributes for the link */
+    /* Initialize the attributes for the system root symlink */
+    RtlInitUnicodeString(&LinkName, L"\\SystemRoot");
     InitializeObjectAttributes(&ObjectAttributes,
                                &LinkName,
                                OBJ_CASE_INSENSITIVE | OBJ_PERMANENT,
                                NULL,
                                SePublicDefaultUnrestrictedSd);
 
+#if (NTDDI_VERSION >= NTDDI_WIN8)
+    // TODO: Make "\\SystemRoot" link instead to "\\Device\\BootDevice\\%s", LoaderBlock->NtBootPathName.
+#endif
     /* Build the ARC name */
-    sprintf(Buffer,
-            "\\ArcName\\%s%s",
-            LoaderBlock->ArcBootDeviceName,
-            LoaderBlock->NtBootPathName);
+    sprintf(Buffer, "\\ArcName\\%s%s", LoaderBlock->ArcBootDeviceName, LoaderBlock->NtBootPathName);
     Buffer[strlen(Buffer) - 1] = ANSI_NULL;
+    // if (FALSE) KeBugCheckEx(SYMBOLIC_INITIALIZATION_FAILED, Status, 3, 0, 0);
 
     /* Convert it to Unicode */
     RtlInitString(&TargetString, Buffer);
-    Status = RtlAnsiStringToUnicodeString(&TargetName,
-                                          &TargetString,
-                                          TRUE);
+    Status = RtlAnsiStringToUnicodeString(&TargetName, &TargetString, TRUE);
     if (!NT_SUCCESS(Status))
     {
         /* We failed, bugcheck */
         KeBugCheckEx(SYMBOLIC_INITIALIZATION_FAILED, Status, 4, 0, 0);
     }
 
-    /* Create it */
+    /* Create the system root symlink */
     Status = NtCreateSymbolicLinkObject(&LinkHandle,
                                         SYMBOLIC_LINK_ALL_ACCESS,
                                         &ObjectAttributes,
                                         &TargetName);
 
-    /* Free the strings */
-    RtlFreeUnicodeString(&LinkName);
+    /* Free the string */
     RtlFreeUnicodeString(&TargetName);
 
     /* Check if creating the link failed */
@@ -202,8 +194,17 @@ ExpCreateSystemRootLink(IN PLOADER_PARAMETER_BLOCK LoaderBlock)
         KeBugCheckEx(SYMBOLIC_INITIALIZATION_FAILED, Status, 5, 0, 0);
     }
 
-    /* Close the handle and return success */
+    /* Close the LinkHandle */
     ObCloseHandle(LinkHandle, KernelMode);
+
+#if (NTDDI_VERSION >= NTDDI_WIN10_RS4)
+    // TODO: Create "\\Device\\OSDataDevice" symlink to "\\ArcName\\%s", LoaderBlock->ArcOSDataDeviceName,
+    // or LoaderBlock->ArcBootDeviceName if the former is NULL. If it fails,
+    // KeBugCheckEx(SYMBOLIC_INITIALIZATION_FAILED, Status, 8, 0, 0);
+    // TODO: Create "\\OSDataRoot" symlink to "\\Device\\OSDataDevice".
+    // If it fails, KeBugCheckEx(SYMBOLIC_INITIALIZATION_FAILED, Status, 9, 0, 0);
+#endif
+
     return STATUS_SUCCESS;
 }
 

@@ -396,23 +396,20 @@ NTAPI
 IopMarkBootPartition(IN PLOADER_PARAMETER_BLOCK LoaderBlock)
 {
     OBJECT_ATTRIBUTES ObjectAttributes;
-    STRING DeviceString;
-    CHAR Buffer[256];
-    UNICODE_STRING DeviceName;
     NTSTATUS Status;
     HANDLE FileHandle;
     IO_STATUS_BLOCK IoStatusBlock;
     PFILE_OBJECT FileObject;
+    UNICODE_STRING ArcName;
+    WCHAR Buffer[256];
 
     /* Build the ARC device name */
-    sprintf(Buffer, "\\ArcName\\%s", LoaderBlock->ArcBootDeviceName);
-    RtlInitAnsiString(&DeviceString, Buffer);
-    Status = RtlAnsiStringToUnicodeString(&DeviceName, &DeviceString, TRUE);
-    if (!NT_SUCCESS(Status)) return FALSE;
+    swprintf(Buffer, L"\\ArcName\\%S", LoaderBlock->ArcBootDeviceName);
+    RtlInitUnicodeString(&ArcName, Buffer);
 
     /* Open it */
     InitializeObjectAttributes(&ObjectAttributes,
-                               &DeviceName,
+                               &ArcName,
                                OBJ_CASE_INSENSITIVE,
                                NULL,
                                NULL);
@@ -426,7 +423,7 @@ IopMarkBootPartition(IN PLOADER_PARAMETER_BLOCK LoaderBlock)
     {
         /* Fail */
         KeBugCheckEx(INACCESSIBLE_BOOT_DEVICE,
-                     (ULONG_PTR)&DeviceName,
+                     (ULONG_PTR)&ArcName,
                      Status,
                      0,
                      0);
@@ -437,12 +434,11 @@ IopMarkBootPartition(IN PLOADER_PARAMETER_BLOCK LoaderBlock)
                                        0,
                                        IoFileObjectType,
                                        KernelMode,
-                                       (PVOID *)&FileObject,
+                                       (PVOID*)&FileObject,
                                        NULL);
     if (!NT_SUCCESS(Status))
     {
         /* Fail */
-        RtlFreeUnicodeString(&DeviceName);
         return FALSE;
     }
 
@@ -454,7 +450,6 @@ IopMarkBootPartition(IN PLOADER_PARAMETER_BLOCK LoaderBlock)
     IopErrorLogObject = FileObject->DeviceObject;
 
     /* Cleanup and return success */
-    RtlFreeUnicodeString(&DeviceName);
     NtClose(FileHandle);
     ObDereferenceObject(FileObject);
     return TRUE;
