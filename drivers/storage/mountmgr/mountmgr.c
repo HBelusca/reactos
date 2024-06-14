@@ -130,12 +130,11 @@ BOOLEAN
 IsOffline(PUNICODE_STRING SymbolicName)
 {
     NTSTATUS Status;
-    ULONG IsOffline, Default;
+    ULONG IsOffline, Default = 0;
     RTL_QUERY_REGISTRY_TABLE QueryTable[2];
 
-    /* Prepare to look in the registry to see if
-     * given volume is offline
-     */
+    /* Prepare to look in the registry to see
+     * if the given volume is offline */
     RtlZeroMemory(QueryTable, sizeof(QueryTable));
     QueryTable[0].Flags = RTL_QUERY_REGISTRY_DIRECT;
     QueryTable[0].Name = SymbolicName->Buffer;
@@ -144,8 +143,6 @@ IsOffline(PUNICODE_STRING SymbolicName)
     QueryTable[0].DefaultLength = sizeof(ULONG);
     QueryTable[0].DefaultData = &Default;
 
-    Default = 0;
-
     /* Query status */
     Status = RtlQueryRegistryValues(RTL_REGISTRY_ABSOLUTE,
                                     OfflinePath,
@@ -153,9 +150,7 @@ IsOffline(PUNICODE_STRING SymbolicName)
                                     NULL,
                                     NULL);
     if (!NT_SUCCESS(Status))
-    {
-        IsOffline = 0;
-    }
+        IsOffline = Default;
 
     return (IsOffline != 0);
 }
@@ -944,7 +939,7 @@ MountMgrMountedDeviceArrival(IN PDEVICE_EXTENSION DeviceExtension,
     DeviceInformation->DeviceName = TargetDeviceName;
     DeviceInformation->KeepLinks = FALSE;
 
-    /* If we found system partition, mark it */
+    /* If we've found the system partition, mark it */
     if (DeviceExtension->DriveLetterData && UniqueId->UniqueIdLength == DeviceExtension->DriveLetterData->UniqueIdLength)
     {
         if (RtlCompareMemory(UniqueId->UniqueId, DeviceExtension->DriveLetterData->UniqueId, UniqueId->UniqueIdLength)
@@ -1056,10 +1051,8 @@ MountMgrMountedDeviceArrival(IN PDEVICE_EXTENSION DeviceExtension,
                 continue;
             }
 
-            /* This link is matching our device, whereas it's not supposed to have any
-             * symlink associated.
-             * Delete it
-             */
+            /* This link is matching our device, whereas it's not supposed
+             * to have any symlink associated: delete it */
             if (!SymLinkCount)
             {
                 IoDeleteSymbolicLink(&CSymLink);
@@ -1328,8 +1321,7 @@ MountMgrMountedDeviceArrival(IN PDEVICE_EXTENSION DeviceExtension,
     }
 
     /* If this drive was set to have a drive letter automatically
-     * Now it's back, local databases sync will be required
-     */
+     * Now it's back, local databases sync will be required */
     if (DeviceExtension->AutomaticDriveLetter)
     {
         KeWaitForSingleObject(&(DeviceExtension->DeviceLock), Executive, KernelMode, FALSE, NULL);
