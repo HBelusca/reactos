@@ -713,9 +713,8 @@ ReconcileThisDatabaseWithMasterWorker(IN PVOID Parameter)
         goto ReleaseRDS;
     }
 
-    /* Query reparse point information
-     * We only pay attention to mout point
-     */
+    /* Query reparse point information;
+     * we only pay attention to mount point */
     RtlZeroMemory(FileNameBuffer, sizeof(FileNameBuffer));
     FileName.Buffer = FileNameBuffer;
     FileName.Length = sizeof(FileNameBuffer);
@@ -1031,7 +1030,7 @@ ReconcileThisDatabaseWithMasterWorker(IN PVOID Parameter)
         }
         else
         {
-            /* Associate the device with the currrent DB */
+            /* Associate the device with the current DB */
             AssociatedDevice = AllocatePool(sizeof(ASSOCIATED_DEVICE_ENTRY));
             if (AssociatedDevice == NULL)
             {
@@ -1268,7 +1267,7 @@ QueueWorkItem(IN PDEVICE_EXTENSION DeviceExtension,
 
     /* When called, lock is already acquired */
 
-    /* If noone (-1 as references), start to work */
+    /* If no one (-1 as reference), start to work */
     if (InterlockedIncrement(&(DeviceExtension->WorkerReferences)) == 0)
     {
         IoQueueWorkItem(WorkItem->WorkItem, WorkerThread, DelayedWorkQueue, DeviceExtension);
@@ -1466,7 +1465,7 @@ OnlineMountedVolumes(IN PDEVICE_EXTENSION DeviceExtension,
     IO_STATUS_BLOCK IoStatusBlock;
     OBJECT_ATTRIBUTES ObjectAttributes;
     PDEVICE_INFORMATION VolumeDeviceInformation;
-    WCHAR FileNameBuffer[0x8], SymbolicNameBuffer[0x64];
+    WCHAR FileNameBuffer[8], SymbolicNameBuffer[100];
     UNICODE_STRING ReparseFile, FileName, SymbolicName, VolumeName;
     FILE_REPARSE_POINT_INFORMATION ReparsePointInformation, SavedReparsePointInformation;
 
@@ -1511,9 +1510,8 @@ OnlineMountedVolumes(IN PDEVICE_EXTENSION DeviceExtension,
         return;
     }
 
-    /* Query reparse point information
-     * We only pay attention to mout point
-     */
+    /* Query reparse point information;
+     * we only pay attention to mount point */
     RtlZeroMemory(FileNameBuffer, sizeof(FileNameBuffer));
     FileName.Buffer = FileNameBuffer;
     FileName.Length = sizeof(FileNameBuffer);
@@ -1555,52 +1553,52 @@ OnlineMountedVolumes(IN PDEVICE_EXTENSION DeviceExtension,
                                       sizeof(FILE_REPARSE_POINT_INFORMATION),
                                       FileReparsePointInformation,
                                       TRUE,
-                                      (RestartScan) ? &FileName : NULL,
+                                      RestartScan ? &FileName : NULL,
                                       RestartScan);
-         if (!RestartScan)
-         {
-             if (ReparsePointInformation.FileReference == SavedReparsePointInformation.FileReference &&
-                 ReparsePointInformation.Tag == SavedReparsePointInformation.Tag)
-             {
-                 break;
-             }
-         }
-         else
-         {
-             RestartScan = FALSE;
-         }
+        if (!RestartScan)
+        {
+            if (ReparsePointInformation.FileReference == SavedReparsePointInformation.FileReference &&
+                ReparsePointInformation.Tag == SavedReparsePointInformation.Tag)
+            {
+                break;
+            }
+        }
+        else
+        {
+            RestartScan = FALSE;
+        }
 
-         if (!NT_SUCCESS(Status) || ReparsePointInformation.Tag != IO_REPARSE_TAG_MOUNT_POINT)
-         {
-             break;
-         }
+        if (!NT_SUCCESS(Status) || ReparsePointInformation.Tag != IO_REPARSE_TAG_MOUNT_POINT)
+        {
+            break;
+        }
 
-         /* Get the volume name associated to the mount point */
-         Status = QueryVolumeName(Handle,
-                                  &ReparsePointInformation,
-                                  NULL, &SymbolicName,
-                                  &VolumeName);
-         if (!NT_SUCCESS(Status))
-         {
-             continue;
-         }
+        /* Get the volume name associated to the mount point */
+        Status = QueryVolumeName(Handle,
+                                 &ReparsePointInformation,
+                                 NULL, &SymbolicName,
+                                 &VolumeName);
+        if (!NT_SUCCESS(Status))
+        {
+            continue;
+        }
 
-         FreePool(VolumeName.Buffer);
+        FreePool(VolumeName.Buffer);
 
-         /* Get its information */
-         Status = FindDeviceInfo(DeviceExtension, &SymbolicName,
-                                 FALSE, &VolumeDeviceInformation);
-         if (!NT_SUCCESS(Status))
-         {
-             DeviceInformation->NoDatabase = TRUE;
-             continue;
-         }
+        /* Get its information */
+        Status = FindDeviceInfo(DeviceExtension, &SymbolicName,
+                                FALSE, &VolumeDeviceInformation);
+        if (!NT_SUCCESS(Status))
+        {
+            DeviceInformation->NoDatabase = TRUE;
+            continue;
+        }
 
-         /* If notification are enabled, mark it online */
-         if (!DeviceInformation->SkipNotifications)
-         {
-             PostOnlineNotification(DeviceExtension, &VolumeDeviceInformation->SymbolicName);
-         }
+        /* If notification are enabled, mark it online */
+        if (!DeviceInformation->SkipNotifications)
+        {
+            PostOnlineNotification(DeviceExtension, &VolumeDeviceInformation->SymbolicName);
+        }
     }
 
     ZwClose(Handle);

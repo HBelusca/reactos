@@ -240,6 +240,10 @@ MountMgrTargetDeviceNotification(IN PVOID NotificationStructure,
         }
     }
 
+    // Win7+: MountMgrUniqueIdChangeRoutine() is now called from here,
+    // when receiving notification with GUID_IO_VOLUME_UNIQUE_ID_CHANGE
+    // (whose definition is in ioevent.h)
+
     return STATUS_SUCCESS;
 }
 
