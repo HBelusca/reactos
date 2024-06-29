@@ -27,8 +27,8 @@
 #define FALSE false
 #define CONST const
 #define MmCopyFromCaller memmove
-#define ALTERNATE 0
-#define WINDING 1
+#define ALTERNATE 1
+#define WINDING 2
 
 #define ASSERT assert
 
