@@ -12,7 +12,7 @@
 #include <debug.h>
 
 // FIXME: Windows uses 0x0012009f
-#define DIRTY_DEFAULT DIRTY_CHARSET|DIRTY_BACKGROUND|DIRTY_TEXT|DIRTY_LINE|DIRTY_FILL
+#define DIRTY_DEFAULT (DIRTY_CHARSET|DIRTY_BACKGROUND|DIRTY_TEXT|DIRTY_LINE|DIRTY_FILL)
 
 PSURFACE psurfDefaultBitmap = NULL;
 PBRUSH pbrDefaultBrush = NULL;
@@ -294,12 +294,12 @@ DC_vInitDc(
 
     /* Setup fill data */
 	pdc->dcattr.jROP2 = R2_COPYPEN;
-	pdc->dcattr.jBkMode = 2;
-	pdc->dcattr.lBkMode = 2;
+	pdc->dcattr.jBkMode = OPAQUE;
+	pdc->dcattr.lBkMode = OPAQUE;
 	pdc->dcattr.jFillMode = ALTERNATE;
-	pdc->dcattr.lFillMode = 1;
-	pdc->dcattr.jStretchBltMode = 1;
-	pdc->dcattr.lStretchBltMode = 1;
+	pdc->dcattr.lFillMode = ALTERNATE;
+	pdc->dcattr.jStretchBltMode = BLACKONWHITE;
+	pdc->dcattr.lStretchBltMode = BLACKONWHITE;
     pdc->ptlFillOrigin.x = 0;
     pdc->ptlFillOrigin.y = 0;
 
