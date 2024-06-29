@@ -1071,8 +1071,10 @@ SetBkMode(
     }
 
     iOldMode = pdcattr->lBkMode;
-    pdcattr->jBkMode = iBkMode; // Processed
     pdcattr->lBkMode = iBkMode; // Raw
+    if ((iBkMode <= 0) || (iBkMode > BKMODE_LAST))
+        iBkMode = TRANSPARENT;
+    pdcattr->jBkMode = iBkMode; // Processed
 
     return iOldMode;
 }
@@ -1384,7 +1386,8 @@ SetStretchBltMode(
     pdcattr->lStretchBltMode = iStretchMode;
 
     // Wine returns an error here. We set the default.
-    if ((iStretchMode <= 0) || (iStretchMode > MAXSTRETCHBLTMODE)) iStretchMode = WHITEONBLACK;
+    if ((iStretchMode <= 0) || (iStretchMode > MAXSTRETCHBLTMODE))
+        iStretchMode = WHITEONBLACK;
 
     pdcattr->jStretchBltMode = iStretchMode;
 

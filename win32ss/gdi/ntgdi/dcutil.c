@@ -134,8 +134,10 @@ IntGdiSetBkMode(HDC hDC, INT Mode)
     }
     pdcattr = dc->pdcattr;
     oldMode = pdcattr->lBkMode;
-    pdcattr->jBkMode = Mode;
-    pdcattr->lBkMode = Mode;
+    pdcattr->lBkMode = Mode; // Raw
+    if ((Mode <= 0) || (Mode > BKMODE_LAST))
+        Mode = TRANSPARENT;
+    pdcattr->jBkMode = Mode; // Processed
     DC_UnlockDc(dc);
     return oldMode;
 }
@@ -160,7 +162,8 @@ IntGdiSetTextAlign(HDC  hDC,
     pdcattr->lTextAlign = Mode;
     if (pdcattr->dwLayout & LAYOUT_RTL)
     {
-        if ((Mode & TA_CENTER) != TA_CENTER) Mode ^= TA_RIGHT;
+        if ((Mode & TA_CENTER) != TA_CENTER)
+            Mode ^= TA_RIGHT;
     }
     pdcattr->flTextAlign = Mode & TA_MASK;
     DC_UnlockDc(dc);
@@ -294,7 +297,8 @@ GreSetStretchBltMode(HDC hDC, int iStretchMode)
        pdcattr->lStretchBltMode = iStretchMode;
 
        // Wine returns an error here. We set the default.
-       if ((iStretchMode <= 0) || (iStretchMode > MAXSTRETCHBLTMODE)) iStretchMode = WHITEONBLACK;
+       if ((iStretchMode <= 0) || (iStretchMode > MAXSTRETCHBLTMODE))
+          iStretchMode = WHITEONBLACK;
 
        pdcattr->jStretchBltMode = iStretchMode;
        DC_UnlockDc(pdc);
