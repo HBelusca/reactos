@@ -1205,7 +1205,17 @@ co_WinPosDoNCCALCSize(PWND Window, PWINDOWPOS WinPos, RECTL* WindowRect, RECTL* 
       params.lppos = &winposCopy;
       winposCopy = *WinPos;
 
-      wvrFlags = co_IntSendMessage(UserHMGetHandle(Window), WM_NCCALCSIZE, TRUE, (LPARAM)&params);
+      wvrFlags = 0;
+      if (Window->pcls->style & CS_VREDRAW) {
+ERR("**** CS_VREDRAW, set WVR_VREDRAW ****\n");
+          wvrFlags |= WVR_VREDRAW;
+      }
+      if (Window->pcls->style & CS_HREDRAW) {
+ERR("**** CS_HREDRAW, set WVR_HREDRAW ****\n");
+          wvrFlags |= WVR_HREDRAW;
+      }
+
+      wvrFlags |= co_IntSendMessage(UserHMGetHandle(Window), WM_NCCALCSIZE, TRUE, (LPARAM)&params);
 
       if (wvrFlags & WVR_VREDRAW)
         ERR("**** Got WVR_VREDRAW ****\n");
