@@ -1207,6 +1207,11 @@ co_WinPosDoNCCALCSize(PWND Window, PWINDOWPOS WinPos, RECTL* WindowRect, RECTL* 
 
       wvrFlags = co_IntSendMessage(UserHMGetHandle(Window), WM_NCCALCSIZE, TRUE, (LPARAM)&params);
 
+      if (wvrFlags & WVR_VREDRAW)
+        ERR("**** Got WVR_VREDRAW ****\n");
+      if (wvrFlags & WVR_HREDRAW)
+        ERR("**** Got WVR_HREDRAW ****\n");
+
       /* If the application send back garbage, ignore it */
       if (params.rgrc[0].left <= params.rgrc[0].right &&
           params.rgrc[0].top <= params.rgrc[0].bottom)

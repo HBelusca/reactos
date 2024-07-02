@@ -1290,10 +1290,12 @@ LRESULT NC_HandleNCCalcSize( PWND Wnd, WPARAM wparam, RECTL *Rect, BOOL Suspende
    {
       if (Wnd->pcls->style & CS_VREDRAW)
       {
+ERR("CS_VREDRAW, setting WVR_VREDRAW\n");
          Result |= WVR_VREDRAW;
       }
       if (Wnd->pcls->style & CS_HREDRAW)
       {
+ERR("CS_HREDRAW, setting WVR_HREDRAW\n");
          Result |= WVR_HREDRAW;
       }
       Result |= WVR_VALIDRECTS;
