@@ -741,51 +741,43 @@ private:
         }
 
         if (pszAllFilesDescription)
-        {
-            strFilter += pszAllFilesDescription;
-
-            BOOL bFirst = TRUE;
-            CString extensions;
-            for (UINT i = 0; i < cCodecs; ++i)
-            {
-                if (ShouldExcludeFormat(pCodecs[i].FormatID, dwExclude))
-                    continue;
-
-                if (bFirst)
-                    bFirst = FALSE;
-                else
-                    extensions += TEXT(';');
-
-                CString ext(pCodecs[i].FilenameExtension);
-                extensions += ext;
-            }
-
-            strFilter += chSeparator;
-            strFilter += extensions;
-            strFilter += chSeparator;
-
             aguidFileTypes.Add(GUID_NULL);
-        }
 
+        CString extensions, filter;
         for (UINT i = 0; i < cCodecs; ++i)
         {
             if (ShouldExcludeFormat(pCodecs[i].FormatID, dwExclude))
                 continue;
 
-            CString extensions(pCodecs[i].FilenameExtension);
+            CString ext(pCodecs[i].FilenameExtension);
+            // CString desc(pCodecs[i].FormatDescription);
 
-            CString desc(pCodecs[i].FormatDescription);
-            strFilter += desc;
-            strFilter += TEXT(" (");
-            strFilter += extensions;
-            strFilter += TEXT(")");
-            strFilter += chSeparator;
-            strFilter += extensions;
-            strFilter += chSeparator;
+            if (pszAllFilesDescription)
+            {
+                if (*extensions)
+                    extensions += TEXT(';');
+                extensions += ext;
+            }
+
+            filter += pCodecs[i].FormatDescription; // desc;
+            filter += TEXT(" (");
+            filter += ext;
+            filter += TEXT(")");
+            filter += chSeparator;
+            filter += ext;
+            filter += chSeparator;
 
             aguidFileTypes.Add(pCodecs[i].FormatID);
         }
 
+        if (pszAllFilesDescription)
+        {
+            strFilter += pszAllFilesDescription;
+            strFilter += chSeparator;
+            strFilter += extensions;
+            strFilter += chSeparator;
+        }
+        strFilter += filter;
         strFilter += chSeparator;
         return S_OK;
     }
