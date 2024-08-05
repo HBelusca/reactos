@@ -3287,7 +3287,7 @@ typedef struct _LOG_PARAMETER_HEADER {
 
 typedef struct _LOG_PARAMETER {
   LOG_PARAMETER_HEADER Header;
-  union {
+  /*_ANONYMOUS_UNION*/ /*__C89_NAMELESS*/__extension__ union {
 #if !defined(__midl)
     UCHAR AsByte[0];
 #endif
@@ -3339,7 +3339,7 @@ typedef struct _LOG_PARAMETER {
       UCHAR MostRecentTemperature;
       UCHAR VendorSpecific[ANYSIZE_ARRAY];
     } INFORMATIONAL_EXCEPTIONS;
-  };
+  } /*DUMMYUNIONNAME*/ __C89_NAMELESSUNIONNAME;
 } LOG_PARAMETER, *PLOG_PARAMETER;
 
 typedef struct _LOG_PAGE {

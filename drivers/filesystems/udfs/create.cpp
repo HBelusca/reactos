@@ -16,6 +16,13 @@
 
 #include            "udffs.h"
 
+#ifndef _CONSOLE
+//#pragma push_macro("NONAMELESSUNION")
+//#define NONAMELESSUNION
+#include <scsi.h>
+//#pragma pop_macro("NONAMELESSUNION")
+#endif
+
 #define IsFileObjectReadOnly(FO) (!((FO)->WriteAccess | (FO)->DeleteAccess))
 
 // define the file specific bug-check id
