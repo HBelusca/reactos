@@ -34,7 +34,8 @@ BOOLEAN MmMakeLowMemory;
 BOOLEAN MmEnforceWriteProtection = TRUE;
 
 PMMPTE MiKernelResourceStartPte, MiKernelResourceEndPte;
-ULONG_PTR ExPoolCodeStart, ExPoolCodeEnd, MmPoolCodeStart, MmPoolCodeEnd;
+ULONG_PTR ExPoolCodeStart, ExPoolCodeEnd;
+ULONG_PTR MmPoolCodeStart, MmPoolCodeEnd;
 ULONG_PTR MmPteCodeStart, MmPteCodeEnd;
 
 #ifdef _WIN64
@@ -2215,13 +2216,13 @@ MiLocateKernelSections(IN PLDR_DATA_TABLE_ENTRY LdrEntry)
             /* POOLCODE vs. POOLMI */
             if (*(PULONG)&SectionHeader->Name[4] == 'EDOC')
             {
-                /* Found Ex* Pool code */
+                /* Found POOLCODE (Ex* Pool code) */
                 ExPoolCodeStart = DllBase + SectionHeader->VirtualAddress;
                 ExPoolCodeEnd = ExPoolCodeStart + Size;
             }
-            else if (*(PUSHORT)&SectionHeader->Name[4] == 'MI')
+            else if (*(PUSHORT)&SectionHeader->Name[4] == 'IM')
             {
-                /* Found Mm* Pool code */
+                /* Found POOLMI (Mm* Pool code) */
                 MmPoolCodeStart = DllBase + SectionHeader->VirtualAddress;
                 MmPoolCodeEnd = MmPoolCodeStart + Size;
             }
