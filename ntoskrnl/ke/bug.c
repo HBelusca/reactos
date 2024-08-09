@@ -723,7 +723,7 @@ KeBugCheckWithTf(IN ULONG BugCheckCode,
     BOOLEAN IsSystem, IsHardError = FALSE;
     BOOLEAN Reboot = !!IopAutoReboot;
     PCHAR HardErrCaption = NULL, HardErrMessage = NULL;
-    PVOID Pc = NULL, Memory;
+    PVOID Pc = NULL;
     PVOID DriverBase;
     PLDR_DATA_TABLE_ENTRY LdrEntry;
     PULONG_PTR HardErrorParameters;
@@ -844,11 +844,30 @@ KeBugCheckWithTf(IN ULONG BugCheckCode,
         case IRQL_NOT_LESS_OR_EQUAL:
         {
             /*
-             * The NT kernel has 3 special sections:
-             * MISYSPTE, POOLMI and POOLCODE. The bug check code can
-             * determine in which of these sections this bugcode happened
-             * and provide a more detailed analysis. For now, we don't.
+             * The NT kernel has 3 special sections: MISYSPTE, POOLMI,
+             * and POOLCODE (see MiLocateKernelSections()). In order
+             * to provide a more detailed analysis, the checks below
+             * determine in which of these sections the bugcheck happened.
              */
+            if ((ExPoolCodeStart <= BugCheckParameter4) && (BugCheckParameter4 < ExPoolCodeEnd))
+            {
+                /* Found POOLCODE (Ex* Pool code) */
+                KiBugCheckData[0] = DRIVER_CORRUPTED_EXPOOL;
+                break;
+            }
+            else if ((MmPoolCodeStart <= BugCheckParameter4) && (BugCheckParameter4 < MmPoolCodeEnd))
+            {
+                /* Found POOLMI (Mm* Pool code) */
+                KiBugCheckData[0] = DRIVER_CORRUPTED_MMPOOL;
+                break;
+            }
+            else if ((MmPteCodeStart <= BugCheckParameter4) && (BugCheckParameter4 < MmPteCodeEnd))
+            {
+                /* Found MISYSPTE (Mm System PTE code) */
+                KiBugCheckData[0] = DRIVER_CORRUPTED_SYSPTES;
+                break;
+            }
+
 
             /* Program Counter is in parameter 4 */
             Pc = (PVOID)BugCheckParameter4;
@@ -864,7 +883,7 @@ KeBugCheckWithTf(IN ULONG BugCheckCode,
                  * The error happened inside the kernel or HAL.
                  * Get the memory address that was being referenced.
                  */
-                Memory = (PVOID)BugCheckParameter1;
+                PVOID Memory = (PVOID)BugCheckParameter1;
 
                 /* Find to which driver it belongs */
                 DriverBase = KiPcToFileHeader(Memory,
