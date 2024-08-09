@@ -466,6 +466,7 @@ extern PKWIN32_PROCESS_CALLOUT PspW32ProcessCallout;
 extern PKWIN32_THREAD_CALLOUT PspW32ThreadCallout;
 extern PVOID PspSystemDllEntryPoint;
 extern PVOID PspSystemDllBase;
+extern ULONG PsEmbeddedNTMask;
 extern BOOLEAN PspUseJobSchedulingClasses;
 extern CHAR PspJobSchedulingClasses[PSP_JOB_SCHEDULING_CLASSES];
 extern ULONG PsRawPrioritySeparation;

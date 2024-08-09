@@ -38,6 +38,8 @@ GENERIC_MAPPING PspThreadMapping =
     THREAD_ALL_ACCESS
 };
 
+ULONG PsEmbeddedNTMask;
+
 PVOID PspSystemDllBase;
 PVOID PspSystemDllSection;
 PVOID PspSystemDllEntryPoint;
@@ -193,6 +195,11 @@ PsLocateSystemDll(VOID)
     ULONG_PTR HardErrorParameters;
     ULONG HardErrorResponse;
 
+    /* If we are in KernelOnlyConfiguration for Embedded-NT mode,
+     * don't load NTDLL, since no user-mode is needed */
+    if (/*ExVerifySuite(EmbeddedNT) &&*/ (PsEmbeddedNTMask & 1))
+        return STATUS_SUCCESS;
+
     /* Locate and open NTDLL to determine ImageBase and LdrStartup */
     InitializeObjectAttributes(&ObjectAttributes,
                                &PsNtDllPathName,
@@ -273,6 +280,14 @@ NTAPI
 PspInitializeSystemDll(VOID)
 {
     NTSTATUS Status;
+
+    /* We may have no system dll loaded, only if we are
+     * in KernelOnlyConfiguration for Embedded-NT mode */
+    if (!PspSystemDllBase)
+    {
+        ASSERT((PsEmbeddedNTMask & 1));
+        return (PsEmbeddedNTMask & 1) ? STATUS_SUCCESS : STATUS_DLL_NOT_FOUND;
+    }
 
     /* Get user-mode startup thunk */
     Status = PspLookupSystemDllEntryPoint("LdrInitializeThunk",

@@ -969,6 +969,13 @@ DATA_SEG("INITDATA") CM_SYSTEM_CONTROL_VECTOR CmControlVector[] =
         &NtInitialUserProcessBufferType
     },
     {
+        L"EmbeddedNT\\Executive",
+        L"KernelOnlyConfiguration",
+        &PsEmbeddedNTMask,
+        NULL,
+        NULL
+    },
+    {
         L"CrashControl",
         L"AutoReboot",
         &IopAutoReboot,
