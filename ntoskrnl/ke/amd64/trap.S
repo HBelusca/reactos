@@ -1087,7 +1087,7 @@ FUNC KiConvertToGuiThread
     test rax, rax
     jz KiConvertToGuiThreadFailed
 
-    /* OldStack = KeSwitchKernelStack((PVOID)NewStack, (PVOID)(NewStack - KERNEL_LARGE_STACK_COMMIT )); */
+    /* OldStack = KeSwitchKernelStack((PVOID)NewStack, (PVOID)(NewStack - KERNEL_LARGE_STACK_COMMIT)); */
     mov rcx, rax
     mov rdx, rax
     sub rdx, KERNEL_LARGE_STACK_COMMIT
