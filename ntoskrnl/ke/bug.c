@@ -720,7 +720,8 @@ KeBugCheckWithTf(IN ULONG BugCheckCode,
     CONTEXT Context;
     ULONG MessageId;
     CHAR AnsiName[128];
-    BOOLEAN IsSystem, IsHardError = FALSE, Reboot = FALSE;
+    BOOLEAN IsSystem, IsHardError = FALSE;
+    BOOLEAN Reboot = !!IopAutoReboot;
     PCHAR HardErrCaption = NULL, HardErrMessage = NULL;
     PVOID Pc = NULL, Memory;
     PVOID DriverBase;

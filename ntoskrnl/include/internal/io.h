@@ -1461,6 +1461,7 @@ extern KSPIN_LOCK IopDeviceActionLock;
 extern LIST_ENTRY IopDeviceActionRequestList;
 extern RESERVE_IRP_ALLOCATOR IopReserveIrpAllocator;
 extern BOOLEAN IoRemoteBootClient;
+extern ULONG IopAutoReboot;
 
 //
 // Inlined Functions
