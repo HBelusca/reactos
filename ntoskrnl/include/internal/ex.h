@@ -41,6 +41,11 @@ extern ULONG ExDelayedWorkerThreads;
 extern PVOID ExpDefaultErrorPort;
 extern PEPROCESS ExpDefaultErrorPortProcess;
 
+extern WCHAR NtInitialUserProcessBuffer[128];
+extern ULONG NtInitialUserProcessBufferLength;
+extern ULONG NtInitialUserProcessBufferType;
+
+
 /*
  * NT/Cm Version Info variables
  */

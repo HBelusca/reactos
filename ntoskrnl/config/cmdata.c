@@ -962,6 +962,13 @@ DATA_SEG("INITDATA") CM_SYSTEM_CONTROL_VECTOR CmControlVector[] =
         NULL
     },
     {
+        L"Session Manager",
+        L"Initial Process",
+        NtInitialUserProcessBuffer,
+        &NtInitialUserProcessBufferLength,
+        &NtInitialUserProcessBufferType
+    },
+    {
         L"CrashControl",
         L"AutoReboot",
         &IopAutoReboot,
