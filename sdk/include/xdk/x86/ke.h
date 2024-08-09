@@ -217,7 +217,7 @@ $if (_NTDDK_)
 
 #define KERNEL_STACK_SIZE                   12288
 #define KERNEL_LARGE_STACK_SIZE             61440
-#define KERNEL_LARGE_STACK_COMMIT           12288
+#define KERNEL_LARGE_STACK_COMMIT           KERNEL_STACK_SIZE
 
 #define SIZE_OF_80387_REGISTERS   80
 
