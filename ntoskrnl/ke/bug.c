@@ -30,6 +30,9 @@ ULONG KiHardwareTrigger;
 PUNICODE_STRING KiBugCheckDriver;
 ULONG_PTR KiBugCheckData[5];
 
+/* Backing store for the current stack data */
+UCHAR KiPreBugcheckStackSaveArea[6 * PAGE_SIZE];
+
 PKNMI_HANDLER_CALLBACK KiNmiCallbackListHead = NULL;
 KSPIN_LOCK KiNmiCallbackListLock;
 
@@ -431,6 +434,10 @@ KeGetBugMessageText(IN ULONG BugCheckCode,
     return Result;
 }
 
+/**
+ * @brief
+ * Execute the bugcheck callbacks registered via KeRegisterBugCheckCallback().
+ **/
 VOID
 NTAPI
 KiDoBugCheckCallbacks(VOID)
@@ -449,7 +456,7 @@ KiDoBugCheckCallbacks(VOID)
     NextEntry = ListHead->Flink;
     while (NextEntry != ListHead)
     {
-        /* Get the reord */
+        /* Get the record */
         CurrentRecord = CONTAINING_RECORD(NextEntry,
                                           KBUGCHECK_CALLBACK_RECORD,
                                           Entry);
@@ -732,6 +739,7 @@ KeBugCheckWithTf(IN ULONG BugCheckCode,
     CONTEXT Context;
     ULONG MessageId;
     CHAR AnsiName[128];
+    BOOLEAN FirstCall;
     BOOLEAN IsSystem, IsHardError = FALSE, Reboot = FALSE;
     PCHAR HardErrCaption = NULL, HardErrMessage = NULL;
     PVOID Pc = NULL;
@@ -741,16 +749,9 @@ KeBugCheckWithTf(IN ULONG BugCheckCode,
     KIRQL OldIrql;
 
     /* Set active bugcheck */
-    KeBugCheckActive = TRUE;
+    KeBugCheckActive = TRUE; // NOTE: Repurposed as KiBugCheckActive flags in Win7+
     KiBugCheckDriver = NULL;
 
-    /* Check if this is power failure simulation */
-    if (BugCheckCode == POWER_FAILURE_SIMULATE)
-    {
-        /* Call the Callbacks and reboot */
-        KiDoBugCheckCallbacks();
-        HalReturnToFirmware(HalRebootRoutine);
-    }
 
     /* Save the IRQL and set hardware trigger */
     Prcb->DebuggerSavedIRQL = KeGetCurrentIrql();
@@ -760,6 +761,48 @@ KeBugCheckWithTf(IN ULONG BugCheckCode,
     RtlCaptureContext(&Prcb->ProcessorState.ContextFrame);
     KiSaveProcessorControlState(&Prcb->ProcessorState);
     Context = Prcb->ProcessorState.ContextFrame;
+
+
+    /* Raise to DISPATCH_LEVEL if required */
+    OldIrql = KeGetCurrentIrql();
+    if (OldIrql < DISPATCH_LEVEL)
+        KeRaiseIrql(DISPATCH_LEVEL, &OldIrql); // OldIrql = KeRaiseIrqlToDpcLevel();
+
+
+    /* Check whether bugcheck is re-entered and if so, skip reinitialization */
+    FirstCall = !InterlockedDecrement((PLONG)&KeBugCheckCount);
+    if (!FirstCall) // FIXME: Improve the check: Use also KeBugCheckActive
+        goto Reentered_Bugcheck;
+
+
+
+// https://x.com/osrdrivers/status/456493578563620864
+// Note: with $ptrsize == 8 (on x64), c00*@$ptrsize == 0x6000 == 6 * PAGE_SIZE
+// https://community.osr.com/t/help-needed-to-solve-win2012r2-bsod-mi-check-kernel-noexecute-fault/56433/9
+// Note: 0: kd> dps KiPreBugcheckStackSaveArea KiPreBugcheckStackSaveArea+3000
+// on 32-bit systems? see https://blog.csdn.net/renluborenlubo/article/details/129078736
+//
+// "Windows Internals, Sixth Edition, Part 2", pages 576-577
+
+    /* Capture the caller's stack */
+    {
+    ULONG_PTR LowLimit, HighLimit;
+    SIZE_T StackSize;
+
+    RtlpGetStackLimits(&LowLimit, &HighLimit);
+    StackSize = min(HighLimit - LowLimit, sizeof(KiPreBugcheckStackSaveArea));
+    RtlCopyMemory(&KiPreBugcheckStackSaveArea, LowLimit, StackSize);
+    }
+
+
+
+    /* Check if this is power failure simulation */
+    if (BugCheckCode == POWER_FAILURE_SIMULATE)
+    {
+        /* Call the Callbacks and reboot */
+        KiDoBugCheckCallbacks();
+        HalReturnToFirmware(HalRebootRoutine);
+    }
 
     /* FIXME: Call the Watchdog if it's registered */
 
@@ -776,7 +819,6 @@ KeBugCheckWithTf(IN ULONG BugCheckCode,
         case FAT_FILE_SYSTEM:
         case NO_MORE_SYSTEM_PTES:
         case INACCESSIBLE_BOOT_DEVICE:
-
             /* Keep the same code */
             MessageId = BugCheckCode;
             break;
@@ -785,35 +827,30 @@ KeBugCheckWithTf(IN ULONG BugCheckCode,
         case KERNEL_MODE_EXCEPTION_NOT_HANDLED:
         case SYSTEM_THREAD_EXCEPTION_NOT_HANDLED:
         case KMODE_EXCEPTION_NOT_HANDLED:
-
             /* Use the generic text message */
             MessageId = KMODE_EXCEPTION_NOT_HANDLED;
             break;
 
         /* File-system errors */
         case NTFS_FILE_SYSTEM:
-
             /* Use the generic message for FAT */
             MessageId = FAT_FILE_SYSTEM;
             break;
 
-        /* Check if this is a coruption of the Mm's Pool */
+        /* Check if this is a corruption of the Mm* Pool */
         case DRIVER_CORRUPTED_MMPOOL:
-
             /* Use generic corruption message */
             MessageId = DRIVER_CORRUPTED_EXPOOL;
             break;
 
         /* Check if this is a signature check failure */
         case STATUS_SYSTEM_IMAGE_BAD_SIGNATURE:
-
             /* Use the generic corruption message */
             MessageId = BUGCODE_PSS_MESSAGE_SIGNATURE;
             break;
 
         /* All other codes */
         default:
-
             /* Use the default bugcheck message */
             MessageId = BUGCODE_PSS_MESSAGE;
             break;
@@ -834,16 +871,12 @@ KeBugCheckWithTf(IN ULONG BugCheckCode,
         case ATTEMPTED_WRITE_TO_READONLY_MEMORY:
         case ATTEMPTED_EXECUTE_OF_NOEXECUTE_MEMORY:
         {
-            /* Check if we have a trap frame */
-            if (!TrapFrame)
-            {
-                /* Use parameter 3 as a trap frame, if it exists */
-                if (BugCheckParameter3) TrapFrame = (PVOID)BugCheckParameter3;
-            }
+            /* If we don't have a trap frame, use parameter 3 as one if possible */
+            if (!TrapFrame && BugCheckParameter3)
+                TrapFrame = (PVOID)BugCheckParameter3;
 
             /* Check if we got one now and if we need to get the Program Counter */
-            if ((TrapFrame) &&
-                (BugCheckCode != KERNEL_MODE_EXCEPTION_NOT_HANDLED))
+            if (TrapFrame && (BugCheckCode != KERNEL_MODE_EXCEPTION_NOT_HANDLED))
             {
                 /* Get the Program Counter */
                 Pc = (PVOID)KeGetTrapFramePc(TrapFrame);
@@ -956,12 +989,9 @@ KeBugCheckWithTf(IN ULONG BugCheckCode,
             /* Assume no driver */
             DriverBase = NULL;
 
-            /* Check if we have a trap frame */
-            if (!TrapFrame)
-            {
-                /* We don't, use parameter 3 if possible */
-                if (BugCheckParameter3) TrapFrame = (PVOID)BugCheckParameter3;
-            }
+            /* If we don't have a trap frame, use parameter 3 as one if possible */
+            if (!TrapFrame && BugCheckParameter3)
+                TrapFrame = (PVOID)BugCheckParameter3;
 
             /* Check if we have a frame now */
             if (TrapFrame)
@@ -1017,14 +1047,12 @@ KeBugCheckWithTf(IN ULONG BugCheckCode,
 
         /* Check if the driver forgot to unlock pages */
         case DRIVER_LEFT_LOCKED_PAGES_IN_PROCESS:
-
             /* Program Counter is in parameter 1 */
             Pc = (PVOID)BugCheckParameter1;
             break;
 
         /* Check if the driver consumed too many PTEs */
         case DRIVER_USED_EXCESSIVE_PTES:
-
             /* Loader entry is in parameter 1 */
             LdrEntry = (PVOID)BugCheckParameter1;
             KiBugCheckDriver = &LdrEntry->BaseDllName;
@@ -1032,8 +1060,7 @@ KeBugCheckWithTf(IN ULONG BugCheckCode,
 
         /* Check if the driver has a stuck thread */
         case THREAD_STUCK_IN_DEVICE_DRIVER:
-
-            /* The name is in Parameter 3 */
+            /* Name is in parameter 3 */
             KiBugCheckDriver = (PVOID)BugCheckParameter3;
             break;
 
@@ -1048,24 +1075,22 @@ KeBugCheckWithTf(IN ULONG BugCheckCode,
         /* Convert it to ANSI */
         KeBugCheckUnicodeToAnsi(KiBugCheckDriver, AnsiName, sizeof(AnsiName));
     }
-    else
+    /* Do we have a Program Counter? */
+    else if (Pc)
     {
-        /* Do we have a Program Counter? */
-        if (Pc)
-        {
-            /* Dump image name */
-            KiDumpParameterImages(AnsiName,
-                                  (PULONG_PTR)&Pc,
-                                  1,
-                                  KeBugCheckUnicodeToAnsi);
-        }
+        /* Dump image name */
+        KiDumpParameterImages(AnsiName,
+                              (PULONG_PTR)&Pc,
+                              1,
+                              KeBugCheckUnicodeToAnsi);
     }
 
     /* Check if we need to save the context for KD */
-    if (!KdPitchDebugger) KdDebuggerDataBlock.SavedContext = (ULONG_PTR)&Context;
+    if (!KdPitchDebugger)
+        KdDebuggerDataBlock.SavedContext = (ULONG_PTR)&Context;
 
     /* Check if a debugger is connected */
-    if ((BugCheckCode != MANUALLY_INITIATED_CRASH) && (KdDebuggerEnabled))
+    if ((BugCheckCode != MANUALLY_INITIATED_CRASH) && KdDebuggerEnabled)
     {
         /* Crash on the debugger console */
         DbgPrint("\n*** Fatal System Error: 0x%08lx\n"
@@ -1099,12 +1124,15 @@ KeBugCheckWithTf(IN ULONG BugCheckCode,
         }
     }
 
+
+Reentered_Bugcheck:
+
     /* Raise IRQL to HIGH_LEVEL */
     _disable();
     KeRaiseIrql(HIGH_LEVEL, &OldIrql);
 
     /* Avoid recursion */
-    if (!InterlockedDecrement((PLONG)&KeBugCheckCount))
+    if (FirstCall)
     {
 #ifdef CONFIG_SMP
         /* Set CPU that is bug checking now */
@@ -1126,7 +1154,7 @@ KeBugCheckWithTf(IN ULONG BugCheckCode,
         // KbCallbackReserved1 reason.
 
         /* Check if the debugger is disabled but we can enable it */
-        if (!(KdDebuggerEnabled) && !(KdPitchDebugger))
+        if (!KdDebuggerEnabled && !KdPitchDebugger)
         {
             /* Enable it */
             KdEnableDebuggerWithLock(FALSE);
@@ -1158,7 +1186,7 @@ KeBugCheckWithTf(IN ULONG BugCheckCode,
         else if (KeBugCheckOwnerRecursionCount > 2)
         {
             /* Halt execution */
-            while (TRUE);
+            while (TRUE) YieldProcessor();
         }
     }
 
@@ -1183,6 +1211,10 @@ KeBugCheckWithTf(IN ULONG BugCheckCode,
     while (TRUE);
 }
 
+/**
+ * @brief
+ * Execute the bugcheck callbacks registered via KeRegisterNmiCallback().
+ **/
 BOOLEAN
 NTAPI
 KiHandleNmi(VOID)
@@ -1471,7 +1503,7 @@ KeEnterKernelDebugger(VOID)
     if (!InterlockedDecrement((PLONG)&KeBugCheckCount))
     {
         /* There was only one, is the debugger disabled? */
-        if (!(KdDebuggerEnabled) && !(KdPitchDebugger))
+        if (!KdDebuggerEnabled && !KdPitchDebugger)
         {
             /* Enable the debugger */
             KdInitSystem(0, NULL);
