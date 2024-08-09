@@ -38,6 +38,8 @@ GENERIC_MAPPING PspThreadMapping =
     THREAD_ALL_ACCESS
 };
 
+ULONG PsEmbeddedNTMask;
+
 PVOID PspSystemDllBase;
 PVOID PspSystemDllSection;
 PVOID PspSystemDllEntryPoint;
@@ -192,6 +194,11 @@ PsLocateSystemDll(VOID)
     NTSTATUS Status;
     ULONG_PTR HardErrorParameters;
     ULONG HardErrorResponse;
+
+    /* If we are in KernelOnlyConfiguration for Embedded-NT mode,
+     * don't load ntdll as no user-mode is needed */
+    if (/*ExVerifySuite(EmbeddedNT) &&*/ (PsEmbeddedNTMask & 1))
+        return STATUS_SUCCESS;
 
     /* Locate and open NTDLL to determine ImageBase and LdrStartup */
     InitializeObjectAttributes(&ObjectAttributes,
