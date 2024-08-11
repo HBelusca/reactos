@@ -22,7 +22,7 @@ BOOLEAN CmpLazyFlushPending;
 BOOLEAN CmpForceForceFlush;
 BOOLEAN CmpHoldLazyFlush = TRUE;
 ULONG CmpLazyFlushIntervalInSeconds = 5;
-static ULONG CmpLazyFlushHiveCount = 7;
+ULONG CmpLazyFlushHiveCount = 7;
 ULONG CmpLazyFlushCount = 1;
 LONG CmpFlushStarveWriters;
 
@@ -60,7 +60,7 @@ CmpDoFlushNextHive(_In_  BOOLEAN ForceFlush,
         if (!(CmHive->Hive.HiveFlags & HIVE_NOLAZYFLUSH) &&
             (CmHive->FlushCount != CmpLazyFlushCount))
         {
-            /* Great sucess! */
+            /* Great success! */
             Result = TRUE;
 
             /* One less to flush */
