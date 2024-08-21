@@ -47,6 +47,8 @@ typedef struct _VOLENTRY
     VOLINFO Info;
     FORMATSTATE FormatState;
 
+/** The following properties may be replaced by flags **/
+
     /* Volume must be checked */
     BOOLEAN NeedsCheck;
     /* Volume is new and has not yet been actually formatted and mounted */
@@ -75,6 +77,8 @@ typedef struct _PARTENTRY
     ULONG PartitionNumber;       /* Current partition number, only valid for the currently running NTOS instance */
     ULONG PartitionIndex;        /* Index in the LayoutBuffer->PartitionEntry[] cached array of the corresponding DiskEntry */
     WCHAR DeviceName[MAX_PATH];  ///< NT device name: "\Device\HarddiskM\PartitionN"
+
+/** The following properties may be replaced by flags **/
 
     BOOLEAN LogicalPartition;
 
