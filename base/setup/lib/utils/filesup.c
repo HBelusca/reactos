@@ -708,6 +708,9 @@ DoesPathExist_UStr(
                                RootDirectory,
                                NULL);
 
+    // Investigate: check for presence of FILE_ATTRIBUTE_DIRECTORY
+    // or FILE_ATTRIBUTE_REPARSE_POINT for directories?
+
     Status = NtOpenFile(&FileHandle,
                         IsDirectory ? (FILE_LIST_DIRECTORY | SYNCHRONIZE)
                                     :  FILE_GENERIC_READ, // Contains SYNCHRONIZE
