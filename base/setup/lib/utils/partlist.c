@@ -13,20 +13,10 @@
 #include "volutil.h"
 #include "fsrec.h" // For FileSystemToMBRPartitionType()
 
-#include "registry.h"
-
 #define NDEBUG
 #include <debug.h>
 
 // #define DUMP_PARTITION_TABLE
-
-#include <pshpack1.h>
-typedef struct _REG_DISK_MOUNT_INFO
-{
-    ULONG Signature;
-    ULONGLONG StartingOffset;
-} REG_DISK_MOUNT_INFO, *PREG_DISK_MOUNT_INFO;
-#include <poppack.h>
 
 
 /* FUNCTIONS ****************************************************************/
@@ -3068,6 +3058,11 @@ DeletePartition(
     return TRUE;
 }
 
+
+/*****************************************************************************\
+ * SETUP-specific support functions
+ */
+
 static
 BOOLEAN
 IsSupportedActivePartition(
@@ -3457,6 +3452,11 @@ UseAlternativePartition:
     return CandidatePartition;
 }
 
+/*
+ * End of SETUP-specific support functions
+ *****************************************************************************/
+
+
 BOOLEAN
 SetActivePartition(
     IN PPARTLIST List,
@@ -3735,6 +3735,43 @@ WritePartitionsToDisk(
     return TRUE;
 }
 
+VOID
+SetMBRPartitionType(
+    IN PPARTENTRY PartEntry,
+    IN UCHAR PartitionType)
+{
+    PDISKENTRY DiskEntry = PartEntry->DiskEntry;
+
+    ASSERT(DiskEntry->DiskStyle == PARTITION_STYLE_MBR);
+
+    /* Nothing to do if we assign the same type */
+    if (PartitionType == PartEntry->PartitionType)
+        return;
+
+    // TODO: We might need to remount the associated basic volume...
+
+    PartEntry->PartitionType = PartitionType;
+
+    DiskEntry->Dirty = TRUE;
+    DiskEntry->LayoutBuffer->PartitionEntry[PartEntry->PartitionIndex].PartitionType = PartitionType;
+    DiskEntry->LayoutBuffer->PartitionEntry[PartEntry->PartitionIndex].RecognizedPartition = IsRecognizedPartition(PartitionType);
+    DiskEntry->LayoutBuffer->PartitionEntry[PartEntry->PartitionIndex].RewritePartition = TRUE;
+}
+
+
+/*****************************************************************************\
+ * SETUP-specific support functions
+ */
+
+#include "registry.h" // For GetRootKeyByPredefKey()
+
+#include <pshpack1.h>
+typedef struct _REG_DISK_MOUNT_INFO
+{
+    ULONG Signature;
+    ULONGLONG StartingOffset;
+} REG_DISK_MOUNT_INFO, *PREG_DISK_MOUNT_INFO;
+#include <poppack.h>
 
 /**
  * @brief
@@ -3830,27 +3867,8 @@ SetMountedDeviceValues(
     return TRUE;
 }
 
-VOID
-SetMBRPartitionType(
-    IN PPARTENTRY PartEntry,
-    IN UCHAR PartitionType)
-{
-    PDISKENTRY DiskEntry = PartEntry->DiskEntry;
-
-    ASSERT(DiskEntry->DiskStyle == PARTITION_STYLE_MBR);
-
-    /* Nothing to do if we assign the same type */
-    if (PartitionType == PartEntry->PartitionType)
-        return;
-
-    // TODO: We might need to remount the associated basic volume...
-
-    PartEntry->PartitionType = PartitionType;
-
-    DiskEntry->Dirty = TRUE;
-    DiskEntry->LayoutBuffer->PartitionEntry[PartEntry->PartitionIndex].PartitionType = PartitionType;
-    DiskEntry->LayoutBuffer->PartitionEntry[PartEntry->PartitionIndex].RecognizedPartition = IsRecognizedPartition(PartitionType);
-    DiskEntry->LayoutBuffer->PartitionEntry[PartEntry->PartitionIndex].RewritePartition = TRUE;
-}
+/*
+ * End of SETUP-specific support functions
+ *****************************************************************************/
 
 /* EOF */
