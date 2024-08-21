@@ -216,7 +216,7 @@ NTAPI
 InitDestinationPaths(
     _Inout_ PUSETUP_DATA pSetupData,
     _In_ PCWSTR InstallationDir,
-    _In_ PVOLENTRY Volume);
+    _In_ PVOLENTRY Volume); // FIXME: HACK!
 
 // NTSTATUS
 ERROR_NUMBER
