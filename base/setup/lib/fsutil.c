@@ -831,6 +831,8 @@ FormatVolume(
         return Status;
 
     /* Set the new volume's file system and label */
+    // TODO: Here, call a volutil.c function that updates
+    // the actual FS name and the label fields of the volume.
     RtlStringCbCopyW(Volume->FileSystem, sizeof(Volume->FileSystem), FileSystemName);
     if (!Label) Label = L"";
     RtlStringCbCopyW(Volume->VolumeLabel, sizeof(Volume->VolumeLabel), Label);
