@@ -40,6 +40,7 @@ typedef struct _VOLINFO
     (!IsUnknown(VolInfo) && !IsUnformatted(VolInfo))
 
 
+// DetectFileSystem()
 NTSTATUS
 MountVolume(
     _Inout_ PVOLINFO Volume,
