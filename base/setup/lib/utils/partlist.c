@@ -1070,7 +1070,7 @@ AddPartitionToDisk(
          * considered as having an unknown format (it may or may not be
          * formatted) and the FileSystem value has been emptied.
          */
-        if (IsUnknown(&Volume->Info))
+        if (IsUnknown(&Volume->Info)) // (!*...Info.FileSystem)
             Volume->FormatState = UnknownFormat;
         else if (IsUnformatted(&Volume->Info)) // FileSystem is "RAW"
             Volume->FormatState = Unformatted;
