@@ -54,7 +54,7 @@ MountVolume(
     if (!NT_SUCCESS(Status))
         DPRINT1("InferFileSystem() failed, Status 0x%08lx\n", Status);
 
-    if (*Volume->FileSystem)
+    if (*Volume->FileSystem) // (!IsUnknown(Volume))
     {
         /*
          * Handle volume mounted with RawFS: it is
@@ -158,7 +158,7 @@ DismountVolume(
     HANDLE VolumeHandle;
 
     /* If the volume is not mounted, just return success */
-    if (!*Volume->FileSystem)
+    if (!*Volume->FileSystem) // (IsUnknown(Volume))
         return STATUS_SUCCESS;
 
     /* Open the volume */
