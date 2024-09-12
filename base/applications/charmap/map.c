@@ -53,10 +53,10 @@ UpdateCells(PMAP infoPtr)
     {
         for (x = 0; x < XCELLS; ++x, ++i)
         {
-            if (i < infoPtr->NumValidGlyphs)
+            //if (i < infoPtr->NumValidGlyphs)
                 ch = (WCHAR)infoPtr->ValidGlyphs[i];
-            else
-                ch = 0xFFFF;
+            //else
+            //    ch = 0xFFFF;
 
             Cell = &infoPtr->Cells[y][x];
             Cell->ch = ch;
@@ -74,7 +74,7 @@ FillGrid(PMAP infoPtr,
     RECT rc;
     PCELL Cell;
     INT i;
-    HBRUSH hOldBrush, hbrGray = (HBRUSH)GetStockObject(LTGRAY_BRUSH);
+    HBRUSH hOldBrush; //, hbrGray = (HBRUSH)GetStockObject(LTGRAY_BRUSH);
     HPEN hOldPen, hPenGray = CreatePen(PS_SOLID, 1, RGB(140, 140, 140));
 
     UpdateCells(infoPtr);
@@ -96,7 +96,7 @@ FillGrid(PMAP infoPtr,
             rc = Cell->CellExt;
             Rectangle(ps->hdc, rc.left, rc.top, rc.right, rc.bottom);
 
-            if (i < infoPtr->NumValidGlyphs)
+            //if (i < infoPtr->NumValidGlyphs)
             {
                 DrawTextW(ps->hdc, &Cell->ch, 1, &Cell->CellInt,
                           DT_CENTER | DT_VCENTER | DT_SINGLELINE);
@@ -119,10 +119,10 @@ FillGrid(PMAP infoPtr,
                     }
                 }
             }
-            else
-            {
-                FillRect(ps->hdc, &Cell->CellInt, hbrGray);
-            }
+            //else
+            //{
+            //    FillRect(ps->hdc, &Cell->CellInt, hbrGray);
+            //}
         }
     }
 
@@ -183,7 +183,7 @@ MoveLargeCell(PMAP infoPtr)
 }
 
 
-static
+//static
 VOID
 GetPossibleCharacters(WCHAR* ch, INT chLen, INT codePageIdx)
 {
@@ -254,7 +254,10 @@ SetFont(PMAP infoPtr,
     SelectObject(hdc, infoPtr->hFont);
 
     // Get the code page associated with the selected 'character set'
-    GetPossibleCharacters(ch, MAX_GLYPHS, infoPtr->CharMap);
+    //GetPossibleCharacters(ch, MAX_GLYPHS, infoPtr->CharMap);
+    ZeroMemory(ch, sizeof(ch[0]) * MAX_GLYPHS);
+    for (i = 0; i < MAX_GLYPHS; i++)
+        ch[i] = (WCHAR)i;
 
     if (GetGlyphIndicesW(hdc,
                          ch,
@@ -263,9 +266,9 @@ SetFont(PMAP infoPtr,
                          GGI_MARK_NONEXISTING_GLYPHS) != GDI_ERROR)
     {
         j = 0;
-        for (i = 0; i < MAX_GLYPHS; i++)
+        for (i = /*0*/' '+1; i < MAX_GLYPHS; i++)
         {
-            if (out[i] != 0xffff && out[i] != 0x0000 && ch[i] != 0x0000)
+            if (out[i] != 0xffff /*&& out[i] != 0x0000 && ch[i] != 0x0000*/)
             {
                 infoPtr->ValidGlyphs[j] = ch[i];
                 j++;
