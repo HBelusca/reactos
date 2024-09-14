@@ -130,7 +130,13 @@ BOOL FASTCALL IntGdiRemoveFontResource(
 HANDLE FASTCALL IntGdiAddFontMemResource(PVOID Buffer, DWORD dwSize, PDWORD pNumAdded);
 BOOL FASTCALL IntGdiRemoveFontMemResource(HANDLE hMMFont);
 ULONG FASTCALL ftGdiGetGlyphOutline(PDC, WCHAR, UINT, LPGLYPHMETRICS, ULONG, PVOID, const MAT2*, BOOL);
-INT FASTCALL IntGetOutlineTextMetrics(PFONTGDI, UINT, OUTLINETEXTMETRICW*, BOOL);
+
+UINT FASTCALL
+IntGetOutlineTextMetrics(
+    _In_ PFONTGDI FontGDI,
+    _In_ UINT Size, // If 0, then Otm == NULL. Otherwise, specifies size of Otm
+    _Out_ POUTLINETEXTMETRICW Otm, // If Otm != NULL, on return Otm->otmSize should be <= Size
+    _In_ BOOL bLocked);
 
 BOOL
 FASTCALL
@@ -144,7 +150,13 @@ BOOL FASTCALL TextIntGetTextExtentPoint(PDC, PTEXTOBJ, PCWCH, INT, ULONG, PINT, 
 BOOL FASTCALL ftGdiGetTextMetricsW(HDC,PTMW_INTERNAL);
 DWORD FASTCALL IntGetFontLanguageInfo(PDC);
 INT FASTCALL ftGdiGetTextCharsetInfo(PDC,PFONTSIGNATURE,DWORD);
-DWORD FASTCALL ftGetFontUnicodeRanges(PFONTGDI, PGLYPHSET);
+
+ULONG
+FASTCALL
+ftGetFontUnicodeRanges(
+    _In_ PFONTGDI Font,
+    _Out_opt_ PGLYPHSET glyphset);
+
 DWORD FASTCALL ftGdiGetFontData(PFONTGDI,DWORD,DWORD,PVOID,DWORD);
 BOOL FASTCALL IntGdiGetFontResourceInfo(PUNICODE_STRING,PVOID,DWORD*,DWORD);
 BOOL FASTCALL ftGdiRealizationInfo(PFONTGDI,PREALIZATION_INFO);

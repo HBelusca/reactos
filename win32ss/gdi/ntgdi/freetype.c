@@ -338,9 +338,11 @@ BYTE FASTCALL IntCharSetFromCodePage(UINT uCodePage)
 }
 
 static __inline VOID
-FindBestFontFromList(FONTOBJ **FontObj, ULONG *MatchPenalty,
-                     const LOGFONTW *LogFont,
-                     const PLIST_ENTRY Head);
+FindBestFontFromList(
+    _Out_ FONTOBJ **FontObj,
+    _Inout_ PULONG MatchPenalty,
+    _In_ const LOGFONTW *LogFont,
+    _In_ const LIST_ENTRY *Head);
 
 static BOOL
 MatchFontName(PSHARED_FACE SharedFace, PUNICODE_STRING Name1, FT_UShort NameID, FT_UShort LangID);
@@ -429,7 +431,7 @@ SharedFace_Create(FT_Face Face, PSHARED_MEM Memory)
         SharedFaceCache_Init(&Ptr->UserLanguage);
 
         SharedMem_AddRef(Memory);
-        DPRINT("Creating SharedFace for %s\n", Face->family_name ? Face->family_name : "<NULL>");
+        DPRINT1("Creating SharedFace for %s\n", Face->family_name ? Face->family_name : "<NULL>");
     }
     return Ptr;
 }
@@ -445,7 +447,7 @@ SharedMem_Create(PBYTE Buffer, ULONG BufferSize, BOOL IsMapping)
         Ptr->BufferSize = BufferSize;
         Ptr->RefCount = 1;
         Ptr->IsMapping = IsMapping;
-        DPRINT("Creating SharedMem for %p (%i, %p)\n", Buffer, IsMapping, Ptr);
+        DPRINT1("Creating SharedMem for %p (%i, %p)\n", Buffer, IsMapping, Ptr);
     }
     return Ptr;
 }
@@ -1247,7 +1249,7 @@ FontLink_Create(
         RtlStringCchCopyW(lf.lfFaceName, _countof(lf.lfFaceName), pch0);
 
     SubstituteFontRecurse(&lf);
-    DPRINT("lfFaceName: %S\n", lf.lfFaceName);
+    DPRINT1("lfFaceName: %S\n", lf.lfFaceName);
 
     if (RtlEqualMemory(plfBase, &lf, sizeof(lf)) || FontLink_Chain_FindLink(pChain, &lf))
         return NULL; // Already exists
@@ -1346,7 +1348,7 @@ FontLink_Chain_Populate(
     pszLink = pChain->pszzFontLink;
     while (*pszLink)
     {
-        DPRINT("pszLink: '%S'\n", pszLink);
+        DPRINT1("pszLink: '%S'\n", pszLink);
         pLink = FontLink_Create(pChain, &lfBase, pszLink);
         if (pLink)
             InsertTailList(&pChain->FontLinkList, &pLink->ListEntry);
@@ -1359,7 +1361,7 @@ FontLink_Chain_Populate(
         RtlStringCchCopyW(szEntry, _countof(szEntry), s_szDefFontLinkFileName);
         RtlStringCchCatW(szEntry, _countof(szEntry), L",");
         RtlStringCchCatW(szEntry, _countof(szEntry), s_szDefFontLinkFontName);
-        DPRINT("szEntry: '%S'\n", szEntry);
+        DPRINT1("szEntry: '%S'\n", szEntry);
         pLink = FontLink_Create(pChain, &lfBase, szEntry);
         if (pLink)
             InsertTailList(&pChain->FontLinkList, &pLink->ListEntry);
@@ -1821,11 +1823,11 @@ IntGdiLoadFontsFromMemory(PGDI_LOAD_FONT pLoadFont,
         goto CleanupAndFail;
 
     ++FaceCount;
-    DPRINT("Font loaded: %s (%s)\n",
+    DPRINT1("Font loaded: %s (%s)\n",
            Face->family_name ? Face->family_name : "<NULL>",
            Face->style_name ? Face->style_name : "<NULL>");
-    DPRINT("Num glyphs: %d\n", Face->num_glyphs);
-    DPRINT("CharSet: %d\n", FontGDI->CharSet);
+    DPRINT1("Num glyphs: %d\n", Face->num_glyphs);
+    DPRINT1("CharSet: %d\n", FontGDI->CharSet);
 
     /* Add this font resource to the font table */
     Entry->Font = FontGDI;
@@ -3136,11 +3138,12 @@ IntFreeFontNames(FONT_NAMES *Names)
  * IntGetOutlineTextMetrics
  *
  */
-INT FASTCALL
-IntGetOutlineTextMetrics(PFONTGDI FontGDI,
-                         UINT Size,
-                         OUTLINETEXTMETRICW *Otm,
-                         BOOL bLocked)
+UINT FASTCALL
+IntGetOutlineTextMetrics(
+    _In_ PFONTGDI FontGDI,
+    _In_ UINT Size, // If 0, then Otm == NULL. Otherwise, specifies size of Otm
+    _Out_ POUTLINETEXTMETRICW Otm, // If Otm != NULL, on return Otm->otmSize should be <= Size
+    _In_ BOOL bLocked)
 {
     TT_OS2 *pOS2;
     TT_HoriHeader *pHori;
@@ -3148,7 +3151,7 @@ IntGetOutlineTextMetrics(PFONTGDI FontGDI,
     FT_Fixed XScale, YScale;
     FT_WinFNT_HeaderRec WinFNT;
     FT_Error Error;
-    BYTE *pb;
+    PBYTE pb;
     FONT_NAMES FontNames;
     PSHARED_FACE SharedFace = FontGDI->SharedFace;
     PSHARED_FACE_CACHE Cache;
@@ -5201,19 +5204,17 @@ Exit:
 }
 
 
-DWORD
+ULONG
 FASTCALL
-ftGetFontUnicodeRanges(PFONTGDI Font, PGLYPHSET glyphset)
+ftGetFontUnicodeRanges(
+    _In_ PFONTGDI Font,
+    _Out_opt_ PGLYPHSET glyphset)
 {
-    DWORD size = 0;
-    DWORD num_ranges = 0;
+    ULONG size = 0;
+    ULONG num_ranges = 0;
     FT_Face face = Font->SharedFace->Face;
 
-    if (face->charmap == NULL)
-    {
-        DPRINT1("FIXME: No charmap selected! This is a BUG!\n");
-        return 0;
-    }
+    ASSERT(face->charmap);
 
     /* Lock FreeType for face lookup */
     IntLockFreeType();
@@ -5758,15 +5759,17 @@ GetFontPenalty(const LOGFONTW *               LogFont,
 #undef GOT_PENALTY
 
 static __inline VOID
-FindBestFontFromList(FONTOBJ **FontObj, ULONG *MatchPenalty,
-                     const LOGFONTW *LogFont,
-                     const PLIST_ENTRY Head)
+FindBestFontFromList(
+    _Out_ FONTOBJ **FontObj,
+    _Inout_ PULONG MatchPenalty,
+    _In_ const LOGFONTW *LogFont,
+    _In_ const LIST_ENTRY *Head)
 {
     ULONG Penalty;
     PLIST_ENTRY Entry;
     PFONT_ENTRY CurrentEntry;
     FONTGDI *FontGDI;
-    OUTLINETEXTMETRICW *Otm = NULL;
+    POUTLINETEXTMETRICW Otm = NULL;
     UINT OtmSize, OldOtmSize = 0;
     FT_Face Face;
 
@@ -5776,10 +5779,9 @@ FindBestFontFromList(FONTOBJ **FontObj, ULONG *MatchPenalty,
     ASSERT(Head);
 
     /* Start with a pretty big buffer */
-    OldOtmSize = 0x200;
-    Otm = ExAllocatePoolWithTag(PagedPool, OldOtmSize, GDITAG_TEXT);
+    OldOtmSize = 0; // 0x200;
 
-    /* get the FontObj of lowest penalty */
+    /* Get the FontObj of lowest penalty */
     for (Entry = Head->Flink; Entry != Head; Entry = Entry->Flink)
     {
         CurrentEntry = CONTAINING_RECORD(Entry, FONT_ENTRY, ListEntry);
@@ -5788,7 +5790,7 @@ FindBestFontFromList(FONTOBJ **FontObj, ULONG *MatchPenalty,
         ASSERT(FontGDI);
         Face = FontGDI->SharedFace->Face;
 
-        /* get text metrics */
+        /* Get text metrics */
         ASSERT_FREETYPE_LOCK_HELD();
         OtmSize = IntGetOutlineTextMetrics(FontGDI, 0, NULL, TRUE);
         if (OtmSize > OldOtmSize)
@@ -5796,9 +5798,11 @@ FindBestFontFromList(FONTOBJ **FontObj, ULONG *MatchPenalty,
             if (Otm)
                 ExFreePoolWithTag(Otm, GDITAG_TEXT);
             Otm = ExAllocatePoolWithTag(PagedPool, OtmSize, GDITAG_TEXT);
+            if (Otm)
+                OldOtmSize = OtmSize;
         }
 
-        /* update FontObj if lowest penalty */
+        /* Update FontObj if lowest penalty */
         if (Otm)
         {
             ASSERT_FREETYPE_LOCK_HELD();
@@ -5808,8 +5812,7 @@ FindBestFontFromList(FONTOBJ **FontObj, ULONG *MatchPenalty,
             OtmSize = IntGetOutlineTextMetrics(FontGDI, OtmSize, Otm, TRUE);
             if (!OtmSize)
                 continue;
-
-            OldOtmSize = OtmSize;
+            ASSERT(OtmSize <= OldOtmSize);
 
             Penalty = GetFontPenalty(LogFont, Otm, Face->style_name);
             if (*MatchPenalty == MAXULONG || Penalty < *MatchPenalty)
