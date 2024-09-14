@@ -34,6 +34,7 @@
 
 #define NDEBUG
 #include <debug.h>
+DBG_DEFAULT_CHANNEL(GdiFont);
 
 typedef struct _FONTLINK
 {
@@ -492,9 +493,11 @@ BYTE FASTCALL IntCharSetFromCodePage(UINT uCodePage)
 }
 
 static __inline VOID
-FindBestFontFromList(FONTOBJ **FontObj, ULONG *MatchPenalty,
-                     const LOGFONTW *LogFont,
-                     const PLIST_ENTRY Head);
+FindBestFontFromList(
+    _Out_ FONTOBJ **FontObj,
+    _Inout_ PULONG MatchPenalty,
+    _In_ const LOGFONTW *LogFont,
+    _In_ const LIST_ENTRY *Head);
 
 static BOOL
 MatchFontName(PSHARED_FACE SharedFace, PUNICODE_STRING Name1, FT_UShort NameID, FT_UShort LangID);
@@ -583,7 +586,7 @@ SharedFace_Create(FT_Face Face, PSHARED_MEM Memory)
         SharedFaceCache_Init(&Ptr->UserLanguage);
 
         SharedMem_AddRef(Memory);
-        DPRINT("Creating SharedFace for %s\n", Face->family_name ? Face->family_name : "<NULL>");
+        DPRINT1("Creating SharedFace for %s\n", Face->family_name ? Face->family_name : "<NULL>");
     }
     return Ptr;
 }
@@ -599,7 +602,7 @@ SharedMem_Create(PBYTE Buffer, ULONG BufferSize, BOOL IsMapping)
         Ptr->BufferSize = BufferSize;
         Ptr->RefCount = 1;
         Ptr->IsMapping = IsMapping;
-        DPRINT("Creating SharedMem for %p (%i, %p)\n", Buffer, IsMapping, Ptr);
+        DPRINT1("Creating SharedMem for %p (%i, %p)\n", Buffer, IsMapping, Ptr);
     }
     return Ptr;
 }
@@ -1456,7 +1459,7 @@ FontLink_Create(
         RtlStringCchCopyW(lf.lfFaceName, _countof(lf.lfFaceName), pch0);
 
     SubstituteFontRecurse(&lf);
-    DPRINT("lfFaceName: %S\n", lf.lfFaceName);
+    DPRINT1("lfFaceName: %S\n", lf.lfFaceName);
 
     if (RtlEqualMemory(plfBase, &lf, sizeof(lf)) || FontLink_Chain_FindLink(pChain, &lf))
         return NULL; // Already exists
@@ -1529,7 +1532,7 @@ FontLink_Chain_Populate(
     pszLink = pChain->pszzFontLink;
     while (*pszLink)
     {
-        DPRINT("pszLink: '%S'\n", pszLink);
+        DPRINT1("pszLink: '%S'\n", pszLink);
         pLink = FontLink_Create(pChain, &lfBase, pszLink);
         if (pLink)
             InsertTailList(&pChain->FontLinkList, &pLink->ListEntry);
@@ -1542,7 +1545,7 @@ FontLink_Chain_Populate(
         RtlStringCchCopyW(szEntry, _countof(szEntry), s_szDefFontLinkFileName);
         RtlStringCchCatW(szEntry, _countof(szEntry), L",");
         RtlStringCchCatW(szEntry, _countof(szEntry), s_szDefFontLinkFontName);
-        DPRINT("szEntry: '%S'\n", szEntry);
+        DPRINT1("szEntry: '%S'\n", szEntry);
         pLink = FontLink_Create(pChain, &lfBase, szEntry);
         if (pLink)
             InsertTailList(&pChain->FontLinkList, &pLink->ListEntry);
@@ -1712,8 +1715,222 @@ UINT FASTCALL IntGetCharSet(INT nIndex, FT_ULong CodePageRange1)
     return (nIndex < 0) ? nCount : ANSI_CHARSET;
 }
 
-/* pixels to points */
-#define PX2PT(pixels) FT_MulDiv((pixels), 72, 96)
+static BOOL select_charmap(FT_Face ft_face, FT_Encoding encoding)
+{
+    FT_Error ft_err = FT_Err_Invalid_CharMap_Handle;
+    FT_CharMap cmap0, cmap1, cmap2, cmap3, cmap_def;
+    FT_Int i;
+
+    cmap0 = cmap1 = cmap2 = cmap3 = cmap_def = NULL;
+
+    for (i = 0; i < ft_face->num_charmaps; i++)
+    {
+        if (ft_face->charmaps[i]->encoding == encoding)
+        {
+            TRACE("found cmap with platform_id %u, encoding_id %u\n",
+                   ft_face->charmaps[i]->platform_id, ft_face->charmaps[i]->encoding_id);
+
+            switch (ft_face->charmaps[i]->platform_id)
+            {
+                default:
+                    cmap_def = ft_face->charmaps[i];
+                    break;
+                case 0: /* Apple Unicode */
+                    cmap0 = ft_face->charmaps[i];
+                    break;
+                case 1: /* Macintosh */
+                    cmap1 = ft_face->charmaps[i];
+                    break;
+                case 2: /* ISO */
+                    cmap2 = ft_face->charmaps[i];
+                    break;
+                case 3: /* Microsoft */
+                    cmap3 = ft_face->charmaps[i];
+                    break;
+            }
+        }
+#ifdef __REACTOS__
+// Wine bug: for each loop iteration, a FT_Set_Charmap() call is made.
+// ReactOS fix: Instead, loop until we retrieve all the cmap pointers
+// of interest, then do one single FT_Set_Charmap() call using the
+// preferred cmap.
+    }{
+#endif
+
+        if (cmap3) /* prefer Microsoft cmap table */
+            ft_err = FT_Set_Charmap(ft_face, cmap3);
+        else if (cmap1)
+            ft_err = FT_Set_Charmap(ft_face, cmap1);
+        else if (cmap2)
+            ft_err = FT_Set_Charmap(ft_face, cmap2);
+        else if (cmap0)
+            ft_err = FT_Set_Charmap(ft_face, cmap0);
+        else if (cmap_def)
+            ft_err = FT_Set_Charmap(ft_face, cmap_def);
+    }
+
+    return ft_err == FT_Err_Ok;
+}
+
+static FT_Encoding pick_charmap( FT_Face face, int charset )
+{
+    static const FT_Encoding regular_order[] = { FT_ENCODING_UNICODE, FT_ENCODING_APPLE_ROMAN, FT_ENCODING_MS_SYMBOL, 0 };
+    static const FT_Encoding symbol_order[]  = { FT_ENCODING_MS_SYMBOL, FT_ENCODING_UNICODE, FT_ENCODING_APPLE_ROMAN, 0 };
+    const FT_Encoding *encs = regular_order;
+
+    if (charset == SYMBOL_CHARSET) encs = symbol_order;
+
+    while (*encs != 0)
+    {
+        if (select_charmap( face, *encs )) break;
+        encs++;
+    }
+
+    if (!face->charmap && face->num_charmaps)
+    {
+        if (!FT_Set_Charmap(face, face->charmaps[0]))
+            return face->charmap->encoding;
+    }
+
+    return *encs;
+}
+
+#if 0
+
+static
+BOOLEAN
+FindAnyFallbackCharmap(
+    _In_ FT_Face face)
+{
+    FT_CharMap charmap, found = NULL;
+    UINT i;
+
+    if (face->charmap)
+        return TRUE;
+
+__debugbreak();
+
+    for (i = 0; i < (UINT)face->num_charmaps; i++)
+    {
+        charmap = face->charmaps[i];
+        if (charmap->encoding != FT_ENCODING_NONE)
+        {
+            found = charmap;
+            break;
+        }
+    }
+    if (!found)
+    {
+        //DPRINT1("WARNING: Could not find desired charmap!\n");
+        return FALSE;
+    }
+
+    FT_Set_Charmap(face, found);
+    return TRUE;
+}
+
+static
+void
+FindFallbackCharmap(
+    _In_ FT_Face face)
+{
+    FT_CharMap charmap, found = NULL;
+    INT error, n;
+
+    if (face->charmap)
+        return;
+
+    DPRINT1("WARNING: No charmap selected!\n");
+    DPRINT1("This font face has %d charmaps\n", face->num_charmaps);
+__debugbreak();
+
+    /*
+     * Selects a unicode charmap, if any.
+     * Prefers one that supports UCS-4, otherwise use UCS-2.
+     * See also FreeType's src/base/ftobjs.c!find_unicode_charmap().
+     */
+    // error = FT_Select_Charmap(face, FT_ENCODING_UNICODE);
+    for (n = 0; n < face->num_charmaps; n++)
+    {
+        //
+        // Specific 
+        //
+        charmap = face->charmaps[n];
+        if (charmap->encoding == FT_ENCODING_UNICODE)
+        {
+            found = charmap;
+            break;
+        }
+    }
+    if (!found)
+    {
+        for (n = 0; n < face->num_charmaps; n++)
+        {
+            charmap = face->charmaps[n];
+
+            /* Windows Unicode? */
+            if (charmap->platform_id == TT_PLATFORM_MICROSOFT &&
+                charmap->encoding_id == TT_MS_ID_UNICODE_CS)
+            {
+                found = charmap;
+                break;
+            }
+
+            /* Apple Unicode platform id? */
+            if (charmap->platform_id == TT_PLATFORM_APPLE_UNICODE)
+            {
+                found = charmap;
+                break;
+            }
+        }
+    }
+    if (!found)
+    {
+        // error = FT_Select_Charmap(face, FT_ENCODING_MS_SYMBOL);
+        for (n = 0; n < face->num_charmaps; n++)
+        {
+            charmap = face->charmaps[n];
+            if (charmap->encoding == FT_ENCODING_MS_SYMBOL)
+            {
+                found = charmap;
+                break;
+            }
+        }
+    }
+    if (!found)
+    {
+        for (n = 0; n < face->num_charmaps; n++)
+        {
+            charmap = face->charmaps[n];
+            if (charmap->encoding != FT_ENCODING_NONE)
+            {
+                found = charmap;
+                break;
+            }
+        }
+    }
+#if 0
+    if (!found && face->num_charmaps > 0)
+    {
+        found = face->charmaps[0];
+    }
+#endif
+    if (!found)
+    {
+        DPRINT1("WARNING: Could not find desired charmap!\n");
+    }
+    else
+    {
+        DPRINT1("Found charmap encoding: 0x%x\n", found->encoding);
+        error = FT_Set_Charmap(face, found);
+        if (error)
+        {
+            DPRINT1("WARNING: Could not set the charmap!\n");
+        }
+    }
+}
+
+#endif
 
 static INT FASTCALL
 IntGdiLoadFontsFromMemory(PGDI_LOAD_FONT pLoadFont,
@@ -1737,9 +1954,9 @@ IntGdiLoadFontsFromMemory(PGDI_LOAD_FONT pLoadFont,
     FT_ULong            os2_ulCodePageRange1;
     FT_UShort           os2_usWeightClass;
 
-    if (SharedFace == NULL && CharSetIndex == -1)
+    if (!SharedFace && CharSetIndex == -1)
     {
-        /* load a face from memory */
+        /* Load a face from memory */
         IntLockFreeType();
         Error = FT_New_Memory_Face(
                     g_FreeTypeLibrary,
@@ -1747,6 +1964,29 @@ IntGdiLoadFontsFromMemory(PGDI_LOAD_FONT pLoadFont,
                     pLoadFont->Memory->BufferSize,
                     ((FontIndex != -1) ? FontIndex : 0),
                     &Face);
+
+        /*
+         * Down below, when CharSetIndex == -1, we will always
+         * activate a charmap in the font face.
+         *
+         * Note from FreeType documentation:
+         * https://freetype.org/freetype2/docs/reference/ft2-character_mapping.html#ft_charmap
+         *
+         * When a new face is created (either through FT_New_Face or
+         * FT_Open_Face), the library looks for a Unicode charmap within
+         * the list and automatically activates it. If there is no
+         * Unicode charmap, FreeType doesn't set an 'active' charmap.
+         */
+        if (!Error)
+        {
+            pick_charmap(Face, DEFAULT_CHARSET);
+            if (!Face->charmap)
+            {
+                DPRINT1("WARNING: Could not find default charmap!\n");
+__debugbreak();
+                // Error = FT_Err_Invalid_CharMap_Handle;
+            }
+        }
 
         if (!Error)
             SharedFace = SharedFace_Create(Face, pLoadFont->Memory);
@@ -1756,7 +1996,7 @@ IntGdiLoadFontsFromMemory(PGDI_LOAD_FONT pLoadFont,
         if (!Error && FT_IS_SFNT(Face))
             pLoadFont->IsTrueType = TRUE;
 
-        if (Error || SharedFace == NULL)
+        if (Error || !SharedFace)
         {
             if (SharedFace)
                 SharedFace_Release(SharedFace);
@@ -1765,7 +2005,7 @@ IntGdiLoadFontsFromMemory(PGDI_LOAD_FONT pLoadFont,
                 DPRINT1("Unknown font file format\n");
             else
                 DPRINT1("Error reading font (error code: %d)\n", Error);
-            return 0;   /* failure */
+            return 0; /* failure */
         }
     }
     else
@@ -1825,6 +2065,7 @@ IntGdiLoadFontsFromMemory(PGDI_LOAD_FONT pLoadFont,
             EngFreeMem(FontGDI);
             SharedFace_Release(SharedFace);
             ExFreePoolWithTag(Entry, TAG_FONT);
+            EngSetLastError(ERROR_NOT_ENOUGH_MEMORY);
             return 0;
         }
 
@@ -1848,6 +2089,7 @@ IntGdiLoadFontsFromMemory(PGDI_LOAD_FONT pLoadFont,
     FontGDI->OriginalWeight = FALSE;
     FontGDI->RequestWeight = FW_NORMAL;
 
+    os2_version = 0;
     IntLockFreeType();
     pOS2 = (TT_OS2 *)FT_Get_Sfnt_Table(Face, FT_SFNT_OS2);
     if (pOS2)
@@ -1864,52 +2106,7 @@ IntGdiLoadFontsFromMemory(PGDI_LOAD_FONT pLoadFont,
             FontGDI->OriginalWeight = WinFNT.weight;
         }
     }
-    IntUnLockFreeType();
 
-    RtlInitAnsiString(&AnsiString, Face->family_name);
-    Status = RtlAnsiStringToUnicodeString(&Entry->FaceName, &AnsiString, TRUE);
-    if (NT_SUCCESS(Status))
-    {
-        if (Face->style_name && Face->style_name[0] &&
-            strcmp(Face->style_name, "Regular") != 0)
-        {
-            RtlInitAnsiString(&AnsiString, Face->style_name);
-            Status = RtlAnsiStringToUnicodeString(&Entry->StyleName, &AnsiString, TRUE);
-            if (!NT_SUCCESS(Status))
-            {
-                RtlFreeUnicodeString(&Entry->FaceName);
-            }
-        }
-        else
-        {
-            RtlInitUnicodeString(&Entry->StyleName, NULL);
-        }
-    }
-    if (!NT_SUCCESS(Status))
-    {
-        if (PrivateEntry)
-        {
-            if (pLoadFont->PrivateEntry == PrivateEntry)
-            {
-                pLoadFont->PrivateEntry = NULL;
-            }
-            else
-            {
-                RemoveEntryList(&PrivateEntry->ListEntry);
-            }
-            ExFreePoolWithTag(PrivateEntry, TAG_FONT);
-        }
-        if (FontGDI->Filename)
-            ExFreePoolWithTag(FontGDI->Filename, GDITAG_PFF);
-        EngFreeMem(FontGDI);
-        SharedFace_Release(SharedFace);
-        ExFreePoolWithTag(Entry, TAG_FONT);
-        return 0;
-    }
-
-    os2_version = 0;
-    IntLockFreeType();
-    pOS2 = (TT_OS2 *)FT_Get_Sfnt_Table(Face, FT_SFNT_OS2);
     if (pOS2)
     {
         os2_version = pOS2->version;
@@ -1957,12 +2154,79 @@ IntGdiLoadFontsFromMemory(PGDI_LOAD_FONT pLoadFont,
         IntUnLockFreeType();
     }
 
+    /*
+     * If this is the first time the font face is loaded,
+     * activate a charmap in the font face.
+     *
+     * Note from FreeType documentation:
+     * https://freetype.org/freetype2/docs/reference/ft2-character_mapping.html#ft_charmap
+     *
+     * When a new face is created (either through FT_New_Face or
+     * FT_Open_Face), the library looks for a Unicode charmap within
+     * the list and automatically activates it. If there is no
+     * Unicode charmap, FreeType doesn't set an 'active' charmap.
+     */
+    if (CharSetIndex == -1)
+    {
+        IntLockFreeType();
+        pick_charmap(Face, FontGDI->CharSet);
+        if (!Face->charmap)
+        {
+            DPRINT1("ERROR: Could not find desired charmap!\n");
+__debugbreak();
+            // TODO: Actually fail font creation!
+            // Error = FT_Err_Invalid_CharMap_Handle;
+        }
+        IntUnLockFreeType();
+    }
+
+    RtlInitAnsiString(&AnsiString, Face->family_name);
+    Status = RtlAnsiStringToUnicodeString(&Entry->FaceName, &AnsiString, TRUE);
+    if (NT_SUCCESS(Status))
+    {
+        if (Face->style_name && Face->style_name[0] &&
+            strcmp(Face->style_name, "Regular") != 0)
+        {
+            RtlInitAnsiString(&AnsiString, Face->style_name);
+            Status = RtlAnsiStringToUnicodeString(&Entry->StyleName, &AnsiString, TRUE);
+            if (!NT_SUCCESS(Status))
+            {
+                RtlFreeUnicodeString(&Entry->FaceName);
+            }
+        }
+        else
+        {
+            RtlInitUnicodeString(&Entry->StyleName, NULL);
+        }
+    }
+    if (!NT_SUCCESS(Status))
+    {
+        if (PrivateEntry)
+        {
+            if (pLoadFont->PrivateEntry == PrivateEntry)
+            {
+                pLoadFont->PrivateEntry = NULL;
+            }
+            else
+            {
+                RemoveEntryList(&PrivateEntry->ListEntry);
+            }
+            ExFreePoolWithTag(PrivateEntry, TAG_FONT);
+        }
+        if (FontGDI->Filename)
+            ExFreePoolWithTag(FontGDI->Filename, GDITAG_PFF);
+        EngFreeMem(FontGDI);
+        SharedFace_Release(SharedFace);
+        ExFreePoolWithTag(Entry, TAG_FONT);
+        return 0;
+    }
+
     ++FaceCount;
-    DPRINT("Font loaded: %s (%s)\n",
+    DPRINT1("Font loaded: %s (%s)\n",
            Face->family_name ? Face->family_name : "<NULL>",
            Face->style_name ? Face->style_name : "<NULL>");
-    DPRINT("Num glyphs: %d\n", Face->num_glyphs);
-    DPRINT("CharSet: %d\n", FontGDI->CharSet);
+    DPRINT1("Num glyphs: %d\n", Face->num_glyphs);
+    DPRINT1("CharSet: %d\n", FontGDI->CharSet);
 
     /* Add this font resource to the font table */
     Entry->Font = FontGDI;
@@ -2045,7 +2309,7 @@ IntGdiLoadFontsFromMemory(PGDI_LOAD_FONT pLoadFont,
 
         for (i = 1; i < CharSetCount; ++i)
         {
-            /* Do not count charsets towards 'faces' loaded */
+            /* Do not count charsets as loaded 'faces' */
             IntGdiLoadFontsFromMemory(pLoadFont, SharedFace, FontIndex, i);
         }
     }
@@ -3071,11 +3335,12 @@ IntFreeFontNames(FONT_NAMES *Names)
  * IntGetOutlineTextMetrics
  *
  */
-INT FASTCALL
-IntGetOutlineTextMetrics(PFONTGDI FontGDI,
-                         UINT Size,
-                         OUTLINETEXTMETRICW *Otm,
-                         BOOL bLocked)
+UINT FASTCALL
+IntGetOutlineTextMetrics(
+    _In_ PFONTGDI FontGDI,
+    _In_ UINT Size, // If 0, then Otm == NULL. Otherwise, specifies size of Otm
+    _Out_ POUTLINETEXTMETRICW Otm, // If Otm != NULL, on return Otm->otmSize should be <= Size
+    _In_ BOOL bLocked)
 {
     TT_OS2 *pOS2;
     TT_HoriHeader *pHori;
@@ -3083,7 +3348,7 @@ IntGetOutlineTextMetrics(PFONTGDI FontGDI,
     FT_Fixed XScale, YScale;
     FT_WinFNT_HeaderRec WinFNT;
     FT_Error Error;
-    BYTE *pb;
+    PBYTE pb;
     FONT_NAMES FontNames;
     PSHARED_FACE SharedFace = FontGDI->SharedFace;
     PSHARED_FACE_CACHE Cache;
@@ -3470,11 +3735,11 @@ FontFamilyFillInfo(PFONTFAMILYINFO Info, LPCWSTR FaceName,
     RtlZeroMemory(Info, sizeof(FONTFAMILYINFO));
     ASSERT_FREETYPE_LOCK_HELD();
     Size = IntGetOutlineTextMetrics(FontGDI, 0, NULL, TRUE);
+    if (!Size)
+        return;
     Otm = ExAllocatePoolWithTag(PagedPool, Size, GDITAG_TEXT);
     if (!Otm)
-    {
         return;
-    }
     ASSERT_FREETYPE_LOCK_HELD();
     Size = IntGetOutlineTextMetrics(FontGDI, Size, Otm, TRUE);
     if (!Size)
@@ -4224,91 +4489,29 @@ IntRequestFontSize(PDC dc, PFONTGDI FontGDI, LONG lfWidth, LONG lfHeight)
 
 BOOL
 FASTCALL
-TextIntUpdateSize(PDC dc,
-                  PTEXTOBJ TextObj,
-                  PFONTGDI FontGDI,
-                  BOOL bDoLock)
+TextIntUpdateSize(
+    _In_ PDC dc,
+    _In_ PTEXTOBJ TextObj,
+    _In_ PFONTGDI FontGDI,
+    _In_ BOOL bDoLock)
 {
-    FT_Face face;
-    INT error, n;
-    FT_CharMap charmap, found;
-    LOGFONTW *plf;
+    FT_Face face = FontGDI->SharedFace->Face;
+    PLOGFONTW plf = &TextObj->logfont.elfEnumLogfontEx.elfLogFont;
+    FT_Error error;
+
+    ASSERT(face->charmap);
 
     if (bDoLock)
         IntLockFreeType();
-
-    face = FontGDI->SharedFace->Face;
-    if (face->charmap == NULL)
-    {
-        DPRINT("WARNING: No charmap selected!\n");
-        DPRINT("This font face has %d charmaps\n", face->num_charmaps);
-
-        found = NULL;
-        for (n = 0; n < face->num_charmaps; n++)
-        {
-            charmap = face->charmaps[n];
-            if (charmap->encoding == FT_ENCODING_UNICODE)
-            {
-                found = charmap;
-                break;
-            }
-        }
-        if (!found)
-        {
-            for (n = 0; n < face->num_charmaps; n++)
-            {
-                charmap = face->charmaps[n];
-                if (charmap->platform_id == TT_PLATFORM_APPLE_UNICODE)
-                {
-                    found = charmap;
-                    break;
-                }
-            }
-        }
-        if (!found)
-        {
-            for (n = 0; n < face->num_charmaps; n++)
-            {
-                charmap = face->charmaps[n];
-                if (charmap->encoding == FT_ENCODING_MS_SYMBOL)
-                {
-                    found = charmap;
-                    break;
-                }
-            }
-        }
-        if (!found && face->num_charmaps > 0)
-        {
-            found = face->charmaps[0];
-        }
-        if (!found)
-        {
-            DPRINT1("WARNING: Could not find desired charmap!\n");
-        }
-        else
-        {
-            DPRINT("Found charmap encoding: %i\n", found->encoding);
-            error = FT_Set_Charmap(face, found);
-            if (error)
-            {
-                DPRINT1("WARNING: Could not set the charmap!\n");
-            }
-        }
-    }
-
-    plf = &TextObj->logfont.elfEnumLogfontEx.elfLogFont;
-
     error = IntRequestFontSize(dc, FontGDI, plf->lfWidth, plf->lfHeight);
-
     if (bDoLock)
         IntUnLockFreeType();
 
-    if (error)
+    if (error != FT_Err_Ok)
     {
         DPRINT1("Error in setting pixel sizes: %d\n", error);
         return FALSE;
     }
-
     return TRUE;
 }
 
@@ -4493,20 +4696,26 @@ ftGdiGetGlyphOutline(
 
     ASSERT_FREETYPE_LOCK_NOT_HELD();
     Size = IntGetOutlineTextMetrics(FontGDI, 0, NULL, FALSE);
+    if (!Size)
+    {
+        TEXTOBJ_UnlockText(TextObj);
+        EngSetLastError(ERROR_GEN_FAILURE);
+        return GDI_ERROR;
+    }
     potm = ExAllocatePoolWithTag(PagedPool, Size, GDITAG_TEXT);
     if (!potm)
     {
-        EngSetLastError(ERROR_NOT_ENOUGH_MEMORY);
         TEXTOBJ_UnlockText(TextObj);
+        EngSetLastError(ERROR_NOT_ENOUGH_MEMORY);
         return GDI_ERROR;
     }
     ASSERT_FREETYPE_LOCK_NOT_HELD();
     Size = IntGetOutlineTextMetrics(FontGDI, Size, potm, FALSE);
     if (!Size)
     {
-        /* FIXME: last error? */
         ExFreePoolWithTag(potm, GDITAG_TEXT);
         TEXTOBJ_UnlockText(TextObj);
+        EngSetLastError(ERROR_GEN_FAILURE);
         return GDI_ERROR;
     }
 
@@ -5188,19 +5397,20 @@ Exit:
 }
 
 
-DWORD
+ULONG
 FASTCALL
-ftGetFontUnicodeRanges(PFONTGDI Font, PGLYPHSET glyphset)
+ftGetFontUnicodeRanges(
+    _In_ PFONTGDI Font,
+    _Out_opt_ PGLYPHSET glyphset)
 {
-    DWORD size = 0;
-    DWORD num_ranges = 0;
+    ULONG size = 0;
+    ULONG num_ranges = 0;
     FT_Face face = Font->SharedFace->Face;
 
-    if (face->charmap == NULL)
-    {
-        DPRINT1("FIXME: No charmap selected! This is a BUG!\n");
-        return 0;
-    }
+    ASSERT(face->charmap);
+
+    /* Lock FreeType for face lookup */
+    IntLockFreeType();
 
     if (face->charmap->encoding == FT_ENCODING_UNICODE)
     {
@@ -5212,7 +5422,8 @@ ftGetFontUnicodeRanges(PFONTGDI Font, PGLYPHSET glyphset)
         DPRINT("Face encoding FT_ENCODING_UNICODE, number of glyphs %ld, first glyph %u, first char %04lx\n",
                face->num_glyphs, glyph_code, char_code);
 
-        if (!glyph_code) return 0;
+        if (!glyph_code)
+            goto Quit;
 
         if (glyphset)
         {
@@ -5227,7 +5438,7 @@ ftGetFontUnicodeRanges(PFONTGDI Font, PGLYPHSET glyphset)
             if (char_code < char_code_prev)
             {
                 DPRINT1("Expected increasing char code from FT_Get_Next_Char\n");
-                return 0;
+                goto Quit;
             }
             if (char_code - char_code_prev > 1)
             {
@@ -5258,6 +5469,11 @@ ftGetFontUnicodeRanges(PFONTGDI Font, PGLYPHSET glyphset)
         glyphset->cRanges = num_ranges;
         glyphset->flAccel = 0;
     }
+
+Quit:
+    /* Unlock FreeType */
+    IntUnLockFreeType();
+
     return size;
 }
 
@@ -5276,13 +5492,12 @@ ftGdiGetTextMetricsW(
     TT_OS2 *pOS2;
     TT_HoriHeader *pHori;
     FT_WinFNT_HeaderRec Win;
-    ULONG Error;
+    FT_Error Error;
     NTSTATUS Status = STATUS_SUCCESS;
-    LOGFONTW *plf;
 
     if (!ptmwi)
     {
-        EngSetLastError(STATUS_INVALID_PARAMETER);
+        EngSetLastError(ERROR_INVALID_PARAMETER);
         return FALSE;
     }
     RtlZeroMemory(ptmwi, sizeof(TMW_INTERNAL));
@@ -5296,21 +5511,19 @@ ftGdiGetTextMetricsW(
     TextObj = RealizeFontInit(pdcattr->hlfntNew);
     if (NULL != TextObj)
     {
-        plf = &TextObj->logfont.elfEnumLogfontEx.elfLogFont;
-        FontGDI = ObjToGDI(TextObj->Font, FONT);
+        BOOL Success;
 
+        FontGDI = ObjToGDI(TextObj->Font, FONT);
         Face = FontGDI->SharedFace->Face;
 
         // NOTE: GetTextMetrics simply ignores lfEscapement and XFORM.
         IntLockFreeType();
-        Error = IntRequestFontSize(dc, FontGDI, plf->lfWidth, plf->lfHeight);
+        Success = TextIntUpdateSize(dc, TextObj, FontGDI, FALSE);
         FT_Set_Transform(Face, NULL, NULL);
-
         IntUnLockFreeType();
 
-        if (0 != Error)
+        if (!Success)
         {
-            DPRINT1("Error in setting pixel sizes: %u\n", Error);
             Status = STATUS_UNSUCCESSFUL;
         }
         else
@@ -5749,15 +5962,17 @@ GetFontPenalty(const LOGFONTW *               LogFont,
 #undef GOT_PENALTY
 
 static __inline VOID
-FindBestFontFromList(FONTOBJ **FontObj, ULONG *MatchPenalty,
-                     const LOGFONTW *LogFont,
-                     const PLIST_ENTRY Head)
+FindBestFontFromList(
+    _Out_ FONTOBJ **FontObj,
+    _Inout_ PULONG MatchPenalty,
+    _In_ const LOGFONTW *LogFont,
+    _In_ const LIST_ENTRY *Head)
 {
     ULONG Penalty;
     PLIST_ENTRY Entry;
     PFONT_ENTRY CurrentEntry;
     FONTGDI *FontGDI;
-    OUTLINETEXTMETRICW *Otm = NULL;
+    POUTLINETEXTMETRICW Otm = NULL;
     UINT OtmSize, OldOtmSize = 0;
     FT_Face Face;
 
@@ -5767,10 +5982,9 @@ FindBestFontFromList(FONTOBJ **FontObj, ULONG *MatchPenalty,
     ASSERT(Head);
 
     /* Start with a pretty big buffer */
-    OldOtmSize = 0x200;
-    Otm = ExAllocatePoolWithTag(PagedPool, OldOtmSize, GDITAG_TEXT);
+    OldOtmSize = 0; // 0x200;
 
-    /* get the FontObj of lowest penalty */
+    /* Get the FontObj of lowest penalty */
     for (Entry = Head->Flink; Entry != Head; Entry = Entry->Flink)
     {
         CurrentEntry = CONTAINING_RECORD(Entry, FONT_ENTRY, ListEntry);
@@ -5779,7 +5993,7 @@ FindBestFontFromList(FONTOBJ **FontObj, ULONG *MatchPenalty,
         ASSERT(FontGDI);
         Face = FontGDI->SharedFace->Face;
 
-        /* get text metrics */
+        /* Get text metrics */
         ASSERT_FREETYPE_LOCK_HELD();
         OtmSize = IntGetOutlineTextMetrics(FontGDI, 0, NULL, TRUE);
         if (OtmSize > OldOtmSize)
@@ -5787,9 +6001,11 @@ FindBestFontFromList(FONTOBJ **FontObj, ULONG *MatchPenalty,
             if (Otm)
                 ExFreePoolWithTag(Otm, GDITAG_TEXT);
             Otm = ExAllocatePoolWithTag(PagedPool, OtmSize, GDITAG_TEXT);
+            if (Otm)
+                OldOtmSize = OtmSize;
         }
 
-        /* update FontObj if lowest penalty */
+        /* Update FontObj if lowest penalty */
         if (Otm)
         {
             ASSERT_FREETYPE_LOCK_HELD();
@@ -5799,8 +6015,7 @@ FindBestFontFromList(FONTOBJ **FontObj, ULONG *MatchPenalty,
             OtmSize = IntGetOutlineTextMetrics(FontGDI, OtmSize, Otm, TRUE);
             if (!OtmSize)
                 continue;
-
-            OldOtmSize = OtmSize;
+            ASSERT(OtmSize <= OldOtmSize);
 
             Penalty = GetFontPenalty(LogFont, Otm, Face->style_name);
             if (*MatchPenalty == MAXULONG || Penalty < *MatchPenalty)
@@ -5935,9 +6150,10 @@ TextIntRealizeFont(HFONT FontHandle, PTEXTOBJ pTextObj)
 
     /* substitute */
     SubstitutedLogFont = *pLogFont;
-    DPRINT("Font '%S,%u' is substituted by: ", pLogFont->lfFaceName, pLogFont->lfCharSet);
     SubstituteFontRecurse(&SubstitutedLogFont);
-    DPRINT("'%S,%u'.\n", SubstitutedLogFont.lfFaceName, SubstitutedLogFont.lfCharSet);
+    DPRINT("Font '%S,%u' is substituted by '%S,%u'.\n",
+           pLogFont->lfFaceName, pLogFont->lfCharSet,
+           SubstitutedLogFont.lfFaceName, SubstitutedLogFont.lfCharSet);
 
     MatchPenalty = 0xFFFFFFFF;
     TextObj->Font = NULL;
@@ -7481,12 +7697,10 @@ NtGdiGetCharABCWidthsW(
     PTEXTOBJ TextObj;
     PFONTGDI FontGDI;
     FT_Face face;
-    FT_CharMap charmap, found = NULL;
     UINT i, glyph_index, BufferSize;
-    HFONT hFont = 0;
+    HFONT hFont =  NULL;
     NTSTATUS Status = STATUS_SUCCESS;
     PWCHAR Safepwch = NULL;
-    LOGFONTW *plf;
 
     if (!Buffer)
     {
@@ -7519,10 +7733,10 @@ NtGdiGetCharABCWidthsW(
 
     if (!NT_SUCCESS(Status))
     {
-        if(Safepwch)
-            ExFreePoolWithTag(Safepwch , GDITAG_TEXT);
+        if (Safepwch)
+            ExFreePoolWithTag(Safepwch, GDITAG_TEXT);
 
-        EngSetLastError(Status);
+        SetLastNtError(Status);
         return FALSE;
     }
 
@@ -7531,9 +7745,8 @@ NtGdiGetCharABCWidthsW(
     if (!fl) SafeBuffF = (LPABCFLOAT) SafeBuff;
     if (SafeBuff == NULL)
     {
-
-        if(Safepwch)
-            ExFreePoolWithTag(Safepwch , GDITAG_TEXT);
+        if (Safepwch)
+            ExFreePoolWithTag(Safepwch, GDITAG_TEXT);
 
         EngSetLastError(ERROR_NOT_ENOUGH_MEMORY);
         return FALSE;
@@ -7544,8 +7757,8 @@ NtGdiGetCharABCWidthsW(
     {
         ExFreePoolWithTag(SafeBuff, GDITAG_TEXT);
 
-        if(Safepwch)
-            ExFreePoolWithTag(Safepwch , GDITAG_TEXT);
+        if (Safepwch)
+            ExFreePoolWithTag(Safepwch, GDITAG_TEXT);
 
         EngSetLastError(ERROR_INVALID_HANDLE);
         return FALSE;
@@ -7560,50 +7773,19 @@ NtGdiGetCharABCWidthsW(
     {
         ExFreePoolWithTag(SafeBuff, GDITAG_TEXT);
 
-        if(Safepwch)
-            ExFreePoolWithTag(Safepwch , GDITAG_TEXT);
+        if (Safepwch)
+            ExFreePoolWithTag(Safepwch, GDITAG_TEXT);
 
         EngSetLastError(ERROR_INVALID_HANDLE);
         return FALSE;
     }
 
     FontGDI = ObjToGDI(TextObj->Font, FONT);
-
     face = FontGDI->SharedFace->Face;
-    if (face->charmap == NULL)
-    {
-        for (i = 0; i < (UINT)face->num_charmaps; i++)
-        {
-            charmap = face->charmaps[i];
-            if (charmap->encoding != 0)
-            {
-                found = charmap;
-                break;
-            }
-        }
-
-        if (!found)
-        {
-            DPRINT1("WARNING: Could not find desired charmap!\n");
-            ExFreePoolWithTag(SafeBuff, GDITAG_TEXT);
-
-            if(Safepwch)
-                ExFreePoolWithTag(Safepwch , GDITAG_TEXT);
-
-            EngSetLastError(ERROR_INVALID_HANDLE);
-            return FALSE;
-        }
-
-        IntLockFreeType();
-        FT_Set_Charmap(face, found);
-        IntUnLockFreeType();
-    }
-
-    plf = &TextObj->logfont.elfEnumLogfontEx.elfLogFont;
 
     // NOTE: GetCharABCWidths simply ignores lfEscapement and XFORM.
     IntLockFreeType();
-    IntRequestFontSize(dc, FontGDI, plf->lfWidth, plf->lfHeight);
+    TextIntUpdateSize(dc, TextObj, FontGDI, FALSE);
     FT_Set_Transform(face, NULL, NULL);
 
     for (i = FirstChar; i < FirstChar+Count; i++)
@@ -7651,8 +7833,8 @@ NtGdiGetCharABCWidthsW(
 
     ExFreePoolWithTag(SafeBuff, GDITAG_TEXT);
 
-    if(Safepwch)
-        ExFreePoolWithTag(Safepwch , GDITAG_TEXT);
+    if (Safepwch)
+        ExFreePoolWithTag(Safepwch, GDITAG_TEXT);
 
     if (!NT_SUCCESS(Status))
     {
@@ -7685,11 +7867,9 @@ NtGdiGetCharWidthW(
     PTEXTOBJ TextObj;
     PFONTGDI FontGDI;
     FT_Face face;
-    FT_CharMap charmap, found = NULL;
     UINT i, glyph_index, BufferSize;
-    HFONT hFont = 0;
+    HFONT hFont = NULL;
     PWCHAR Safepwc = NULL;
-    LOGFONTW *plf;
 
     if (UnSafepwc)
     {
@@ -7715,7 +7895,7 @@ NtGdiGetCharWidthW(
 
     if (!NT_SUCCESS(Status))
     {
-        EngSetLastError(Status);
+        SetLastNtError(Status);
         return FALSE;
     }
 
@@ -7724,7 +7904,7 @@ NtGdiGetCharWidthW(
     if (!fl) SafeBuffF = (PFLOAT) SafeBuff;
     if (SafeBuff == NULL)
     {
-        if(Safepwc)
+        if (Safepwc)
             ExFreePoolWithTag(Safepwc, GDITAG_TEXT);
 
         EngSetLastError(ERROR_NOT_ENOUGH_MEMORY);
@@ -7734,7 +7914,7 @@ NtGdiGetCharWidthW(
     dc = DC_LockDc(hDC);
     if (dc == NULL)
     {
-        if(Safepwc)
+        if (Safepwc)
             ExFreePoolWithTag(Safepwc, GDITAG_TEXT);
 
         ExFreePoolWithTag(SafeBuff, GDITAG_TEXT);
@@ -7748,7 +7928,7 @@ NtGdiGetCharWidthW(
 
     if (TextObj == NULL)
     {
-        if(Safepwc)
+        if (Safepwc)
             ExFreePoolWithTag(Safepwc, GDITAG_TEXT);
 
         ExFreePoolWithTag(SafeBuff, GDITAG_TEXT);
@@ -7757,42 +7937,11 @@ NtGdiGetCharWidthW(
     }
 
     FontGDI = ObjToGDI(TextObj->Font, FONT);
-
     face = FontGDI->SharedFace->Face;
-    if (face->charmap == NULL)
-    {
-        for (i = 0; i < (UINT)face->num_charmaps; i++)
-        {
-            charmap = face->charmaps[i];
-            if (charmap->encoding != 0)
-            {
-                found = charmap;
-                break;
-            }
-        }
-
-        if (!found)
-        {
-            DPRINT1("WARNING: Could not find desired charmap!\n");
-
-            if(Safepwc)
-                ExFreePoolWithTag(Safepwc, GDITAG_TEXT);
-
-            ExFreePoolWithTag(SafeBuff, GDITAG_TEXT);
-            EngSetLastError(ERROR_INVALID_HANDLE);
-            return FALSE;
-        }
-
-        IntLockFreeType();
-        FT_Set_Charmap(face, found);
-        IntUnLockFreeType();
-    }
-
-    plf = &TextObj->logfont.elfEnumLogfontEx.elfLogFont;
 
     // NOTE: GetCharWidth simply ignores lfEscapement and XFORM.
     IntLockFreeType();
-    IntRequestFontSize(dc, FontGDI, plf->lfWidth, plf->lfHeight);
+    TextIntUpdateSize(dc, TextObj, FontGDI, FALSE);
     FT_Set_Transform(face, NULL, NULL);
 
     for (i = FirstChar; i < FirstChar+Count; i++)
@@ -7815,7 +7964,7 @@ NtGdiGetCharWidthW(
     TEXTOBJ_UnlockText(TextObj);
     MmCopyToCaller(Buffer, SafeBuff, BufferSize);
 
-    if(Safepwc)
+    if (Safepwc)
         ExFreePoolWithTag(Safepwc, GDITAG_TEXT);
 
     ExFreePoolWithTag(SafeBuff, GDITAG_TEXT);
