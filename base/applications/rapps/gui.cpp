@@ -100,6 +100,8 @@ CMainWindow::InitCategoriesList()
 {
     HTREEITEM hRootItemAvailable;
 
+    // TODO: Do not show any other categories in APPWIZ-mode.  ????
+
     hRootItemInstalled = m_TreeView->AddCategory(TVI_ROOT, IDS_INSTALLED, IDI_CATEGORY);
     m_TreeView->AddCategory(hRootItemInstalled, IDS_APPLICATIONS, IDI_APPS);
     m_TreeView->AddCategory(hRootItemInstalled, IDS_UPDATES, IDI_APPUPD);
