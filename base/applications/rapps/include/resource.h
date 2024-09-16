@@ -141,7 +141,10 @@
 /* Columns info */
 #define IDS_APP_NAME             250
 #define IDS_APP_INST_VERSION     251
-#define IDS_APP_DESCRIPTION      252
+#define IDS_APP_INSTALL_DATE     252
+#define IDS_APP_SIZE             253
+#define IDS_APP_PUBLISHER        254
+#define IDS_APP_DESCRIPTION      255
 
 /* Apps info */
 #define IDS_INFO_VERSION          280

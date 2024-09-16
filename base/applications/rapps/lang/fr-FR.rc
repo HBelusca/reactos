@@ -114,6 +114,9 @@ STRINGTABLE
 BEGIN
     IDS_APP_NAME "Nom"
     IDS_APP_INST_VERSION "Version"
+    IDS_APP_INSTALL_DATE "Installé le"
+    IDS_APP_SIZE "Taille"
+    IDS_APP_PUBLISHER "Éditeur"
     IDS_APP_DESCRIPTION "Description"
 END
 

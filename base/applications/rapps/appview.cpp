@@ -1404,21 +1404,31 @@ CAppsListView::SetDisplayAppType(APPLICATION_VIEW_TYPE AppType)
         g_DefaultPackageIconILIdx = I_IMAGENONE;
 
     // Add columns to the ListView.
+    // TODO: Support dynamic column resizing.
     CStringW szText;
     switch (AppType)
     {
         case AppViewTypeInstalledApps:
         {
             szText.LoadStringW(IDS_APP_NAME);
-            AddColumn(ColumnCount++, szText, 368, LVCFMT_LEFT);
+            AddColumn(ColumnCount++, szText, 250, LVCFMT_LEFT);
 
             szText.LoadStringW(IDS_APP_INST_VERSION);
             AddColumn(ColumnCount++, szText, 90, LVCFMT_RIGHT);
 
-#if 0 // This column is not currently useful for installed apps.
+#if 1
+            szText.LoadStringW(IDS_APP_INSTALL_DATE);
+            AddColumn(ColumnCount++, szText, 90, LVCFMT_RIGHT);
+
+            szText.LoadStringW(IDS_APP_SIZE);
+            AddColumn(ColumnCount++, szText, 90, LVCFMT_RIGHT);
+
+            szText.LoadStringW(IDS_APP_PUBLISHER);
+            AddColumn(ColumnCount++, szText, 90, LVCFMT_RIGHT);
+#endif
+
             szText.LoadStringW(IDS_APP_DESCRIPTION);
             AddColumn(ColumnCount++, szText, 300, LVCFMT_LEFT);
-#endif
 
             // Disable checkboxes
             ShowCheckboxes(false);
@@ -1471,8 +1481,17 @@ CAppsListView::AddApplication(CAppInfo *AppInfo, BOOL InitialCheckState)
             return FALSE;
         CAsyncLoadIcon::Queue(m_hWnd, *AppInfo, true);
 
-        SetItemText(Index, 1, AppInfo->szDisplayVersion.IsEmpty() ? L"---" : AppInfo->szDisplayVersion);
-        SetItemText(Index, 2, AppInfo->szComments.IsEmpty() ? L"---" : AppInfo->szComments);
+        // FIXME: CInstalledApplicationInfo interface needs some rework
+        // in order to be able to retrieve more interesting info fields.
+        CInstalledApplicationInfo *InstalledInfo = static_cast<CInstalledApplicationInfo *>(AppInfo);
+
+        // FIXME: Not sure we are interested in the "---" thing when the fields are empty...
+        SetItemText(Index, 1, InstalledInfo->szDisplayVersion.IsEmpty() ? L"---" : InstalledInfo->szDisplayVersion);
+        // SetItemText(Index, 2, InstalledInfo->m_szInstallDate.IsEmpty() ? L"---" : InstalledInfo->m_szInstallDate);
+        SetItemText(Index, 2, L"---"); // FIXME: Install date
+        SetItemText(Index, 3, L"---"); // FIXME: Size
+        SetItemText(Index, 4, L"---"); // FIXME: Publisher
+        SetItemText(Index, 5, InstalledInfo->szComments.IsEmpty() ? L"---" : InstalledInfo->szComments);
 
         ItemCount++;
         return TRUE;

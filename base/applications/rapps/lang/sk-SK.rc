@@ -111,6 +111,9 @@ STRINGTABLE
 BEGIN
     IDS_APP_NAME "Názov"
     IDS_APP_INST_VERSION "Verzia"
+    IDS_APP_INSTALL_DATE "Installed on"
+    IDS_APP_SIZE "Size"
+    IDS_APP_PUBLISHER "Publisher"
     IDS_APP_DESCRIPTION "Popis"
 END
 

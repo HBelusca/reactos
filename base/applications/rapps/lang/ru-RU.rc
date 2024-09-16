@@ -116,6 +116,9 @@ STRINGTABLE
 BEGIN
     IDS_APP_NAME "Название"
     IDS_APP_INST_VERSION "Версия"
+    IDS_APP_INSTALL_DATE "Installed on"
+    IDS_APP_SIZE "Size"
+    IDS_APP_PUBLISHER "Publisher"
     IDS_APP_DESCRIPTION "Описание"
 END
 
