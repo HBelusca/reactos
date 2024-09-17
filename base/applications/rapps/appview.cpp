@@ -67,11 +67,9 @@ CMainToolbar::AddImageToImageList(HIMAGELIST hImageList, UINT ImageIndex)
 {
     HICON hImage;
 
-    if (!(hImage =
-              (HICON)LoadImageW(hInst, MAKEINTRESOURCE(ImageIndex), IMAGE_ICON, m_iToolbarHeight, m_iToolbarHeight, 0)))
-    {
+    hImage = (HICON)LoadImageW(hInst, MAKEINTRESOURCE(ImageIndex), IMAGE_ICON, m_iToolbarHeight, m_iToolbarHeight, 0);
+    if (!hImage)
         return;
-    }
 
     ImageList_AddIcon(hImageList, hImage);
     DeleteObject(hImage);
@@ -85,9 +83,7 @@ CMainToolbar::InitImageList()
     /* Create the toolbar icon image list */
     hImageList = ImageList_Create(m_iToolbarHeight, m_iToolbarHeight, ILC_MASK | GetSystemColorDepth(), 1, 1);
     if (!hImageList)
-    {
         return NULL;
-    }
 
     AddImageToImageList(hImageList, IDI_INSTALL);
     AddImageToImageList(hImageList, IDI_UNINSTALL);
@@ -844,34 +840,19 @@ CAppInfoDisplay::ResizeChildren(int Width, int Height)
     HDWP hDwp = BeginDeferWindowPos(2);
 
     if (hDwp)
-    {
         hDwp = ::DeferWindowPos(hDwp, ScrnshotPrev->m_hWnd, NULL, 0, 0, ScrnshotWidth, Height, 0);
 
-        if (hDwp)
-        {
-            // hide the padding if scrnshot window width == 0
-            int RicheditPosX = ScrnshotWidth ? (ScrnshotWidth + INFO_DISPLAY_PADDING) : 0;
-
-            hDwp = ::DeferWindowPos(hDwp, RichEdit->m_hWnd, NULL, RicheditPosX, 0, Width - RicheditPosX, Height, 0);
-
-            if (hDwp)
-            {
-                EndDeferWindowPos(hDwp);
-            }
-            else
-            {
-                dwError = GetLastError();
-            }
-        }
-        else
-        {
-            dwError = GetLastError();
-        }
-    }
-    else
+    if (hDwp)
     {
-        dwError = GetLastError();
+        // hide the padding if scrnshot window width == 0
+        int RicheditPosX = ScrnshotWidth ? (ScrnshotWidth + INFO_DISPLAY_PADDING) : 0;
+        hDwp = ::DeferWindowPos(hDwp, RichEdit->m_hWnd, NULL, RicheditPosX, 0, Width - RicheditPosX, Height, 0);
     }
+
+    if (hDwp)
+        EndDeferWindowPos(hDwp);
+    else
+        dwError = GetLastError();
 
 #if DBG
     ATLASSERT(dwError == ERROR_SUCCESS);
@@ -1006,7 +987,6 @@ CAppInfoDisplay::OnCommand(WPARAM wParam, LPARAM lParam)
     switch (wCommand)
     {
         case ID_OPEN_LINK:
-
             ShellExecuteW(m_hWnd, L"open", pLink, NULL, NULL, SW_SHOWNOACTIVATE);
             HeapFree(GetProcessHeap(), 0, pLink);
             pLink = NULL;
@@ -1143,7 +1123,7 @@ CAppsListView::OnAsyncIcon(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandl
         LVFINDINFO lvfi;
         lvfi.flags = LVFI_PARAM;
         lvfi.lParam = (LPARAM)task->AppInfo;
-        lvi.iItem = ListView_FindItem(m_hWnd, -1, &lvfi);
+        lvi.iItem = FindItem(-1, &lvfi);
         if (lvi.iItem != -1)
         {
             lvi.iImage = ImageList_AddIcon(m_hImageListView, (HICON)wParam);
@@ -1151,7 +1131,7 @@ CAppsListView::OnAsyncIcon(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandl
             {
                 lvi.mask = LVIF_IMAGE;
                 lvi.iSubItem = 0;
-                ListView_SetItem(m_hWnd, &lvi);
+                SetItem(&lvi);
             }
         }
     }
@@ -1592,8 +1572,7 @@ CApplicationView::ProcessWindowMessage(
             m_Toolbar->AutoSize();
 
             RECT rTop;
-
-            ::GetWindowRect(m_Toolbar->m_hWnd, &rTop);
+            m_Toolbar->GetWindowRect(&rTop);
             m_HSplitter->m_Margin.top = rTop.bottom - rTop.top;
             if (!bSuccess)
             {
@@ -1922,14 +1901,8 @@ CApplicationView::OnCommand(WPARAM wParam, LPARAM lParam)
                     szBuf.LoadStringW(IDS_SEARCH_TEXT);
                     m_SearchBar->GetWindowTextW(szWndText);
                     if (szBuf == szWndText)
-                    {
                         szWndText = L"";
-                        m_MainWindow->SearchTextChanged(szWndText);
-                    }
-                    else
-                    {
-                        m_MainWindow->SearchTextChanged(szWndText);
-                    }
+                    m_MainWindow->SearchTextChanged(szWndText);
                 }
                 break;
             }
@@ -2118,11 +2091,10 @@ CApplicationView::GetRestoreListSelectionData(RESTORELISTSELECTION &Restore)
     Item.stateMask = LVIS_FOCUSED|LVIS_SELECTED;
     Item.pszText = Restore.Name, Item.cchTextMax = _countof(Restore.Name);
 
-    HWND hList = m_ListView ? m_ListView->m_hWnd : NULL;
-    if (hList)
+    if (m_ListView)
     {
-        Item.iItem = ListView_GetNextItem(hList, -1, LVNI_FOCUSED);
-        ListView_GetItem(hList, &Item);
+        Item.iItem = m_ListView->GetNextItem(-1, LVNI_FOCUSED);
+        m_ListView->GetItem(&Item);
     }
 }
 
@@ -2136,11 +2108,11 @@ CApplicationView::RestoreListSelection(const RESTORELISTSELECTION &Restore)
         LVFINDINFOW fi;
         fi.flags = LVFI_STRING;
         fi.psz = Item.pszText;
-        index = ListView_FindItem(m_ListView->m_hWnd, -1, &fi);
+        index = m_ListView->FindItem(-1, &fi);
     }
     if (index != -1) // Is it still in the list?
     {
-        ListView_SetItemState(m_ListView->m_hWnd, index, Item.state, Item.stateMask);
+        m_ListView->SetItemState(index, Item.state, Item.stateMask);
     }
 }
 

@@ -208,13 +208,11 @@ CMainWindow::CreateLayout()
 
     if (b)
     {
-        RECT rBottom;
-
         /* Size status bar */
         m_StatusBar->SendMessageW(WM_SIZE, 0, 0);
 
-        ::GetWindowRect(m_StatusBar->m_hWnd, &rBottom);
-
+        RECT rBottom;
+        m_StatusBar->GetWindowRect(&rBottom);
         m_VSplitter->m_Margin.bottom = rBottom.bottom - rBottom.top;
     }
 
@@ -277,7 +275,6 @@ CMainWindow::RemoveSelectedAppFromRegistry()
         return FALSE;
 
     CStringW szMsgText, szMsgTitle;
-
     if (!szMsgText.LoadStringW(IDS_APP_REG_REMOVE) || !szMsgTitle.LoadStringW(IDS_INFORMATION))
         return FALSE;
 
@@ -498,7 +495,6 @@ CMainWindow::ProcessWindowMessage(HWND hwnd, UINT Msg, WPARAM wParam, LPARAM lPa
             if (wParam == SEARCH_TIMER_ID)
             {
                 ::KillTimer(hwnd, SEARCH_TIMER_ID);
-
                 UpdateApplicationsList(SelectedEnumType);
             }
             break;
@@ -664,7 +660,7 @@ CMainWindow::UpdateApplicationsList(AppsCategories EnumType, BOOL bReload, BOOL 
     if (bCheckAvailable)
         CheckAvailable();
 
-    BOOL TryRestoreSelection = SelectedEnumType == EnumType;
+    BOOL TryRestoreSelection = (SelectedEnumType == EnumType);
     SelectedEnumType = EnumType;
 
     CApplicationView::RESTORELISTSELECTION RestoreSelection;
@@ -793,8 +789,8 @@ CMainWindow::ItemCheckStateChanged(BOOL bChecked, LPVOID CallbackParam)
     UpdateStatusBarText();
 }
 
-// this function is called when one or more application(s) should be installed
-// if Info is not zero, this app should be installed. otherwise those checked apps should be installed
+// This function is called when one or more application(s) should be installed.
+// If Info is not NULL, this app should be installed, otherwise the checked apps should be.
 BOOL
 CMainWindow::InstallApplication(CAppInfo *Info)
 {
