@@ -331,14 +331,14 @@ class CDowloadingAppsListView : public CListView
     }
 
     BOOL
-    AddItem(INT ItemIndex, LPWSTR lpText)
+    AddItem(INT ItemIndex, LPCWSTR lpText)
     {
         LVITEMW Item;
 
         ZeroMemory(&Item, sizeof(Item));
 
         Item.mask = LVIF_TEXT | LVIF_STATE;
-        Item.pszText = lpText;
+        Item.pszText = const_cast<LPWSTR>(lpText);
         Item.iItem = ItemIndex;
 
         return InsertItem(&Item);
@@ -348,7 +348,7 @@ class CDowloadingAppsListView : public CListView
     AddRow(INT RowIndex, LPCWSTR szAppName, const DownloadStatus Status)
     {
         CStringW szStatus = LoadStatusString(Status);
-        AddItem(RowIndex, const_cast<LPWSTR>(szAppName));
+        AddItem(RowIndex, szAppName);
         SetDownloadStatus(RowIndex, Status);
     }
 

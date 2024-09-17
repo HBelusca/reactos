@@ -29,7 +29,7 @@ class CSideTreeView : public CUiWindow<CTreeView>
     CSideTreeView();
 
     HTREEITEM
-    AddItem(HTREEITEM hParent, CStringW &Text, INT Image, INT SelectedImage, LPARAM lParam);
+    AddItem(HTREEITEM hParent, const CStringW &Text, INT Image, INT SelectedImage, LPARAM lParam);
 
     HTREEITEM
     AddCategory(HTREEITEM hRootItem, UINT TextIndex, UINT IconIndex);
@@ -132,7 +132,7 @@ class CMainWindow : public CWindowImpl<CMainWindow, CWindow, CFrameWinTraits>
 
     // this function is called when search text is changed
     BOOL
-    SearchTextChanged(CStringW &SearchText);
+    SearchTextChanged(const CStringW &SearchText);
 
     void
     HandleTabOrder(int direction);

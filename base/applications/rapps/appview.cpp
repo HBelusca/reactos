@@ -145,20 +145,13 @@ CMainToolbar::OnGetDispInfo(LPTOOLTIPTEXT lpttt)
 HWND
 CMainToolbar::Create(HWND hwndParent)
 {
-    CStringW szInstallBtn;
-    CStringW szUninstallBtn;
-    CStringW szModifyBtn;
-    CStringW szSelectAllBtn;
-    CStringW szRefreshBtn;
-    CStringW szUpdateDbBtn;
-
     /* Load tooltip strings */
-    szInstallBtn.LoadStringW(IDS_TOOLTIP_INSTALL);
-    szUninstallBtn.LoadStringW(IDS_TOOLTIP_UNINSTALL);
-    szModifyBtn.LoadStringW(IDS_TOOLTIP_MODIFY);
-    szSelectAllBtn.LoadStringW(IDS_TOOLTIP_SELECT_ALL);
-    szRefreshBtn.LoadStringW(IDS_TOOLTIP_REFRESH);
-    szUpdateDbBtn.LoadStringW(IDS_TOOLTIP_UPDATE_DB);
+    const CStringW szInstallBtn(MAKEINTRESOURCEW(IDS_TOOLTIP_INSTALL));
+    const CStringW szUninstallBtn(MAKEINTRESOURCEW(IDS_TOOLTIP_UNINSTALL));
+    const CStringW szModifyBtn(MAKEINTRESOURCEW(IDS_TOOLTIP_MODIFY));
+    const CStringW szSelectAllBtn(MAKEINTRESOURCEW(IDS_TOOLTIP_SELECT_ALL));
+    const CStringW szRefreshBtn(MAKEINTRESOURCEW(IDS_TOOLTIP_REFRESH));
+    const CStringW szUpdateDbBtn(MAKEINTRESOURCEW(IDS_TOOLTIP_UPDATE_DB));
 
     /* Create buttons */
     TBBUTTON Buttons[] = {
@@ -239,13 +232,12 @@ CSearchBar::SetText(LPCWSTR lpszText)
 HWND
 CSearchBar::Create(HWND hwndParent)
 {
-    CStringW szBuf;
     m_hWnd = CreateWindowExW(
         WS_EX_CLIENTEDGE, L"Edit", NULL, WS_CHILD | WS_VISIBLE | ES_LEFT | ES_AUTOHSCROLL, 0, 0, m_Width, m_Height,
         hwndParent, (HMENU)NULL, hInst, 0);
 
     SendMessageW(WM_SETFONT, (WPARAM)GetStockObject(DEFAULT_GUI_FONT), 0);
-    szBuf.LoadStringW(IDS_SEARCH_TEXT);
+    const CStringW szBuf(MAKEINTRESOURCEW(IDS_SEARCH_TEXT));
     SetWindowTextW(szBuf);
     return m_hWnd;
 }
@@ -268,8 +260,7 @@ CComboBox::Create(HWND hwndParent)
 
     for (int i = 0; i < (int)_countof(m_TypeStringID); i++)
     {
-        CStringW szBuf;
-        szBuf.LoadStringW(m_TypeStringID[i]);
+        const CStringW szBuf(MAKEINTRESOURCEW(m_TypeStringID[i]));
         SendMessageW(CB_ADDSTRING, 0, (LPARAM)(LPCWSTR)szBuf);
     }
 
@@ -1221,7 +1212,7 @@ CAppsListView::ColumnClick(LPNMLISTVIEW pnmv)
 }
 
 BOOL
-CAppsListView::AddColumn(INT Index, CStringW &Text, INT Width, INT Format)
+CAppsListView::AddColumn(INT Index, const CStringW &Text, INT Width, INT Format)
 {
     LVCOLUMNW Column;
 

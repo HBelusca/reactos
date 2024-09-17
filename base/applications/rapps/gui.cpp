@@ -37,15 +37,14 @@ CSideTreeView::CSideTreeView()
 }
 
 HTREEITEM
-CSideTreeView::AddItem(HTREEITEM hParent, CStringW &Text, INT Image, INT SelectedImage, LPARAM lParam)
+CSideTreeView::AddItem(HTREEITEM hParent, const CStringW &Text, INT Image, INT SelectedImage, LPARAM lParam)
 {
-    return CUiWindow<CTreeView>::AddItem(hParent, const_cast<LPWSTR>(Text.GetString()), Image, SelectedImage, lParam);
+    return CUiWindow<CTreeView>::AddItem(hParent, Text, Image, SelectedImage, lParam);
 }
 
 HTREEITEM
 CSideTreeView::AddCategory(HTREEITEM hRootItem, UINT TextIndex, UINT IconIndex)
 {
-    CStringW szText;
     INT Index = 0;
     HICON hIcon;
 
@@ -57,7 +56,7 @@ CSideTreeView::AddCategory(HTREEITEM hRootItem, UINT TextIndex, UINT IconIndex)
         DestroyIcon(hIcon);
     }
 
-    szText.LoadStringW(TextIndex);
+    const CStringW szText(MAKEINTRESOURCEW(TextIndex));
     return AddItem(hRootItem, szText, Index, Index, TextIndex);
 }
 
@@ -511,11 +510,9 @@ CMainWindow::ProcessWindowMessage(HWND hwnd, UINT Msg, WPARAM wParam, LPARAM lPa
 VOID
 CMainWindow::ShowAboutDlg()
 {
-    CStringW szApp;
-    CStringW szAuthors;
+    const CStringW szApp(MAKEINTRESOURCEW(IDS_APPTITLE));
+    const CStringW szAuthors(MAKEINTRESOURCEW(IDS_APP_AUTHORS));
 
-    szApp.LoadStringW(IDS_APPTITLE);
-    szAuthors.LoadStringW(IDS_APP_AUTHORS);
     ShellAboutW(m_hWnd, szApp, szAuthors,
                 LoadIconW(hInst, MAKEINTRESOURCEW(IDI_MAIN)));
 }
@@ -756,9 +753,6 @@ CMainWindow::GetWndClassInfo()
 HWND
 CMainWindow::Create()
 {
-    CStringW szWindowName;
-    szWindowName.LoadStringW(IDS_APPTITLE);
-
     RECT r = {
         (SettingsInfo.bSaveWndPos ? SettingsInfo.Left : CW_USEDEFAULT),
         (SettingsInfo.bSaveWndPos ? SettingsInfo.Top : CW_USEDEFAULT),
@@ -766,8 +760,9 @@ CMainWindow::Create()
     r.right += r.left;
     r.bottom += r.top;
 
+    const CStringW szWindowName(MAKEINTRESOURCEW(IDS_APPTITLE));
     return CWindowImpl::Create(
-        NULL, r, szWindowName.GetString(), WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN | WS_CLIPSIBLINGS, WS_EX_WINDOWEDGE);
+        NULL, r, szWindowName, WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN | WS_CLIPSIBLINGS, WS_EX_WINDOWEDGE);
 }
 
 // this function is called when a item of application-view is checked/unchecked
@@ -816,7 +811,7 @@ CMainWindow::InstallApplication(CAppInfo *Info)
 }
 
 BOOL
-CMainWindow::SearchTextChanged(CStringW &SearchText)
+CMainWindow::SearchTextChanged(const CStringW &SearchText)
 {
     if (szSearchPattern == SearchText)
     {

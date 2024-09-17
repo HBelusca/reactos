@@ -230,7 +230,7 @@ class CAppsListView : public CUiWindow<CWindowImpl<CAppsListView, CListView>>
     ColumnClick(LPNMLISTVIEW pnmv);
 
     BOOL
-    AddColumn(INT Index, CStringW &Text, INT Width, INT Format);
+    AddColumn(INT Index, const CStringW &Text, INT Width, INT Format);
     void
     DeleteColumn(INT Index);
 
