@@ -6,7 +6,7 @@ class CListView: public CWindow
 public:
 
     HWND Create(HWND hWndParent, _U_RECT rect, LPCTSTR szWindowName = NULL, DWORD dwStyle = 0,
-                    DWORD dwExStyle = 0, _U_MENUorID MenuOrID = 0U, LPVOID lpCreateParam = NULL)
+                    DWORD dwExStyle = 0, _U_MENUorID MenuOrID = 0U, PVOID lpCreateParam = NULL)
     {
         m_hWnd = ::CreateWindowEx(dwExStyle,
                                   WC_LISTVIEW,
@@ -60,22 +60,22 @@ public:
         column.mask = LVCF_TEXT|LVCF_FMT;
         column.pszText = pszText;
         column.fmt = fmt;
-        if(width != -1)
+        if (width != -1)
         {
             column.mask |= LVCF_WIDTH;
             column.cx = width;
         }
-        if(iSubItem != -1)
+        if (iSubItem != -1)
         {
             column.mask |= LVCF_SUBITEM;
             column.iSubItem = iSubItem;
         }
-        if(iImage != -1)
+        if (iImage != -1)
         {
             column.mask |= LVCF_IMAGE;
             column.iImage = iImage;
         }
-        if(iOrder != -1)
+        if (iOrder != -1)
         {
             column.mask |= LVCF_ORDER;
             column.iOrder = iOrder;
@@ -115,7 +115,7 @@ public:
 
     BOOL FindItem(int iStart, const LV_FINDINFO * plvfi)
     {
-        return (BOOL)SendMessage(LVM_FINDITEM, iStart, (LPARAM) plvfi);
+        return (BOOL)SendMessage(LVM_FINDITEM, iStart, reinterpret_cast<LPARAM>(plvfi));
     }
 
     int GetItemCount()
@@ -140,12 +140,12 @@ public:
 
     BOOL SortItems(PFNLVCOMPARE pfnCompare, PVOID lParam)
     {
-        return (BOOL)SendMessage(LVM_SORTITEMS, (WPARAM)lParam, (LPARAM) pfnCompare);
+        return (BOOL)SendMessage(LVM_SORTITEMS, (WPARAM)lParam, (LPARAM)pfnCompare);
     }
 
     BOOL EnsureVisible(int i, BOOL fPartialOK)
     {
-        return (BOOL)SendMessage(LVM_ENSUREVISIBLE, i, MAKELPARAM((fPartialOK),0));
+        return (BOOL)SendMessage(LVM_ENSUREVISIBLE, i, MAKELPARAM(fPartialOK, 0));
     }
 
     HWND EditLabel(int i)
@@ -160,7 +160,7 @@ public:
 
     int GetNextItem(int i, WORD flags)
     {
-        return (int)SendMessage(LVM_GETNEXTITEM, i, MAKELPARAM((flags),0));
+        return (int)SendMessage(LVM_GETNEXTITEM, i, MAKELPARAM(flags, 0));
     }
 
     void GetItemSpacing(SIZE& spacing, BOOL bSmallIconView = FALSE)
@@ -225,7 +225,7 @@ public:
         itemInfo.pszText = pszText;
         itemInfo.cchTextMax = cchTextMax;
 
-        SendMessage(LVM_GETITEMTEXT, iItem, (LPARAM) &itemInfo);
+        SendMessage(LVM_GETITEMTEXT, iItem, (LPARAM)&itemInfo);
     }
 
     BOOL GetItemPosition(int nItem, POINT* pPoint)
@@ -436,7 +436,7 @@ public: // Image list management methods
 public: // Other methods
     INT HitTest(PPOINT ppt)
     {
-        return (INT) SendMessageW(TB_HITTEST, 0, reinterpret_cast<LPARAM>(ppt));
+        return (INT)SendMessageW(TB_HITTEST, 0, reinterpret_cast<LPARAM>(ppt));
     }
 
 public: // Utility methods
@@ -444,7 +444,7 @@ public: // Utility methods
     {
         TBBUTTON btn;
         GetButton(index, &btn);
-        return (TItemData*) btn.dwData;
+        return (TItemData*)btn.dwData;
     }
 
     DWORD SetItemData(int index, TItemData * data)
@@ -452,7 +452,7 @@ public: // Utility methods
         TBBUTTONINFOW info = { 0 };
         info.cbSize = sizeof(info);
         info.dwMask = TBIF_BYINDEX | TBIF_LPARAM;
-        info.lParam = (DWORD_PTR) data;
+        info.lParam = (DWORD_PTR)data;
         return SetButtonInfo(index, &info);
     }
 };
@@ -463,7 +463,7 @@ class CStatusBar :
 public:
     VOID SetText(LPCWSTR lpszText)
     {
-        SendMessage(SB_SETTEXT, SBT_NOBORDERS, (LPARAM) lpszText);
+        SendMessage(SB_SETTEXT, SBT_NOBORDERS, reinterpret_cast<LPARAM>(lpszText));
     }
 
     HWND Create(HWND hwndParent, HMENU hMenu)
@@ -526,37 +526,37 @@ public:
 
     BOOL SetBkColor(COLORREF cr)
     {
-        return (BOOL) SendMessage(TVM_SETBKCOLOR, 0, cr);
+        return (BOOL)SendMessage(TVM_SETBKCOLOR, 0, cr);
     }
 
     BOOL SetTextColor(COLORREF cr)
     {
-        return (BOOL) SendMessage(TVM_SETTEXTCOLOR, 0, cr);
+        return (BOOL)SendMessage(TVM_SETTEXTCOLOR, 0, cr);
     }
 
     HIMAGELIST SetImageList(HIMAGELIST himl, int iImageList)
     {
-        return (HIMAGELIST) SendMessage(TVM_SETIMAGELIST, iImageList, reinterpret_cast<LPARAM>(himl));
+        return (HIMAGELIST)SendMessage(TVM_SETIMAGELIST, iImageList, reinterpret_cast<LPARAM>(himl));
     }
 
     HTREEITEM InsertItem(const TVINSERTSTRUCTW * pitem)
     {
-        return (HTREEITEM) SendMessage(TVM_INSERTITEM, 0, reinterpret_cast<LPARAM>(pitem));
+        return (HTREEITEM)SendMessage(TVM_INSERTITEM, 0, reinterpret_cast<LPARAM>(pitem));
     }
 
     BOOL DeleteItem(HTREEITEM i)
     {
-        return (BOOL) SendMessage(TVM_DELETEITEM, 0, (LPARAM)i);
+        return (BOOL)SendMessage(TVM_DELETEITEM, 0, (LPARAM)i);
     }
 
     BOOL GetItem(TV_ITEM* pitem)
     {
-        return (BOOL) SendMessage(TVM_GETITEM, 0, reinterpret_cast<LPARAM>(pitem));
+        return (BOOL)SendMessage(TVM_GETITEM, 0, reinterpret_cast<LPARAM>(pitem));
     }
 
     BOOL SetItem(const TV_ITEM * pitem)
     {
-        return (BOOL) SendMessage(TVM_SETITEM, 0, reinterpret_cast<LPARAM>(pitem));
+        return (BOOL)SendMessage(TVM_SETITEM, 0, reinterpret_cast<LPARAM>(pitem));
     }
 
     int GetItemCount()
@@ -566,12 +566,12 @@ public:
 
     BOOL EnsureVisible(HTREEITEM i)
     {
-        return (BOOL) SendMessage(TVM_ENSUREVISIBLE, 0, (LPARAM)i);
+        return (BOOL)SendMessage(TVM_ENSUREVISIBLE, 0, (LPARAM)i);
     }
 
     HWND EditLabel(HTREEITEM i)
     {
-        return (HWND) SendMessage(TVM_EDITLABEL, 0, (LPARAM)i);
+        return (HWND)SendMessage(TVM_EDITLABEL, 0, (LPARAM)i);
     }
 
     HTREEITEM GetNextItem(HTREEITEM i, WORD flags)
@@ -581,12 +581,12 @@ public:
 
     UINT GetItemState(int i, UINT mask)
     {
-        return SendMessage(TVM_GETITEMSTATE, i, (LPARAM) mask);
+        return SendMessage(TVM_GETITEMSTATE, i, (LPARAM)mask);
     }
 
     HTREEITEM HitTest(TVHITTESTINFO * phtInfo)
     {
-        return (HTREEITEM) SendMessage(TVM_HITTEST, 0, reinterpret_cast<LPARAM>(phtInfo));
+        return (HTREEITEM)SendMessage(TVM_HITTEST, 0, reinterpret_cast<LPARAM>(phtInfo));
     }
 
     DWORD_PTR GetItemData(HTREEITEM item)
@@ -595,7 +595,7 @@ public:
         lvItem.hItem = item;
         lvItem.mask = TVIF_PARAM;
         BOOL ret = GetItem(&lvItem);
-        return (DWORD_PTR) (ret ? lvItem.lParam : NULL);
+        return (DWORD_PTR)(ret ? lvItem.lParam : NULL);
     }
 
     HTREEITEM GetSelection()
@@ -610,7 +610,7 @@ public:
 
     BOOL SelectItem(HTREEITEM item, DWORD action = TVGN_CARET)
     {
-        return SendMessage(TVM_SELECTITEM, action, (LPARAM) item);
+        return SendMessage(TVM_SELECTITEM, action, (LPARAM)item);
     }
 
 };
