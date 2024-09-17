@@ -54,11 +54,11 @@ public:
         return (int)SendMessage(LVM_INSERTCOLUMN, iCol, reinterpret_cast<LPARAM>(pcol));
     }
 
-    int InsertColumn(int iCol, LPWSTR pszText, int fmt, int width = -1, int iSubItem = -1, int iImage = -1, int iOrder = -1)
+    int InsertColumn(int iCol, LPCTSTR pszText, int fmt, int width = -1, int iSubItem = -1, int iImage = -1, int iOrder = -1)
     {
         LV_COLUMN column = {0};
         column.mask = LVCF_TEXT|LVCF_FMT;
-        column.pszText = pszText;
+        column.pszText = const_cast<LPTSTR>(pszText);
         column.fmt = fmt;
         if (width != -1)
         {
@@ -187,7 +187,7 @@ public:
     {
         LVITEMW item;
         item.iSubItem = subItem;
-        item.pszText = (LPWSTR)text;
+        item.pszText = const_cast<LPWSTR>(text);
         return SendMessage(LVM_SETITEMTEXT, i, (LPARAM)&item);
     }
 
@@ -502,7 +502,7 @@ public:
         return m_hWnd;
     }
 
-    HTREEITEM AddItem(HTREEITEM hParent, LPWSTR lpText, INT Image, INT SelectedImage, LPARAM lParam)
+    HTREEITEM AddItem(HTREEITEM hParent, LPCWSTR lpText, INT Image, INT SelectedImage, LPARAM lParam)
     {
         TVINSERTSTRUCTW Insert;
 
@@ -514,7 +514,7 @@ public:
         Insert.item.iSelectedImage = SelectedImage;
         Insert.item.iImage = Image;
         Insert.item.lParam = lParam;
-        Insert.item.pszText = lpText;
+        Insert.item.pszText = const_cast<LPWSTR>(lpText);
 
         return InsertItem(&Insert);
     }
