@@ -312,6 +312,9 @@ typedef enum _SYSTEM_INFORMATION_CLASS
     SystemCoverageInformation,
     SystemPrefetchPathInformation,
     SystemVerifierFaultsInformation,
+#if (NTDDI_VERSION >= NTDDI_WINBLUE)
+    SystemKernelDebuggerInformationEx = 149,
+#endif
     MaxSystemInfoClass,
 } SYSTEM_INFORMATION_CLASS;
 
@@ -1455,6 +1458,16 @@ typedef struct _SYSTEM_BOOT_ENVIRONMENT_V1
 #endif
 
 // FIXME: Class 91-97
+
+// Class 149 (0x95)
+#if (NTDDI_VERSION >= NTDDI_WINBLUE)
+typedef struct _SYSTEM_KERNEL_DEBUGGER_INFORMATION_EX
+{
+    BOOLEAN DebuggerAllowed;
+    BOOLEAN DebuggerEnabled;
+    BOOLEAN DebuggerPresent;
+} SYSTEM_KERNEL_DEBUGGER_INFORMATION_EX, *PSYSTEM_KERNEL_DEBUGGER_INFORMATION_EX;
+#endif
 
 //
 // Hotpatch flags

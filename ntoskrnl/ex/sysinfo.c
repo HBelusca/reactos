@@ -2817,6 +2817,27 @@ QSI_DEF(SystemFirmwareTableInformation)
     return Status;
 }
 
+#if (NTDDI_VERSION >= NTDDI_WINBLUE)
+/* Class 149 - Kernel Debugger Information (Extended) */
+QSI_DEF(SystemKernelDebuggerInformationEx)
+{
+    PSYSTEM_KERNEL_DEBUGGER_INFORMATION_EX skdi = (PSYSTEM_KERNEL_DEBUGGER_INFORMATION_EX)Buffer;
+
+    *ReqSize = sizeof(SYSTEM_KERNEL_DEBUGGER_INFORMATION_EX);
+
+    if (Size < sizeof(SYSTEM_KERNEL_DEBUGGER_INFORMATION_EX))
+    {
+        return STATUS_INFO_LENGTH_MISMATCH;
+    }
+
+    skdi->DebuggerAllowed = !(KdPitchDebugger || KdBlockEnable);
+    skdi->DebuggerEnabled = KD_DEBUGGER_ENABLED; // KdDebuggerEnabled;
+    skdi->DebuggerPresent = !KD_DEBUGGER_NOT_PRESENT; //!KdDebuggerNotPresent:
+
+    return STATUS_SUCCESS;
+}
+#endif
+
 /* Query/Set Calls Table */
 typedef
 struct _QSSI_CALLS
@@ -2916,6 +2937,81 @@ CallQS[] =
     SI_XX(SystemWow64SharedInformation), /* FIXME: not implemented */
     SI_XX(SystemRegisterFirmwareTableInformationHandler), /* FIXME: not implemented */
     SI_QX(SystemFirmwareTableInformation),
+#if (NTDDI_VERSION >= NTDDI_WINBLUE) // Following is padding up to the next implemented class
+    SI_XX(Unknown),
+    SI_XX(Unknown),
+    SI_XX(Unknown),
+    SI_XX(Unknown),
+    SI_XX(Unknown),
+    SI_XX(Unknown),
+    SI_XX(Unknown),
+    SI_XX(Unknown),
+    SI_XX(Unknown),
+    SI_XX(Unknown),
+    SI_XX(Unknown),
+    SI_XX(Unknown),
+    SI_XX(Unknown),
+    SI_XX(Unknown),
+    SI_XX(Unknown),
+    SI_XX(Unknown),
+    SI_XX(Unknown),
+    SI_XX(Unknown),
+    SI_XX(Unknown),
+    SI_XX(Unknown),
+    SI_XX(Unknown),
+    SI_XX(Unknown),
+    SI_XX(Unknown),
+    SI_XX(Unknown),
+    SI_XX(Unknown),
+    SI_XX(Unknown),
+    SI_XX(Unknown),
+    SI_XX(Unknown),
+    SI_XX(Unknown),
+    SI_XX(Unknown),
+    SI_XX(Unknown),
+    SI_XX(Unknown),
+    SI_XX(Unknown),
+    SI_XX(Unknown),
+    SI_XX(Unknown),
+    SI_XX(Unknown),
+    SI_XX(Unknown),
+    SI_XX(Unknown),
+    SI_XX(Unknown),
+    SI_XX(Unknown),
+    SI_XX(Unknown),
+    SI_XX(Unknown),
+    SI_XX(Unknown),
+    SI_XX(Unknown),
+    SI_XX(Unknown),
+    SI_XX(Unknown),
+    SI_XX(Unknown),
+    SI_XX(Unknown),
+    SI_XX(Unknown),
+    SI_XX(Unknown),
+    SI_XX(Unknown),
+    SI_XX(Unknown),
+    SI_XX(Unknown),
+    SI_XX(Unknown),
+    SI_XX(Unknown),
+    SI_XX(Unknown),
+    SI_XX(Unknown),
+    SI_XX(Unknown),
+    SI_XX(Unknown),
+    SI_XX(Unknown),
+    SI_XX(Unknown),
+    SI_XX(Unknown),
+    SI_XX(Unknown),
+    SI_XX(Unknown),
+    SI_XX(Unknown),
+    SI_XX(Unknown),
+    SI_XX(Unknown),
+    SI_XX(Unknown),
+    SI_XX(Unknown),
+    SI_XX(Unknown),
+    SI_XX(Unknown),
+    SI_XX(Unknown),
+    SI_QX(SystemKernelDebuggerInformationEx),
+#endif
 };
 
 C_ASSERT(SystemBasicInformation == 0);
@@ -2958,9 +3054,15 @@ NtQuerySystemInformation(
 
         if (PreviousMode != KernelMode)
         {
-            /* SystemKernelDebuggerInformation needs only BOOLEAN alignment */
-            if (SystemInformationClass == SystemKernelDebuggerInformation)
+            /* SystemKernelDebuggerInformation(Ex) needs only BOOLEAN alignment */
+            if (SystemInformationClass == SystemKernelDebuggerInformation
+#if (NTDDI_VERSION >= NTDDI_WINBLUE)
+             || SystemInformationClass == SystemKernelDebuggerInformationEx
+#endif
+                )
+            {
                 Alignment = TYPE_ALIGNMENT(BOOLEAN);
+            }
 
             ProbeForWrite(SystemInformation, SystemInformationLength, Alignment);
             if (ReturnLength != NULL)

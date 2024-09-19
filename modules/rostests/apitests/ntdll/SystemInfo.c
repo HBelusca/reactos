@@ -323,6 +323,54 @@ Test_KernelDebugger(void)
     ok(Status == STATUS_INVALID_INFO_CLASS, "NtSetSystemInformation returned %lx\n", Status);
 }
 
+static
+void
+Test_KernelDebuggerEx(void)
+{
+    NTSTATUS Status;
+    ULONG ReturnLength;
+    ULONG Buffer[2];
+    PSYSTEM_KERNEL_DEBUGGER_INFORMATION_EX DebuggerInfo = (PVOID)Buffer;
+
+    /* Query */
+    ReturnLength = 0x55555555;
+    Status = NtQuerySystemInformation(SystemKernelDebuggerInformationEx, NULL, 0, &ReturnLength);
+    ok(Status == STATUS_INFO_LENGTH_MISMATCH, "NtQuerySystemInformation returned %lx\n", Status);
+    ok(ReturnLength == sizeof(SYSTEM_KERNEL_DEBUGGER_INFORMATION_EX), "ReturnLength = %lu\n", ReturnLength);
+
+    ReturnLength = 0x55555555;
+    RtlFillMemory(Buffer, sizeof(Buffer), 0x55);
+    Status = NtQuerySystemInformation(SystemKernelDebuggerInformationEx, DebuggerInfo, sizeof(SYSTEM_KERNEL_DEBUGGER_INFORMATION_EX) - 1, &ReturnLength);
+    ok(Status == STATUS_INFO_LENGTH_MISMATCH, "NtQuerySystemInformation returned %lx\n", Status);
+    ok(ReturnLength == sizeof(SYSTEM_KERNEL_DEBUGGER_INFORMATION_EX), "ReturnLength = %lu\n", ReturnLength);
+    ok(Buffer[0] == 0x55555555, "Buffer[0] = %lx\n", Buffer[0]);
+    ok(Buffer[1] == 0x55555555, "Buffer[1] = %lx\n", Buffer[1]);
+
+    ReturnLength = 0x55555555;
+    RtlFillMemory(Buffer, sizeof(Buffer), 0x55);
+    Status = NtQuerySystemInformation(SystemKernelDebuggerInformationEx, (PUCHAR)DebuggerInfo + 1, sizeof(SYSTEM_KERNEL_DEBUGGER_INFORMATION_EX), &ReturnLength);
+    ok(Status == STATUS_SUCCESS, "NtQuerySystemInformation returned %lx\n", Status);
+    ok(ReturnLength == sizeof(SYSTEM_KERNEL_DEBUGGER_INFORMATION_EX), "ReturnLength = %lu\n", ReturnLength);
+    ok((Buffer[0] & 0x55fefe55) == 0x55000055, "Buffer[0] = %lx\n", Buffer[0]);
+    ok(Buffer[1] == 0x55555555, "Buffer[1] = %lx\n", Buffer[1]);
+
+    ReturnLength = 0x55555555;
+    RtlFillMemory(Buffer, sizeof(Buffer), 0x55);
+    Status = NtQuerySystemInformation(SystemKernelDebuggerInformationEx, DebuggerInfo, sizeof(SYSTEM_KERNEL_DEBUGGER_INFORMATION_EX), &ReturnLength);
+    ok(Status == STATUS_SUCCESS, "NtQuerySystemInformation returned %lx\n", Status);
+    ok(ReturnLength == sizeof(SYSTEM_KERNEL_DEBUGGER_INFORMATION_EX), "ReturnLength = %lu\n", ReturnLength);
+    ok(DebuggerInfo->DebuggerEnabled == FALSE ||
+       DebuggerInfo->DebuggerEnabled == TRUE, "DebuggerEnabled = %u\n", DebuggerInfo->DebuggerEnabled);
+    ok(DebuggerInfo->DebuggerNotPresent == FALSE ||
+       DebuggerInfo->DebuggerNotPresent == TRUE, "DebuggerNotPresent = %u\n", DebuggerInfo->DebuggerNotPresent);
+
+    /* Set - not supported */
+    DebuggerInfo->DebuggerEnabled = FALSE;
+    DebuggerInfo->DebuggerNotPresent = TRUE;
+    Status = NtSetSystemInformation(SystemKernelDebuggerInformationEx, DebuggerInfo, sizeof(SYSTEM_KERNEL_DEBUGGER_INFORMATION_EX));
+    ok(Status == STATUS_INVALID_INFO_CLASS, "NtSetSystemInformation returned %lx\n", Status);
+}
+
 START_TEST(NtSystemInformation)
 {
     NTSTATUS Status;
@@ -364,4 +412,5 @@ START_TEST(NtSystemInformation)
     Test_Flags();
     Test_TimeAdjustment();
     Test_KernelDebugger();
+    Test_KernelDebuggerEx();
 }
