@@ -689,7 +689,7 @@ FsRegisterDevice(
     pNewEntry->DeviceName = (PSTR)(pNewEntry + 1);
     RtlCopyMemory(pNewEntry->DeviceName, DeviceName, Length);
 
-    InsertHeadList(&DeviceListHead, &pNewEntry->ListEntry);
+    InsertTailList(&DeviceListHead, &pNewEntry->ListEntry);
 }
 
 PCWSTR FsGetServiceName(ULONG FileId)
