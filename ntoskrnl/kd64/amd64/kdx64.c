@@ -100,7 +100,7 @@ KdpSysReadMsr(
     /* Use SEH to protect from invalid MSRs */
     _SEH2_TRY
     {
-        MsrValue->QuadPart = __readmsr(Msr);
+        *MsrValue = __readmsr(Msr);
     }
     _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
     {
@@ -120,7 +120,7 @@ KdpSysWriteMsr(
     /* Use SEH to protect from invalid MSRs */
     _SEH2_TRY
     {
-        __writemsr(Msr, MsrValue->QuadPart);
+        __writemsr(Msr, *MsrValue);
     }
     _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
     {
