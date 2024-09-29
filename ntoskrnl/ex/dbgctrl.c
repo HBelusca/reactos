@@ -214,207 +214,219 @@ NtSystemDebugControl(
     _In_ ULONG OutputBufferLength,
     _Out_opt_ PULONG ReturnLength)
 {
-    KPROCESSOR_MODE PreviousMode = KeGetPreviousMode();
-    ULONG Length = 0;
     NTSTATUS Status;
+    KPROCESSOR_MODE PreviousMode = KeGetPreviousMode(); // ExGetPreviousMode();
+    ULONG Length = 0;
 
     /* Debugger controlling requires the debug privilege */
     if (!SeSinglePrivilegeCheck(SeDebugPrivilege, PreviousMode))
         return STATUS_ACCESS_DENIED;
 
-    _SEH2_TRY
+    /* Live dumping is allowed even if kernel debugging is disabled or absent.
+     * Otherwise, check whether the kernel debugger is present and fail if not. */
+    if ((Command != SysDbgGetTriageDump)
+#if (NTDDI_VERSION >= NTDDI_WINBLUE) // NTDDI_WIN81
+        && (Command != SysDbgGetLiveKernelDump)
+#endif
+       )
     {
-        if (PreviousMode != KernelMode)
+        if (KdDebuggerNotPresent || KdPitchDebugger)
+            return STATUS_DEBUGGER_INACTIVE;
+    }
+
+    /* Probe the parameters if we are called from user-mode */
+    if (PreviousMode != KernelMode)
+    {
+        _SEH2_TRY
         {
-            if (InputBufferLength)
+            if (InputBufferLength != 0)
                 ProbeForRead(InputBuffer, InputBufferLength, sizeof(ULONG));
-            if (OutputBufferLength)
+            if (OutputBufferLength != 0)
                 ProbeForWrite(OutputBuffer, OutputBufferLength, sizeof(ULONG));
             if (ReturnLength)
-                ProbeForWriteUlong(ReturnLength);
+                ProbeForWriteUlong(ReturnLength, sizeof(*ReturnLength), sizeof(ULONG));
         }
-
-        switch (Command)
+        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
         {
-            case SysDbgQueryModuleInformation:
-                /* Removed in WinNT4 */
-                Status = STATUS_INVALID_INFO_CLASS;
-                break;
+            _SEH2_YIELD(return _SEH2_GetExceptionCode());
+        }
+        _SEH2_END;
+    }
 
+    /* Default to returning success */
+    Status = STATUS_SUCCESS;
+
+    /* Protect all cases with SEH */
+    _SEH2_TRY
+    {
+    switch (Command)
+    {
+        /* Commands 0-5 */
+        case SysDbgQueryModuleInformation:
+            /* Removed in WinNT4 */
+            _SEH2_YIELD(return STATUS_INVALID_INFO_CLASS);
 #ifdef _M_IX86
-            case SysDbgQueryTraceInformation:
-            case SysDbgSetTracepoint:
-            case SysDbgSetSpecialCall:
-            case SysDbgClearSpecialCalls:
-            case SysDbgQuerySpecialCalls:
-                UNIMPLEMENTED;
-                Status = STATUS_NOT_IMPLEMENTED;
-                break;
+        case SysDbgQueryTraceInformation:
+        case SysDbgSetTracepoint:
+        case SysDbgSetSpecialCall:
+        case SysDbgClearSpecialCalls:
+        case SysDbgQuerySpecialCalls:
+            UNIMPLEMENTED;
+            _SEH2_YIELD(return STATUS_NOT_IMPLEMENTED);
 #endif
 
-            case SysDbgQueryVersion:
-            case SysDbgReadVirtual:
-            case SysDbgWriteVirtual:
-            case SysDbgReadPhysical:
-            case SysDbgWritePhysical:
-            case SysDbgReadControlSpace:
-            case SysDbgWriteControlSpace:
-            case SysDbgReadIoSpace:
-            case SysDbgWriteIoSpace:
-            case SysDbgReadMsr:
-            case SysDbgWriteMsr:
-            case SysDbgReadBusData:
-            case SysDbgWriteBusData:
-            case SysDbgCheckLowMemory:
-                /* Those are implemented in KdSystemDebugControl */
-                if (InitIsWinPEMode)
-                {
-                    Status = KdSystemDebugControl(Command,
-                                                  InputBuffer, InputBufferLength,
-                                                  OutputBuffer, OutputBufferLength,
-                                                  &Length, PreviousMode);
-                }
-                else
-                {
-                    Status = STATUS_NOT_IMPLEMENTED;
-                }
+        /* Command 6 */
+        case SysDbgBreakPoint:
+            if (KdDebuggerEnabled)
+            {
+                DbgBreakPointWithStatus(DBG_STATUS_DEBUG_CONTROL);
+                Status = STATUS_SUCCESS;
+            }
+            else
+            {
+                Status = STATUS_UNSUCCESSFUL;
+            }
+            break;
+
+        /* Commands 7-20 - Implemented by KdSystemDebugControl() instead */
+        case SysDbgQueryVersion:
+        case SysDbgReadVirtual:
+        case SysDbgWriteVirtual:
+        case SysDbgReadPhysical:
+        case SysDbgWritePhysical:
+        case SysDbgReadControlSpace:
+        case SysDbgWriteControlSpace:
+        case SysDbgReadIoSpace:
+        case SysDbgWriteIoSpace:
+        case SysDbgReadMsr:
+        case SysDbgWriteMsr:
+        case SysDbgReadBusData:
+        case SysDbgWriteBusData:
+        case SysDbgCheckLowMemory:
+            /* Those are implemented in KdSystemDebugControl */
+            if (InitIsWinPEMode)
+            {
+                Status = KdSystemDebugControl(Command,
+                                              InputBuffer, InputBufferLength,
+                                              OutputBuffer, OutputBufferLength,
+                                              &Length, PreviousMode);
                 break;
+            }
+            _SEH2_YIELD(return STATUS_NOT_IMPLEMENTED);
 
-            case SysDbgBreakPoint:
-                if (KdDebuggerEnabled)
-                {
-                    DbgBreakPointWithStatus(DBG_STATUS_DEBUG_CONTROL);
-                    Status = STATUS_SUCCESS;
-                }
-                else
-                {
-                    Status = STATUS_UNSUCCESSFUL;
-                }
-                break;
+        /* Commands 21-28 */
+        case SysDbgEnableKernelDebugger:
+            Status = KdEnableDebugger();
+            break;
 
-            case SysDbgEnableKernelDebugger:
-                Status = KdEnableDebugger();
-                break;
+        case SysDbgDisableKernelDebugger:
+            Status = KdDisableDebugger();
+            break;
 
-            case SysDbgDisableKernelDebugger:
-                Status = KdDisableDebugger();
-                break;
+        case SysDbgGetAutoKdEnable:
+            if (OutputBufferLength != sizeof(BOOLEAN))
+                _SEH2_YIELD(return STATUS_INFO_LENGTH_MISMATCH);
+            *(PBOOLEAN)OutputBuffer = KdAutoEnableOnEvent;
+            break;
 
-            case SysDbgGetAutoKdEnable:
-                if (OutputBufferLength != sizeof(BOOLEAN))
-                {
-                    Status = STATUS_INFO_LENGTH_MISMATCH;
-                }
-                else
-                {
-                    *(PBOOLEAN)OutputBuffer = KdAutoEnableOnEvent;
-                    Status = STATUS_SUCCESS;
-                }
-                break;
+        case SysDbgSetAutoKdEnable:
+            if (InputBufferLength != sizeof(BOOLEAN))
+                _SEH2_YIELD(return STATUS_INFO_LENGTH_MISMATCH);
+            if (KdPitchDebugger)
+                Status = STATUS_ACCESS_DENIED;
+            else
+                KdAutoEnableOnEvent = !!*(PBOOLEAN)InputBuffer;
+            break;
 
-            case SysDbgSetAutoKdEnable:
-                if (InputBufferLength != sizeof(BOOLEAN))
-                {
-                    Status = STATUS_INFO_LENGTH_MISMATCH;
-                }
-                else if (KdPitchDebugger)
-                {
-                    Status = STATUS_ACCESS_DENIED;
-                }
-                else
-                {
-                    KdAutoEnableOnEvent = *(PBOOLEAN)InputBuffer;
-                    Status = STATUS_SUCCESS;
-                }
-                break;
+        case SysDbgGetPrintBufferSize:
+            if (OutputBufferLength != sizeof(ULONG))
+                _SEH2_YIELD(return STATUS_INFO_LENGTH_MISMATCH);
+            /* Return buffer size only if KD is enabled */
+            *(PULONG)OutputBuffer = KdPitchDebugger ? 0 : KdPrintBufferSize;
+            break;
 
-            case SysDbgGetPrintBufferSize:
-                if (OutputBufferLength != sizeof(ULONG))
-                {
-                    Status = STATUS_INFO_LENGTH_MISMATCH;
-                }
-                else
-                {
-                    /* Return buffer size only if KD is enabled */
-                    *(PULONG)OutputBuffer = KdPitchDebugger ? 0 : KdPrintBufferSize;
-                    Status = STATUS_SUCCESS;
-                }
-                break;
+        case SysDbgSetPrintBufferSize:
+            UNIMPLEMENTED;
+            _SEH2_YIELD(return STATUS_NOT_IMPLEMENTED);
 
-            case SysDbgSetPrintBufferSize:
-                UNIMPLEMENTED;
-                Status = STATUS_NOT_IMPLEMENTED;
-                break;
+        case SysDbgGetKdUmExceptionEnable:
+            if (OutputBufferLength != sizeof(BOOLEAN))
+                _SEH2_YIELD(return STATUS_INFO_LENGTH_MISMATCH);
+            /* Unfortunately, the internal flag tells if UM exceptions are disabled */
+            *(PBOOLEAN)OutputBuffer = !KdIgnoreUmExceptions;
+            break;
 
-            case SysDbgGetKdUmExceptionEnable:
-                if (OutputBufferLength != sizeof(BOOLEAN))
-                {
-                    Status = STATUS_INFO_LENGTH_MISMATCH;
-                }
-                else
-                {
-                    /* Unfortunately, the internal flag says if UM exceptions are disabled */
-                    *(PBOOLEAN)OutputBuffer = !KdIgnoreUmExceptions;
-                    Status = STATUS_SUCCESS;
-                }
-                break;
+        case SysDbgSetKdUmExceptionEnable:
+            if (InputBufferLength != sizeof(BOOLEAN))
+                _SEH2_YIELD(return STATUS_INFO_LENGTH_MISMATCH);
+            if (KdPitchDebugger)
+            {
+                Status = STATUS_ACCESS_DENIED;
+            }
+            else
+            {
+                /* Unfortunately, the internal flag tells if UM exceptions are disabled */
+                KdIgnoreUmExceptions = !*(PBOOLEAN)InputBuffer;
+            }
+            break;
 
-            case SysDbgSetKdUmExceptionEnable:
-                if (InputBufferLength != sizeof(BOOLEAN))
-                {
-                    Status = STATUS_INFO_LENGTH_MISMATCH;
-                }
-                else if (KdPitchDebugger)
-                {
-                    Status = STATUS_ACCESS_DENIED;
-                }
-                else
-                {
-                    /* Unfortunately, the internal flag says if UM exceptions are disabled */
-                    KdIgnoreUmExceptions = !*(PBOOLEAN)InputBuffer;
-                    Status = STATUS_SUCCESS;
-                }
-                break;
+        /* Command 29 */
+        case SysDbgGetTriageDump:
+        // This is implemented in Vista+.
+            UNIMPLEMENTED;
+            // DbgPrint("%s: Command %d is unimplemented!\n", __FUNCTION__, Command);
+            _SEH2_YIELD(return STATUS_NOT_IMPLEMENTED);
 
-            case SysDbgGetTriageDump:
-                UNIMPLEMENTED;
-                Status = STATUS_NOT_IMPLEMENTED;
-                break;
+        /* Commands 30-31 */
+        case SysDbgGetKdBlockEnable:
+            if (OutputBufferLength != sizeof(BOOLEAN))
+                _SEH2_YIELD(return STATUS_INFO_LENGTH_MISMATCH);
+            *(PBOOLEAN)OutputBuffer = KdBlockEnable;
+            break;
 
-            case SysDbgGetKdBlockEnable:
-                if (OutputBufferLength != sizeof(BOOLEAN))
-                {
-                    Status = STATUS_INFO_LENGTH_MISMATCH;
-                }
-                else
-                {
-                    *(PBOOLEAN)OutputBuffer = KdBlockEnable;
-                    Status = STATUS_SUCCESS;
-                }
-                break;
+        case SysDbgSetKdBlockEnable:
+            // if (InputBufferLength != sizeof(BOOLEAN))
+            //     _SEH2_YIELD(return STATUS_INFO_LENGTH_MISMATCH);
+            Status = KdChangeOption(KD_OPTION_SET_BLOCK_ENABLE,
+                                    InputBufferLength,
+                                    InputBuffer,
+                                    OutputBufferLength,
+                                    OutputBuffer,
+                                    &Length);
+            break;
 
-            case SysDbgSetKdBlockEnable:
-                Status = KdChangeOption(KD_OPTION_SET_BLOCK_ENABLE,
-                                        InputBufferLength,
-                                        InputBuffer,
-                                        OutputBufferLength,
-                                        OutputBuffer,
-                                        &Length);
-                break;
+        /* Commands 32-3x */
+#if (NTDDI_VERSION >= NTDDI_VISTA)
+        case SysDbgRegisterForUmBreakInfo:
+        case SysDbgGetUmBreakPid:
+        case SysDbgClearUmBreakPid:
+        case SysDbgGetUmAttachPid:
+        case SysDbgClearUmAttachPid:
+#if (NTDDI_VERSION >= NTDDI_WINBLUE) // NTDDI_WIN81
+        case SysDbgGetLiveKernelDump:
+#endif
+#if (NTDDI_VERSION >= NTDDI_WIN10_VB)
+        case SysDbgKdPullRemoteFile:
+#endif
+            DbgPrint("%s: Command %d is unimplemented!\n", __FUNCTION__, Command);
+            _SEH2_YIELD(return STATUS_NOT_IMPLEMENTED);
+#endif // (NTDDI_VERSION >= NTDDI_VISTA)
 
-            default:
-                Status = STATUS_INVALID_INFO_CLASS;
-                break;
-        }
+        default:
+            Status = STATUS_INVALID_INFO_CLASS;
+            break;
+    }
 
-        if (ReturnLength)
-            *ReturnLength = Length;
-
-        _SEH2_YIELD(return Status);
+    /* Return the actual data length written in the output buffer, if requested */
+    // NOTE: A non-zero length is returned only for the dump commands.
+    if (ReturnLength)
+        *ReturnLength = Length;
     }
     _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
     {
         _SEH2_YIELD(return _SEH2_GetExceptionCode());
     }
     _SEH2_END;
+
+    return Status;
 }

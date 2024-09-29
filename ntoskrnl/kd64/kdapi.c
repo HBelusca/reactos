@@ -2226,6 +2226,10 @@ KdSystemDebugControl(
     NTSTATUS Status;
     ULONG Length = 0;
 
+    /* Check whether the kernel debugger is present and fail if not */
+    if (KdDebuggerNotPresent || KdPitchDebugger)
+        return STATUS_DEBUGGER_INACTIVE;
+
     /* Handle some internal commands */
     switch ((ULONG)Command)
     {
@@ -2284,305 +2288,286 @@ KdSystemDebugControl(
             return KdbRegisterCliCallback(InputBuffer, InputBufferLength);
         }
 #endif // KDBG
-#endif
+#endif // DBG
+
         default:
             break;
     }
 
+// Cases 7 to 20 done here...
     switch (Command)
     {
         case SysDbgQueryVersion:
+        {
             if (OutputBufferLength != sizeof(DBGKD_GET_VERSION64))
-            {
-                Status = STATUS_INFO_LENGTH_MISMATCH;
-            }
-            else
-            {
-                KdpSysGetVersion((PDBGKD_GET_VERSION64)OutputBuffer);
-                Status = STATUS_SUCCESS;
-            }
-            break;
+                return STATUS_INFO_LENGTH_MISMATCH;
+
+            KdpSysGetVersion((PDBGKD_GET_VERSION64)OutputBuffer);
+            return STATUS_SUCCESS;
+        }
 
         case SysDbgReadVirtual:
+            // OutputBuffer, OutputBufferLength;
         case SysDbgWriteVirtual:
-            if (InputBufferLength != sizeof(SYSDBG_VIRTUAL))
-            {
-                Status = STATUS_INFO_LENGTH_MISMATCH;
-            }
-            else
-            {
-                SYSDBG_VIRTUAL Request = *(PSYSDBG_VIRTUAL)InputBuffer;
-                PVOID LockedBuffer;
-                PMDL LockVariable;
+        {
+            PSYSDBG_VIRTUAL Request = (PSYSDBG_VIRTUAL)InputBuffer;
+            PVOID LockedBuffer;
+            PMDL LockVariable;
 
-                Status = ExLockUserBuffer(Request.Buffer,
-                                          Request.Request,
-                                          PreviousMode,
-                                          Command == SysDbgReadVirtual ? IoWriteAccess : IoReadAccess,
-                                          &LockedBuffer,
-                                          &LockVariable);
-                if (NT_SUCCESS(Status))
-                {
-                    Status = KdpCopyMemoryChunks((ULONG64)(ULONG_PTR)Request.Address,
-                                                 Request.Buffer,
-                                                 Request.Request,
-                                                 0,
-                                                 Command == SysDbgReadVirtual ? 0 : MMDBG_COPY_WRITE,
-                                                 &Length);
-                    ExUnlockUserBuffer(LockVariable);
-                }
+            if (InputBufferLength != sizeof(SYSDBG_VIRTUAL))
+                return STATUS_INFO_LENGTH_MISMATCH;
+
+            Status = ExLockUserBuffer(Request->Buffer,
+                                      Request->Request,
+                                      PreviousMode,
+                                      Command == SysDbgReadVirtual ? IoWriteAccess : IoReadAccess,
+                                      &LockedBuffer,
+                                      &LockVariable);
+            if (NT_SUCCESS(Status))
+            {
+                Status = KdpCopyMemoryChunks((ULONG64)(ULONG_PTR)Request->Address,
+                                             Request->Buffer,
+                                             Request->Request,
+                                             0,
+                                             Command == SysDbgReadVirtual ? 0 : MMDBG_COPY_WRITE,
+                                             &Length);
+                ExUnlockUserBuffer(LockVariable);
             }
             break;
+        }
 
         case SysDbgReadPhysical:
+            // OutputBuffer, OutputBufferLength;
         case SysDbgWritePhysical:
-            if (InputBufferLength != sizeof(SYSDBG_PHYSICAL))
-            {
-                Status = STATUS_INFO_LENGTH_MISMATCH;
-            }
-            else
-            {
-                SYSDBG_PHYSICAL Request = *(PSYSDBG_PHYSICAL)InputBuffer;
-                PVOID LockedBuffer;
-                PMDL LockVariable;
+        {
+            PSYSDBG_PHYSICAL Request = (PSYSDBG_PHYSICAL)InputBuffer;
+            PVOID LockedBuffer;
+            PMDL LockVariable;
 
-                Status = ExLockUserBuffer(Request.Buffer,
-                                          Request.Request,
-                                          PreviousMode,
-                                          Command == SysDbgReadVirtual ? IoWriteAccess : IoReadAccess,
-                                          &LockedBuffer,
-                                          &LockVariable);
-                if (NT_SUCCESS(Status))
-                {
-                    Status = KdpCopyMemoryChunks(Request.Address.QuadPart,
-                                                 Request.Buffer,
-                                                 Request.Request,
-                                                 0,
-                                                 MMDBG_COPY_PHYSICAL | (Command == SysDbgReadVirtual ? 0 : MMDBG_COPY_WRITE),
-                                                 &Length);
-                    ExUnlockUserBuffer(LockVariable);
-                }
+            if (InputBufferLength != sizeof(SYSDBG_PHYSICAL))
+                return STATUS_INFO_LENGTH_MISMATCH;
+
+            Status = ExLockUserBuffer(Request->Buffer,
+                                      Request->Request,
+                                      PreviousMode,
+                                      Command == SysDbgReadVirtual ? IoWriteAccess : IoReadAccess,
+                                      &LockedBuffer,
+                                      &LockVariable);
+            if (NT_SUCCESS(Status))
+            {
+                Status = KdpCopyMemoryChunks(Request->Address.QuadPart,
+                                             Request->Buffer,
+                                             Request->Request,
+                                             0,
+                                             MMDBG_COPY_PHYSICAL | (Command == SysDbgReadVirtual ? 0 : MMDBG_COPY_WRITE),
+                                             &Length);
+                ExUnlockUserBuffer(LockVariable);
             }
             break;
+        }
 
         case SysDbgReadControlSpace:
-            if (InputBufferLength != sizeof(SYSDBG_CONTROL_SPACE))
-            {
-                Status = STATUS_INFO_LENGTH_MISMATCH;
-            }
-            else
-            {
-                SYSDBG_CONTROL_SPACE Request = *(PSYSDBG_CONTROL_SPACE)InputBuffer;
-                PVOID LockedBuffer;
-                PMDL LockVariable;
+        {
+            // OutputBuffer, OutputBufferLength;
+            PSYSDBG_CONTROL_SPACE /*ReadMemory*/ Request = (PSYSDBG_CONTROL_SPACE)InputBuffer;
+            PVOID LockedBuffer;
+            PMDL LockVariable;
 
-                Status = ExLockUserBuffer(Request.Buffer,
-                                          Request.Request,
-                                          PreviousMode,
-                                          IoWriteAccess,
-                                          &LockedBuffer,
-                                          &LockVariable);
-                if (NT_SUCCESS(Status))
-                {
-                    Status = KdpSysReadControlSpace(Request.Processor,
-                                                    Request.Address,
-                                                    LockedBuffer,
-                                                    Request.Request,
-                                                    &Length);
-                    ExUnlockUserBuffer(LockVariable);
-                }
+            if (InputBufferLength != sizeof(SYSDBG_CONTROL_SPACE))
+                return STATUS_INFO_LENGTH_MISMATCH;
+
+            Status = ExLockUserBuffer(Request->Buffer,
+                                      Request->Request,
+                                      PreviousMode,
+                                      IoWriteAccess,
+                                      &LockedBuffer,
+                                      &LockVariable);
+            if (NT_SUCCESS(Status))
+            {
+                Status = KdpSysReadControlSpace(Request->Processor,
+                                                Request->Address,
+                                                LockedBuffer,
+                                                Request->Request,
+                                                &Length);
+                ExUnlockUserBuffer(LockVariable);
             }
             break;
+        }
 
         case SysDbgWriteControlSpace:
-            if (InputBufferLength != sizeof(SYSDBG_CONTROL_SPACE))
-            {
-                Status = STATUS_INFO_LENGTH_MISMATCH;
-            }
-            else
-            {
-                SYSDBG_CONTROL_SPACE Request = *(PSYSDBG_CONTROL_SPACE)InputBuffer;
-                PVOID LockedBuffer;
-                PMDL LockVariable;
+        {
+            PSYSDBG_CONTROL_SPACE /*WriteMemory*/ Request = (PSYSDBG_CONTROL_SPACE)InputBuffer;
+            PVOID LockedBuffer;
+            PMDL LockVariable;
 
-                Status = ExLockUserBuffer(Request.Buffer,
-                                          Request.Request,
-                                          PreviousMode,
-                                          IoReadAccess,
-                                          &LockedBuffer,
-                                          &LockVariable);
-                if (NT_SUCCESS(Status))
-                {
-                    Status = KdpSysWriteControlSpace(Request.Processor,
-                                                     Request.Address,
-                                                     LockedBuffer,
-                                                     Request.Request,
-                                                     &Length);
-                    ExUnlockUserBuffer(LockVariable);
-                }
+            if (InputBufferLength != sizeof(SYSDBG_CONTROL_SPACE))
+                return STATUS_INFO_LENGTH_MISMATCH;
+
+            Status = ExLockUserBuffer(Request->Buffer,
+                                      Request->Request,
+                                      PreviousMode,
+                                      IoReadAccess,
+                                      &LockedBuffer,
+                                      &LockVariable);
+            if (NT_SUCCESS(Status))
+            {
+                Status = KdpSysWriteControlSpace(Request->Processor,
+                                                 Request->Address,
+                                                 LockedBuffer,
+                                                 Request->Request,
+                                                 &Length);
+                ExUnlockUserBuffer(LockVariable);
             }
             break;
+        }
 
         case SysDbgReadIoSpace:
-            if (InputBufferLength != sizeof(SYSDBG_IO_SPACE))
-            {
-                Status = STATUS_INFO_LENGTH_MISMATCH;
-            }
-            else
-            {
-                SYSDBG_IO_SPACE Request = *(PSYSDBG_IO_SPACE)InputBuffer;
-                PVOID LockedBuffer;
-                PMDL LockVariable;
+        {
+            // OutputBuffer, OutputBufferLength;
+            PSYSDBG_IO_SPACE /*IoSpace*/ Request = (PSYSDBG_IO_SPACE)InputBuffer;
+            PVOID LockedBuffer;
+            PMDL LockVariable;
 
-                Status = ExLockUserBuffer(Request.Buffer,
-                                          Request.Request,
-                                          PreviousMode,
-                                          IoWriteAccess,
-                                          &LockedBuffer,
-                                          &LockVariable);
-                if (NT_SUCCESS(Status))
-                {
-                    Status = KdpSysReadIoSpace(Request.InterfaceType,
-                                               Request.BusNumber,
-                                               Request.AddressSpace,
-                                               Request.Address,
-                                               LockedBuffer,
-                                               Request.Request,
-                                               &Length);
-                    ExUnlockUserBuffer(LockVariable);
-                }
+            if (InputBufferLength != sizeof(SYSDBG_IO_SPACE))
+                return STATUS_INFO_LENGTH_MISMATCH;
+
+            Status = ExLockUserBuffer(Request->Buffer,
+                                      Request->Request,
+                                      PreviousMode,
+                                      IoWriteAccess,
+                                      &LockedBuffer,
+                                      &LockVariable);
+            if (NT_SUCCESS(Status))
+            {
+                Status = KdpSysReadIoSpace(Request->InterfaceType,
+                                           Request->BusNumber,
+                                           Request->AddressSpace,
+                                           Request->Address, // IoAddress
+                                           LockedBuffer,
+                                           Request->Request,
+                                           &Length);
+                ExUnlockUserBuffer(LockVariable);
             }
             break;
+        }
 
         case SysDbgWriteIoSpace:
-            if (InputBufferLength != sizeof(SYSDBG_IO_SPACE))
-            {
-                Status = STATUS_INFO_LENGTH_MISMATCH;
-            }
-            else
-            {
-                SYSDBG_IO_SPACE Request = *(PSYSDBG_IO_SPACE)InputBuffer;
-                PVOID LockedBuffer;
-                PMDL LockVariable;
+        {
+            PSYSDBG_IO_SPACE /*IoSpace*/ Request = (PSYSDBG_IO_SPACE)InputBuffer;
+            PVOID LockedBuffer;
+            PMDL LockVariable;
 
-                Status = ExLockUserBuffer(Request.Buffer,
-                                          Request.Request,
-                                          PreviousMode,
-                                          IoReadAccess,
-                                          &LockedBuffer,
-                                          &LockVariable);
-                if (NT_SUCCESS(Status))
-                {
-                    Status = KdpSysWriteIoSpace(Request.InterfaceType,
-                                                Request.BusNumber,
-                                                Request.AddressSpace,
-                                                Request.Address,
-                                                LockedBuffer,
-                                                Request.Request,
-                                                &Length);
-                    ExUnlockUserBuffer(LockVariable);
-                }
+            if (InputBufferLength != sizeof(SYSDBG_IO_SPACE))
+                return STATUS_INFO_LENGTH_MISMATCH;
+
+            Status = ExLockUserBuffer(Request->Buffer,
+                                      Request->Request,
+                                      PreviousMode,
+                                      IoReadAccess,
+                                      &LockedBuffer,
+                                      &LockVariable);
+            if (NT_SUCCESS(Status))
+            {
+                Status = KdpSysWriteIoSpace(Request->InterfaceType,
+                                            Request->BusNumber,
+                                            Request->AddressSpace,
+                                            Request->Address, // IoAddress
+                                            LockedBuffer,
+                                            Request->Request,
+                                            &Length);
+                ExUnlockUserBuffer(LockVariable);
             }
             break;
+        }
 
         case SysDbgReadMsr:
+        {
+            // OutputBuffer, OutputBufferLength;
+            PSYSDBG_MSR /*ReadMsr*/ Request = (PSYSDBG_MSR)InputBuffer;
+
             if (InputBufferLength != sizeof(SYSDBG_MSR))
-            {
-                Status = STATUS_INFO_LENGTH_MISMATCH;
-            }
-            else
-            {
-                PSYSDBG_MSR Request = (PSYSDBG_MSR)InputBuffer;
-                Status = KdpSysReadMsr(Request->Address, &Request->Data);
-            }
-            break;
+                return STATUS_INFO_LENGTH_MISMATCH;
+            return KdpSysReadMsr(Request->Address, &Request->Data);
+        }
 
         case SysDbgWriteMsr:
+        {
+            PSYSDBG_MSR /*WriteMsr*/ Request = (PSYSDBG_MSR)InputBuffer;
+
             if (InputBufferLength != sizeof(SYSDBG_MSR))
-            {
-                Status = STATUS_INFO_LENGTH_MISMATCH;
-            }
-            else
-            {
-                PSYSDBG_MSR Request = (PSYSDBG_MSR)InputBuffer;
-                Status = KdpSysWriteMsr(Request->Address, &Request->Data);
-            }
-            break;
+                return STATUS_INFO_LENGTH_MISMATCH;
+            return KdpSysWriteMsr(Request->Address, &Request->Data);
+        }
 
         case SysDbgReadBusData:
-            if (InputBufferLength != sizeof(SYSDBG_BUS_DATA))
-            {
-                Status = STATUS_INFO_LENGTH_MISMATCH;
-            }
-            else
-            {
-                SYSDBG_BUS_DATA Request = *(PSYSDBG_BUS_DATA)InputBuffer;
-                PVOID LockedBuffer;
-                PMDL LockVariable;
+        {
+            // OutputBuffer, OutputBufferLength;
+            PSYSDBG_BUS_DATA /*BusData*/ Request = (PSYSDBG_BUS_DATA)InputBuffer;
+            PVOID LockedBuffer;
+            PMDL LockVariable;
 
-                Status = ExLockUserBuffer(Request.Buffer,
-                                          Request.Request,
-                                          PreviousMode,
-                                          IoWriteAccess,
-                                          &LockedBuffer,
-                                          &LockVariable);
-                if (NT_SUCCESS(Status))
-                {
-                    Status = KdpSysReadBusData(Request.BusDataType,
-                                               Request.BusNumber,
-                                               Request.SlotNumber,
-                                               Request.Address,
-                                               LockedBuffer,
-                                               Request.Request,
-                                               &Length);
-                    ExUnlockUserBuffer(LockVariable);
-                }
+            if (InputBufferLength != sizeof(SYSDBG_BUS_DATA))
+                return STATUS_INFO_LENGTH_MISMATCH;
+
+            Status = ExLockUserBuffer(Request->Buffer,
+                                      Request->Request,
+                                      PreviousMode,
+                                      IoWriteAccess,
+                                      &LockedBuffer,
+                                      &LockVariable);
+            if (NT_SUCCESS(Status))
+            {
+                Status = KdpSysReadBusData(Request->BusDataType,
+                                           Request->BusNumber,
+                                           Request->SlotNumber,
+                                           Request->Address,
+                                           LockedBuffer,
+                                           Request->Request,
+                                           &Length);
+                ExUnlockUserBuffer(LockVariable);
             }
             break;
+        }
 
         case SysDbgWriteBusData:
-            if (InputBufferLength != sizeof(SYSDBG_BUS_DATA))
-            {
-                Status = STATUS_INFO_LENGTH_MISMATCH;
-            }
-            else
-            {
-                SYSDBG_BUS_DATA Request = *(PSYSDBG_BUS_DATA)InputBuffer;
-                PVOID LockedBuffer;
-                PMDL LockVariable;
+        {
+            PSYSDBG_BUS_DATA /*BusData*/ Request = (PSYSDBG_BUS_DATA)InputBuffer;
+            PVOID LockedBuffer;
+            PMDL LockVariable;
 
-                Status = ExLockUserBuffer(Request.Buffer,
-                                          Request.Request,
-                                          PreviousMode,
-                                          IoReadAccess,
-                                          &LockedBuffer,
-                                          &LockVariable);
-                if (NT_SUCCESS(Status))
-                {
-                    Status = KdpSysWriteBusData(Request.BusDataType,
-                                                Request.BusNumber,
-                                                Request.SlotNumber,
-                                                Request.Address,
-                                                LockedBuffer,
-                                                Request.Request,
-                                                &Length);
-                    ExUnlockUserBuffer(LockVariable);
-                }
+            if (InputBufferLength != sizeof(SYSDBG_BUS_DATA))
+                return STATUS_INFO_LENGTH_MISMATCH;
+
+            Status = ExLockUserBuffer(Request->Buffer,
+                                      Request->Request,
+                                      PreviousMode,
+                                      IoReadAccess,
+                                      &LockedBuffer,
+                                      &LockVariable);
+            if (NT_SUCCESS(Status))
+            {
+                Status = KdpSysWriteBusData(Request->BusDataType,
+                                            Request->BusNumber,
+                                            Request->SlotNumber,
+                                            Request->Address,
+                                            LockedBuffer,
+                                            Request->Request,
+                                            &Length);
+                ExUnlockUserBuffer(LockVariable);
             }
             break;
+        }
 
         case SysDbgCheckLowMemory:
-            Status = KdpSysCheckLowMemory(0);
-            break;
+            return KdpSysCheckLowMemory(0);
 
         default:
-            Status = STATUS_INVALID_INFO_CLASS;
-            break;
+            return STATUS_INVALID_INFO_CLASS;
     }
 
+    /* Return the actual length read or written */
     if (ReturnLength)
         *ReturnLength = Length;
-
     return Status;
 }
 
