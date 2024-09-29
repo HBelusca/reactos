@@ -1951,7 +1951,8 @@ KdExitDebugger(IN BOOLEAN Enable)
 {
     ULONG TimeSlip;
 
-    /* Restore the state and unlock the port */
+    /* Reset the debugger entered flag, restore the port state and unlock it */
+    KdEnteredDebugger = FALSE;
     KdRestore(FALSE);
     if (KdpPortLocked) KdpPortUnlock();
 
