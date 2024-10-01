@@ -37,9 +37,9 @@ list(APPEND ROSLOAD_SOURCE
 if(ARCH STREQUAL "i386")
 
     list(APPEND ROSLOAD_SOURCE
-        arch/i386/halstub.c
-        arch/i386/ntoskrnl.c
-        disk/scsiport.c
+        #arch/i386/halstub.c
+        #arch/i386/ntoskrnl.c
+        #disk/scsiport.c
         ntldr/arch/i386/winldr.c)
 
     list(APPEND ROSLOAD_ASM_SOURCE
@@ -69,11 +69,11 @@ endif()
 
 add_asm_files(rosload_asm ${ROSLOAD_ASM_SOURCE})
 
-add_executable(rosload
-    ${ROSLOAD_SOURCE}
-    ${rosload_asm}
-    ${CMAKE_CURRENT_BINARY_DIR}/rosload.def
-)
+# Must be included together with disk/scsiport.c
+list(APPEND ROSLOAD_SOURCE
+    ${CMAKE_CURRENT_BINARY_DIR}/rosload.def)
+
+add_executable(rosload ${ROSLOAD_SOURCE} ${rosload_asm})
 
 set_target_properties(rosload
     PROPERTIES
@@ -84,10 +84,8 @@ set_image_base(rosload 0x10000) # 0x200000
 set_subsystem(rosload native)
 set_entrypoint(rosload RunLoader)
 
+target_link_libraries(rosload mini_hal)
 target_link_libraries(rosload blcmlib blrtl libcntpr)
-if(ARCH STREQUAL "i386")
-    target_link_libraries(rosload mini_hal)
-endif()
 
 add_importlibs(rosload freeldr)
 

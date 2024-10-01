@@ -29,10 +29,12 @@ list(APPEND FREELDR_ARC_SOURCE
     arcname.c
     arch/arcemul.c
     arch/archwsup.c
+    arch/i386/halstub.c
+    arch/i386/ntoskrnl.c
     disk/disk.c
     disk/partition.c
-    disk/ramdisk.c)
-    # disk/scsiport.c
+    disk/ramdisk.c
+    disk/scsiport.c)
     # lib/fs/pxe.c
 
 list(APPEND FREELDR_BOOTLIB_SOURCE
@@ -83,8 +85,7 @@ elseif(ARCH STREQUAL "amd64")
         # arch/amd64/linux.S
 
     list(APPEND FREELDR_ARC_SOURCE
-        arch/i386/i386bug.c
-        arch/i386/ntoskrnl.c)
+        arch/i386/i386bug.c)
 
 elseif(ARCH STREQUAL "arm")
     #TBD
@@ -97,11 +98,9 @@ list(APPEND FREELDR_BASE_SOURCE
     ntldr/ntldropts.c # Is in rosload, but is currently needed by machpc.c and ramdisk.c
     lib/rtl/libsupp.c)
 
-if(ARCH STREQUAL "i386" OR ARCH STREQUAL "amd64")
-    # Must be included together with disk/scsiport.c
-    list(APPEND FREELDR_BASE_SOURCE
-        ${CMAKE_CURRENT_BINARY_DIR}/freeldr.def)
-endif()
+# Must be included together with disk/scsiport.c
+list(APPEND FREELDR_BASE_SOURCE
+    ${CMAKE_CURRENT_BINARY_DIR}/freeldr.def)
 
 include(pcat.cmake)
 include(rosload.cmake)

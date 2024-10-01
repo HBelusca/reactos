@@ -562,7 +562,12 @@ ScsiPortGetBusData(
     IN PVOID Buffer,
     IN ULONG Length)
 {
-    return HalGetBusDataByOffset(BusDataType, SystemIoBusNumber, SlotNumber, Buffer, 0, Length);
+    return HalGetBusDataByOffset(BusDataType,
+                                 SystemIoBusNumber,
+                                 SlotNumber,
+                                 Buffer,
+                                 0,
+                                 Length);
 }
 
 PVOID
@@ -805,7 +810,6 @@ ScsiPortGetUncachedExtension(
 
     /* Allocate a common DMA buffer */
     Status = SpiAllocateCommonBuffer(DeviceExtension, NumberOfBytes);
-
     if (!NT_SUCCESS(Status))
     {
         TRACE("SpiAllocateCommonBuffer() failed with Status = 0x%08X!\n", Status);
@@ -1075,13 +1079,12 @@ SpiGetPciConfigData(
             SlotNumber.u.bits.FunctionNumber = FunctionNumber;
 
             /* Get PCI config bytes */
-            DataSize = HalGetBusDataByOffset(
-                PCIConfiguration,
-                BusNumber,
-                SlotNumber.u.AsULONG,
-                &PciConfig,
-                0,
-                sizeof(ULONG));
+            DataSize = HalGetBusDataByOffset(PCIConfiguration,
+                                             BusNumber,
+                                             SlotNumber.u.AsULONG,
+                                             &PciConfig,
+                                             0,
+                                             sizeof(PciConfig));
 
             /* If result of HalGetBusData is 0, then the bus is wrong */
             if (DataSize == 0)
@@ -1115,7 +1118,6 @@ SpiGetPciConfigData(
                                             BusNumber,
                                             SlotNumber.u.AsULONG,
                                             &ResourceList);
-
             if (!NT_SUCCESS(Status))
                 break;
 
@@ -1235,7 +1237,7 @@ ScsiPortInitialize(
 
             if (!SpiGetPciConfigData(HwInitializationData,
                                      &PortConfig,
-                                     0, /* FIXME */
+                                     0, /* FIXME */ // PortConfig.SystemIoBusNumber
                                      &SlotNumber))
             {
                 /* Continue to the next bus, nothing here */
@@ -1378,7 +1380,7 @@ ScsiPortReadPortBufferUchar(
     OUT PUCHAR Buffer,
     IN ULONG Count)
 {
-    __inbytestring(H2I(Port), Buffer, Count);
+    READ_PORT_BUFFER_UCHAR(Port, Buffer, Count);
 }
 
 VOID
@@ -1388,7 +1390,7 @@ ScsiPortReadPortBufferUlong(
     OUT PULONG Buffer,
     IN ULONG Count)
 {
-    __indwordstring(H2I(Port), Buffer, Count);
+    READ_PORT_BUFFER_ULONG(Port, Buffer, Count);
 }
 
 VOID
@@ -1398,7 +1400,7 @@ ScsiPortReadPortBufferUshort(
     OUT PUSHORT Buffer,
     IN ULONG Count)
 {
-    __inwordstring(H2I(Port), Buffer, Count);
+    READ_PORT_BUFFER_USHORT(Port, Buffer, Count);
 }
 
 UCHAR
@@ -1406,8 +1408,6 @@ NTAPI
 ScsiPortReadPortUchar(
     IN PUCHAR Port)
 {
-    TRACE("ScsiPortReadPortUchar(%p)\n", Port);
-
     return READ_PORT_UCHAR(Port);
 }
 
@@ -1434,8 +1434,7 @@ ScsiPortReadRegisterBufferUchar(
     IN PUCHAR Buffer,
     IN ULONG Count)
 {
-    // FIXME
-    UNIMPLEMENTED;
+    READ_REGISTER_BUFFER_UCHAR(Register, Buffer, Count);
 }
 
 VOID
@@ -1445,8 +1444,7 @@ ScsiPortReadRegisterBufferUlong(
     IN PULONG Buffer,
     IN ULONG Count)
 {
-    // FIXME
-    UNIMPLEMENTED;
+    READ_REGISTER_BUFFER_ULONG(Register, Buffer, Count);
 }
 
 VOID
@@ -1456,8 +1454,7 @@ ScsiPortReadRegisterBufferUshort(
     IN PUSHORT Buffer,
     IN ULONG Count)
 {
-    // FIXME
-    UNIMPLEMENTED;
+    READ_REGISTER_BUFFER_USHORT(Register, Buffer, Count);
 }
 
 UCHAR
@@ -1495,9 +1492,12 @@ ScsiPortSetBusDataByOffset(
     IN ULONG Offset,
     IN ULONG Length)
 {
-    // FIXME
-    UNIMPLEMENTED;
-    return 0;
+    return HalSetBusDataByOffset(BusDataType,
+                                 SystemIoBusNumber,
+                                 SlotNumber,
+                                 Buffer,
+                                 Offset,
+                                 Length);
 }
 
 VOID
@@ -1523,10 +1523,6 @@ ScsiPortValidateRange(
     return TRUE;
 }
 
-#if 0
-// ScsiPortWmi*
-#endif
-
 
 VOID
 NTAPI
@@ -1535,7 +1531,7 @@ ScsiPortWritePortBufferUchar(
     IN PUCHAR Buffer,
     IN ULONG Count)
 {
-    __outbytestring(H2I(Port), Buffer, Count);
+    WRITE_PORT_BUFFER_UCHAR(Port, Buffer, Count);
 }
 
 VOID
@@ -1545,7 +1541,7 @@ ScsiPortWritePortBufferUlong(
     IN PULONG Buffer,
     IN ULONG Count)
 {
-    __outdwordstring(H2I(Port), Buffer, Count);
+    WRITE_PORT_BUFFER_ULONG(Port, Buffer, Count);
 }
 
 VOID
@@ -1555,7 +1551,7 @@ ScsiPortWritePortBufferUshort(
     IN PUSHORT Buffer,
     IN ULONG Count)
 {
-    __outwordstring(H2I(Port), Buffer, Count);
+    WRITE_PORT_BUFFER_USHORT(Port, Buffer, Count);
 }
 
 VOID
@@ -1592,8 +1588,7 @@ ScsiPortWriteRegisterBufferUchar(
     IN PUCHAR Buffer,
     IN ULONG Count)
 {
-    // FIXME
-    UNIMPLEMENTED;
+    WRITE_REGISTER_BUFFER_UCHAR(Register, Buffer, Count);
 }
 
 VOID
@@ -1603,8 +1598,7 @@ ScsiPortWriteRegisterBufferUlong(
     IN PULONG Buffer,
     IN ULONG Count)
 {
-    // FIXME
-    UNIMPLEMENTED;
+    WRITE_REGISTER_BUFFER_ULONG(Register, Buffer, Count);
 }
 
 VOID
@@ -1614,8 +1608,7 @@ ScsiPortWriteRegisterBufferUshort(
     IN PUSHORT Buffer,
     IN ULONG Count)
 {
-    // FIXME
-    UNIMPLEMENTED;
+    WRITE_REGISTER_BUFFER_USHORT(Register, Buffer, Count);
 }
 
 VOID

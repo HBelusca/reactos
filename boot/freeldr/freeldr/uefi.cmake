@@ -101,12 +101,8 @@ set(PCH_SOURCE
     ${FREELDR_NTLDR_SOURCE})
 
 add_pch(uefifreeldr_common include/arch/uefi/uefildr.h PCH_SOURCE)
+#target_link_libraries(uefifreeldr_common mini_hal)
 add_dependencies(uefifreeldr_common bugcodes asm xdk)
-
-## GCC builds need this extra thing for some reason...
-if(ARCH STREQUAL "i386" AND NOT MSVC)
-    target_link_libraries(uefifreeldr_common mini_hal)
-endif()
 
 
 spec2def(uefildr.exe freeldr.spec)
@@ -117,11 +113,9 @@ list(APPEND UEFILDR_BASE_SOURCE
     bootmgr.c
     ${FREELDR_BASE_SOURCE})
 
-if(ARCH STREQUAL "i386")
-    # Must be included together with disk/scsiport.c
-    list(APPEND UEFILDR_BASE_SOURCE
-        ${CMAKE_CURRENT_BINARY_DIR}/uefildr.def)
-endif()
+# Must be included together with disk/scsiport.c
+list(APPEND UEFILDR_BASE_SOURCE
+    ${CMAKE_CURRENT_BINARY_DIR}/uefildr.def)
 
 add_executable(uefildr ${UEFILDR_BASE_SOURCE})
 set_target_properties(uefildr PROPERTIES SUFFIX ".efi")
@@ -157,10 +151,8 @@ endif()
 
 set_entrypoint(uefildr EfiEntry)
 
+target_link_libraries(uefildr mini_hal)
 target_link_libraries(uefildr uefifreeldr_common cportlib blcmlib blrtl libcntpr)
-if(ARCH STREQUAL "i386")
-    target_link_libraries(uefildr mini_hal)
-endif()
 
 # dynamic analysis switches
 if(STACK_PROTECTOR)
