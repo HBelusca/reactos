@@ -59,7 +59,7 @@ HalpAssignSlotResources(IN PUNICODE_STRING RegistryPath,
         return STATUS_NOT_IMPLEMENTED;
 
     /* Setup fake PCI Bus handler */
-    RtlCopyMemory(&BusHandler, &HalpFakePciBusHandler, sizeof(BusHandler));
+    BusHandler = HalpFakePciBusHandler;
     BusHandler.BusNumber = BusNumber;
 
     /* Call the PCI function */
@@ -139,6 +139,8 @@ HalAssignSlotResources(IN PUNICODE_STRING RegistryPath,
                        IN ULONG SlotNumber,
                        IN OUT PCM_RESOURCE_LIST *AllocatedResources)
 {
+    PAGED_CODE();
+
     /* Check the bus type */
     if (BusType != PCIBus)
     {
@@ -213,8 +215,7 @@ HalGetBusDataByOffset(IN BUS_DATA_TYPE BusDataType,
              (BusNumber >= HalpMinPciBus) && (BusNumber <= HalpMaxPciBus))
     {
         /* Setup fake PCI Bus handler */
-        BUS_HANDLER BusHandler;
-        RtlCopyMemory(&BusHandler, &HalpFakePciBusHandler, sizeof(BusHandler));
+        BUS_HANDLER BusHandler = HalpFakePciBusHandler;
         BusHandler.BusNumber = BusNumber;
 
         /* Call the PCI function */
@@ -292,8 +293,7 @@ HalSetBusDataByOffset(IN BUS_DATA_TYPE BusDataType,
     else if ((BusDataType == PCIConfiguration) && HalpPCIConfigInitialized)
     {
         /* Setup fake PCI Bus handler */
-        BUS_HANDLER BusHandler;
-        RtlCopyMemory(&BusHandler, &HalpFakePciBusHandler, sizeof(BusHandler));
+        BUS_HANDLER BusHandler = HalpFakePciBusHandler;
         BusHandler.BusNumber = BusNumber;
 
         /* Call the PCI function */
@@ -332,6 +332,13 @@ HalTranslateBusAddress(IN INTERFACE_TYPE InterfaceType,
     }
     else
     {
+#if 0
+        return HalpTranslateBusAddress(InterfaceType,
+                                       BusNumber,
+                                       BusAddress,
+                                       AddressSpace,
+                                       TranslatedAddress);
+#endif
         /* Translation is easy */
         TranslatedAddress->QuadPart = BusAddress.QuadPart;
         return TRUE;

@@ -939,10 +939,8 @@ HaliPciInterfaceReadConfig(
     _In_ ULONG Offset,
     _In_ ULONG Length)
 {
-    BUS_HANDLER BusHandler;
-
     /* Setup fake PCI Bus handler */
-    RtlCopyMemory(&BusHandler, &HalpFakePciBusHandler, sizeof(BUS_HANDLER));
+    BUS_HANDLER BusHandler = HalpFakePciBusHandler;
     BusHandler.BusNumber = BusNumber;
 
     /* Read configuration data */
@@ -1248,24 +1246,21 @@ HalpInitializePciStubs(VOID)
     {
         /* Type 1 PCI Bus */
         case 1:
-
+        {
             /* Copy the Type 1 handler data */
-            RtlCopyMemory(&PCIConfigHandler,
-                          &PCIConfigHandlerType1,
-                          sizeof(PCIConfigHandler));
+            PCIConfigHandler = PCIConfigHandlerType1;
 
             /* Set correct I/O Ports */
             BusData->Config.Type1.Address = PCI_TYPE1_ADDRESS_PORT;
             BusData->Config.Type1.Data = PCI_TYPE1_DATA_PORT;
             break;
+        }
 
         /* Type 2 PCI Bus */
         case 2:
-
+        {
             /* Copy the Type 2 handler data */
-            RtlCopyMemory(&PCIConfigHandler,
-                          &PCIConfigHandlerType2,
-                          sizeof (PCIConfigHandler));
+            PCIConfigHandler = PCIConfigHandlerType2;
 
             /* Set correct I/O Ports */
             BusData->Config.Type2.CSE = PCI_TYPE2_CSE_PORT;
@@ -1275,9 +1270,9 @@ HalpInitializePciStubs(VOID)
             /* Only 16 devices supported, not 32 */
             BusData->MaxDevice = 16;
             break;
+        }
 
         default:
-
             /* Invalid type */
             DbgPrint("HAL: Unknown PCI type\n");
     }
@@ -1325,4 +1320,3 @@ HalpInitializePciStubs(VOID)
 }
 
 /* EOF */
-
