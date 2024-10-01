@@ -48,7 +48,6 @@ if(ARCH STREQUAL "i386")
         arch/i386/linux.S)
 
     list(APPEND PCATLDR_ARC_SOURCE
-        # disk/scsiport.c
         lib/fs/pxe.c
         arch/i386/drivemap.c
         arch/i386/hwacpi.c

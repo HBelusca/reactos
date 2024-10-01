@@ -112,11 +112,9 @@ list(APPEND UEFILDR_BASE_SOURCE
     bootmgr.c
     ${FREELDR_BASE_SOURCE})
 
-if(ARCH STREQUAL "i386")
-    # Must be included together with disk/scsiport.c
-    list(APPEND UEFILDR_BASE_SOURCE
-        ${CMAKE_CURRENT_BINARY_DIR}/uefildr.def)
-endif()
+# Must be included together with disk/scsiport.c
+list(APPEND UEFILDR_BASE_SOURCE
+    ${CMAKE_CURRENT_BINARY_DIR}/uefildr.def)
 
 add_executable(uefildr ${UEFILDR_BASE_SOURCE} ${FREELDR_NTLDR_SOURCE})
 set_target_properties(uefildr PROPERTIES SUFFIX ".efi")

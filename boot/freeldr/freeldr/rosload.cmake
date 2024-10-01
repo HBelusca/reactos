@@ -32,7 +32,6 @@ list(APPEND ROSLOAD_SOURCE
 if(ARCH STREQUAL "i386")
 
     list(APPEND ROSLOAD_SOURCE
-        disk/scsiport.c
         ntldr/arch/i386/winldr.c)
 
     list(APPEND ROSLOAD_ASM_SOURCE
