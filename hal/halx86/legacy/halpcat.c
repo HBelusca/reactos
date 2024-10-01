@@ -91,12 +91,12 @@ HalReportResourceUsage(VOID)
     INTERFACE_TYPE InterfaceType;
     UNICODE_STRING HalString;
 
-    /* FIXME: Initialize MCA bus */
+    /* FIXME: Initialize the MCA bus */
 
-    /* Initialize PCI bus. */
+    /* Initialize the PCI bus */
     HalpInitializePciBus();
 
-    /* Initialize the stubs */
+    /* Setup the PCI stub support */
     HalpInitializePciStubs();
 
     /* What kind of bus is this? */
