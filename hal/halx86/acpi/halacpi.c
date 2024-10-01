@@ -1127,9 +1127,9 @@ HalReportResourceUsage(VOID)
 
     /* FIXME: Initialize DMA 64-bit support */
 
-    /* FIXME: Initialize MCA bus */
+    /* FIXME: Initialize the MCA bus */
 
-    /* Initialize PCI bus. */
+    /* Initialize the PCI bus */
     HalpInitializePciBus();
 
     /* What kind of bus is this? */
