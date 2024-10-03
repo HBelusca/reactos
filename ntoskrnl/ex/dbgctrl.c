@@ -208,6 +208,52 @@ NtSystemDebugControl(
     _In_ ULONG OutputBufferLength,
     _Out_opt_ PULONG ReturnLength)
 {
+    NTSTATUS Status;
+    KPROCESSOR_MODE PreviousMode = ExGetPreviousMode();
+
+    /* Debugger controlling requires the debug privilege */
+    if (!SeSinglePrivilegeCheck(SeDebugPrivilege, PreviousMode))
+    {
+        return STATUS_ACCESS_DENIED;
+    }
+
+    /* Live dumping is allowed even if kernel debugging is disabled or absent.
+     * Otherwise, check whether the kernel debugger is present and fail if not. */
+    if ((Command != SysDbgGetTriageDump)
+#if (NTDDI_VERSION >= NTDDI_WINBLUE) // NTDDI_WIN81
+        && (Command != SysDbgGetLiveKernelDump)
+#endif
+       )
+    {
+        if (KdDebuggerNotPresent || KdPitchDebugger)
+            return STATUS_DEBUGGER_INACTIVE;
+    }
+
+    /* Probe the parameters if we are called from user-mode */
+    if (PreviousMode != KernelMode)
+    {
+        _SEH2_TRY
+        {
+            if (InputBufferLength != 0)
+                ProbeForRead(InputBuffer, InputBufferLength, sizeof(ULONG));
+            if (OutputBufferLength != 0)
+                ProbeForWrite(OutputBuffer, OutputBufferLength, sizeof(ULONG));
+            if (ReturnLength)
+                ProbeForWriteUlong(ReturnLength, sizeof(*ReturnLength), sizeof(ULONG));
+        }
+        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+        {
+            _SEH2_YIELD(return _SEH2_GetExceptionCode());
+        }
+        _SEH2_END;
+    }
+
+    /* Default to returning success */
+    Status = STATUS_SUCCESS;
+
+    /* Protect all cases with SEH */
+    _SEH2_TRY
+    {
     switch (Command)
     {
         /* Commands 0-5 */
@@ -217,9 +263,12 @@ NtSystemDebugControl(
         case SysDbgSetSpecialCall:
         case SysDbgClearSpecialCalls:
         case SysDbgQuerySpecialCalls:
+            _SEH2_YIELD(return STATUS_NOT_IMPLEMENTED);
 
         /* Command 6 */
         case SysDbgBreakPoint:
+            DbgBreakPointWithStatus(DBG_STATUS_DEBUG_CONTROL);
+            break;
 
         /* Commands 7-20 - Implemented by KdSystemDebugControl() instead */
         case SysDbgQueryVersion:
@@ -236,30 +285,114 @@ NtSystemDebugControl(
         case SysDbgReadBusData:
         case SysDbgWriteBusData:
         case SysDbgCheckLowMemory:
-
-        /* Command 29 */
-        case SysDbgGetTriageDump:
-            return STATUS_NOT_IMPLEMENTED;
+            _SEH2_YIELD(return STATUS_NOT_IMPLEMENTED);
 
         /* Commands 21-28 */
         case SysDbgEnableKernelDebugger:
+        {
+            Status = KdEnableDebugger();
+            break;
+        }
         case SysDbgDisableKernelDebugger:
+        {
+            Status = KdDisableDebugger();
+            break;
+        }
+
         case SysDbgGetAutoKdEnable:
+        {
+            if (OutputBufferLength != sizeof(BOOLEAN))
+                _SEH2_YIELD(return STATUS_INFO_LENGTH_MISMATCH);
+            *(PBOOLEAN)OutputBuffer = KdAutoEnableOnEvent;
+            break;
+        }
         case SysDbgSetAutoKdEnable:
+        {
+            if (InputBufferLength != sizeof(BOOLEAN))
+                _SEH2_YIELD(return STATUS_INFO_LENGTH_MISMATCH);
+            KdAutoEnableOnEvent = !!*(PBOOLEAN)InputBuffer;
+            break;
+        }
+
         case SysDbgGetPrintBufferSize:
+        {
+            if (OutputBufferLength != sizeof(ULONG))
+                _SEH2_YIELD(return STATUS_INFO_LENGTH_MISMATCH);
+            *(PULONG)OutputBuffer = KdPrintBufferSize;
+            break;
+        }
         case SysDbgSetPrintBufferSize:
+            _SEH2_YIELD(return STATUS_NOT_IMPLEMENTED);
+
         case SysDbgGetKdUmExceptionEnable:
+        {
+            if (OutputBufferLength != sizeof(BOOLEAN))
+                _SEH2_YIELD(return STATUS_INFO_LENGTH_MISMATCH);
+            *(PBOOLEAN)OutputBuffer = KdIgnoreUmExceptions;
+            break;
+        }
         case SysDbgSetKdUmExceptionEnable:
+        {
+            if (InputBufferLength != sizeof(BOOLEAN))
+                _SEH2_YIELD(return STATUS_INFO_LENGTH_MISMATCH);
+            KdIgnoreUmExceptions = !!*(PBOOLEAN)InputBuffer;
+            break;
+        }
+
+        /* Command 29 */
+        case SysDbgGetTriageDump:
+        // This is implemented in Vista+.
+            DbgPrint("%s: Command %d is unimplemented!\n", __FUNCTION__, Command);
+            _SEH2_YIELD(return STATUS_NOT_IMPLEMENTED);
 
         /* Commands 30-31 */
         case SysDbgGetKdBlockEnable:
+        {
+            if (OutputBufferLength != sizeof(BOOLEAN))
+                _SEH2_YIELD(return STATUS_INFO_LENGTH_MISMATCH);
+            *(PBOOLEAN)OutputBuffer = KdBlockEnable;
+            break;
+        }
         case SysDbgSetKdBlockEnable:
-            return KdSystemDebugControl(
-                Command,
-                InputBuffer, InputBufferLength,
-                OutputBuffer, OutputBufferLength,
-                ReturnLength, KeGetPreviousMode());
+        {
+            if (InputBufferLength != sizeof(BOOLEAN))
+                _SEH2_YIELD(return STATUS_INFO_LENGTH_MISMATCH);
+            KdBlockEnable = !!*(PBOOLEAN)InputBuffer;
+            break;
+        }
+
+        /* Commands 32-3x */
+#if (NTDDI_VERSION >= NTDDI_VISTA)
+        case SysDbgRegisterForUmBreakInfo:
+        case SysDbgGetUmBreakPid:
+        case SysDbgClearUmBreakPid:
+        case SysDbgGetUmAttachPid:
+        case SysDbgClearUmAttachPid:
+#if (NTDDI_VERSION >= NTDDI_WINBLUE) // NTDDI_WIN81
+        case SysDbgGetLiveKernelDump:
+#endif
+#if (NTDDI_VERSION >= NTDDI_WIN10_VB)
+        case SysDbgKdPullRemoteFile:
+#endif
+            DbgPrint("%s: Command %d is unimplemented!\n", __FUNCTION__, Command);
+            _SEH2_YIELD(return STATUS_NOT_IMPLEMENTED);
+#endif // (NTDDI_VERSION >= NTDDI_VISTA)
+
         default:
-            return STATUS_INVALID_INFO_CLASS;
+            Status = STATUS_INVALID_INFO_CLASS;
+            break;
     }
+
+    /* Return the actual data length written in the output buffer, if requested */
+    // FIXME: A non-zero length is returned only for the dump commands.
+    if (ReturnLength)
+        *ReturnLength = 0;
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        _SEH2_YIELD(return _SEH2_GetExceptionCode());
+    }
+    _SEH2_END;
+
+    return Status;
 }

@@ -2222,6 +2222,10 @@ KdSystemDebugControl(
     _Out_opt_ PULONG ReturnLength,
     _In_ KPROCESSOR_MODE PreviousMode)
 {
+    /* Check whether the kernel debugger is present and fail if not */
+    if (KdDebuggerNotPresent || KdPitchDebugger)
+        return STATUS_DEBUGGER_INACTIVE;
+
     /* Handle some internal commands */
     switch ((ULONG)Command)
     {
@@ -2281,8 +2285,230 @@ KdSystemDebugControl(
         }
 #endif // KDBG
 #endif
+
         default:
             break;
+    }
+
+// Cases 7 to 20 done here...
+    switch (Command)
+    {
+        case SysDbgQueryVersion:
+        {
+            if (OutputBufferLength != sizeof(DBGKD_GET_VERSION64))
+                return STATUS_INFO_LENGTH_MISMATCH;
+            KdpSysGetVersion((PDBGKD_GET_VERSION64)OutputBuffer);
+            return STATUS_SUCCESS;
+        }
+
+        case SysDbgReadVirtual:
+        {
+            /*
+            OutputBuffer;
+            OutputBufferLength;
+            KdpCopyMemoryChunks();
+            */
+            break;
+        }
+
+        case SysDbgWriteVirtual:
+        {
+            /*
+            InputBuffer;
+            InputBufferLength;
+            KdpCopyMemoryChunks();
+            */
+            break;
+        }
+
+        case SysDbgReadPhysical:
+        {
+            /*
+            OutputBuffer;
+            OutputBufferLength;
+            KdpCopyMemoryChunks();
+            */
+            break;
+        }
+
+        case SysDbgWritePhysical:
+        {
+            /*
+            InputBuffer;
+            InputBufferLength;
+            KdpCopyMemoryChunks();
+            */
+            break;
+        }
+
+        case SysDbgReadControlSpace:
+        {
+            PSYSDBG_CONTROL_SPACE ReadMemory;
+            ULONG Length;
+            NTSTATUS ReturnStatus;
+
+            if (OutputBufferLength != sizeof(SYSDBG_CONTROL_SPACE))
+                return STATUS_INFO_LENGTH_MISMATCH;
+
+            ReadMemory = (PSYSDBG_CONTROL_SPACE)OutputBuffer;
+            ReturnStatus = KdpSysReadControlSpace(ReadMemory->Processor,
+                                                  ReadMemory->Address,
+                                                  ReadMemory->Buffer,
+                                                  ReadMemory->Request,
+                                                  &Length);
+
+            /* Return the actual length read */
+            if (ReturnLength)
+                *ReturnLength = Length;
+            return ReturnStatus;
+        }
+
+        case SysDbgWriteControlSpace:
+        {
+            PSYSDBG_CONTROL_SPACE WriteMemory;
+            ULONG Length;
+            NTSTATUS ReturnStatus;
+
+            if (OutputBufferLength != sizeof(SYSDBG_CONTROL_SPACE))
+                return STATUS_INFO_LENGTH_MISMATCH;
+
+            WriteMemory = (PSYSDBG_CONTROL_SPACE)OutputBuffer;
+            ReturnStatus = KdpSysWriteControlSpace(WriteMemory->Processor,
+                                                   WriteMemory->Address,
+                                                   WriteMemory->Buffer,
+                                                   WriteMemory->Request,
+                                                   &Length);
+
+            /* Return the actual length written */
+            if (ReturnLength)
+                *ReturnLength = Length;
+            return ReturnStatus;
+        }
+
+        case SysDbgReadIoSpace:
+        {
+            PSYSDBG_IO_SPACE IoSpace;
+            ULONG Length;
+            NTSTATUS ReturnStatus;
+
+            if (OutputBufferLength != sizeof(SYSDBG_IO_SPACE))
+                return STATUS_INFO_LENGTH_MISMATCH;
+
+            IoSpace = (PSYSDBG_IO_SPACE)OutputBuffer;
+            ReturnStatus = KdpSysReadIoSpace(IoSpace->InterfaceType,
+                                             IoSpace->BusNumber,
+                                             IoSpace->AddressSpace,
+                                             IoSpace->IoAddress,
+                                             IoSpace->Buffer,
+                                             IoSpace->Request,
+                                             &Length);
+
+            /* Return the actual length read */
+            if (ReturnLength)
+                *ReturnLength = Length;
+            return ReturnStatus;
+        }
+
+        case SysDbgWriteIoSpace:
+        {
+            PSYSDBG_IO_SPACE IoSpace;
+            ULONG Length;
+            NTSTATUS ReturnStatus;
+
+            if (InputBufferLength != sizeof(SYSDBG_IO_SPACE))
+                return STATUS_INFO_LENGTH_MISMATCH;
+
+            IoSpace = (PSYSDBG_IO_SPACE)InputBuffer;
+            ReturnStatus = KdpSysWriteIoSpace(IoSpace->InterfaceType,
+                                              IoSpace->BusNumber,
+                                              IoSpace->AddressSpace,
+                                              IoSpace->IoAddress,
+                                              IoSpace->Buffer,
+                                              IoSpace->Request,
+                                              &Length);
+
+            /* Return the actual length written */
+            if (ReturnLength)
+                *ReturnLength = Length;
+            return ReturnStatus;
+        }
+
+        case SysDbgReadMsr:
+        {
+            PSYSDBG_MSR ReadMsr;
+
+            if (OutputBufferLength != sizeof(SYSDBG_MSR))
+                return STATUS_INFO_LENGTH_MISMATCH;
+
+            ReadMsr = (PSYSDBG_MSR)OutputBuffer;
+            return KdpSysReadMsr(ReadMsr->Address, &ReadMsr->Data);
+        }
+
+        case SysDbgWriteMsr:
+        {
+            PSYSDBG_MSR WriteMsr;
+
+            if (InputBufferLength != sizeof(SYSDBG_MSR))
+                return STATUS_INFO_LENGTH_MISMATCH;
+
+            WriteMsr = (PSYSDBG_MSR)InputBuffer;
+            return KdpSysWriteMsr(WriteMsr->Address, &WriteMsr->Data);
+        }
+
+        case SysDbgReadBusData:
+        {
+            PSYSDBG_BUS_DATA BusData;
+            ULONG Length;
+            NTSTATUS ReturnStatus;
+
+            if (OutputBufferLength != sizeof(SYSDBG_BUS_DATA))
+                return STATUS_INFO_LENGTH_MISMATCH;
+
+            BusData = (PSYSDBG_BUS_DATA)OutputBuffer;
+            ReturnStatus = KdpSysReadBusData(BusData->BusDataType,
+                                             BusData->BusNumber,
+                                             BusData->SlotNumber,
+                                             BusData->Address,
+                                             BusData->Buffer,
+                                             BusData->Request,
+                                             &Length);
+
+            /* Return the actual length read */
+            if (ReturnLength)
+                *ReturnLength = Length;
+            return ReturnStatus;
+        }
+
+        case SysDbgWriteBusData:
+        {
+            PSYSDBG_BUS_DATA BusData;
+            ULONG Length;
+            NTSTATUS ReturnStatus;
+
+            if (InputBufferLength != sizeof(SYSDBG_BUS_DATA))
+                return STATUS_INFO_LENGTH_MISMATCH;
+
+            BusData = (PSYSDBG_BUS_DATA)InputBuffer;
+            ReturnStatus = KdpSysWriteBusData(BusData->BusDataType,
+                                              BusData->BusNumber,
+                                              BusData->SlotNumber,
+                                              BusData->Address,
+                                              BusData->Buffer,
+                                              BusData->Request,
+                                              &Length);
+
+            /* Return the actual length written */
+            if (ReturnLength)
+                *ReturnLength = Length;
+            return ReturnStatus;
+        }
+
+        case SysDbgCheckLowMemory:
+            // return KdpSysCheckLowMemory(); but which flags?
+            break;
+
+        default:
+            return STATUS_INVALID_INFO_CLASS;
     }
 
     /* Local kernel debugging is not yet supported */
