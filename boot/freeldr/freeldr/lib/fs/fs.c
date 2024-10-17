@@ -245,6 +245,9 @@ ARC_STATUS ArcOpen(CHAR* Path, OPENMODE OpenMode, ULONG* FileId)
     if (!DeviceName)
         return ENOMEM;
 
+ERR("ArcOpen: Path(0x%p): '%s' ; DeviceName(0x%p): '%.*s' ; FileName: '%s'\n",
+    Path, Path, DeviceName, Length, DeviceName, FileName);
+
     if (OpenMode == OpenReadOnly || OpenMode == OpenWriteOnly)
         DeviceOpenMode = OpenMode;
     else
@@ -350,6 +353,8 @@ ARC_STATUS ArcOpen(CHAR* Path, OPENMODE OpenMode, ULONG* FileId)
      * in DeviceId, and pDevice->FileFuncTable contains what needs to be
      * called to manipulate the file.
      */
+
+ERR("~~ Opening file '%s' inside device %s\n", FileName, pDevice->DeviceName);
 
     /* Open the file */
     FileData[i].DeviceId = DeviceId;
@@ -689,7 +694,7 @@ FsRegisterDevice(
     pNewEntry->DeviceName = (PSTR)(pNewEntry + 1);
     RtlCopyMemory(pNewEntry->DeviceName, DeviceName, Length);
 
-    InsertHeadList(&DeviceListHead, &pNewEntry->ListEntry);
+    InsertTailList(&DeviceListHead, &pNewEntry->ListEntry);
 }
 
 PCWSTR FsGetServiceName(ULONG FileId)

@@ -102,13 +102,13 @@ BOOLEAN CallPxe(UINT16 Service, PVOID Parameter)
     if (exit != PXENV_EXIT_SUCCESS)
     {
         ERR("PxeCall(0x%x, %p) failed with exit=%d status=0x%x\n",
-                Service, Parameter, exit, *(PXENV_STATUS*)Parameter);
+            Service, Parameter, exit, *(PXENV_STATUS*)Parameter);
         return FALSE;
     }
     if (*(PXENV_STATUS*)Parameter != PXENV_STATUS_SUCCESS)
     {
         ERR("PxeCall(0x%x, %p) succeeded, but returned error status 0x%x\n",
-                Service, Parameter, *(PXENV_STATUS*)Parameter);
+            Service, Parameter, *(PXENV_STATUS*)Parameter);
         return FALSE;
     }
     return TRUE;
@@ -126,6 +126,12 @@ static ARC_STATUS PxeClose(ULONG FileId)
         return EIO;
 
     _OpenFile = NO_FILE;
+
+    _FileSize = 0;
+    _FilePosition = 0;
+    _PacketPosition = 0;
+    _CachedLength = 0;
+
     return ESUCCESS;
 }
 
@@ -183,6 +189,8 @@ static ARC_STATUS PxeOpen(CHAR* Path, OPENMODE OpenMode, ULONG* FileId)
     if (*Path == '\\' || *Path == '/')
         ++Path;
 
+ERR("PxeOpen(1) for '%s'\n", Path);
+
     /* Retrieve the path length without NULL terminator */
     PathLen = strlen(Path);
     PathLen = min(PathLen, sizeof(_OpenFileName) - 1);
@@ -196,13 +204,18 @@ static ARC_STATUS PxeOpen(CHAR* Path, OPENMODE OpenMode, ULONG* FileId)
         else
             _OpenFileName[i] = tolower(Path[i]);
     }
+ERR("PxeOpen(2a) for '%s'\n", Path);
+ERR("PxeOpen(2b) for '%s'\n", _OpenFileName);
 
     /* Zero out rest of the file name */
     RtlZeroMemory(_OpenFileName + PathLen, sizeof(_OpenFileName) - PathLen);
 
+    /* Query the file size (must be done before opening it!) */
     RtlZeroMemory(&sizeData, sizeof(sizeData));
     sizeData.ServerIPAddress = _ServerIP;
     RtlCopyMemory(sizeData.FileName, _OpenFileName, sizeof(_OpenFileName));
+ERR("PxeOpen(3a) for '%s'\n", Path);
+ERR("PxeOpen(3b) for '%s'\n", sizeData.FileName);
     if (!CallPxe(PXENV_TFTP_GET_FSIZE, &sizeData))
     {
         ERR("Failed to get '%s' size\n", Path);
@@ -212,17 +225,26 @@ static ARC_STATUS PxeOpen(CHAR* Path, OPENMODE OpenMode, ULONG* FileId)
     _FileSize = sizeData.FileSize;
     _CachedLength = 0;
 
+    /* Now open the file proper */
+ERR("PxeOpen(4a) for '%s'\n", _OpenFileName);
     RtlZeroMemory(&openData, sizeof(openData));
     openData.ServerIPAddress = _ServerIP;
     RtlCopyMemory(openData.FileName, _OpenFileName, sizeof(_OpenFileName));
-    openData.PacketSize = sizeof(_Packet);
+ERR("PxeOpen(4b) for '%s'\n", openData.FileName);
+    openData.PacketSize = 0;//sizeof(_Packet);
+ERR("Requested packet size: %lu\n", openData.PacketSize);
 
     if (!CallPxe(PXENV_TFTP_OPEN, &openData))
         return ENOENT;
 
+ERR("Negotiated packet size: %lu\n", openData.PacketSize);
+
     _FilePosition = 0;
     _PacketPosition = 0;
+    // NOTE: on return, openData.PacketSize is the negotiated packet size,
+    // less than or equal to the requested size.
 
+ERR("PxeOpen(5) for '%s'\n", _OpenFileName);
     _OpenFile = *FileId;
     return ESUCCESS;
 }
@@ -240,27 +262,54 @@ static ARC_STATUS PxeRead(ULONG FileId, VOID* Buffer, ULONG N, ULONG* Count)
     RtlZeroMemory(&readData, sizeof(readData));
     readData.Buffer.segment = ((ULONG_PTR)_Packet & 0xf0000) / 16;
     readData.Buffer.offset = (ULONG_PTR)_Packet & 0xffff;
+    //// FIX!!
+    readData.BufferSize = sizeof(_Packet); // Technically, should be the negotiated size value.
+    ////
 
-    // Get new packets as required
+    /* Get new packets as required */
+ERR("PxeRead(%lu) %lu bytes -> 0x%p\n", FileId, N, Buffer);
     while (N > 0)
     {
-        if (N < _CachedLength - _FilePosition)
-            i = N;
-        else
-            i = _CachedLength - _FilePosition;
+ERR("PP 0x%p , FP 0x%p , CL 0x%p\n", _PacketPosition, _FilePosition, _CachedLength);
+        ASSERT(_FilePosition - _PacketPosition <= sizeof(_Packet));
+        ASSERT((_PacketPosition <= _FilePosition) &&
+               (_FilePosition <= _CachedLength));
+
+        /* Copy any remaining data */
+        i = min(N, _CachedLength - _FilePosition);
         RtlCopyMemory(Buffer, _Packet + _FilePosition - _PacketPosition, i);
         _FilePosition += i;
+ERR("i = %lu\n", i);
+ERR("Updated: PP 0x%p , FP 0x%p , CL 0x%p\n", _PacketPosition, _FilePosition, _CachedLength);
         Buffer = (UCHAR*)Buffer + i;
         *Count += i;
         N -= i;
         if (N == 0)
             break;
 
+    //// FIX??
+    readData.BufferSize = sizeof(_Packet); // Technically, should be the negotiated size value.
+    ////
+
+        /* Fetch a new packet */
         if (!CallPxe(PXENV_TFTP_READ, &readData))
+        {
+ERR("PxeRead(%lu) failed\n", FileId);
             return EIO;
+        }
+        // TRACE("PacketNumber: %u\n", readData.PacketNumber);
         _PacketPosition = _CachedLength;
         _CachedLength += readData.BufferSize;
+
+ERR("Returned PacketSize: %lu\n", readData.BufferSize);
+
+        /****/if (readData.BufferSize == 0) break;/****/
     }
+ERR("DONE ** PxeRead(%lu) in 0x%p\n", FileId, Buffer);
+
+    ASSERT(_FilePosition - _PacketPosition <= sizeof(_Packet));
+    ASSERT((_PacketPosition <= _FilePosition) &&
+           (_FilePosition <= _CachedLength));
 
     return ESUCCESS;
 }
@@ -275,29 +324,53 @@ static ARC_STATUS PxeSeek(ULONG FileId, LARGE_INTEGER* Position, SEEKMODE SeekMo
     if (Position->HighPart != 0 || SeekMode != SeekAbsolute)
         return EINVAL;
 
+ERR("PxeSeek(%lu): Seek: %lu, OldPos = %lu, NewPos = %lu -- CachedLen = %lu\n",
+    FileId, SeekMode, _FilePosition, Position->LowPart, _CachedLength);
+
     if (Position->LowPart < _FilePosition)
     {
-        // Close and reopen the file to go to position 0
+// Close-reopen for backward-seeking was added in commit
+// f5ab68a2c698db36bd5fcd4caba5d987de957fe4 (r66035)
+ERR("Do hackish PxeSeek(%lu) stuff for file '%s'\n", FileId, _OpenFileName);
+        /* Close and reopen the file to go to position 0 */
         if (PxeClose(FileId) != ESUCCESS)
             return EIO;
+ERR("hackish PxeSeek(%lu) : After PxeClose, file is '%s'\n", _OpenFileName);
         if (PxeOpen(_OpenFileName, OpenReadOnly, &FileId) != ESUCCESS)
             return EIO;
+ERR("hackish PxeSeek(%lu) : After PxeOpen, file is '%s'\n", _OpenFileName);
     }
 
     RtlZeroMemory(&readData, sizeof(readData));
     readData.Buffer.segment = ((ULONG_PTR)_Packet & 0xf0000) / 16;
     readData.Buffer.offset = (ULONG_PTR)_Packet & 0xffff;
+    //// FIX!!
+    readData.BufferSize = sizeof(_Packet); // Technically, should be the negotiated size value.
+    ////
 
-    // Get new packets as required
+    /* Get new packets as required and ignore them until we reach the position */
     while (Position->LowPart > _CachedLength)
     {
+        // Cannot do the assertion with _FilePosition
+        // since we don't update _FilePosition in the loop.
+        // ASSERT((_PacketPosition <= _FilePosition) &&
+        //        (_FilePosition <= _CachedLength));
+        ASSERT(_PacketPosition <= _CachedLength);
+
         if (!CallPxe(PXENV_TFTP_READ, &readData))
             return EIO;
+        // TRACE("PacketNumber: %u\n", readData.PacketNumber);
         _PacketPosition = _CachedLength;
         _CachedLength += readData.BufferSize;
+        /****/if (readData.BufferSize == 0) break;/****/
     }
 
     _FilePosition = Position->LowPart;
+
+    ASSERT(_FilePosition - _PacketPosition <= sizeof(_Packet));
+    ASSERT((_PacketPosition <= _FilePosition) &&
+           (_FilePosition <= _CachedLength));
+
     return ESUCCESS;
 }
 
@@ -392,4 +465,3 @@ BOOLEAN PxeInit(VOID)
 
     return Success;
 }
-
