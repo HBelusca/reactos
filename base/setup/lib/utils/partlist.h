@@ -42,21 +42,22 @@ typedef enum _FORMATSTATE
 typedef struct _PARTENTRY PARTENTRY, *PPARTENTRY;
 typedef struct _VOLENTRY
 {
-    LIST_ENTRY ListEntry; ///< Entry in VolumesList
+    LIST_ENTRY ListEntry; ///< Entry in VolumesList.
 
     VOLINFO Info;
     FORMATSTATE FormatState;
 
-    /* Volume must be checked */
-    BOOLEAN NeedsCheck;
-    /* Volume is new and has not yet been actually formatted and mounted */
-    BOOLEAN New;
+    BOOLEAN NeedsCheck : 1; ///< Volume must be checked.
+    BOOLEAN New        : 1; ///< Volume is new and has not yet been actually formatted and mounted.
+    BOOLEAN Reserved   : 6;
 
     // union {
     //     PVOLUME_DISK_EXTENTS pExtents;
         PPARTENTRY PartEntry;
     // };
 } VOLENTRY, *PVOLENTRY;
+
+static inline GET_ADJ_RECORD_DEF_(GetAdjVolume, VOLENTRY, ListEntry);
 
 typedef struct _PARTENTRY
 {
@@ -69,20 +70,18 @@ typedef struct _PARTENTRY
     ULARGE_INTEGER StartSector;
     ULARGE_INTEGER SectorCount;
 
-    BOOLEAN BootIndicator;  // NOTE: See comment for the PARTLIST::SystemPartition member.
-    UCHAR PartitionType;
     ULONG OnDiskPartitionNumber; /* Enumerated partition number (primary partitions first, excluding the extended partition container, then the logical partitions) */
     ULONG PartitionNumber;       /* Current partition number, only valid for the currently running NTOS instance */
     ULONG PartitionIndex;        /* Index in the LayoutBuffer->PartitionEntry[] cached array of the corresponding DiskEntry */
     WCHAR DeviceName[MAX_PATH];  ///< NT device name: "\Device\HarddiskM\PartitionN"
 
-    BOOLEAN LogicalPartition;
+    UCHAR PartitionType;
 
-    /* Partition is partitioned disk space */
-    BOOLEAN IsPartitioned;
-
-    /* Partition is new, table does not exist on disk yet */
-    BOOLEAN New;
+    BOOLEAN IsSystemPartition : 1; // MBR: BootIndicator == TRUE / GPT: PARTITION_SYSTEM_GUID.
+    BOOLEAN LogicalPartition  : 1; ///< Partition is MBR logical.
+    BOOLEAN IsPartitioned     : 1; ///< Partition is partitioned disk space.
+    BOOLEAN New               : 1; ///< Partition is new, table does not exist on disk yet.
+    BOOLEAN Reserved          : 4;
 
     /*
      * Volume-related properties:
@@ -95,6 +94,8 @@ typedef struct _PARTENTRY
     PVOLENTRY Volume;
 
 } PARTENTRY, *PPARTENTRY;
+
+static inline GET_ADJ_RECORD_DEF_(GetAdjPartition, PARTENTRY, ListEntry);
 
 typedef struct _DISKENTRY
 {
@@ -154,6 +155,8 @@ typedef struct _DISKENTRY
 
 } DISKENTRY, *PDISKENTRY;
 
+static inline GET_ADJ_RECORD_DEF_(GetAdjDisk, DISKENTRY, ListEntry);
+
 typedef struct _BIOSDISKENTRY
 {
     LIST_ENTRY ListEntry;
@@ -167,19 +170,20 @@ typedef struct _BIOSDISKENTRY
     CM_INT13_DRIVE_PARAMETER Int13DiskData;
 } BIOSDISKENTRY, *PBIOSDISKENTRY;
 
+// static inline GET_ADJ_RECORD_DEF_(GetAdjBiosDisk, BIOSDISKENTRY, ListEntry);
+
+#if 0 // FIXME: Investigate usage wrt. BIOSDISKENTRY
+typedef struct
+{
+    LIST_ENTRY ListEntry;
+    ULONG DiskNumber;
+    ULONG Identifier;
+    ULONG Signature;
+} BIOS_DISK, *PBIOS_DISK;
+#endif
+
 typedef struct _PARTLIST
 {
-    /*
-     * The system partition where the boot manager resides.
-     * The corresponding system disk is obtained via:
-     *    SystemPartition->DiskEntry.
-     */
-    // NOTE: It seems to appear that the specifications of ARC and (u)EFI
-    // actually allow for multiple system partitions to exist on the system.
-    // If so we should instead rely on the BootIndicator bit of the PARTENTRY
-    // structure in order to find these.
-    PPARTENTRY SystemPartition;
-
     LIST_ENTRY DiskListHead;
     LIST_ENTRY BiosDiskListHead;
 
@@ -221,15 +225,6 @@ typedef struct _PARTITION_SECTOR
 } PARTITION_SECTOR, *PPARTITION_SECTOR;
 
 #include <poppack.h>
-
-typedef struct
-{
-    LIST_ENTRY ListEntry;
-    ULONG DiskNumber;
-    ULONG Identifier;
-    ULONG Signature;
-} BIOS_DISK, *PBIOS_DISK;
-
 
 
 ULONGLONG
@@ -278,10 +273,6 @@ BOOLEAN
 IsSuperFloppy(
     _In_ PDISKENTRY DiskEntry);
 
-BOOLEAN
-IsPartitionActive(
-    IN PPARTENTRY PartEntry);
-
 PPARTLIST
 NTAPI
 CreatePartitionList(VOID);
@@ -327,14 +318,14 @@ SelectPartition(
 PPARTENTRY
 NTAPI
 GetNextPartition(
-    IN PPARTLIST List,
-    IN PPARTENTRY CurrentPart OPTIONAL);
+    _In_ PPARTLIST List,
+    _In_opt_ PPARTENTRY CurrentPart);
 
 PPARTENTRY
 NTAPI
 GetPrevPartition(
-    IN PPARTLIST List,
-    IN PPARTENTRY CurrentPart OPTIONAL);
+    _In_ PPARTLIST List,
+    _In_opt_ PPARTENTRY CurrentPart);
 
 PPARTENTRY
 NTAPI
@@ -363,19 +354,6 @@ DeletePartition(
     _In_ PPARTLIST List,
     _In_ PPARTENTRY PartEntry,
     _Out_opt_ PPARTENTRY* FreeRegion);
-
-PPARTENTRY
-FindSupportedSystemPartition(
-    IN PPARTLIST List,
-    IN BOOLEAN ForceSelect,
-    IN PDISKENTRY AlternativeDisk OPTIONAL,
-    IN PPARTENTRY AlternativePart OPTIONAL);
-
-BOOLEAN
-SetActivePartition(
-    IN PPARTLIST List,
-    IN PPARTENTRY PartEntry,
-    IN PPARTENTRY OldActivePart OPTIONAL);
 
 NTSTATUS
 WritePartitions(
