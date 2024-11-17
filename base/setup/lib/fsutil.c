@@ -1190,10 +1190,6 @@ NextFormat:
 
                 if (Volume->FormatState == Unformatted)
                 {
-                    // TODO: Should we let the user use a custom file system,
-                    // or should we always use FAT(32) for it?
-                    // For "compatibility", FAT(32) would be best indeed.
-
                     FormatState = FormatSystemVolume;
                     DPRINT1("FormatState: %s --> %s\n",
                             FormatStateNames[OldFormatState], FormatStateNames[FormatState]);

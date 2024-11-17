@@ -278,6 +278,33 @@ and only contain letters, digits, dashes and periods. Spaces are not allowed."
     IDS_WARN_DELETE_PARTITION "Are you sure you want to delete the selected partition?"
     IDS_WARN_DELETE_MBR_EXTENDED_PARTITION "Are you sure you want to delete the selected extended partition and ALL the logical partitions it contains?"
 
+    IDS_WARN_CHANGE_SYSTEM_PARTITION "The current system partition of your computer\n\
+\n\
+%s\n\
+\n\
+on the system disk\n\
+\n\
+%s\n\
+\n\
+uses a format not supported by ReactOS.\n\
+\n\
+In order to successfully install ReactOS, the Setup program must change \
+the current system partition to a new one.\n\
+\n\
+The new candidate system partition is:\n\
+\n\
+%s\n\
+\nClick on OK to accept this choice.\n\
+\nTo manually change the system partition, click on CANCEL to go back \
+to the partition selection list, then select or create a new system \
+partition on the system disk.\
+\n\
+In case there are other operating systems that depend on the original \
+system partition, you may need to either reconfigure them for the new \
+system partition, or you may need to change the system partition back \
+to the original one after finishing the installation of ReactOS."
+
+
     IDS_ERROR_WRITE_PTABLE "Setup failed to write partition tables."
 
     IDS_ERROR_SYSTEM_PARTITION "The ReactOS Setup could not find a supported system partition\n\

@@ -377,7 +377,7 @@ ArcPathNormalize(
  *      In output, ArcNamePath points to the beginning of the path after
  *      the ARC name part.
  */
-static NTSTATUS
+NTSTATUS
 ParseArcName(
     IN OUT PCWSTR* ArcNamePath,
     OUT PULONG pAdapterKey,
