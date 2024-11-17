@@ -189,13 +189,13 @@ LoadSetupInf(
 
 #define ERROR_SYSTEM_PARTITION_NOT_FOUND    (ERROR_LAST_ERROR_CODE + 1)
 
-BOOLEAN
+PPARTENTRY
 NTAPI
 InitSystemPartition(
-    /**/_In_ PPARTLIST PartitionList,       /* HACK HACK! */
-    /**/_In_ PPARTENTRY InstallPartition,   /* HACK HACK! */
-    /**/_Out_ PPARTENTRY* pSystemPartition, /* HACK HACK! */
-    _In_opt_ PFSVOL_CALLBACK FsVolCallback,
+    _In_ ARCHITECTURE_TYPE ArchType,
+    _In_ PPARTLIST PartitionList,
+    _In_ PPARTENTRY InstallPartition,
+    _In_opt_ PFSVOL_CALLBACK StorCfgCallback,
     _In_opt_ PVOID Context);
 
 /**

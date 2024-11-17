@@ -44,8 +44,16 @@ SETUPDATA SetupData;
 PPARTENTRY InstallPartition = NULL;
 // static PVOLENTRY InstallVolume = NULL;
 #define InstallVolume (InstallPartition->Volume)
-
-/* The system partition we will actually use */
+/*
+ * The system partition we will actually use to install the bootloader.
+ * On BIOS-based PCs, it can be different from the existing single bootable
+ * partition, in case we don't support it, or we install on a removable disk.
+ * We may indeed not support the original partition in case we do not have
+ * write support on it. Please note that this situation is partly a HACK
+ * and MUST NEVER happen on architectures where real system partitions are
+ * mandatory (because then they are formatted in FAT FS and we support write
+ * operation on them).
+ */
 PPARTENTRY SystemPartition = NULL;
 // static PVOLENTRY SystemVolume = NULL;
 #define SystemVolume (SystemPartition->Volume)
@@ -1290,25 +1298,14 @@ static FSVOL_OP
 CALLBACK
 FsVolCallback(
     _In_opt_ PVOID Context,
-    _In_ FSVOLNOTIFY FormatStatus,
+    _In_ FSVOLNOTIFY Notify,
     _In_ ULONG_PTR Param1,
     _In_ ULONG_PTR Param2)
 {
     PFSVOL_CONTEXT FsVolContext = (PFSVOL_CONTEXT)Context;
 
-    switch (FormatStatus)
+    switch (Notify)
     {
-    // FIXME: Deprecate!
-    case ChangeSystemPartition:
-    {
-        // PPARTENTRY SystemPartition = (PPARTENTRY)Param1;
-
-        // FsVolContext->NextPageOnAbort = SELECT_PARTITION_PAGE;
-        // if (ChangeSystemPartitionPage(Ir, SystemPartition))
-        //     return FSVOL_DOIT;
-        return FSVOL_ABORT;
-    }
-
     case FSVOLNOTIFY_PARTITIONERROR:
     {
         switch (Param1)
@@ -1316,7 +1313,7 @@ FsVolCallback(
         case STATUS_PARTITION_FAILURE:
         {
             // ERROR_WRITE_PTABLE
-            DisplayError(NULL,
+            DisplayError(GetParent(UiContext.hwndDlg),
                          0, // Default to "Error"
                          IDS_ERROR_WRITE_PTABLE);
             // FsVolContext->NextPageOnAbort = QUIT_PAGE;
@@ -1324,26 +1321,15 @@ FsVolCallback(
             break;
         }
 
-        case ERROR_SYSTEM_PARTITION_NOT_FOUND:
+        default:
         {
-            /* FIXME: improve the error dialog */
-            //
-            // Error dialog should say that we cannot find a suitable
-            // system partition and create one on the system. At this point,
-            // it may be nice to ask the user whether he wants to continue,
-            // or use an external drive as the system drive/partition
-            // (e.g. floppy, USB drive, etc...)
-            //
-            DisplayError(NULL,
-                         0, // Default to "Error"
-                         IDS_ERROR_SYSTEM_PARTITION);
-            // FsVolContext->NextPageOnAbort = SELECT_PARTITION_PAGE;
-            // TODO: Go back to the partitioning page
+            DisplayMessage(GetParent(UiContext.hwndDlg),
+                           MB_ICONERROR,
+                           NULL, // Default to "Error"
+                           L"Unknown error while partitioning: Status 0x%08lx",
+                           Param1);
             break;
         }
-
-        default:
-            break;
         }
         return FSVOL_ABORT;
     }
@@ -1405,7 +1391,7 @@ FsVolCallback(
         if (FmtInfo->ErrorStatus == STATUS_PARTITION_FAILURE)
         {
             // ERROR_WRITE_PTABLE
-            DisplayError(NULL,
+            DisplayError(GetParent(UiContext.hwndDlg),
                          0, // Default to "Error"
                          IDS_ERROR_WRITE_PTABLE);
             // FsVolContext->NextPageOnAbort = QUIT_PAGE;
@@ -1417,7 +1403,7 @@ FsVolCallback(
         {
             /* FIXME: show an error dialog */
             // MUIDisplayError(ERROR_FORMATTING_PARTITION, Ir, POPUP_WAIT_ANY_KEY, PathBuffer);
-            DisplayError(NULL,
+            DisplayError(GetParent(UiContext.hwndDlg),
                          0, // Default to "Error"
                          IDS_ERROR_FORMAT_UNRECOGNIZED_VOLUME);
             // FsVolContext->NextPageOnAbort = QUIT_PAGE;
@@ -1428,7 +1414,8 @@ FsVolCallback(
         {
             INT nRet;
 
-            nRet = DisplayMessage(NULL, MB_ICONERROR | MB_OKCANCEL,
+            nRet = DisplayMessage(GetParent(UiContext.hwndDlg),
+                                  MB_ICONERROR | MB_OKCANCEL,
                                   NULL, // Default to "Error"
                                   MAKEINTRESOURCEW(IDS_ERROR_COULD_NOT_FORMAT),
                                   FmtInfo->FileSystemName);
@@ -1449,7 +1436,7 @@ FsVolCallback(
             DPRINT1("FormatPartition() failed with status 0x%08lx\n", FmtInfo->ErrorStatus);
 
             // ERROR_FORMATTING_PARTITION
-            DisplayError(NULL,
+            DisplayError(GetParent(UiContext.hwndDlg),
                          0, // Default to "Error"
                          IDS_ERROR_FORMATTING_PARTITION,
                          FmtInfo->Volume->Info.DeviceName);
@@ -1468,7 +1455,8 @@ FsVolCallback(
         {
             INT nRet;
 
-            nRet = DisplayMessage(NULL, MB_ICONERROR | MB_OKCANCEL,
+            nRet = DisplayMessage(GetParent(UiContext.hwndDlg),
+                                  MB_ICONERROR | MB_OKCANCEL,
                                   NULL, // Default to "Error"
                                   MAKEINTRESOURCEW(IDS_ERROR_COULD_NOT_CHECK),
                                   ChkInfo->Volume->Info.FileSystem);
@@ -1486,7 +1474,7 @@ FsVolCallback(
         {
             DPRINT1("ChkdskPartition() failed with status 0x%08lx\n", ChkInfo->ErrorStatus);
 
-            DisplayError(NULL,
+            DisplayError(GetParent(UiContext.hwndDlg),
                          0, // Default to "Error"
                          IDS_ERROR_CHECKING_PARTITION,
                          ChkInfo->ErrorStatus);
@@ -1560,9 +1548,6 @@ FsVolCallback(
         // EndFormat(FmtInfo->ErrorStatus);
         if (FmtInfo->FileSystemName)
             *(PWSTR)FmtInfo->FileSystemName = UNICODE_NULL; // FIXME: HACK!
-
-        // /* Reset the file system list */
-        // ResetFileSystemList();
         return 0;
     }
 
@@ -1815,7 +1800,6 @@ PrepareAndDoCopyThread(
     NTSTATUS Status;
     FSVOL_CONTEXT FsVolContext;
     COPYCONTEXT CopyContext;
-    WCHAR PathBuffer[RTL_NUMBER_OF_FIELD(PARTENTRY, DeviceName) + 1];
 
     /* Retrieve pointer to the global setup data */
     pSetupData = (PSETUPDATA)GetWindowLongPtrW(hwndDlg, GWLP_USERDATA);
@@ -1838,45 +1822,11 @@ PrepareAndDoCopyThread(
 
 
     /*
-     * Find/Set the system partition, and apply all pending partition operations.
+     * Apply all the pending partition/volume operations.
      */
 
-    /* Create context for the volume/partition operations */
+    /* Create context for the partition/volume operations */
     FsVolContext.pSetupData = pSetupData;
-
-    /* Set status text */
-    SetWindowResTextW(GetDlgItem(hwndDlg, IDC_ACTIVITY),
-                      pSetupData->hInstance,
-                      IDS_CONFIG_SYSTEM_PARTITION);
-    SetDlgItemTextW(hwndDlg, IDC_ITEM, L"");
-
-    /* Find or set the active system partition before starting formatting */
-    Success = InitSystemPartition(pSetupData->PartitionList,
-                                  InstallPartition,
-                                  &SystemPartition,
-                                  FsVolCallback,
-                                  &FsVolContext);
-    // if (!Success)
-    //     return FsVolContext.NextPageOnAbort;
-    //
-    // FIXME?? If cannot use any system partition, install FreeLdr on floppy / removable media??
-    //
-    if (!Success)
-    {
-        /* Display an error if an unexpected failure happened */
-        MessageBoxW(GetParent(hwndDlg), L"Failed to find or set the system partition!", L"Error", MB_ICONERROR);
-
-        /* Re-enable the Close/Cancel buttons */
-        PropSheet_SetCloseCancel(GetParent(hwndDlg), TRUE);
-
-        /*
-         * We failed due to an unexpected error, keep on the copy page to view the current state,
-         * but enable the "Next" button to allow the user to continue to the terminate page.
-         */
-        PropSheet_SetWizButtons(GetParent(hwndDlg), PSWIZB_NEXT);
-        return 1;
-    }
-
 
     /* Set status text */
     SetWindowResTextW(GetDlgItem(hwndDlg, IDC_ACTIVITY),
@@ -1911,7 +1861,6 @@ PrepareAndDoCopyThread(
     PropSheet_SetCloseCancel(GetParent(hwndDlg), TRUE);
 
 
-
     /* Re-calculate the final destination paths */
     ASSERT(InstallPartition);
     Status = InitDestinationPaths(&pSetupData->USetupData,
@@ -1919,7 +1868,11 @@ PrepareAndDoCopyThread(
                                   InstallVolume);
     if (!NT_SUCCESS(Status))
     {
-        DisplayMessage(GetParent(hwndDlg), MB_ICONERROR, L"Error", L"InitDestinationPaths() failed with status 0x%08lx\n", Status);
+        DisplayMessage(GetParent(hwndDlg),
+                       MB_ICONERROR,
+                       NULL, // Default to "Error"
+                       L"InitDestinationPaths() failed with status 0x%08lx",
+                       Status);
 
         /*
          * We failed due to an unexpected error, keep on the copy page to view the current state,
@@ -1930,9 +1883,8 @@ PrepareAndDoCopyThread(
     }
 
 
-
     /*
-     * Preparation of the list of files to be copied
+     * Prepare the list of files to be copied.
      */
 
     /* Set status text */
@@ -1971,7 +1923,7 @@ PrepareAndDoCopyThread(
 
 
     /*
-     * Perform the file copy
+     * Perform the file copy.
      */
 
     /* Set status text */
@@ -1985,7 +1937,7 @@ PrepareAndDoCopyThread(
     CopyContext.TotalOperations = 0;
     CopyContext.CompletedOperations = 0;
 
-    /* Do the file copying - The callback handles whether or not we should stop file copying */
+    /* Do the file copying - The callback handles file copying halting */
     if (!DoFileCopy(&pSetupData->USetupData, FileCopyCallback, &CopyContext))
     {
         /* Display an error only if an unexpected failure happened, and not because the user cancelled the installation */
@@ -2013,7 +1965,7 @@ PrepareAndDoCopyThread(
 
 
     /*
-     * Create or update the registry hives
+     * Create or update the registry hives.
      */
 
     /* Set status text */
@@ -2042,22 +1994,19 @@ PrepareAndDoCopyThread(
     DBG_UNREFERENCED_PARAMETER(ErrorNumber);
     SendMessageW(UiContext.hWndProgress, PBM_SETPOS, 100, 0);
 
+
     /*
-     * And finally, install the bootloader
+     * And finally, install the bootloader if necessary.
      */
 
-    /* Set status text */
-    SetWindowResTextW(GetDlgItem(hwndDlg, IDC_ACTIVITY),
-                      pSetupData->hInstance,
-                      IDS_INSTALL_BOOTLOADER);
-    SetDlgItemTextW(hwndDlg, IDC_ITEM, L"");
-
-    RtlFreeUnicodeString(&pSetupData->USetupData.SystemRootPath);
-    StringCchPrintfW(PathBuffer, _countof(PathBuffer),
-                     L"%s\\", SystemPartition->DeviceName);
-    RtlCreateUnicodeString(&pSetupData->USetupData.SystemRootPath, PathBuffer);
-    DPRINT1("SystemRootPath: %wZ\n", &pSetupData->USetupData.SystemRootPath);
-
+    if (pSetupData->USetupData.BootLoaderLocation >= 1)
+    {
+        /* Set status text */
+        SetWindowResTextW(GetDlgItem(hwndDlg, IDC_ACTIVITY),
+                          pSetupData->hInstance,
+                          IDS_INSTALL_BOOTLOADER);
+        SetDlgItemTextW(hwndDlg, IDC_ITEM, L"");
+    }
     switch (pSetupData->USetupData.BootLoaderLocation)
     {
         /* Install on removable disk */
@@ -2071,6 +2020,7 @@ PrepareAndDoCopyThread(
 
             INT nRet;
         RetryCancel:
+            Status = STATUS_CANCELLED;
             nRet = DisplayMessage(GetParent(hwndDlg),
                                   MB_ICONINFORMATION | MB_OKCANCEL,
                                   L"Bootloader installation",
@@ -2125,6 +2075,16 @@ PrepareAndDoCopyThread(
         case 2: // System partition / MBR and VBR (on BIOS-based PC)
         case 3: // VBR only (on BIOS-based PC)
         {
+            WCHAR PathBuffer[RTL_NUMBER_OF_FIELD(PARTENTRY, DeviceName) + 1];
+
+            ASSERT(SystemPartition);
+
+            RtlFreeUnicodeString(&pSetupData->USetupData.SystemRootPath);
+            StringCchPrintfW(PathBuffer, _countof(PathBuffer),
+                             L"%s\\", SystemPartition->DeviceName);
+            RtlCreateUnicodeString(&pSetupData->USetupData.SystemRootPath, PathBuffer);
+            DPRINT1("SystemRootPath: %wZ\n", &pSetupData->USetupData.SystemRootPath);
+
             /* Copy FreeLoader to the disk and save the boot entries */
             Status = InstallBootManagerAndBootEntries(
                         pSetupData->USetupData.ArchType,
@@ -2174,7 +2134,47 @@ PrepareAndDoCopyThread(
         /* Skip installation */
         case 0:
         default:
+            Status = STATUS_CANCELLED;
             break;
+    }
+
+    /*
+     * Only now, set the system partition if the bootloader
+     * was successfully installed on hard-disk.
+     */
+    // TODO: Investigate if we need to do this as well for the removable media case.
+    if ((pSetupData->USetupData.BootLoaderLocation >= 2) &&
+        (pSetupData->USetupData.BootLoaderLocation <= 3) &&
+        (Status == STATUS_SUCCESS))
+    {
+        ASSERT(SystemPartition);
+
+        /* Set status text */
+        SetWindowResTextW(GetDlgItem(hwndDlg, IDC_ACTIVITY),
+                          pSetupData->hInstance,
+                          IDS_CONFIG_SYSTEM_PARTITION);
+        SetDlgItemTextW(hwndDlg, IDC_ITEM, L"");
+
+        /* Set the active system partition */
+        // FIXME TODO: Part of this behaviour is platform-specific
+        // and will be refactored in the future.
+        // TODO: Could we retrieve, if any, the old system partition (on BIOS-based
+        // PCs only), so that we can then add a bootloader entry to boot that older
+        // partition?
+        // PPARTENTRY OldActivePart = GetActiveDiskPartition(SystemPartition->DiskEntry);
+        PtSetSystemPartition(SystemPartition);
+
+        /* Commit the partition changes to the disk */
+        Status = WritePartitions(SystemPartition->DiskEntry);
+        if (!NT_SUCCESS(Status))
+        {
+            DPRINT1("WritePartitions(disk %lu) failed, Status 0x%08lx\n",
+                    DiskEntry->DiskNumber, Status);
+            FsVolCallback(&FsVolContext,
+                          FSVOLNOTIFY_PARTITIONERROR,
+                          STATUS_PARTITION_FAILURE, // FIXME
+                          Status);
+        }
     }
 
 

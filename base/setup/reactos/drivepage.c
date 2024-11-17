@@ -1136,7 +1136,7 @@ PrintPartitionData(
     {
         StringCchPrintfW(LineBuffer, ARRAYSIZE(LineBuffer),
                          // MUIGetString(STRING_HDDINFOUNK5),
-                         PartEntry->BootIndicator ? L"Active" : L"");
+                         PartEntry->IsSystemPartition ? L"Active" : L"");
     }
     TreeList_SetItemText(hWndList, htiPart, 3, LineBuffer);
 
@@ -1629,6 +1629,88 @@ DoDeletePartition(
 }
 
 
+// PFSVOL_CALLBACK
+static FSVOL_OP
+CALLBACK
+StorCfgCallback(
+    _In_opt_ PVOID Context,
+    _In_ FSVOLNOTIFY Notify,
+    _In_ ULONG_PTR Param1,
+    _In_ ULONG_PTR Param2)
+{
+    HWND hwndDlg = (HWND)Context;
+
+    switch (Notify)
+    {
+    // FIXME: Deprecate!
+    case ChangeSystemPartition:
+    {
+        PPARTENTRY OldSystemPart = (PPARTENTRY)Param1;
+        PPARTENTRY SystemPartition = (PPARTENTRY)Param2;
+
+        WCHAR CurSysPart[128];
+        WCHAR CurSysDisk[128];
+        WCHAR NewSysPart[128];
+
+        // FIXME: Use partition/disk display description helpers
+        StringCchPrintfW(CurSysPart, _countof(CurSysPart),
+                         L"Harddisk %lu, Partition %lu",
+                         OldSystemPart->DiskEntry->DiskNumber,
+                         OldSystemPart->OnDiskPartitionNumber);
+        StringCchPrintfW(CurSysDisk, _countof(CurSysDisk),
+                         L"Harddisk %lu",
+                         OldSystemPart->DiskEntry->DiskNumber);
+        StringCchPrintfW(NewSysPart, _countof(NewSysPart),
+                         L"Harddisk %lu, Partition %lu",
+                         SystemPartition->DiskEntry->DiskNumber,
+                         SystemPartition->OnDiskPartitionNumber);
+
+        /* If the user really wants to change the system partition... */
+        if (DisplayMessage(GetParent(hwndDlg),
+                           MB_OKCANCEL | MB_DEFBUTTON2 | MB_ICONWARNING,
+                           MAKEINTRESOURCEW(IDS_CAPTION), // L"Warning",
+                           MAKEINTRESOURCEW(IDS_WARN_CHANGE_SYSTEM_PARTITION),
+                           CurSysPart,
+                           CurSysDisk,
+                           NewSysPart) == IDOK)
+        {
+            /* ... make it so! */
+            return FSVOL_DOIT;
+        }
+        return FSVOL_ABORT;
+    }
+
+    case FSVOLNOTIFY_PARTITIONERROR:
+    {
+        switch (Param1)
+        {
+        case ERROR_SYSTEM_PARTITION_NOT_FOUND:
+        {
+            /* FIXME: improve the error dialog */
+            //
+            // Error dialog should say that we cannot find a suitable
+            // system partition and create one on the system. At this point,
+            // it may be nice to ask the user whether he wants to continue,
+            // or use an external drive as the system drive/partition
+            // (e.g. floppy, USB drive, etc...)
+            //
+            DisplayError(GetParent(hwndDlg),
+                         0, // Default to "Error"
+                         IDS_ERROR_SYSTEM_PARTITION);
+            break;
+        }
+
+        default:
+            DPRINT1("Unknown error: Status 0x%08lx\n", Param1);
+            break;
+        }
+        return FSVOL_ABORT;
+    }
+    }
+    return 0;
+}
+
+
 INT_PTR
 CALLBACK
 DriveDlgProc(
@@ -1841,6 +1923,10 @@ DriveDlgProc(
                         ASSERT(FALSE);
                         break;
                     }
+
+                    // TODO: Warn if we delete a system partition, or
+                    // the partition containing the installation source
+                    // (see usetup.c).
 
                     /* Choose the correct warning message to display:
                      * MBR-extended (container) vs. standard partition */
@@ -2071,7 +2157,7 @@ DisableWizNext:
 
                         nRet = DisplayMessage(hwndDlg,
                                               MB_OKCANCEL | MB_ICONWARNING,
-                                              L"Warning",
+                                              MAKEINTRESOURCEW(IDS_CAPTION), // L"Warning",
                                               L"The disk you have selected for installing ReactOS\n"
                                               L"is not visible by the firmware of your computer,\n"
                                               L"and so may not be bootable.\n"
@@ -2170,6 +2256,29 @@ DisableWizNext:
                     }
 
                     InstallPartition = PartEntry;
+
+                    /* Find the existing, or configure a new system partition,
+                     * **ONLY** if we are going to install a bootloader. */
+                    SystemPartition = InitSystemPartition(pSetupData->USetupData.ArchType,
+                                                          pSetupData->PartitionList,
+                                                          InstallPartition,
+                                                          StorCfgCallback,
+                                                          hwndDlg);
+                    if (!SystemPartition)
+                    {
+                        //
+                        // FIXME?? If cannot use any system partition,
+                        // install FreeLdr on floppy / removable media??
+                        //
+#if 0
+                        SystemPartition = InstallPartition;
+                        pSetupData->USetupData.BootLoaderLocation = 1; // or 0: Skip install.
+#endif
+
+                        /* Fail and don't continue the installation */
+                        SetWindowLongPtrW(hwndDlg, DWLP_MSGRESULT, -1);
+                        return TRUE;
+                    }
                     break;
                 }
 

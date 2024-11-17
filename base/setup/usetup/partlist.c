@@ -207,7 +207,7 @@ PartitionDescription(
                           "%c%c %c %s(%lu) ",
                           !(VolInfo && VolInfo->DriveLetter) ? '-' : (CHAR)VolInfo->DriveLetter,
                           !(VolInfo && VolInfo->DriveLetter) ? '-' : ':',
-                          PartEntry->BootIndicator ? '*' : ' ',
+                          PartEntry->IsSystemPartition ? '*' : ' ',
                           PartEntry->LogicalPartition ? "  " : "", // Optional indentation
                           PartEntry->PartitionNumber);
 

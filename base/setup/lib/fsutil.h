@@ -202,7 +202,7 @@ typedef struct _CHECK_VOLUME_INFO
 typedef FSVOL_OP
 (CALLBACK *PFSVOL_CALLBACK)(
     _In_opt_ PVOID Context,
-    _In_ FSVOLNOTIFY FormatStatus,
+    _In_ FSVOLNOTIFY Notify,
     _In_ ULONG_PTR Param1,
     _In_ ULONG_PTR Param2);
 

@@ -66,7 +66,7 @@
 @ stdcall IsValidInstallDirectory(wstr)
 @ stdcall InitDestinationPaths(ptr wstr ptr)
 @ stdcall InitializeSetup(ptr ptr ptr ptr)
-@ stdcall InitSystemPartition(ptr ptr ptr ptr ptr)
+@ stdcall InitSystemPartition(long ptr ptr ptr ptr)
 @ stdcall InstallSetupInfFile(ptr)
 @ stdcall UpdateRegistry(ptr long ptr long wstr ptr ptr)
 

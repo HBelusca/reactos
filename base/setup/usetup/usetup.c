@@ -48,11 +48,11 @@ static PPARTENTRY InstallPartition = NULL;
 // static PVOLENTRY InstallVolume = NULL;
 #define InstallVolume (InstallPartition->Volume)
 /*
- * The system partition we will actually use. It can be different from
- * PartitionList->SystemPartition in case we don't support it, or we install
- * on a removable disk.
- * We may indeed not support the original system partition in case we do not
- * have write support on it. Please note that this situation is partly a HACK
+ * The system partition we will actually use to install the bootloader.
+ * On BIOS-based PCs, it can be different from the existing single bootable
+ * partition, in case we don't support it, or we install on a removable disk.
+ * We may indeed not support the original partition in case we do not have
+ * write support on it. Please note that this situation is partly a HACK
  * and MUST NEVER happen on architectures where real system partitions are
  * mandatory (because then they are formatted in FAT FS and we support write
  * operation on them).
@@ -1556,10 +1556,10 @@ SelectPartitionPage(PINPUT_RECORD Ir)
     ULONG Error;
     ULONGLONG MaxTargetSize;
 
-    if (PartitionList == NULL)
+    if (!PartitionList)
     {
         PartitionList = CreatePartitionList();
-        if (PartitionList == NULL)
+        if (!PartitionList)
         {
             MUIDisplayError(ERROR_DRIVE_INFORMATION, Ir, POPUP_WAIT_ENTER);
             return QUIT_PAGE;
@@ -1589,7 +1589,7 @@ SelectPartitionPage(PINPUT_RECORD Ir)
         ASSERT(InstallPartition->IsPartitioned);
         ASSERT(InstallPartition->Volume);
 
-        return START_PARTITION_OPERATIONS_PAGE;
+        goto StartOperations;
     }
 
     MUIDisplayPage(SELECT_PARTITION_PAGE);
@@ -1601,6 +1601,9 @@ SelectPartitionPage(PINPUT_RECORD Ir)
                         yScreen - 3);
     DrawPartitionList(&ListUi);
 
+    // FIXME: We do this after the InitPartitionListUi(), because the code below
+    // wants to use ListUi.CurrentPartition in the AutoPartition case. This needs
+    // to be fixed to not depend on ListUi.
     if (IsUnattendedSetup) do
     {
         /* If DestinationDiskNumber or DestinationPartitionNumber are invalid
@@ -1794,16 +1797,17 @@ SelectPartitionPage(PINPUT_RECORD Ir)
                 }
             }
 
-            if (CurrentPartition == PartitionList->SystemPartition ||
-                IsPartitionActive(CurrentPartition))
-            {
+            /* Warn the user if a system partition (or the single bootable
+             * partition on BIOS-based PCs) is going to be deleted */
+            if (CurrentPartition->IsSystemPartition)
                 return CONFIRM_DELETE_SYSTEM_PARTITION_PAGE;
-            }
 
             return DELETE_PARTITION_PAGE;
         }
     }
 
+// TODO: Consider: The following might be done in the
+// initialization steps in StartPartitionOperationsPage().
 CreateInstallPartition:
     ASSERT(CurrentPartition);
     ASSERT(!IsContainerPartition(CurrentPartition->PartitionType));
@@ -1839,6 +1843,8 @@ CreateInstallPartition:
     }
 
     InstallPartition = CurrentPartition;
+
+StartOperations:
     return START_PARTITION_OPERATIONS_PAGE;
 }
 
@@ -2242,25 +2248,21 @@ DeletePartitionPage(PINPUT_RECORD Ir)
 }
 
 
-/*
- * Displays the SelectFileSystemPage.
- *
- * Next pages:
- *  CheckFileSystemPage (At once if RepairUpdate is selected)
- *  CheckFileSystemPage (At once if Unattended and not USetupData.FormatPartition)
- *  FormatPartitionPage (Default, at once if Unattended and USetupData.FormatPartition)
- *  SelectPartitionPage (If the user aborts)
- *  QuitPage
- *
- * RETURNS
- *   Number of the next page.
- */
+// PFSVOL_CALLBACK
+static FSVOL_OP
+CALLBACK
+StorCfgCallback(
+    _In_opt_ PVOID Context,
+    _In_ FSVOLNOTIFY Notify,
+    _In_ ULONG_PTR Param1,
+    _In_ ULONG_PTR Param2);
+
 // PFSVOL_CALLBACK
 static FSVOL_OP
 CALLBACK
 FsVolCallback(
     _In_opt_ PVOID Context,
-    _In_ FSVOLNOTIFY FormatStatus,
+    _In_ FSVOLNOTIFY Notify,
     _In_ ULONG_PTR Param1,
     _In_ ULONG_PTR Param2);
 
@@ -2270,25 +2272,35 @@ typedef struct _FSVOL_CONTEXT
     PAGE_NUMBER NextPageOnAbort;
 } FSVOL_CONTEXT, *PFSVOL_CONTEXT;
 
+/*
+ * Starts the partition/volume operations.
+ *
+ * Next pages:
+ *  SelectFileSystemPage
+ *  FormatPartitionPage (Default, at once if Unattended and USetupData.FormatPartition)
+ *  CheckFileSystemPage (At once if RepairUpdate is selected)
+ *  CheckFileSystemPage (At once if Unattended and not USetupData.FormatPartition)
+ *  SelectPartitionPage (If the user aborts)
+ *  QuitPage
+ *
+ * RETURNS
+ *   Number of the next page.
+ */
 static PAGE_NUMBER
 StartPartitionOperationsPage(PINPUT_RECORD Ir)
 {
     FSVOL_CONTEXT FsVolContext = {Ir, QUIT_PAGE};
     BOOLEAN Success;
 
-    if (PartitionList == NULL || InstallPartition == NULL)
-    {
-        /* FIXME: show an error dialog */
-        return QUIT_PAGE;
-    }
+    ASSERT(PartitionList && InstallPartition);
 
-    /* Find or set the active system partition before starting formatting */
-    Success = InitSystemPartition(PartitionList,
-                                  InstallPartition,
-                                  &SystemPartition,
-                                  FsVolCallback,
-                                  &FsVolContext);
-    if (!Success)
+    /* Find the existing, or configure a new system partition */
+    SystemPartition = InitSystemPartition(USetupData.ArchType,
+                                          PartitionList,
+                                          InstallPartition,
+                                          StorCfgCallback,
+                                          &FsVolContext);
+    if (!SystemPartition)
         return FsVolContext.NextPageOnAbort;
     //
     // FIXME?? If cannot use any system partition, install FreeLdr on floppy / removable media??
@@ -2312,10 +2324,12 @@ StartPartitionOperationsPage(PINPUT_RECORD Ir)
     return BOOTLOADER_SELECT_PAGE;
 }
 
+
 static BOOLEAN
 ChangeSystemPartitionPage(
-    IN PINPUT_RECORD Ir,
-    IN PPARTENTRY SystemPartition)
+    _In_ PINPUT_RECORD Ir,
+    _In_ PPARTENTRY OldSystemPart,
+    _In_ PPARTENTRY SystemPartition)
 {
     PPARTENTRY PartEntry;
     PDISKENTRY DiskEntry;
@@ -2325,7 +2339,7 @@ ChangeSystemPartitionPage(
     // CONSOLE_Flush();
     MUIDisplayPage(CHANGE_SYSTEM_PARTITION);
 
-    PartEntry = PartitionList->SystemPartition;
+    PartEntry = OldSystemPart;
     DiskEntry = PartEntry->DiskEntry;
 
     PartitionDescription(PartEntry, LineBuffer, ARRAYSIZE(LineBuffer));
@@ -2355,6 +2369,69 @@ ChangeSystemPartitionPage(
     return TRUE;
 }
 
+// PFSVOL_CALLBACK
+static FSVOL_OP
+CALLBACK
+StorCfgCallback(
+    _In_opt_ PVOID Context,
+    _In_ FSVOLNOTIFY Notify,
+    _In_ ULONG_PTR Param1,
+    _In_ ULONG_PTR Param2)
+{
+    PFSVOL_CONTEXT FsVolContext = (PFSVOL_CONTEXT)Context;
+    PINPUT_RECORD Ir = FsVolContext->Ir;
+
+    switch (Notify)
+    {
+    // FIXME: Deprecate!
+    case ChangeSystemPartition:
+    {
+        PPARTENTRY OldSystemPart = (PPARTENTRY)Param1;
+        PPARTENTRY SystemPartition = (PPARTENTRY)Param2;
+
+        FsVolContext->NextPageOnAbort = SELECT_PARTITION_PAGE;
+        if (ChangeSystemPartitionPage(Ir, OldSystemPart, SystemPartition))
+            return FSVOL_DOIT;
+        return FSVOL_ABORT;
+    }
+
+    case FSVOLNOTIFY_PARTITIONERROR:
+    {
+        switch (Param1)
+        {
+        case ERROR_SYSTEM_PARTITION_NOT_FOUND:
+        {
+            /* FIXME: improve the error dialog */
+            //
+            // Error dialog should say that we cannot find a suitable
+            // system partition and create one on the system. At this point,
+            // it may be nice to ask the user whether he wants to continue,
+            // or use an external drive as the system drive/partition
+            // (e.g. floppy, USB drive, etc...)
+            //
+            PopupError("The ReactOS Setup could not find a supported system partition\n"
+                       "on your system or could not create a new one. Without such a partition\n"
+                       "the Setup program cannot install ReactOS.\n"
+                       "Press ENTER to return to the partition selection list.",
+                       MUIGetString(STRING_CONTINUE),
+                       Ir, POPUP_WAIT_ENTER);
+
+            FsVolContext->NextPageOnAbort = SELECT_PARTITION_PAGE;
+            break;
+        }
+
+        default:
+            DPRINT1("Unknown error: Status 0x%08lx\n", Param1);
+            break;
+        }
+        return FSVOL_ABORT;
+    }
+    }
+
+    return 0;
+}
+
+
 static VOID
 ResetFileSystemList(VOID)
 {
@@ -2376,8 +2453,6 @@ SelectFileSystemPage(
     PCWSTR DefaultFs;
     BOOLEAN ForceFormat;
     CHAR LineBuffer[100];
-
-    DPRINT("SelectFileSystemPage()\n");
 
     ForceFormat = (Volume->New || Volume->FormatState == Unformatted);
 
@@ -2448,6 +2523,10 @@ Restart:
         /* By default select the "FAT" file system */
         DefaultFs = L"FAT";
     }
+    // TODO: Should we let the user use a custom file system for
+    // the system volume or should we always use FAT(32) for it?
+    // For "compatibility", FAT(32) would be best indeed.
+    // Only do such choice if: ((Volume == SystemVolume) && (SystemVolume != InstallVolume))
 
     /* Create the file system list */
     // TODO: Display only the FSes compatible with the selected volume!
@@ -2599,26 +2678,15 @@ static FSVOL_OP
 CALLBACK
 FsVolCallback(
     _In_opt_ PVOID Context,
-    _In_ FSVOLNOTIFY FormatStatus,
+    _In_ FSVOLNOTIFY Notify,
     _In_ ULONG_PTR Param1,
     _In_ ULONG_PTR Param2)
 {
     PFSVOL_CONTEXT FsVolContext = (PFSVOL_CONTEXT)Context;
     PINPUT_RECORD Ir = FsVolContext->Ir;
 
-    switch (FormatStatus)
+    switch (Notify)
     {
-    // FIXME: Deprecate!
-    case ChangeSystemPartition:
-    {
-        PPARTENTRY SystemPartition = (PPARTENTRY)Param1;
-
-        FsVolContext->NextPageOnAbort = SELECT_PARTITION_PAGE;
-        if (ChangeSystemPartitionPage(Ir, SystemPartition))
-            return FSVOL_DOIT;
-        return FSVOL_ABORT;
-    }
-
     case FSVOLNOTIFY_PARTITIONERROR:
     {
         switch (Param1)
@@ -2630,29 +2698,24 @@ FsVolCallback(
             break;
         }
 
-        case ERROR_SYSTEM_PARTITION_NOT_FOUND:
+        default:
         {
+            CHAR Buffer[MAX_PATH];
+
             /* FIXME: improve the error dialog */
-            //
-            // Error dialog should say that we cannot find a suitable
-            // system partition and create one on the system. At this point,
-            // it may be nice to ask the user whether he wants to continue,
-            // or use an external drive as the system drive/partition
-            // (e.g. floppy, USB drive, etc...)
-            //
-            PopupError("The ReactOS Setup could not find a supported system partition\n"
-                       "on your system or could not create a new one. Without such a partition\n"
-                       "the Setup program cannot install ReactOS.\n"
-                       "Press ENTER to return to the partition selection list.",
+            DPRINT1("Unknown error while partitioning: Status 0x%08lx\n", Param1);
+            RtlStringCbPrintfA(Buffer,
+                               sizeof(Buffer),
+                               "Unknown error while partitioning: Status 0x%08lx",
+                               Param1);
+
+            PopupError(Buffer,
                        MUIGetString(STRING_CONTINUE),
                        Ir, POPUP_WAIT_ENTER);
 
             FsVolContext->NextPageOnAbort = SELECT_PARTITION_PAGE;
             break;
         }
-
-        default:
-            break;
         }
         return FSVOL_ABORT;
     }
@@ -2795,7 +2858,7 @@ FsVolCallback(
 
             RtlStringCbPrintfA(Buffer,
                                sizeof(Buffer),
-                               "ChkDsk detected some disk errors.\n(Status 0x%08lx).\n",
+                               "ChkDsk detected some disk errors.\n(Status 0x%08lx).",
                                ChkInfo->ErrorStatus);
 
             PopupError(Buffer,
@@ -3451,7 +3514,7 @@ BootLoaderSelectPage(PINPUT_RECORD Ir)
     }
 #endif
 
-    /* Is it an unattended install on hdd? */
+    /* Is it an unattended install on hard-disk? */
     if (IsUnattendedSetup)
     {
         if ((USetupData.BootLoaderLocation == 2) ||
@@ -3626,6 +3689,15 @@ static BOOLEAN
 BootLoaderHardDiskPage(PINPUT_RECORD Ir)
 {
     NTSTATUS Status;
+    WCHAR PathBuffer[RTL_NUMBER_OF_FIELD(PARTENTRY, DeviceName) + 1];
+
+    ASSERT(SystemPartition);
+
+    RtlFreeUnicodeString(&USetupData.SystemRootPath);
+    RtlStringCchPrintfW(PathBuffer, _countof(PathBuffer),
+                        L"%s\\", SystemPartition->DeviceName);
+    RtlCreateUnicodeString(&USetupData.SystemRootPath, PathBuffer);
+    DPRINT1("SystemRootPath: %wZ\n", &USetupData.SystemRootPath);
 
     /* Copy FreeLoader to the disk and save the boot entries */
     Status = InstallBootManagerAndBootEntries(
@@ -3691,17 +3763,14 @@ BootLoaderHardDiskPage(PINPUT_RECORD Ir)
 static PAGE_NUMBER
 BootLoaderInstallPage(PINPUT_RECORD Ir)
 {
-    WCHAR PathBuffer[RTL_NUMBER_OF_FIELD(PARTENTRY, DeviceName) + 1];
-
-    RtlFreeUnicodeString(&USetupData.SystemRootPath);
-    RtlStringCchPrintfW(PathBuffer, _countof(PathBuffer),
-                        L"%s\\", SystemPartition->DeviceName);
-    RtlCreateUnicodeString(&USetupData.SystemRootPath, PathBuffer);
-    DPRINT1("SystemRootPath: %wZ\n", &USetupData.SystemRootPath);
-
     if (USetupData.BootLoaderLocation != 0)
         MUIDisplayPage(BOOTLOADER_INSTALL_PAGE);
 
+    /*
+     * IMPORTANT:
+     * The system partition is set only if the bootloader
+     * was installed successfully on hard-disk.
+     */
     switch (USetupData.BootLoaderLocation)
     {
         /* Install on removable disk */
@@ -3711,7 +3780,35 @@ BootLoaderInstallPage(PINPUT_RECORD Ir)
         /* Install on hard-disk */
         case 2: // System partition / MBR and VBR (on BIOS-based PC)
         case 3: // VBR only (on BIOS-based PC)
-            return BootLoaderHardDiskPage(Ir) ? SUCCESS_PAGE : QUIT_PAGE;
+        {
+            if (!BootLoaderHardDiskPage(Ir))
+                return QUIT_PAGE;
+
+            /* Set the active system partition */
+            // FIXME TODO: Part of this behaviour is platform-specific
+            // and will be refactored in the future.
+            // TODO: Could we retrieve, if any, the old system partition (on BIOS-based
+            // PCs only), so that we can then add a bootloader entry to boot that older
+            // partition?
+            // PPARTENTRY OldActivePart = GetActiveDiskPartition(SystemPartition->DiskEntry);
+            PtSetSystemPartition(SystemPartition);
+
+            /* Commit the partition changes to the disk */
+            Status = WritePartitions(SystemPartition->DiskEntry);
+            if (!NT_SUCCESS(Status))
+            {
+                FSVOL_CONTEXT FsVolContext = {Ir, QUIT_PAGE};
+
+                DPRINT1("WritePartitions(disk %lu) failed, Status 0x%08lx\n",
+                        DiskEntry->DiskNumber, Status);
+                FsVolCallback(&FsVolContext,
+                              FSVOLNOTIFY_PARTITIONERROR,
+                              STATUS_PARTITION_FAILURE, // FIXME
+                              Status);
+                return QUIT_PAGE;
+            }
+            return SUCCESS_PAGE;
+        }
 
         /* Skip installation */
         case 0:
@@ -4176,7 +4273,7 @@ RunUSetup(VOID)
             case SETUP_INIT_PAGE:
             case SELECT_FILE_SYSTEM_PAGE:
             case FORMAT_PARTITION_PAGE:
-            // case CHECK_FILE_SYSTEM_PAGE:
+            case CHECK_FILE_SYSTEM_PAGE:
             case REBOOT_PAGE:
             case RECOVERY_PAGE:
                 break;
