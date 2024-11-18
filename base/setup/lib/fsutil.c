@@ -560,10 +560,10 @@ InstallFatBootCode(
     }
 
     /* Adjust the bootsector (copy a part of the FAT12/16 BPB) */
-    RtlCopyMemory(&((PFAT_BOOTSECTOR)NewBootSector.BootCode)->OemName,
-                  &((PFAT_BOOTSECTOR)OrigBootSector.BootCode)->OemName,
+    RtlCopyMemory(&((PFAT_BOOTSECTOR)NewBootSector.BootCode)->OemName,  // BytesPerSector
+                  &((PFAT_BOOTSECTOR)OrigBootSector.BootCode)->OemName, // BytesPerSector
                   FIELD_OFFSET(FAT_BOOTSECTOR, BootCodeAndData) -
-                  FIELD_OFFSET(FAT_BOOTSECTOR, OemName));
+                  FIELD_OFFSET(FAT_BOOTSECTOR, OemName));               // BytesPerSector
 
     /* Free the original bootsector */
     FreeBootCode(&OrigBootSector);
@@ -619,10 +619,10 @@ InstallFat32BootCode(
     }
 
     /* Adjust the bootsector (copy a part of the FAT32 BPB) */
-    RtlCopyMemory(&((PFAT32_BOOTSECTOR)NewBootSector.BootCode)->OemName,
-                  &((PFAT32_BOOTSECTOR)OrigBootSector.BootCode)->OemName,
+    RtlCopyMemory(&((PFAT32_BOOTSECTOR)NewBootSector.BootCode)->OemName,    // BytesPerSector
+                  &((PFAT32_BOOTSECTOR)OrigBootSector.BootCode)->OemName,   // BytesPerSector
                   FIELD_OFFSET(FAT32_BOOTSECTOR, BootCodeAndData) -
-                  FIELD_OFFSET(FAT32_BOOTSECTOR, OemName));
+                  FIELD_OFFSET(FAT32_BOOTSECTOR, OemName));                 // BytesPerSector
 
     /*
      * We know we copy the boot code to a file only when DstPath != RootPartition,
