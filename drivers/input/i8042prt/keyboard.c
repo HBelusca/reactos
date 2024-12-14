@@ -836,10 +836,38 @@ i8042KbdInterruptService(
 
     INFO_(I8042PRT, "Got: 0x%02x\n", Output);
 
+
+    /* Check for SysRq debugging support */
+    if (!(InputData->Flags & KEY_BREAK) &&
+        PortDeviceExtension->Settings.BreakOnSysRq &&
+        !KD_DEBUGGER_NOT_PRESENT && KD_DEBUGGER_ENABLED)
+    {
+        BOOLEAN isEnh = ENHANCED_KEYBOARD(DeviceExtension->KeyboardAttributes.KeyboardIdentifier);
+
+        /* On Enhanced 101 keyboard, SysReq key is 0xE0 0x37
+         * On 84-key AT keyboard, SysReq key is 0xE0 0x54. */
+        if ((InputData->Flags & KEY_E0) &&
+            (InputData->MakeCode == isEnh ? KEYBOARD_DEBUG_HOTKEY_ENH : KEYBOARD_DEBUG_HOTKEY_AT))
+        {
+            /* Wrap in SEH so we don't crash if there is
+             * no debugger or it gets disconnected. */
+            _SEH2_TRY
+            {
+                DbgBreakPointWithStatus(DBG_STATUS_SYSRQ);
+            }
+            _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+            {
+            }
+            _SEH2_END;
+        }
+    }
+
+
+    // See commit cba6f25d3 (r44743)
     if (PortDeviceExtension->Settings.CrashOnCtrlScroll)
     {
         /* Test for CTRL + SCROLL LOCK twice */
-        static const UCHAR ScanCodes[] = { 0x1d, 0x46, 0xc6, 0x46, 0 };
+        static const UCHAR ScanCodes[] = { /*0xe0,*/ 0x1d, 0x46, 0xc6, 0x46, 0 };
 
         if (Output == ScanCodes[DeviceExtension->ComboPosition])
         {
@@ -861,6 +889,8 @@ i8042KbdInterruptService(
         }
 
         /* Test for TAB + key combination */
+        // HISTORICAL NOTE: TAB + key was introduced in commit
+        // 3273c9317 (r2469) in replacement of SysRq + key.
         if (InputData->MakeCode == 0x0F)
         {
             DeviceExtension->TabPressed = !(InputData->Flags & KEY_BREAK);
@@ -870,10 +900,20 @@ i8042KbdInterruptService(
             DeviceExtension->TabPressed = FALSE;
 
             /* Check which action to do */
-            if (InputData->MakeCode == 0x25)
+            if (!KD_DEBUGGER_NOT_PRESENT && (InputData->MakeCode == 0x25))
             {
                 /* k - Breakpoint */
-                DbgBreakPointWithStatus(DBG_STATUS_SYSRQ);
+
+                /* Wrap in SEH so we don't crash if there is
+                 * no debugger or it gets disconnected. */
+                _SEH2_TRY
+                {
+                    DbgBreakPointWithStatus(DBG_STATUS_SYSRQ);
+                }
+                _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+                {
+                }
+                _SEH2_END;
             }
             else if (InputData->MakeCode == 0x30)
             {

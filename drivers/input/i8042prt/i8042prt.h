@@ -37,6 +37,8 @@ typedef struct _I8042_SETTINGS
     ULONG PollingIterationsMaximum;
     ULONG ResendIterations;                /* done */
     ULONG SampleRate;
+    ULONG BreakOnSysRq;                    /* done */
+    ULONG KdEnableOnCtrlSysRq;             /* done */
     ULONG CrashOnCtrlScroll;               /* done */
 } I8042_SETTINGS, *PI8042_SETTINGS;
 
@@ -209,6 +211,10 @@ typedef struct _I8042_HOOK_WORKITEM
  * --------------------------------------------------*/
 
 #define MAX(a, b) ((a) >= (b) ? (a) : (b))
+
+// #define KEYBOARD_BREAK_CODE       0xF0
+#define KEYBOARD_DEBUG_HOTKEY_ENH 0x37 // SysReq (Alt+PrtSc) scan code for Enhanced Keyboard
+#define KEYBOARD_DEBUG_HOTKEY_AT  0x54 // SysReq scan code for 84-key Keyboard
 
 #define KEYBOARD_POWER_CODE 0x5E
 #define KEYBOARD_SLEEP_CODE 0x5F
