@@ -835,7 +835,12 @@ i8042KbdInterruptService(
     }
 
     INFO_(I8042PRT, "Got: 0x%02x\n", Output);
-
+    DbgPrint("0x%02x (Prev MakeCode 0x%02x, Flags %c%c%c%c)\n",
+             Output, InputData->MakeCode,
+             (InputData->Flags & KEY_E1 ? '1' : '-'),
+             (InputData->Flags & KEY_E0 ? '0' : '-'),
+             (InputData->Flags & KEY_BREAK ? 'B' : '-'),
+             (InputData->Flags & KEY_MAKE ? 'M' : '-'));
 
     /* Check for SysRq debugging support */
     if (!(InputData->Flags & KEY_BREAK) &&
@@ -846,8 +851,14 @@ i8042KbdInterruptService(
 
         /* On Enhanced 101 keyboard, SysReq key is 0xE0 0x37
          * On 84-key AT keyboard, SysReq key is 0xE0 0x54. */
+#if 0
         if ((InputData->Flags & KEY_E0) &&
             (InputData->MakeCode == isEnh ? KEYBOARD_DEBUG_HOTKEY_ENH : KEYBOARD_DEBUG_HOTKEY_AT))
+#else
+        if (isEnh ? ((InputData->Flags & KEY_E0) &&
+                     (InputData->MakeCode == KEYBOARD_DEBUG_HOTKEY_ENH))
+                  :  (InputData->MakeCode == KEYBOARD_DEBUG_HOTKEY_AT))
+#endif
         {
             /* Wrap in SEH so we don't crash if there is
              * no debugger or it gets disconnected. */
@@ -875,7 +886,7 @@ i8042KbdInterruptService(
             if (ScanCodes[DeviceExtension->ComboPosition] == 0)
                 KeBugCheck(MANUALLY_INITIATED_CRASH);
         }
-        else if (Output == 0xfa)
+        else if (Output == KBD_ACK)
         {
             /* Ignore ACK */
         }
