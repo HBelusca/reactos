@@ -152,6 +152,26 @@ i8042DetectKeyboard(
         return;
 
     /*
+     * TODO: Quoting the "Microsoft Keyboard Scan Code Specification"
+     * https://download.microsoft.com/download/1/6/1/161ba512-40e2-4cc9-843a-923143f3456c/scancode.doc
+     *
+     * "Under all Microsoft operating systems, all keyboards actually transmit
+     * Scan Code Set 2 values down the wire from the keyboard to the keyboard port.
+     * These values are translated to Scan Code Set 1 by the i8042 port chip.[^1]
+     * The rest of the operating system, and all applications that handle scan codes
+     * expect the values to be from Scan Code Set 1.
+     *
+     * [^1] This mode is set by issuing a 0xF0 command byte to the keyboard,
+     * and turning the translate bit (0x40) in the 8042 command byte on. On
+     * Intel and Power PC machines, it is the firmware that initializes the
+     * keyboard and 8042 chip this way, while Windows NT® explicitly sets this
+     * mode for MIPS and Alpha.
+     * In the very early days of Windows NT®, an attempt was made to use the
+     * much more orthogonal Scan Code Set 3, but due to bugs in the implementation
+     * of this Scan Code Set on numerous OEM keyboards, the idea was abandoned."
+     */
+
+    /*
      * We used to send a KBD_LINE_TEST (0xAB) command, but on at least HP
      * Pavilion notebooks the response to that command was incorrect.
      * So now we just assume that a keyboard is attached.
