@@ -20,6 +20,17 @@ typedef enum
     dsSurpriseRemoved
 } DEVICE_STATE;
 
+/* Debugging support */
+typedef union _DBGKEY_SCANCODE
+{
+    struct
+    {
+        UCHAR Code;
+        UCHAR Code2; ///< Alternate for 84-key keyboard.
+    };
+    USHORT AsShort;
+} DBGKEY_SCANCODE;
+
 typedef struct _I8042_SETTINGS
 {
     /* Registry settings */
@@ -37,9 +48,14 @@ typedef struct _I8042_SETTINGS
     ULONG PollingIterationsMaximum;
     ULONG ResendIterations;                /* done */
     ULONG SampleRate;
-    ULONG BreakOnSysRq;                    /* done */
-    ULONG KdEnableOnCtrlSysRq;             /* done */
-    ULONG CrashOnCtrlScroll;               /* done */
+
+    /* Debugging support */
+    ULONG BreakOnSysRq;
+    ULONG CrashOnCtrlScroll; // TODO: Old, deprecate
+    LONG CrashFlags;
+    DBGKEY_SCANCODE CrashScan;
+    LONG DebugEnableFlags;
+    DBGKEY_SCANCODE DebugEnableScan;
 } I8042_SETTINGS, *PI8042_SETTINGS;
 
 typedef enum _MOUSE_TIMEOUT_STATE
@@ -160,9 +176,8 @@ typedef struct _I8042_KEYBOARD_EXTENSION
     PIO_WORKITEM PowerWorkItem;
     PIRP PowerIrp;
 
-    /* Debug items */
-    ULONG ComboPosition;
-    PIO_WORKITEM DebugWorkItem;
+    /* Debugging support */
+    ULONG ComboPosition; // TODO: Old, deprecate and replace with CurrentCrashFlags
     BOOLEAN TabPressed;
 } I8042_KEYBOARD_EXTENSION;
 
@@ -212,9 +227,20 @@ typedef struct _I8042_HOOK_WORKITEM
 
 #define MAX(a, b) ((a) >= (b) ? (a) : (b))
 
+/* Make/Break code is determined from the top bit */
+#define GET_MAKE_CODE(sc)   ((sc) & 0x7F)
+#define IS_MAKE_CODE(sc)    ((sc) <= (UCHAR)0x7F)
+#define IS_BREAK_CODE(sc)   (!IS_MAKE_CODE(sc))
+
 // #define KEYBOARD_BREAK_CODE       0xF0
 #define KEYBOARD_DEBUG_HOTKEY_ENH 0x37 // SysReq (Alt+PrtSc) make scan code for Enhanced Keyboard
 #define KEYBOARD_DEBUG_HOTKEY_AT  0x54 // SysReq make scan code for 84-key Keyboard
+
+#define CTRL_SCANCODE           0x1D
+#define LEFT_SHIFT_SCANCODE     0x2A
+#define RIGHT_SHIFT_SCANCODE    0x36
+#define ALT_SCANCODE            0x38
+#define SCROLL_LOCK_SCANCODE    0x46
 
 #define KEYBOARD_POWER_CODE 0x5E
 #define KEYBOARD_SLEEP_CODE 0x5F

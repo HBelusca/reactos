@@ -594,13 +594,6 @@ i8042KbdInternalDeviceControl(
                 Status = STATUS_INSUFFICIENT_RESOURCES;
                 goto cleanup;
             }
-            DeviceExtension->DebugWorkItem = IoAllocateWorkItem(DeviceObject);
-            if (!DeviceExtension->DebugWorkItem)
-            {
-                WARN_(I8042PRT, "IoAllocateWorkItem() failed\n");
-                Status = STATUS_INSUFFICIENT_RESOURCES;
-                goto cleanup;
-            }
             DeviceExtension->Common.PortDeviceExtension->KeyboardExtension = DeviceExtension;
             DeviceExtension->Common.PortDeviceExtension->Flags |= KEYBOARD_CONNECTED;
 
@@ -622,8 +615,6 @@ cleanup:
                 ExFreePoolWithTag(DeviceExtension->KeyboardBuffer, I8042PRT_TAG);
             if (DeviceExtension->PowerWorkItem)
                 IoFreeWorkItem(DeviceExtension->PowerWorkItem);
-            if (DeviceExtension->DebugWorkItem)
-                IoFreeWorkItem(DeviceExtension->DebugWorkItem);
             if (WorkItem)
                 IoFreeWorkItem(WorkItem);
             if (WorkItemData)
@@ -842,6 +833,8 @@ i8042KbdInterruptService(
              (InputData->Flags & KEY_BREAK ? 'B' : '-'),
              (InputData->Flags & KEY_MAKE ? 'M' : '-'));
 
+#if 00000000 // Disabled for tests
+
     /* Check for SysRq debugging support */
     if (!(InputData->Flags & KEY_BREAK) &&
         PortDeviceExtension->Settings.BreakOnSysRq &&
@@ -878,7 +871,12 @@ i8042KbdInterruptService(
     if (PortDeviceExtension->Settings.CrashOnCtrlScroll)
     {
         /* Test for CTRL + SCROLL LOCK twice */
-        static const UCHAR ScanCodes[] = { /*0xe0,*/ 0x1d, 0x46, 0xc6, 0x46, 0 };
+        static const UCHAR ScanCodes[] = { /*0xe0,*/
+                                           CTRL_SCANCODE,
+                                           SCROLL_LOCK_SCANCODE,
+                                           SCROLL_LOCK_SCANCODE | 0x80,
+                                           SCROLL_LOCK_SCANCODE,
+                                           0 };
 
         if (Output == ScanCodes[DeviceExtension->ComboPosition])
         {
@@ -898,7 +896,14 @@ i8042KbdInterruptService(
         {
             DeviceExtension->ComboPosition = 0;
         }
+    }
 
+//
+// TODO: Fix https://jira.reactos.org/browse/CORE-12728
+// (and https://jira.reactos.org/browse/CORE-17805)
+//
+    if (PortDeviceExtension->Settings.BreakOnSysRq)
+    {
         /* Test for TAB + key combination */
         // HISTORICAL NOTE: TAB + key was introduced in commit
         // 3273c9317 (r2469) in replacement of SysRq + key.
@@ -911,7 +916,13 @@ i8042KbdInterruptService(
             DeviceExtension->TabPressed = FALSE;
 
             /* Check which action to do */
-            if (!KD_DEBUGGER_NOT_PRESENT && (InputData->MakeCode == 0x25))
+            if (InputData->MakeCode == 0x30)
+            {
+                /* b - Bugcheck */
+                if (PortDeviceExtension->Settings.CrashOnCtrlScroll)
+                    KeBugCheck(MANUALLY_INITIATED_CRASH);
+            }
+            else if (!KD_DEBUGGER_NOT_PRESENT && KD_DEBUGGER_ENABLED && (InputData->MakeCode == 0x25))
             {
                 /* k - Breakpoint */
 
@@ -926,12 +937,7 @@ i8042KbdInterruptService(
                 }
                 _SEH2_END;
             }
-            else if (InputData->MakeCode == 0x30)
-            {
-                /* b - Bugcheck */
-                KeBugCheck(MANUALLY_INITIATED_CRASH);
-            }
-            else
+            else if (!KD_DEBUGGER_NOT_PRESENT)
             {
                 /* Send request to the kernel debugger.
                  * Unknown requests will be ignored. */
@@ -945,6 +951,8 @@ i8042KbdInterruptService(
             }
         }
     }
+
+#endif ///////////
 
     if (i8042KbdCallIsrHook(DeviceExtension, PortStatus, Output, &ToReturn))
         return ToReturn;
@@ -991,11 +999,11 @@ i8042KbdInterruptService(
             break;
     }
     DeviceExtension->KeyboardScanState = Normal;
-    if (Output & 0x80)
+    if (IS_BREAK_CODE(Output))
         InputData->Flags |= KEY_BREAK;
-    else
+    else // (IS_MAKE_CODE(Output))
         InputData->Flags |= KEY_MAKE;
-    InputData->MakeCode = Output & 0x7f;
+    InputData->MakeCode = GET_MAKE_CODE(Output);
     InputData->Reserved = 0;
 
     DeviceExtension->KeyboardHook.QueueKeyboardPacket(DeviceExtension->KeyboardHook.CallContext);
