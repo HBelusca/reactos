@@ -142,8 +142,8 @@ IopCheckDeviceAndDriver(IN POPEN_PACKET OpenPacket,
           DOE_REMOVE_PENDING | DOE_REMOVE_PROCESSED)))
     {
         /* It's initializing or unloading, so fail */
-        DPRINT1("You are seeing this because the following ROS driver: %wZ\n"
-                " sucks. Please fix it's AddDevice Routine\n",
+        DPRINT1("\nYou are seeing this because the following ROS driver: %wZ\n"
+                "sucks. Please fix its AddDevice routine.\n",
                 &DeviceObject->DriverObject->DriverName);
         return STATUS_NO_SUCH_DEVICE;
     }
