@@ -73,6 +73,10 @@ IopAttachDeviceToDeviceStackSafe(
 {
     PDEVICE_OBJECT AttachedDevice;
     PEXTENDED_DEVOBJ_EXTENSION SourceDeviceExtension;
+    KIRQL OldIrql;
+
+    /* Lock the device list while attaching the device */
+    OldIrql = KeAcquireQueuedSpinLock(LockQueueIoDatabaseLock);
 
     /* Get the attached device and source extension */
     AttachedDevice = IoGetAttachedDevice(TargetDevice);
@@ -107,9 +111,13 @@ IopAttachDeviceToDeviceStackSafe(
         SourceDeviceExtension->AttachedTo = AttachedDevice;
     }
 
-    /* Return the attached device */
+    /* Return the attached device (under the lock) */
     if (AttachedToDeviceObject)
         *AttachedToDeviceObject = AttachedDevice;
+
+    /* Release the device list lock */
+    KeReleaseQueuedSpinLock(LockQueueIoDatabaseLock, OldIrql);
+
     return AttachedDevice;
 }
 
