@@ -136,14 +136,12 @@ IopCheckDeviceAndDriver(IN POPEN_PACKET OpenPacket,
                         IN PDEVICE_OBJECT DeviceObject)
 {
     /* Make sure the object is valid */
-    if ((IoGetDevObjExtension(DeviceObject)->ExtensionFlags &
-        (DOE_UNLOAD_PENDING |
-         DOE_DELETE_PENDING |
-         DOE_REMOVE_PENDING |
-         DOE_REMOVE_PROCESSED)) ||
-        (DeviceObject->Flags & DO_DEVICE_INITIALIZING))
+    if ((DeviceObject->Flags & DO_DEVICE_INITIALIZING) ||
+        (IoGetDevObjExtension(DeviceObject)->ExtensionFlags &
+         (DOE_UNLOAD_PENDING | DOE_DELETE_PENDING |
+          DOE_REMOVE_PENDING | DOE_REMOVE_PROCESSED)))
     {
-        /* It's unloading or initializing, so fail */
+        /* It's initializing or unloading, so fail */
         DPRINT1("You are seeing this because the following ROS driver: %wZ\n"
                 " sucks. Please fix it's AddDevice Routine\n",
                 &DeviceObject->DriverObject->DriverName);
@@ -156,7 +154,6 @@ IopCheckDeviceAndDriver(IN POPEN_PACKET OpenPacket,
     {
         return STATUS_ACCESS_DENIED;
     }
-
     else
     {
         /* Increase reference count */
@@ -1488,8 +1485,8 @@ IopGetDeviceAttachmentBase(IN PDEVICE_OBJECT DeviceObject)
     PDEVICE_OBJECT PDO = DeviceObject;
 
     /* Go down the stack to attempt to get the PDO */
-    for (; ((PEXTENDED_DEVOBJ_EXTENSION)PDO->DeviceObjectExtension)->AttachedTo != NULL;
-           PDO = ((PEXTENDED_DEVOBJ_EXTENSION)PDO->DeviceObjectExtension)->AttachedTo);
+    while (IoGetDevObjExtension(PDO)->AttachedTo != NULL)
+        PDO = IoGetDevObjExtension(PDO)->AttachedTo;
 
     return PDO;
 }
