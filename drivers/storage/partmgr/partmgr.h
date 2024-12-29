@@ -20,6 +20,11 @@
 
 #include "debug.h"
 
+/* To verify that Irp->StackSize is correctly set, ensure all
+ * the stack locations get referenced during IRP forwarding. */
+#undef IoSkipCurrentIrpStackLocation
+#define IoSkipCurrentIrpStackLocation(Irp) IoCopyCurrentIrpStackLocationToNext(Irp)
+
 #define TAG_PARTMGR 'MtrP'
 
 // from disk.sys

@@ -13,7 +13,7 @@ static const WCHAR PartitionSymLinkFormat[] = L"\\Device\\Harddisk%lu\\Partition
 CODE_SEG("PAGE")
 NTSTATUS
 PartitionCreateDevice(
-    _In_ PDEVICE_OBJECT FDObject,
+    _In_ PDEVICE_OBJECT FDObject, // FIXME Use instead _In_ PFDO_EXTENSION FdoExtension
     _In_ PPARTITION_INFORMATION_EX PartitionEntry,
     _In_ UINT32 PdoNumber,
     _In_ PARTITION_STYLE PartitionStyle,
@@ -43,6 +43,7 @@ PartitionCreateDevice(
      * (The attached volume, on the contrary, would require a VPB.)
      */
     PDEVICE_OBJECT partitionDevice;
+__debugbreak();
     NTSTATUS status = IoCreateDevice(FDObject->DriverObject,
                                      sizeof(PARTITION_EXTENSION),
                                      &deviceName,
@@ -62,14 +63,28 @@ PartitionCreateDevice(
     RtlZeroMemory(partExt, sizeof(*partExt));
 
     partExt->DeviceObject = partitionDevice;
-    partExt->LowerDevice = FDObject;
+    partExt->LowerDevice = FDObject; // ObReferenceObject(FDObject);
+        // This would need a ObDereferenceObject(partExt->LowerDevice); when destroying.
+    // partExt->Part0Device;
 
     // NOTE: See comment above.
     // PFDO_EXTENSION fdoExtension = FDObject->DeviceExtension;
     // partitionDevice->DeviceType = /*fdoExtension->LowerDevice*/FDObject->DeviceType;
 
-    partitionDevice->StackSize = FDObject->StackSize;
+    /* Mark the partition as removable if the parent device is removable */
+    if (/*fdoExtension->LowerDevice*/FDObject->Characteristics & FILE_REMOVABLE_MEDIA)
+        partitionDevice->Characteristics |= FILE_REMOVABLE_MEDIA;
+
+    /* Set the stack size */
+    // NOTE: I think the +1 is indeed the fix for a bug that gets unveiled when
+    // fixing the STORAGE_GET_DEVICE_NUMBER handling and we have a BTRFS volume.
+    partitionDevice->StackSize = /*partExt->LowerDevice*/FDObject->StackSize /** + 1 **/; // Disabled for tests
+
     partitionDevice->Flags |= DO_DIRECT_IO;
+
+    /* Adjust the alignment requirements based on the parent device */
+    if (FDObject->AlignmentRequirement > partitionDevice->AlignmentRequirement)
+        partitionDevice->AlignmentRequirement = FDObject->AlignmentRequirement;
 
     if (PartitionStyle == PARTITION_STYLE_MBR)
     {
@@ -82,7 +97,6 @@ PartitionCreateDevice(
         partExt->Gpt.PartitionType = PartitionEntry->Gpt.PartitionType;
         partExt->Gpt.PartitionId = PartitionEntry->Gpt.PartitionId;
         partExt->Gpt.Attributes = PartitionEntry->Gpt.Attributes;
-
         RtlCopyMemory(partExt->Gpt.Name, PartitionEntry->Gpt.Name, sizeof(partExt->Gpt.Name));
     }
 

@@ -346,10 +346,6 @@ PartMgrUpdatePartitionDevices(
             continue;
         }
 
-        // mark partition as removable if parent device is removable
-        if (FdoExtension->LowerDevice->Characteristics & FILE_REMOVABLE_MEDIA)
-            partitionDevice->Characteristics |= FILE_REMOVABLE_MEDIA;
-
         totalPartitions++;
 
         // insert the structure to the partition list
@@ -964,8 +960,12 @@ FdoHandleStartDevice(
 
     FdoExtension->DiskData.DeviceNumber = deviceNumber.DeviceNumber;
 
-    // Register the disk interface.
-    // partmgr.sys from Windows 8.1 also registers a mysterious GUID_DEVINTERFACE_HIDDEN_DISK here.
+    /* Mark device as removable if parent device is removable */
+    if (FdoExtension->LowerDevice->Characteristics & FILE_REMOVABLE_MEDIA)
+        FdoExtension->DeviceObject->Characteristics |= FILE_REMOVABLE_MEDIA;
+
+    /* Register the disk interface.
+     * partmgr.sys from Windows 8.1 also registers a mysterious GUID_DEVINTERFACE_HIDDEN_DISK here. */
     UNICODE_STRING interfaceName;
     status = IoRegisterDeviceInterface(FdoExtension->PhysicalDiskDO,
                                        &GUID_DEVINTERFACE_DISK,
@@ -1212,7 +1212,7 @@ PartMgrAddDevice(
     {
         // The attachment failed
         IoDeleteDevice(deviceObject);
-        return STATUS_DEVICE_REMOVED;
+        return STATUS_NO_SUCH_DEVICE;
     }
     deviceExtension->PhysicalDiskDO = PhysicalDeviceObject;
     KeInitializeEvent(&deviceExtension->SyncEvent, SynchronizationEvent, TRUE);
@@ -1220,7 +1220,9 @@ PartMgrAddDevice(
     // Update now the device type with the actual underlying device type
     deviceObject->DeviceType = deviceExtension->LowerDevice->DeviceType;
 
-    deviceObject->Flags |= DO_DIRECT_IO | DO_POWER_PAGABLE;
+    deviceObject->Flags |= DO_DIRECT_IO;
+    deviceObject->Flags |= (deviceExtension->LowerDevice->Flags & DO_POWER_INRUSH)
+                            ? DO_POWER_INRUSH : DO_POWER_PAGABLE;
 
     // The device is initialized
     deviceObject->Flags &= ~DO_DEVICE_INITIALIZING;
