@@ -1406,9 +1406,14 @@ PDEVICE_OBJECT
 NTAPI
 IoGetAttachedDeviceReference(PDEVICE_OBJECT DeviceObject)
 {
-    /* Reference the attached device */
+    KIRQL OldIrql;
+
+    /* Retrieve and reference the attached device under the device list lock */
+    OldIrql = KeAcquireQueuedSpinLock(LockQueueIoDatabaseLock);
     DeviceObject = IoGetAttachedDevice(DeviceObject);
     ObReferenceObject(DeviceObject);
+    KeReleaseQueuedSpinLock(LockQueueIoDatabaseLock, OldIrql);
+
     return DeviceObject;
 }
 
@@ -1419,9 +1424,14 @@ PDEVICE_OBJECT
 NTAPI
 IoGetDeviceAttachmentBaseRef(IN PDEVICE_OBJECT DeviceObject)
 {
-    /* Reference the lowest attached device */
+    KIRQL OldIrql;
+
+    /* Retrieve and reference the lowest attached device under the device list lock */
+    OldIrql = KeAcquireQueuedSpinLock(LockQueueIoDatabaseLock);
     DeviceObject = IopGetLowestDevice(DeviceObject);
     ObReferenceObject(DeviceObject);
+    KeReleaseQueuedSpinLock(LockQueueIoDatabaseLock, OldIrql);
+
     return DeviceObject;
 }
 
