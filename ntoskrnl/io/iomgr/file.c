@@ -1959,6 +1959,7 @@ IopQueryNameInternal(IN PVOID ObjectBody,
     PDEVICE_OBJECT DeviceObject;
     BOOLEAN NoObCall;
 
+    PAGED_CODE();
     IOTRACE(IO_FILE_DEBUG, "ObjectBody: %p\n", ObjectBody);
 
     /* Validate length */
@@ -1973,10 +1974,12 @@ IopQueryNameInternal(IN PVOID ObjectBody,
     LocalInfo = ExAllocatePoolWithTag(PagedPool, Length, TAG_IO);
     if (!LocalInfo) return STATUS_INSUFFICIENT_RESOURCES;
 
-    /* Query DOS name if the caller asked to */
+    /* Query the DOS name if the caller asked to */
     NoObCall = FALSE;
     if (QueryDosName)
     {
+        ASSERT(PreviousMode == KernelMode);
+
         DeviceObject = FileObject->DeviceObject;
 
         /* In case of a network file system, don't call mountmgr */
@@ -1997,7 +2000,7 @@ IopQueryNameInternal(IN PVOID ObjectBody,
                 Status = STATUS_SUCCESS;
             }
         }
-        /* Otherwise, call mountmgr to get DOS name */
+        /* Otherwise, call mountmgr to get the DOS name */
         else
         {
             Status = IoVolumeDeviceToDosName(DeviceObject, &LocalInfo->Name);
@@ -2005,7 +2008,7 @@ IopQueryNameInternal(IN PVOID ObjectBody,
         }
     }
 
-    /* Fall back if querying DOS name failed or if caller never wanted it ;-) */
+    /* Fall back if querying the DOS name failed or if caller never wanted it */
     if (!QueryDosName || !NT_SUCCESS(Status))
     {
         /* Query the name */
@@ -2039,22 +2042,24 @@ IopQueryNameInternal(IN PVOID ObjectBody,
             /* Copy structure first */
             RtlCopyMemory(ObjectNameInfo,
                           LocalInfo,
-                          (Length >= LocalReturnLength ? sizeof(OBJECT_NAME_INFORMATION) : Length));
+                          (Length >= LocalReturnLength
+                                ? sizeof(OBJECT_NAME_INFORMATION) : Length));
             /* Name then */
             RtlCopyMemory(p, LocalInfo->Name.Buffer,
-                          (Length >= LocalReturnLength ? LocalInfo->Name.Length : Length - sizeof(OBJECT_NAME_INFORMATION)));
+                          (Length >= LocalReturnLength
+                                ? LocalInfo->Name.Length : Length - sizeof(OBJECT_NAME_INFORMATION)));
 
+            /* If needed, free the string buffer allocated by
+             * the IoVolumeDeviceToDosName() call done above */
             if (FileObject->DeviceObject->DeviceType != FILE_DEVICE_NETWORK_FILE_SYSTEM)
-            {
                 ExFreePool(LocalInfo->Name.Buffer);
-            }
         }
         else
         {
             RtlCopyMemory(ObjectNameInfo,
                           LocalInfo,
                           (LocalReturnLength > Length) ?
-                          Length : LocalReturnLength);
+                                Length : LocalReturnLength);
         }
 
         /* Set buffer pointer */
@@ -2066,9 +2071,8 @@ IopQueryNameInternal(IN PVOID ObjectBody,
         /* Check if this already filled our buffer */
         if (LocalReturnLength > Length)
         {
-            /* Set the length mismatch to true, so that we can return
-             * the proper buffer size to the caller later
-             */
+            /* Set the length mismatch to true, so that we can
+             * return the proper buffer size to the caller later */
             LengthMismatch = TRUE;
 
             /* Save the initial buffer length value */
@@ -2081,10 +2085,19 @@ IopQueryNameInternal(IN PVOID ObjectBody,
                      LocalReturnLength +
                      FIELD_OFFSET(FILE_NAME_INFORMATION, FileName);
 
-        /* Query the File name */
+        /*
+         * Query the file name, using the suitable helper:
+         * - If the call is from kernel mode and the file is accessed
+         *   synchronously, use IopGetFileInformation that doesn't
+         *   require a file lock.
+         * - If the call isn't from kernel mode, or the file is not
+         *   accessed synchronously, use IoQueryFileInformation that
+         *   acquires a file lock.
+         */
         if (PreviousMode == KernelMode &&
             BooleanFlagOn(FileObject->Flags, FO_SYNCHRONOUS_IO))
         {
+            // ASSERT(QueryDosName == TRUE);
             Status = IopGetFileInformation(FileObject,
                                            LengthMismatch ? Length : FileLength,
                                            FileNameInformation,
