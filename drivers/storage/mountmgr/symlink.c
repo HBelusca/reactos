@@ -171,7 +171,7 @@ SendLinkCreated(IN PUNICODE_STRING SymbolicName)
     NTSTATUS Status;
     ULONG NameSize;
     PFILE_OBJECT FileObject;
-    PMOUNTDEV_NAME Name = NULL;
+    PMOUNTDEV_NAME Name;
     PDEVICE_OBJECT DeviceObject;
 
     /* Get the device associated with the name */
@@ -186,7 +186,7 @@ SendLinkCreated(IN PUNICODE_STRING SymbolicName)
     DeviceObject = IoGetAttachedDeviceReference(FileObject->DeviceObject);
 
     /* NameSize is the size of the whole MOUNTDEV_NAME structure */
-    NameSize = sizeof(USHORT) + SymbolicName->Length;
+    NameSize = FIELD_OFFSET(MOUNTDEV_NAME, Name) + SymbolicName->Length;
     Name = AllocatePool(NameSize);
     if (!Name)
         goto Cleanup;
@@ -240,7 +240,7 @@ SendLinkDeleted(IN PUNICODE_STRING DeviceName,
     NTSTATUS Status;
     ULONG NameSize;
     PFILE_OBJECT FileObject;
-    PMOUNTDEV_NAME Name = NULL;
+    PMOUNTDEV_NAME Name;
     PDEVICE_OBJECT DeviceObject;
 
     /* Get the device associated with the name */
@@ -255,7 +255,7 @@ SendLinkDeleted(IN PUNICODE_STRING DeviceName,
     DeviceObject = IoGetAttachedDeviceReference(FileObject->DeviceObject);
 
     /* NameSize is the size of the whole MOUNTDEV_NAME structure */
-    NameSize = sizeof(USHORT) + SymbolicName->Length;
+    NameSize = FIELD_OFFSET(MOUNTDEV_NAME, Name) + SymbolicName->Length;
     Name = AllocatePool(NameSize);
     if (!Name)
         goto Cleanup;

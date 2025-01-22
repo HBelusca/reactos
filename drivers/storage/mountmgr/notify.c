@@ -571,11 +571,12 @@ VOID
 IssueUniqueIdChangeNotifyWorker(IN PUNIQUE_ID_WORK_ITEM WorkItem,
                                 IN PMOUNTDEV_UNIQUE_ID UniqueId)
 {
-    PIRP Irp;
     NTSTATUS Status;
+    ULONG UniqueIdSize;
     PFILE_OBJECT FileObject;
-    PIO_STACK_LOCATION Stack;
     PDEVICE_OBJECT DeviceObject;
+    PIRP Irp;
+    PIO_STACK_LOCATION Stack;
 
     /* Get the device object */
     Status = IoGetDeviceObjectPointer(&(WorkItem->DeviceName),
@@ -595,7 +596,7 @@ IssueUniqueIdChangeNotifyWorker(IN PUNIQUE_ID_WORK_ITEM WorkItem,
     Irp = WorkItem->Irp;
     IoInitializeIrp(Irp, IoSizeOfIrp(WorkItem->StackSize), (CCHAR)WorkItem->StackSize);
 
-    if (InterlockedExchange((PLONG)&(WorkItem->Event), 0) != 0)
+    if (InterlockedExchangePointer((PVOID*)&(WorkItem->Event), NULL) != NULL)
     {
         ObDereferenceObject(FileObject);
         ObDereferenceObject(DeviceObject);
@@ -603,13 +604,15 @@ IssueUniqueIdChangeNotifyWorker(IN PUNIQUE_ID_WORK_ITEM WorkItem,
         return;
     }
 
+    UniqueIdSize = FIELD_OFFSET(MOUNTDEV_UNIQUE_ID, UniqueId) + UniqueId->UniqueIdLength;
+
     Irp->AssociatedIrp.SystemBuffer = WorkItem->IrpBuffer;
     Irp->Tail.Overlay.Thread = PsGetCurrentThread();
-    RtlCopyMemory(Irp->AssociatedIrp.SystemBuffer, UniqueId, UniqueId->UniqueIdLength + sizeof(USHORT));
+    RtlCopyMemory(Irp->AssociatedIrp.SystemBuffer, UniqueId, UniqueIdSize);
 
     Stack = IoGetNextIrpStackLocation(Irp);
 
-    Stack->Parameters.DeviceIoControl.InputBufferLength = UniqueId->UniqueIdLength + sizeof(USHORT);
+    Stack->Parameters.DeviceIoControl.InputBufferLength = UniqueIdSize;
     Stack->Parameters.DeviceIoControl.OutputBufferLength = WorkItem->IrpBufferLength;
     Stack->Parameters.DeviceIoControl.Type3InputBuffer = 0;
     Stack->Parameters.DeviceIoControl.IoControlCode = IOCTL_MOUNTDEV_UNIQUE_ID_CHANGE_NOTIFY;

@@ -25,7 +25,7 @@
 
 #include "mntmgr.h"
 
-#define MAX_DEVICES 1000 /* Maximum number of devices checked by MountMgrQueryDosVolumePath */
+#define MAX_DEVICES 1000 /* Maximum number of devices checked by MountMgrQueryDosVolumePath(s) */
 
 #define NDEBUG
 #include <debug.h>
@@ -869,11 +869,15 @@ MountMgrQueryDosVolumePath(IN PDEVICE_EXTENSION DeviceExtension,
 
     DeviceLength = 0;
     DeviceString = NULL;
-    DevicesFound = 0;
 
     /* Try to find associated device info */
-    while (TRUE)
+    for (DevicesFound = 0; ; ++DevicesFound)
     {
+        /* If too many devices, try another way */
+        if (DevicesFound >= MAX_DEVICES)
+            goto TryWithVolumeName;
+
+        ASSERT(DeviceInformation);
         for (SymlinksEntry = DeviceInformation->SymbolicLinksListHead.Flink;
              SymlinksEntry != &(DeviceInformation->SymbolicLinksListHead);
              SymlinksEntry = SymlinksEntry->Flink)
@@ -897,8 +901,8 @@ MountMgrQueryDosVolumePath(IN PDEVICE_EXTENSION DeviceExtension,
 
         /* Create a string with the information about the device */
         AssociatedDevice = CONTAINING_RECORD(&(DeviceInformation->AssociatedDevicesHead), ASSOCIATED_DEVICE_ENTRY, AssociatedDevicesEntry);
-        OldLength = DeviceLength;
         OldBuffer = DeviceString;
+        OldLength = DeviceLength;
         DeviceLength += AssociatedDevice->String.Length;
         DeviceString = AllocatePool(DeviceLength);
         if (!DeviceString)
@@ -919,15 +923,8 @@ MountMgrQueryDosVolumePath(IN PDEVICE_EXTENSION DeviceExtension,
             FreePool(OldBuffer);
         }
 
-        /* Count and continue looking */
-        ++DevicesFound;
+        /* Continue looking */
         DeviceInformation = AssociatedDevice->DeviceInformation;
-
-        /* If too many devices, try another way */
-        if (DevicesFound > MAX_DEVICES)
-        {
-            goto TryWithVolumeName;
-        }
     }
 
     /* Reallocate our string, so that we can prepend disk letter */
@@ -1148,7 +1145,7 @@ NTSTATUS
 MountMgrQueryVolumePaths(IN PDEVICE_EXTENSION DeviceExtension,
                          IN PDEVICE_INFORMATION DeviceInformation,
                          IN PLIST_ENTRY DeviceInfoList,
-                         OUT PMOUNTMGR_VOLUME_PATHS * VolumePaths,
+                         OUT PMOUNTMGR_VOLUME_PATHS *VolumePaths,
                          OUT PDEVICE_INFORMATION *FailedDevice)
 {
     ULONG Written;
@@ -1157,7 +1154,7 @@ MountMgrQueryVolumePaths(IN PDEVICE_EXTENSION DeviceExtension,
     PSYMLINK_INFORMATION SymlinkInformation;
     PDEVICE_INFORMATION_ENTRY DeviceInfoEntry;
     PASSOCIATED_DEVICE_ENTRY AssociatedDeviceEntry;
-    PMOUNTMGR_VOLUME_PATHS * Paths = NULL, * CurrentPath;
+    PMOUNTMGR_VOLUME_PATHS *Paths = NULL, *CurrentPath;
     ULONG OutputPathLength, NumberOfPaths, ReturnedPaths;
 
     /* We return at least null char */
@@ -1169,7 +1166,7 @@ MountMgrQueryVolumePaths(IN PDEVICE_EXTENSION DeviceExtension,
     {
         SymlinkInformation = CONTAINING_RECORD(Entry, SYMLINK_INFORMATION, SymbolicLinksListEntry);
 
-        /* Try to find the drive letter (ie, DOS device) */
+        /* Try to find the drive letter (i.e. DOS device) */
         if (MOUNTMGR_IS_DRIVE_LETTER(&SymlinkInformation->Name) && SymlinkInformation->Online)
         {
             /* We'll return the letter */
@@ -1193,7 +1190,7 @@ MountMgrQueryVolumePaths(IN PDEVICE_EXTENSION DeviceExtension,
         if (DeviceInfoEntry->DeviceInformation == DeviceInformation)
         {
             /* Allocate the output buffer */
-            *VolumePaths = AllocatePool(sizeof(ULONG) + OutputPathLength);
+            *VolumePaths = AllocatePool(FIELD_OFFSET(MOUNTMGR_VOLUME_PATHS, MultiSz) + OutputPathLength);
             if (*VolumePaths == NULL)
             {
                 return STATUS_INSUFFICIENT_RESOURCES;
@@ -1292,7 +1289,7 @@ MountMgrQueryVolumePaths(IN PDEVICE_EXTENSION DeviceExtension,
             return Status;
         }
 
-        /* Query associated paths (hello ourselves :-)) */
+        /* Query associated paths recursively */
         Status = MountMgrQueryVolumePaths(DeviceExtension,
                                           AssociatedDeviceEntry->DeviceInformation,
                                           DeviceInfoList,
@@ -1318,10 +1315,10 @@ MountMgrQueryVolumePaths(IN PDEVICE_EXTENSION DeviceExtension,
 
         /* Count the number of strings we have in the multi string buffer */
         InnerStrings = 0;
-        if ((*CurrentPath)->MultiSzLength != sizeof(UNICODE_NULL))
+        if ((*CurrentPath)->MultiSzLength > sizeof(UNICODE_NULL))
         {
+            PWCHAR MultiSz = (*CurrentPath)->MultiSz;
             ULONG i;
-            PWSTR MultiSz = (*CurrentPath)->MultiSz;
 
             for (i = 0; i < (*CurrentPath)->MultiSzLength / sizeof(WCHAR); ++i, ++MultiSz)
             {
@@ -1332,7 +1329,7 @@ MountMgrQueryVolumePaths(IN PDEVICE_EXTENSION DeviceExtension,
             }
         }
 
-        /* We returned one more path (ie, one more allocated buffer) */
+        /* We returned one more path (i.e. one more allocated buffer) */
         ++ReturnedPaths;
         /* Move the next pointer to use in the array */
         ++CurrentPath;
@@ -1341,7 +1338,7 @@ MountMgrQueryVolumePaths(IN PDEVICE_EXTENSION DeviceExtension,
     }
 
     /* Allocate the output buffer */
-    *VolumePaths = AllocatePool(sizeof(ULONG) + OutputPathLength);
+    *VolumePaths = AllocatePool(FIELD_OFFSET(MOUNTMGR_VOLUME_PATHS, MultiSz) + OutputPathLength);
     if (*VolumePaths == NULL)
     {
         ULONG i;
@@ -1380,26 +1377,22 @@ MountMgrQueryVolumePaths(IN PDEVICE_EXTENSION DeviceExtension,
         AssociatedDeviceEntry = CONTAINING_RECORD(Entry, ASSOCIATED_DEVICE_ENTRY, AssociatedDevicesEntry);
 
         /* If we had a path... */
-        if ((*CurrentPath)->MultiSzLength != sizeof(UNICODE_NULL))
+        if ((*CurrentPath)->MultiSzLength > sizeof(UNICODE_NULL))
         {
-            ULONG i, Offset;
-            PWSTR MultiSz;
+            PWCHAR MultiSz = (*CurrentPath)->MultiSz;
+            ULONG i;
 
-            /* This offset is used to "jump" into MultiSz, so, start with the string begin (ie, skip MultiSzLength) */
-            Offset = sizeof(ULONG);
             /* Browse every single letter, and skip last UNICODE_NULL */
-            for (i = 0; i < (*CurrentPath)->MultiSzLength / sizeof(WCHAR) - 1; ++i)
+            for (i = 0; i < (*CurrentPath)->MultiSzLength / sizeof(WCHAR) - 1; ++i, ++MultiSz)
             {
-                /* Get the letter */
-                MultiSz = (PWSTR)((ULONG_PTR)(*CurrentPath) + Offset);
-                /* If it was part of the path, just return it */
+                /* If the letter was part of the path, just return it */
                 if (*MultiSz != UNICODE_NULL)
                 {
                     (*VolumePaths)->MultiSz[Written] = *MultiSz;
                 }
                 else
                 {
-                    /* Otherwise, as planed, return our whole associated device name */
+                    /* Otherwise, return our whole associated device name */
                     RtlCopyMemory(&(*VolumePaths)->MultiSz[Written],
                                   AssociatedDeviceEntry->String.Buffer,
                                   AssociatedDeviceEntry->String.Length);
@@ -1410,8 +1403,6 @@ MountMgrQueryVolumePaths(IN PDEVICE_EXTENSION DeviceExtension,
 
                 /* We at least return a letter or a null char */
                 ++Written;
-                /* Move to the next letter */
-                Offset += sizeof(WCHAR);
             }
         }
 
@@ -1491,20 +1482,26 @@ MountMgrQueryDosVolumePaths(IN PDEVICE_EXTENSION DeviceExtension,
     }
 
     NeedNotification = FALSE;
-    Attempts = 0;
-    for (;;)
+    for (Attempts = 0; ; ++Attempts)
     {
+        /* Don't look forever and fail if we get out of attempts */
+        if (Attempts >= MAX_DEVICES)
+            return Status;
+
         FailedDevice = NULL;
         InitializeListHead(&Devices);
 
         /* Query paths */
-        Status = MountMgrQueryVolumePaths(DeviceExtension, DeviceInformation, &Devices, &Paths, &FailedDevice);
+        Status = MountMgrQueryVolumePaths(DeviceExtension,
+                                          DeviceInformation,
+                                          &Devices, &Paths,
+                                          &FailedDevice);
         if (NT_SUCCESS(Status))
         {
             break;
         }
 
-        /* If it failed for generic reason (memory, whatever), bail out (ie, FailedDevice not set) */
+        /* If it failed for a generic reason (so, FailedDevice not set), bail out */
         if (FailedDevice == NULL)
         {
             return Status;
@@ -1523,31 +1520,22 @@ MountMgrQueryDosVolumePaths(IN PDEVICE_EXTENSION DeviceExtension,
         ReconcileThisDatabaseWithMasterWorker(&ReconcileContext);
         KeWaitForSingleObject(&DeviceExtension->DeviceLock, Executive, KernelMode, FALSE, NULL);
 
-        /* Look for our device, to check it's online */
+        /* Look for our device and check whether it's online */
         for (Entry = DeviceExtension->DeviceListHead.Flink;
              Entry != &DeviceExtension->DeviceListHead;
              Entry = Entry->Flink)
         {
             ListDeviceInfo = CONTAINING_RECORD(Entry, DEVICE_INFORMATION, DeviceListEntry);
-            /* It's online, it's OK! */
             if (ListDeviceInfo == DeviceInformation)
             {
+                /* It's online, it's OK */
                 break;
             }
         }
-
-        /* It's not online, it's not good */
+        /* If it's not online, fail */
         if (Entry == &DeviceExtension->DeviceListHead)
         {
             return STATUS_OBJECT_NAME_NOT_FOUND;
-        }
-
-        /* Increase attempts count */
-        ++Attempts;
-        /* Don't look forever and fail if we get out of attempts */
-        if (Attempts >= 1000)
-        {
-            return Status;
         }
     }
 
