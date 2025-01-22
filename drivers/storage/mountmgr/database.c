@@ -627,7 +627,7 @@ ReconcileThisDatabaseWithMasterWorker(IN PVOID Parameter)
     /* Mark mounted only if not unloading */
     if (!(DeviceObject->Flags & DO_UNLOAD_PENDING))
     {
-        InterlockedExchangeAdd(&ListDeviceInfo->MountState, 1);
+        InterlockedIncrement(&ListDeviceInfo->MountState);
     }
 
     ObDereferenceObject(FileObject);
@@ -1174,30 +1174,25 @@ WorkerThread(IN PDEVICE_OBJECT DeviceObject,
      * First, given we start before SMSS, wait for the
      * event creation.
      */
-    i = 0;
-    do
+    for (i = 0; i < 1000; ++i)
     {
         /* If we started to shutdown, stop waiting forever and jump to last attempt */
         if (Unloading)
         {
             i = 999;
+            continue;
         }
-        else
+
+        /* Attempt to open the event */
+        Status = ZwOpenEvent(&SafeEvent, EVENT_ALL_ACCESS, &ObjectAttributes);
+        if (NT_SUCCESS(Status))
         {
-            /* Attempt to open the event */
-            Status = ZwOpenEvent(&SafeEvent, EVENT_ALL_ACCESS, &ObjectAttributes);
-            if (NT_SUCCESS(Status))
-            {
-                break;
-            }
-
-            /* Wait a bit to give SMSS a chance to create the event */
-            KeWaitForSingleObject(&Event, Executive, KernelMode, FALSE, &Timeout);
+            break;
         }
 
-        ++i;
+        /* Wait a bit to give SMSS a chance to create the event */
+        KeWaitForSingleObject(&Event, Executive, KernelMode, FALSE, &Timeout);
     }
-    while (i < 1000);
 
     /* We managed to open the event, wait until autochk signals it */
     if (i < 1000)
