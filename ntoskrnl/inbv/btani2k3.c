@@ -14,22 +14,33 @@
 //
 // Positions of areas and images
 //
+// NOTE: Horizontal centered positions calculated using:
+// BitBltAligned(..., AL_HORIZONTAL_CENTER, AL_VERTICAL_TOP,
+//               0, VID_xxx_TOP, 0, 0);
+//
 
-#define VID_SCROLL_AREA_LEFT       32
+#define VID_SCROLL_AREA_LEFT       32 // == 4 characters of 8 pixels (BOOTCHAR_WIDTH) wide
 #define VID_SCROLL_AREA_TOP        80
-#define VID_SCROLL_AREA_RIGHT     631
-#define VID_SCROLL_AREA_BOTTOM    400
+#define VID_SCROLL_AREA_RIGHT     631 // == 32 + (74 characters of 8 pixels wide) + 7
+#define VID_SCROLL_AREA_BOTTOM    400 // == 80 + (22 lines of 14 pixels high) + 12
 
 #define VID_PROGRESS_BAR_LEFT     259
 #define VID_PROGRESS_BAR_TOP      352
 #define VID_PROGRESS_BAR_WIDTH    121
 #define VID_PROGRESS_BAR_HEIGHT   12
 
+#define VID_HIBER_PRGBAR_LEFT     289
+#define VID_HIBER_PRGBAR_TOP      355
+#define VID_HIBER_PRGBAR_WIDTH    161
+
 /* 16px space between shutdown logo and message */
 #define VID_SHUTDOWN_LOGO_LEFT    225
 #define VID_SHUTDOWN_LOGO_TOP     114
-#define VID_SHUTDOWN_MSG_LEFT     213
+// #define VID_SHUTDOWN_MSG_LEFT     213 // For small version.
+#define VID_SHUTDOWN_MSG_LEFT     194 // For large version.
 #define VID_SHUTDOWN_MSG_TOP      354
+#define VID_HIBER_MSG_LEFT        181
+#define VID_HIBER_MSG_TOP         VID_SHUTDOWN_MSG_TOP
 
 #define VID_SKU_AREA_LEFT         418
 #define VID_SKU_AREA_TOP          230
@@ -64,6 +75,7 @@
 // #define REACTOS_FANCY_BOOT
 #include "btanihlp.c"
 
+static ULONG ProgressBarWidth = VID_PROGRESS_BAR_WIDTH;
 extern ULONG ProgressBarLeft, ProgressBarTop;
 extern BOOLEAN ShowProgressBar;
 
@@ -71,7 +83,7 @@ extern BOOLEAN ShowProgressBar;
 /*
  * Change this to modify progress bar behaviour
  */
-#define ROT_BAR_DEFAULT_MODE    RB_PROGRESS_BAR
+#define ROT_BAR_DEFAULT_MODE    RB_SQUARE_CELLS /*RB_PROGRESS_BAR*/
 
 /*
  * Values for PltRotBarStatus:
@@ -158,18 +170,20 @@ BootThemeTickProgressBar(
     ASSERT(SubPercentTimes100 <= (100 * 100));
 
     /* Compute fill count */
-    FillCount = VID_PROGRESS_BAR_WIDTH * SubPercentTimes100 / (100 * 100);
+    FillCount = ProgressBarWidth * SubPercentTimes100 / (100 * 100);
 
     /* Fill the progress bar */
+    InbvAcquireLock();
     VidSolidColorFill(ProgressBarLeft,
                       ProgressBarTop,
                       ProgressBarLeft + FillCount,
                       ProgressBarTop + VID_PROGRESS_BAR_HEIGHT,
                       BV_COLOR_WHITE);
+    InbvReleaseLock();
 }
 
 #ifdef BOOT_ROTBAR_IMPLEMENTED
-VOID // BOOLEAN
+VOID
 NTAPI
 BootAnimUpdate(
     _In_ PBOOT_ANIM_CTX BootAnimCtx)
@@ -198,7 +212,8 @@ BootAnimUpdate(
         if (PltRotBarStatus == RBS_STOP_ANIMATE)
         {
             /* Stop the animation */
-            return; // return FALSE;
+            // BootAnimCtx->Terminate = TRUE;
+            return;
         }
 
         if (RotBarSelection == RB_SQUARE_CELLS)
@@ -248,8 +263,6 @@ BootAnimUpdate(
             Index += 32;
         }
     }
-
-    return; // TRUE;
 }
 
 CODE_SEG("INIT")
@@ -322,10 +335,6 @@ DisplayBootBitmap(
             Footer = InbvGetResourceAddress(IDB_SERVER_FOOTER);
         }
 
-        /* Set the scrolling region */
-        InbvSetScrollRegion(VID_SCROLL_AREA_LEFT, VID_SCROLL_AREA_TOP,
-                            VID_SCROLL_AREA_RIGHT, VID_SCROLL_AREA_BOTTOM);
-
         /* Make sure we have resources */
         if (Header && Footer)
         {
@@ -344,6 +353,10 @@ DisplayBootBitmap(
 
         /* Restore the kernel resource section protection to be read-only */
         InbvMakeKernelResourceSectionReadOnly();
+
+        /* Set the scrolling region */
+        InbvSetScrollRegion(VID_SCROLL_AREA_LEFT, VID_SCROLL_AREA_TOP,
+                            VID_SCROLL_AREA_RIGHT, VID_SCROLL_AREA_BOTTOM);
     }
     else
     {
@@ -357,7 +370,11 @@ DisplayBootBitmap(
 #endif
 
         /* Is the boot driver installed? */
-        if (!InbvBootDriverInstalled) return;
+        if (!InbvBootDriverInstalled)
+            return;
+
+        /* Cleanup for boot screen, as we will compose it with separate images */
+        InbvSolidColorFill(0, 0, SCREEN_WIDTH-1, SCREEN_HEIGHT-1, BV_COLOR_BLACK);
 
         /*
          * Make the kernel resource section temporarily writable,
@@ -427,7 +444,7 @@ DisplayBootBitmap(
             TempRotBarSelection = ROT_BAR_DEFAULT_MODE;
 #endif
 
-            /* Set progress bar coordinates and display it */
+            /* Set the progress bar coordinates and display it */
             InbvSetProgressBarCoordinates(VID_PROGRESS_BAR_LEFT,
                                           VID_PROGRESS_BAR_TOP);
 
@@ -538,11 +555,16 @@ DisplayBootBitmap(
 VOID
 BootThemeCleanup(VOID)
 {
-    /* Check the display state */
+    /* Clear the screen if we own it */
     if (InbvGetDisplayState() == INBV_DISPLAY_STATE_OWNED)
     {
-        /* Clear the screen */
         VidSolidColorFill(0, 0, SCREEN_WIDTH-1, SCREEN_HEIGHT-1, BV_COLOR_BLACK);
+
+//        /* Reset also the scrolling region (fixes display problem that also
+//         * exists on Windows, when space for the last text line is cleared
+//         * by using the preserved background of the previous screen) */
+//        VidSetScrollRegion(VID_SCROLL_AREA_LEFT, VID_SCROLL_AREA_TOP,
+//                           VID_SCROLL_AREA_RIGHT, VID_SCROLL_AREA_BOTTOM);
     }
 
     /* Reset progress bar */
@@ -564,7 +586,12 @@ DisplayFamousQuote(VOID)
 }
 #endif
 
-BOOLEAN
+/**
+ * @brief
+ * Helper used to show the shutdown message for both
+ * regular shutdown and shutdown after hibernation.
+ **/
+static BOOLEAN
 BootThemeDisplayShutdownMessage(
     _In_ BOOLEAN TextMode,
     _In_opt_ PCSTR Message)
@@ -573,8 +600,6 @@ BootThemeDisplayShutdownMessage(
     {
         /* Center the message on screen. This code expects the message
          * to be 34 characters long, on a 80x25-character screen. */
-        ULONG i;
-        for (i = 0; i < 25; ++i) InbvDisplayString("\r\n");
         InbvDisplayString("                       ");
 #ifndef REACTOS_FANCY_BOOT
         return TRUE; // Caller should display the message
@@ -587,34 +612,12 @@ BootThemeDisplayShutdownMessage(
     }
     else
     {
-        PUCHAR Logo1, Logo2;
-#ifdef REACTOS_FANCY_BOOT
-        /* Decide whether this is a good time to change our logo ;^) */
-        BOOLEAN IsXmas = IsXmasTime();
-#endif
-
-        /* Yes we do, cleanup for shutdown screen */
-        InbvSolidColorFill(0, 0, SCREEN_WIDTH - 1, SCREEN_HEIGHT - 1, BV_COLOR_BLACK);
-        InbvSetScrollRegion(0, 0, SCREEN_WIDTH - 1, SCREEN_HEIGHT - 1);
-
-        /* Display shutdown logo and message */
-        Logo1 = InbvGetResourceAddress(IDB_SHUTDOWN_MSG);
-        Logo2 = InbvGetResourceAddress(
-            SELECT_LOGO_ID(IDB_LOGO_DEFAULT, IsXmas, IDB_LOGO_XMAS));
-
-        if (Logo1 && Logo2)
+        /* Display the shutdown message */
+        PUCHAR Logo1 = InbvGetResourceAddress(IDB_SHUTDOWN_MSG);
+        if (Logo1)
         {
             InbvBitBlt(Logo1, VID_SHUTDOWN_MSG_LEFT, VID_SHUTDOWN_MSG_TOP);
-#ifndef REACTOS_FANCY_BOOT
-            InbvBitBlt(Logo2, VID_SHUTDOWN_LOGO_LEFT, VID_SHUTDOWN_LOGO_TOP);
-#else
-            /* Draw the logo at the center of the screen */
-            BitBltAligned(Logo2,
-                          FALSE,
-                          AL_HORIZONTAL_CENTER,
-                          AL_VERTICAL_BOTTOM,
-                          0, 0, 0, SCREEN_HEIGHT - VID_SHUTDOWN_MSG_TOP + 16);
-
+#ifdef REACTOS_FANCY_BOOT
             /* We've got a logo shown, change the scroll region to get
              * the rest of the text down below the shutdown message */
             InbvSetScrollRegion(0,
@@ -629,4 +632,147 @@ BootThemeDisplayShutdownMessage(
 #endif
     }
     return FALSE;
+}
+
+BOOLEAN
+BootThemeDisplaySafeToPowerOffScreen(
+    _In_ BOOLEAN TextMode,
+    _In_opt_ PCSTR Message)
+{
+    if (TextMode)
+    {
+        /* Center the message on screen. This code expects the message
+         * to be 34 characters long, on a 80x25-character screen. */
+        ULONG i;
+        for (i = 0; i < 25; ++i) InbvDisplayString("\r\n");
+        // InbvDisplayString("                       ");
+    }
+    else
+    {
+        PUCHAR Logo2;
+#ifdef REACTOS_FANCY_BOOT
+        /* Decide whether this is a good time to change our logo ;^) */
+        BOOLEAN IsXmas = IsXmasTime();
+#endif
+
+        /* Acquire ownership if needed, and reset the display */
+        if (!InbvCheckDisplayOwnership()) // (InbvGetDisplayState() == INBV_DISPLAY_STATE_LOST)
+            InbvAcquireDisplayOwnership();
+        InbvResetDisplay();
+
+        /* No string filter needed, we display everything */
+        InbvInstallDisplayStringFilter(NULL);
+        InbvEnableDisplayString(TRUE);
+
+        /* Cleanup for shutdown screen */
+        InbvSolidColorFill(0, 0, SCREEN_WIDTH - 1, SCREEN_HEIGHT - 1, BV_COLOR_BLACK);
+        InbvSetScrollRegion(0, 0, SCREEN_WIDTH - 1, SCREEN_HEIGHT - 1);
+
+        /* Display shutdown logo and message */
+        Logo2 = InbvGetResourceAddress(
+            SELECT_LOGO_ID(IDB_LOGO_DEFAULT, IsXmas, IDB_LOGO_XMAS));
+        if (Logo2)
+        {
+#ifndef REACTOS_FANCY_BOOT
+            InbvBitBlt(Logo2, VID_SHUTDOWN_LOGO_LEFT, VID_SHUTDOWN_LOGO_TOP);
+#else
+            /* Draw the logo at the center of the screen */
+            BitBltAligned(Logo2,
+                          FALSE,
+                          AL_HORIZONTAL_CENTER,
+                          AL_VERTICAL_BOTTOM,
+                          0, 0, 0, SCREEN_HEIGHT - VID_SHUTDOWN_MSG_TOP + 16);
+#endif
+        }
+    }
+    return BootThemeDisplayShutdownMessage(TextMode, Message);
+}
+
+BOOLEAN
+BootThemeHiberProgressInit(
+    _In_ BOOLEAN TextMode,
+    _In_opt_ PCSTR Message)
+{
+    if (TextMode)
+    {
+        // InbvResetDisplay();
+
+        /* Center the message on screen. This code expects the message
+         * to be 34 characters long, on a 80x25-character screen. */
+        ULONG i;
+        for (i = 0; i < 25; ++i) InbvDisplayString("\r\n");
+        InbvDisplayString("                       ");
+
+        /* Always show progress */
+        ShowProgressBar = TRUE;
+
+        return TRUE; // Caller should display the message
+    }
+    else // if (InbvBootDriverInstalled)
+    {
+        PUCHAR Logo1, Logo2;
+#ifdef REACTOS_FANCY_BOOT
+        /* Decide whether this is a good time to change our logo ;^) */
+        BOOLEAN IsXmas = IsXmasTime();
+#endif
+
+        /* Acquire ownership and reset the display */
+        InbvAcquireDisplayOwnership();
+        InbvResetDisplay();
+
+        /* No string filter needed, we display everything */
+        InbvInstallDisplayStringFilter(NULL);
+        InbvEnableDisplayString(TRUE);
+
+        /* Cleanup for hibernation screen */
+        InbvSolidColorFill(0, 0, SCREEN_WIDTH - 1, SCREEN_HEIGHT - 1, BV_COLOR_BLACK);
+        InbvSetScrollRegion(0, 0, SCREEN_WIDTH - 1, SCREEN_HEIGHT - 1);
+
+        /* Display hibernation logo and message bar */
+        Logo1 = InbvGetResourceAddress(IDB_HIBERNATE_BAR);
+        Logo2 = InbvGetResourceAddress(
+            SELECT_LOGO_ID(IDB_LOGO_DEFAULT, IsXmas, IDB_LOGO_XMAS));
+
+        if (Logo1 && Logo2)
+        {
+            InbvBitBlt(Logo1, VID_HIBER_MSG_LEFT, VID_HIBER_MSG_TOP);
+#ifndef REACTOS_FANCY_BOOT
+            InbvBitBlt(Logo2, VID_SHUTDOWN_LOGO_LEFT, VID_SHUTDOWN_LOGO_TOP);
+#else
+            /* Draw the logo at the center of the screen */
+            BitBltAligned(Logo2,
+                          FALSE,
+                          AL_HORIZONTAL_CENTER,
+                          AL_VERTICAL_BOTTOM,
+                          0, 0, 0, SCREEN_HEIGHT - VID_SHUTDOWN_MSG_TOP + 16);
+#endif
+        }
+
+        /* Set the progress bar range and coordinates, and display it */
+        InbvSetProgressBarSubset(0, 100);
+        InbvSetProgressBarCoordinates(VID_HIBER_PRGBAR_LEFT,
+                                      VID_HIBER_PRGBAR_TOP);
+        ProgressBarWidth = VID_HIBER_PRGBAR_WIDTH;
+    }
+    return FALSE;
+}
+
+BOOLEAN
+BootThemeHiberProgressDone(
+    _In_ BOOLEAN TextMode,
+    _In_opt_ PCSTR Message)
+{
+    if (TextMode)
+    {
+        /* Add some space after the hibernation progress */
+        InbvDisplayString("\r\n");
+    }
+    else
+    {
+        /* Erase the hibernation message bar */
+        InbvSolidColorFill(VID_HIBER_MSG_LEFT, VID_HIBER_MSG_TOP,
+                           VID_HIBER_MSG_LEFT + 277, VID_HIBER_MSG_TOP + 14,
+                           BV_COLOR_BLACK);
+    }
+    return BootThemeDisplayShutdownMessage(TextMode, Message);
 }
