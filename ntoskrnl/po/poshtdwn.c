@@ -145,6 +145,9 @@ PopProcessShutDownLists(VOID)
     }
 }
 
+// TMPTMP
+extern BOOLEAN SosEnabled;
+
 VOID
 NTAPI
 PopShutdownHandler(VOID)
@@ -153,23 +156,44 @@ PopShutdownHandler(VOID)
     KeRaiseIrqlToDpcLevel();
     _disable();
 
-    /* Do we have boot video? */
-    if (InbvIsBootDriverInstalled())
-    {
-        /* Yes we do, cleanup for shutdown screen */
-        if (!InbvCheckDisplayOwnership())
-            InbvAcquireDisplayOwnership();
-        InbvResetDisplay();
-        InbvInstallDisplayStringFilter(NULL);
-        InbvEnableDisplayString(TRUE);
+// __debugbreak();
+DisplayHibernateScreen(SosEnabled);
+KeStallExecutionProcessor(500000);
+InbvUpdateProgressBar(5);
+KeStallExecutionProcessor(500000);
+InbvUpdateProgressBar(10);
+KeStallExecutionProcessor(500000);
+InbvUpdateProgressBar(20);
+KeStallExecutionProcessor(500000);
+InbvUpdateProgressBar(30);
+KeStallExecutionProcessor(500000);
+InbvUpdateProgressBar(40);
+KeStallExecutionProcessor(500000);
+InbvUpdateProgressBar(50);
+KeStallExecutionProcessor(500000);
+InbvUpdateProgressBar(60);
+KeStallExecutionProcessor(500000);
+InbvUpdateProgressBar(70);
+KeStallExecutionProcessor(500000);
+InbvUpdateProgressBar(80);
+KeStallExecutionProcessor(500000);
+InbvUpdateProgressBar(90);
+KeStallExecutionProcessor(500000);
+InbvUpdateProgressBar(100);
+KeStallExecutionProcessor(500000);
 
-        DisplayShutdownMessage(FALSE);
-    }
+    // TODO: Do the display stuff only from CPU 0
+    // For all the others, directly hang.
+
+#if 0
+    if (InbvIsBootDriverInstalled())
+        DisplaySafeToPowerOffScreen(FALSE);
     else
-    {
-        /* Do it in text-mode */
-        DisplayShutdownMessage(TRUE);
-    }
+        DisplaySafeToPowerOffScreen(TRUE);
+#endif
+    FinalizeHibernateScreen(SosEnabled);
+KeStallExecutionProcessor(1000000);
+    DisplaySafeToPowerOffScreen(SosEnabled);
 
     /* Hang the system */
     for (;;) HalHaltSystem();
