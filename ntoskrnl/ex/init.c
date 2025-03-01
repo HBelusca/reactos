@@ -1418,6 +1418,7 @@ Phase1InitializationDiscard(IN PVOID Context)
         /* Don't allow boot-time strings */
         InbvEnableDisplayString(FALSE);
     }
+    // /*** HACK ***/SosEnabled = FALSE;/***/
 
     /* Check if this is LiveCD (WinPE) mode */
     if (CommandLine && strstr(CommandLine, "MININT") != NULL)

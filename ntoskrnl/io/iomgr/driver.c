@@ -825,6 +825,8 @@ IopInitializeBuiltinDriver(IN PLDR_DATA_TABLE_ENTRY BootLdrEntry)
     /*
      * Display 'Loading XXX...' message
      */
+DPRINT1("IopInitializeBuiltinDriver(LdrFullName: '%wZ'; LdrBaseName: '%wZ')\n",
+    &BootLdrEntry->FullDllName, ModuleName);
     IopDisplayLoadingMessage(ModuleName);
     InbvIndicateProgress();
 
@@ -1190,6 +1192,8 @@ IopInitializeBootDrivers(VOID)
             LdrEntry = DriverInfo->DataTableEntry->LdrEntry;
 
             /* Initialize it */
+DPRINT1("Calling IopInitializeBuiltinDriver() for driver '%wZ')\n",
+    &DriverInfo->DataTableEntry->FilePath);
             if (IopInitializeBuiltinDriver(LdrEntry))
             {
                 // it does not make sense to enumerate the tree if there are no new devices added
@@ -2010,8 +2014,10 @@ IopLoadDriver(
     /*
      * Load the driver module
      */
-    DPRINT("Loading module from %wZ\n", &ImagePath);
+    DPRINT1("Loading module from %wZ\n", &ImagePath);
     Status = MmLoadSystemImage(&ImagePath, NULL, NULL, 0, (PVOID)&ModuleObject, &BaseAddress);
+    DPRINT1("    ModuleObject FullName '%wZ', BaseName '%wZ'\n",
+            &ModuleObject->FullDllName, &ModuleObject->BaseDllName);
     RtlFreeUnicodeString(&ImagePath);
 
     if (!NT_SUCCESS(Status))
@@ -2043,6 +2049,7 @@ IopLoadDriver(
                     .Buffer = servName->Name
                 };
 
+DPRINT1("IopInitializeBuiltinDriver(ServiceName: '%wZ')\n", &serviceName);
                 IopDisplayLoadingMessage(&serviceName);
             }
             ExFreePoolWithTag(servName, TAG_IO);
