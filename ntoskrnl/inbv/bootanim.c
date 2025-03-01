@@ -34,6 +34,7 @@ NTAPI
 BootAnimInitialize(
     _In_ PLOADER_PARAMETER_BLOCK LoaderBlock,
     _In_ ULONG Count);
+// InbvInitializeResources();
 #endif
 
 /**
@@ -69,7 +70,8 @@ BootThemeCleanup(VOID);
 
 /**
  * @brief
- * Theme-specific callback invoked by DisplayShutdownMessage(), from PopShutdownHandler().
+ * Theme-specific callback invoked by DisplaySafeToPowerOffScreen(), from PopShutdownHandler(),
+ * when the system is about to be powered off.
  *
  * @param[in]   TextMode
  * TRUE when called in text-mode, or graphics-emulated text mode.
@@ -82,16 +84,58 @@ BootThemeCleanup(VOID);
  * TRUE if the caller instead should display the shutdown message, FALSE if not.
  **/
 BOOLEAN
-BootThemeDisplayShutdownMessage(
+BootThemeDisplaySafeToPowerOffScreen(
+    _In_ BOOLEAN TextMode,
+    _In_opt_ PCSTR Message);
+
+/**
+ * @brief
+ * Theme-specific callback invoked when hibernation starts.
+ *
+ * @param[in]   TextMode
+ * TRUE when called in text-mode, or graphics-emulated text mode.
+ * FALSE when called in graphics mode.
+ **/
+BOOLEAN
+BootThemeHiberProgressInit(
+    _In_ BOOLEAN TextMode,
+    _In_opt_ PCSTR Message);
+
+/**
+ * @brief
+ * Theme-specific callback invoked when hibernation finishes and
+ * the system is about to be powered off.
+ *
+ * @param[in]   TextMode
+ * TRUE when called in text-mode, or graphics-emulated text mode.
+ * FALSE when called in graphics mode.
+ *
+ * @param[in]   Message
+ * The optional shutdown message string to display.
+ *
+ * @return
+ * TRUE if the caller instead should display the shutdown message, FALSE if not.
+ **/
+BOOLEAN
+BootThemeHiberProgressDone(
     _In_ BOOLEAN TextMode,
     _In_opt_ PCSTR Message);
 
 
 /* BOOT THEMES ***************************************************************/
 
-// #include "btani2k3.c"
-#include "btani2k.c"
-// #include "btanint4.c"
+#include "config.h"
+
+#ifndef BOOT_THEME_SRC
+#pragma message("\n"\
+    "A boot theme source file has not been specified!\n"\
+    "Please specify one using the BOOT_THEME_SRC macro in the config.h file.\n"\
+    "Example:\n"\
+    "  #define BOOT_THEME_SRC \"bttheme.c\"\n")
+#error "Missing BOOT_THEME_SRC"
+#endif
+
+#include BOOT_THEME_SRC
 
 
 /* FUNCTIONS *****************************************************************/
@@ -118,35 +162,8 @@ FinalizeBootLogo(VOID)
     InbvReleaseLock();
 }
 
-VOID
-NTAPI
-DisplayShutdownMessage( // or "Screen"
-    _In_ BOOLEAN TextMode) // _In_ POWER_ACTION PowerAction
-{
-    /* Check if this is text mode */
-    if (TextMode)
-    {
-        /* Retrieve the default message */
-        // RtlFindMessage(...)
-        PCSTR Message = "The system may be powered off now.\r\n";
 
-        /* Display the message */
-        if (!BootThemeDisplayShutdownMessage(TextMode/*TRUE*/, Message))
-            return; // The boot theme does not want to show the message
-
-        InbvDisplayString((PCHAR)Message);
-    }
-    else
-    {
-#if 0
-        /* Is the boot driver installed? */
-        if (!InbvBootDriverInstalled)
-            return;
-#endif
-        BootThemeDisplayShutdownMessage(TextMode/*FALSE*/, NULL);
-    }
-}
-
+// Ba, Bga, Bt, Bgt, BgTh, BgAn, BAni, AnTh, AnFw (Animation framework)
 
 //
 // Check the following:
@@ -161,29 +178,57 @@ DisplayShutdownMessage( // or "Screen"
 // https://github.com/reactos/reactos/commit/819a0ed90a7c1a5dedff08aa3b3c5501dc58c632
 // the io/iomgr/driver.c!IopDisplayLoadingMessage() function.
 
+typedef BOOLEAN
+(PBOOT_THEME_DISPLAY_MESSAGE)(
+    _In_ BOOLEAN TextMode,
+    _In_opt_ PCSTR Message);
+
+/**
+ * @brief
+ * Common helper for DisplaySafeToPowerOffScreen() and FinalizeHibernateScreen().
+ **/
+static VOID
+DisplayMessage(
+    _In_ BOOLEAN TextMode,
+    _In_ PCSTR Message, // In the future: ULONG MessageId
+    _In_ PBOOT_THEME_DISPLAY_MESSAGE ThemeDisplayMessage)
+{
+    /* Retrieve the default message */
+    // PCSTR Message;
+    // RtlFindMessage(...)
+
+#if 0
+    /* Check if this is text mode. Is the boot driver installed? */
+    if (!TextMode && !InbvBootDriverInstalled)
+        return;
+#endif
+
+    /* Let the boot theme display the message */
+    if (!ThemeDisplayMessage(TextMode, Message))
+        return; // The boot theme does not want to show the message.
+
+    /* Display the message if necessary */
+    InbvDisplayString((PCHAR)Message);
+}
+
+VOID
+NTAPI
+DisplaySafeToPowerOffScreen(
+    _In_ BOOLEAN TextMode)
+{
+    DisplayMessage(TextMode,
+                   "The system may be powered off now.\r\n",
+                   BootThemeDisplaySafeToPowerOffScreen);
+}
+
 VOID
 NTAPI
 DisplayHibernateScreen(
     _In_ BOOLEAN TextMode)
 {
-    /* Check if this is text mode */
-    if (TextMode)
-    {
-        // Init blue screen? Or done by the caller as it is for shutdown or boot?
-        // InbvResetDisplay();
-
-        // Load the hibernation-in-progress message
-    }
-    else
-    {
-        // Display hibernation-in-progress bitmap
-
-        /* Set the progress bar ranges */
-        InbvSetProgressBarSubset(0, 100);
-
-        // /* Set progress bar coordinates and display it */
-        // InbvSetProgressBarCoordinates(left, top);
-    }
+    DisplayMessage(TextMode,
+                   "Hibernating...\r\n",
+                   BootThemeHiberProgressInit);
 }
 
 VOID
@@ -191,15 +236,18 @@ NTAPI
 FinalizeHibernateScreen(
     _In_ BOOLEAN TextMode)
 {
-    /* Check if this is text mode */
-    if (TextMode)
-    {
-        /* Display the default message */
-        // RtlFindMessage(...)
-        InbvDisplayString("State saved, power off the system.\r\n");
-    }
-    else
-    {
-        // Display hibernation-complete bitmap, typically the you-can-shutdown
-    }
+    DisplayMessage(TextMode,
+                   "State saved, power off the system.\r\n",
+                   BootThemeHiberProgressDone);
 }
+
+#if 0
+VOID
+NTAPI
+DisplayResumeScreen(
+    _In_ BOOLEAN TextMode)
+{
+}
+
+// FinalizeResumeScreen()
+#endif

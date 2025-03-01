@@ -227,6 +227,60 @@ BootLogoFadeIn(VOID)
     }
 }
 
+VOID
+BootLogoFadeInEx(
+    _In_ RGBQUAD StartColor)
+{
+    UCHAR PaletteBitmapBuffer[sizeof(BITMAPINFOHEADER) + sizeof(MainPalette)];
+    PBITMAPINFOHEADER PaletteBitmap = (PBITMAPINFOHEADER)PaletteBitmapBuffer;
+    LPRGBQUAD Palette = (LPRGBQUAD)(PaletteBitmapBuffer + sizeof(BITMAPINFOHEADER));
+    ULONG Iteration, Index, ClrUsed;
+
+    LARGE_INTEGER Delay;
+    Delay.QuadPart = -(PALETTE_FADE_TIME * 10);
+
+    /* Check if we are installed and we own the display */
+    if (!InbvBootDriverInstalled ||
+        (InbvGetDisplayState() != INBV_DISPLAY_STATE_OWNED))
+    {
+        return;
+    }
+
+    /*
+     * Build a bitmap containing the fade-in palette. The palette entries
+     * are then processed in a loop and set using VidBitBlt function.
+     */
+    ClrUsed = RTL_NUMBER_OF(MainPalette);
+    RtlZeroMemory(PaletteBitmap, sizeof(BITMAPINFOHEADER));
+    PaletteBitmap->biSize = sizeof(BITMAPINFOHEADER);
+    PaletteBitmap->biBitCount = 4;
+    PaletteBitmap->biClrUsed = ClrUsed;
+
+    /*
+     * Main animation loop.
+     */
+    for (Iteration = 0; Iteration <= PALETTE_FADE_STEPS; ++Iteration)
+    {
+        for (Index = 0; Index < ClrUsed; ++Index)
+        {
+            Palette[Index].rgbRed = StartColor.rgbRed +
+                (UCHAR)((MainPalette[Index].rgbRed - StartColor.rgbRed) * Iteration / PALETTE_FADE_STEPS);
+            Palette[Index].rgbGreen = StartColor.rgbGreen +
+                (UCHAR)((MainPalette[Index].rgbGreen - StartColor.rgbGreen) * Iteration / PALETTE_FADE_STEPS);
+            Palette[Index].rgbBlue = StartColor.rgbBlue +
+                (UCHAR)((MainPalette[Index].rgbBlue - StartColor.rgbBlue) * Iteration / PALETTE_FADE_STEPS);
+        }
+
+        /* Do the animation */
+        InbvAcquireLock();
+        VidBitBlt(PaletteBitmapBuffer, 0, 0);
+        InbvReleaseLock();
+
+        /* Wait for a bit */
+        KeDelayExecutionThread(KernelMode, FALSE, &Delay);
+    }
+}
+
 #endif // NO_BOOT_FADEIN
 
 
@@ -304,6 +358,87 @@ BitBltPalette(
 
 /**
  * @brief
+ * Calculates the placement of the given image, with specified
+ * horizontal and vertical alignment.
+ *
+ * @param[in]   Image
+ * Pointer to the bitmap image, which starts with a BITMAPINFOHEADER header.
+ *
+ * @param[out]  X
+ * @param[out]  Y
+ * In output, receives the placement of the image.
+ *
+ * @param[in]   HorizontalAlignment
+ * The horizontal alignment mode specified by a BBLT_HORZ_ALIGNMENT enumeration.
+ *
+ * @param[in]   VerticalAlignment
+ * The vertical alignment mode specified by a BBLT_VERT_ALIGNMENT enumeration.
+ *
+ * @param[in]   MarginLeft
+ * @param[in]   MarginTop
+ * @param[in]   MarginRight
+ * @param[in]   MarginBottom
+ * The screen margins relative to which the image is to be aligned.
+ **/
+static BOOLEAN
+CalcImagePosition(
+    _In_ PVOID Image,
+    _Out_ PULONG X,
+    _Out_ PULONG Y,
+    _In_ BBLT_HORZ_ALIGNMENT HorizontalAlignment,
+    _In_ BBLT_VERT_ALIGNMENT VerticalAlignment,
+    _In_ ULONG MarginLeft,
+    _In_ ULONG MarginTop,
+    _In_ ULONG MarginRight,
+    _In_ ULONG MarginBottom)
+{
+    PBITMAPINFOHEADER BitmapInfoHeader = Image;
+
+    /* Calculate X */
+    switch (HorizontalAlignment)
+    {
+        case AL_HORIZONTAL_LEFT:
+            *X = MarginLeft - MarginRight;
+            break;
+
+        case AL_HORIZONTAL_CENTER:
+            *X = MarginLeft - MarginRight + (SCREEN_WIDTH - BitmapInfoHeader->biWidth + 1) / 2;
+            break;
+
+        case AL_HORIZONTAL_RIGHT:
+            *X = MarginLeft - MarginRight + SCREEN_WIDTH - BitmapInfoHeader->biWidth;
+            break;
+
+        default:
+            /* Unknown */
+            return FALSE;
+    }
+
+    /* Calculate Y */
+    switch (VerticalAlignment)
+    {
+        case AL_VERTICAL_TOP:
+            *Y = MarginTop - MarginBottom;
+            break;
+
+        case AL_VERTICAL_CENTER:
+            *Y = MarginTop - MarginBottom + (SCREEN_HEIGHT - BitmapInfoHeader->biHeight + 1) / 2;
+            break;
+
+        case AL_VERTICAL_BOTTOM:
+            *Y = MarginTop - MarginBottom + SCREEN_HEIGHT - BitmapInfoHeader->biHeight;
+            break;
+
+        default:
+            /* Unknown */
+            return FALSE;
+    }
+
+    return TRUE;
+}
+
+/**
+ * @brief
  * Bit-blt the given image with specified horizontal and vertical alignment,
  * keeping or not its palette.
  *
@@ -328,7 +463,7 @@ BitBltPalette(
  * @param[in]   MarginBottom
  * The screen margins relative to which the image is to be aligned.
  *
- * @see BitBltPalette()
+ * @see BitBltPalette(), CalcImagePosition()
  **/
 VOID
 BitBltAligned(
@@ -341,50 +476,18 @@ BitBltAligned(
     _In_ ULONG MarginRight,
     _In_ ULONG MarginBottom)
 {
-    PBITMAPINFOHEADER BitmapInfoHeader = Image;
     ULONG X, Y;
 
-    /* Calculate X */
-    switch (HorizontalAlignment)
+    if (!CalcImagePosition(Image, &X, &Y,
+                           HorizontalAlignment,
+                           VerticalAlignment,
+                           MarginLeft,
+                           MarginTop,
+                           MarginRight,
+                           MarginBottom))
     {
-        case AL_HORIZONTAL_LEFT:
-            X = MarginLeft - MarginRight;
-            break;
-
-        case AL_HORIZONTAL_CENTER:
-            X = MarginLeft - MarginRight + (SCREEN_WIDTH - BitmapInfoHeader->biWidth + 1) / 2;
-            break;
-
-        case AL_HORIZONTAL_RIGHT:
-            X = MarginLeft - MarginRight + SCREEN_WIDTH - BitmapInfoHeader->biWidth;
-            break;
-
-        default:
-            /* Unknown */
-            return;
+        return;
     }
-
-    /* Calculate Y */
-    switch (VerticalAlignment)
-    {
-        case AL_VERTICAL_TOP:
-            Y = MarginTop - MarginBottom;
-            break;
-
-        case AL_VERTICAL_CENTER:
-            Y = MarginTop - MarginBottom + (SCREEN_HEIGHT - BitmapInfoHeader->biHeight + 1) / 2;
-            break;
-
-        case AL_VERTICAL_BOTTOM:
-            Y = MarginTop - MarginBottom + SCREEN_HEIGHT - BitmapInfoHeader->biHeight;
-            break;
-
-        default:
-            /* Unknown */
-            return;
-    }
-
-    /* Finally draw the image */
     BitBltPalette(Image, NoPalette, X, Y);
 }
 
@@ -408,7 +511,7 @@ typedef struct _BOOT_ANIM_CTX
 static BOOT_ANIM_CTX BootAnimCtx;
 
 typedef
-VOID // BOOLEAN
+VOID
 (NTAPI BOOT_ANIM_UPDATE)(
     _In_ PBOOT_ANIM_CTX BootAnimCtx);
 
@@ -427,8 +530,7 @@ InbvAnimThread(
     ULONG CurrentDelay = 0;
     LARGE_INTEGER Delay = {{0}};
 
-    // InbvCheckDisplayOwnership();
-    while (InbvGetDisplayState() == INBV_DISPLAY_STATE_OWNED)
+    while (InbvCheckDisplayOwnership())
     {
         /* If the delay was changed, update it */
         if (CurrentDelay != BootAnimCtx->DelayInMs)
@@ -474,8 +576,7 @@ InbvAnimDpc(
     UNREFERENCED_PARAMETER(SystemArgument1);
     UNREFERENCED_PARAMETER(SystemArgument2);
 
-    // InbvCheckDisplayOwnership();
-    if (InbvGetDisplayState() == INBV_DISPLAY_STATE_OWNED)
+    if (InbvCheckDisplayOwnership())
     {
         /* Do one animation step */
         InbvAcquireLock();

@@ -5,12 +5,15 @@
  * COPYRIGHT:   Copyright 2024 Hermès Bélusca-Maïto
  */
 
-#include "include/resource.h"
+#include "include/resource.h" // TMPTMP FIXME
 
 /**
  * This file centralizes the inclusion of custom boot themes,
  * that are implemented in separate resource files.
  **/
 
-// #include "btani2k3.rc"
-#include "btani2k.rc"
+#include "config.h"
+
+#ifdef BOOT_THEME_RSRC
+#include BOOT_THEME_RSRC
+#endif

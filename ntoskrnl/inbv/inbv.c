@@ -707,11 +707,9 @@ InbvUpdateProgressBar(
         TotalProgress = InbvProgressState.Floor + (Percentage * InbvProgressState.Bias);
         // TotalProgress /= (100 * 100);
 
-        /* Tick the progress bar under lock */
-        InbvAcquireLock();
+        /* Tick the progress bar */
         // BootAnimTickProgressBar
         BootThemeTickProgressBar(TotalProgress);
-        InbvReleaseLock();
     }
 }
 

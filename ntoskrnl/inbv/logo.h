@@ -41,5 +41,15 @@ FinalizeBootLogo(VOID);
 
 VOID
 NTAPI
-DisplayShutdownMessage( // or "Screen"
-    _In_ BOOLEAN TextMode); // _In_ POWER_ACTION PowerAction
+DisplaySafeToPowerOffScreen(
+    _In_ BOOLEAN TextMode);
+
+VOID
+NTAPI
+DisplayHibernateScreen(
+    _In_ BOOLEAN TextMode);
+
+VOID
+NTAPI
+FinalizeHibernateScreen(
+    _In_ BOOLEAN TextMode);
