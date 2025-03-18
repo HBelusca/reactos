@@ -1,0 +1,12 @@
+
+[Theme]
+DisplayName=ReactOS Mizu
+
+[VisualStyles]
+Path=%WinDir%\Resources\themes\mizu\mizu.msstyles
+ColorStyle=NormalColor
+Size=NormalSize
+
+[MasterThemeSelector]
+MTSM=DABJDKT
+;; Use RJSPBS for Win8+
