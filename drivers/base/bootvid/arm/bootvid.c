@@ -112,7 +112,7 @@ VOID
 DoScroll(
     _In_ ULONG Scroll)
 {
-    ULONG Top, Offset;
+    ULONG Line, Offset;
     PUSHORT SourceOffset, DestOffset;
     PUSHORT i, j;
 
@@ -121,7 +121,7 @@ DoScroll(
     DestOffset = &SourceOffset[Scroll * (SCREEN_WIDTH / 8)];
 
     /* Start loop */
-    for (Top = VidpScrollRegion.Top; Top <= VidpScrollRegion.Bottom; ++Top)
+    for (Line = VidpScrollRegion.Top + Scroll; Line <= VidpScrollRegion.Bottom; ++Line)
     {
         /* Set number of bytes to loop and start offset */
         Offset = VidpScrollRegion.Left >> 3;

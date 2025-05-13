@@ -232,7 +232,7 @@ VOID
 DoScroll(
     _In_ ULONG Scroll)
 {
-    ULONG Top, RowSize;
+    ULONG Line, RowSize;
     PUCHAR OldPosition, NewPosition;
 
     /* Clear the 4 planes */
@@ -251,7 +251,7 @@ DoScroll(
     NewPosition = (PUCHAR)(VgaBase + VidpScrollRegion.Top * (SCREEN_WIDTH / 8) + VidpScrollRegion.Left / 8);
 
     /* Start loop */
-    for (Top = VidpScrollRegion.Top; Top <= VidpScrollRegion.Bottom; ++Top)
+    for (Line = VidpScrollRegion.Top + Scroll; Line <= VidpScrollRegion.Bottom; ++Line)
     {
 #if defined(_M_IX86) || defined(_M_AMD64)
         __movsb(NewPosition, OldPosition, RowSize);

@@ -18,6 +18,9 @@ URECT VidpScrollRegion = {0, 0, SCREEN_WIDTH - 1, SCREEN_HEIGHT - 1};
 
 static BOOLEAN ClearRow = FALSE;
 
+/* Height of one line of text = height of a character + 1-pixel separation line */
+#define TEXTLINE_HEIGHT (BOOTCHAR_HEIGHT + 1)
+
 /* PUBLIC FUNCTIONS ***********************************************************/
 
 VOID
@@ -104,19 +107,21 @@ VidDisplayString(
         /* Treat new-line separately */
         if (*String == '\n')
         {
-            /* Modify Y position */
-            VidpCurrentY += BOOTCHAR_HEIGHT + 1;
-            if (VidpCurrentY + BOOTCHAR_HEIGHT > VidpScrollRegion.Bottom)
+            /* Update Y position and check if we should scroll it, if the
+             * last line's characters (without the separation) cannot fit
+             * in the scroll region. */
+            VidpCurrentY += TEXTLINE_HEIGHT; // BOOTCHAR_HEIGHT + 1-pixel separation line
+            if (VidpCurrentY + BOOTCHAR_HEIGHT - 1 > VidpScrollRegion.Bottom)
             {
                 /* Scroll the view and clear the current row */
-                DoScroll(BOOTCHAR_HEIGHT + 1);
-                VidpCurrentY -= BOOTCHAR_HEIGHT + 1;
-                PreserveRow(VidpCurrentY, BOOTCHAR_HEIGHT + 1, TRUE);
+                DoScroll(TEXTLINE_HEIGHT);
+                VidpCurrentY -= TEXTLINE_HEIGHT;
+                PreserveRow(VidpCurrentY, TEXTLINE_HEIGHT, TRUE);
             }
             else
             {
                 /* Preserve the current row */
-                PreserveRow(VidpCurrentY, BOOTCHAR_HEIGHT + 1, FALSE);
+                PreserveRow(VidpCurrentY, TEXTLINE_HEIGHT, FALSE);
             }
 
             /* Update current X */
@@ -139,7 +144,7 @@ VidDisplayString(
             /* Clear the current row if we had a return-carriage without a new-line */
             if (ClearRow)
             {
-                PreserveRow(VidpCurrentY, BOOTCHAR_HEIGHT + 1, TRUE);
+                PreserveRow(VidpCurrentY, TEXTLINE_HEIGHT, TRUE);
                 ClearRow = FALSE;
             }
 
@@ -150,19 +155,19 @@ VidDisplayString(
             /* Check if we should scroll */
             if (VidpCurrentX + BOOTCHAR_WIDTH - 1 > VidpScrollRegion.Right)
             {
-                /* Update Y position and check if we should scroll it */
-                VidpCurrentY += BOOTCHAR_HEIGHT + 1;
-                if (VidpCurrentY + BOOTCHAR_HEIGHT > VidpScrollRegion.Bottom)
+                /* Update Y position and check if we should scroll it (see '\n' case) */
+                VidpCurrentY += TEXTLINE_HEIGHT;
+                if (VidpCurrentY + BOOTCHAR_HEIGHT - 1 > VidpScrollRegion.Bottom)
                 {
                     /* Scroll the view and clear the current row */
-                    DoScroll(BOOTCHAR_HEIGHT + 1);
-                    VidpCurrentY -= BOOTCHAR_HEIGHT + 1;
-                    PreserveRow(VidpCurrentY, BOOTCHAR_HEIGHT + 1, TRUE);
+                    DoScroll(TEXTLINE_HEIGHT);
+                    VidpCurrentY -= TEXTLINE_HEIGHT;
+                    PreserveRow(VidpCurrentY, TEXTLINE_HEIGHT, TRUE);
                 }
                 else
                 {
                     /* Preserve the current row */
-                    PreserveRow(VidpCurrentY, BOOTCHAR_HEIGHT + 1, FALSE);
+                    PreserveRow(VidpCurrentY, TEXTLINE_HEIGHT, FALSE);
                 }
 
                 /* Update current X */
