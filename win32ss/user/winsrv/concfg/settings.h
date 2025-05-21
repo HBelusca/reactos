@@ -75,12 +75,10 @@ C_ASSERT(sizeof(CONSOLE_STATE_INFO) == 0xD0);
 
 /* FUNCTIONS ******************************************************************/
 
-BOOLEAN
-ConCfgOpenUserSettings(
-    IN  LPCWSTR ConsoleTitle,
-    OUT PHKEY phSubKey,
-    IN  REGSAM samDesired,
-    IN  BOOLEAN Create);
+#define ConLnkGetConsoleProperties_USE_OUTPTR
+
+// FIXME: TEMP include for NT_(FE_)CONSOLE_PROPS; find an alternative solution!
+#include <shlobj.h>
 
 BOOLEAN
 ConCfgReadUserSettings(
@@ -99,5 +97,46 @@ ConCfgInitDefaultSettings(
 VOID
 ConCfgGetDefaultSettings(
     IN OUT PCONSOLE_STATE_INFO ConsoleInfo);
+
+HRESULT
+ConLnkGetConsoleProperties(
+    _In_ PCWSTR FilePath,
+#ifdef ConLnkGetConsoleProperties_USE_OUTPTR
+    _Outptr_ /*__drv_allocatesMem(Mem)*/ NT_CONSOLE_PROPS** ppConProps,
+    _Outptr_ /*__drv_allocatesMem(Mem)*/ NT_FE_CONSOLE_PROPS** ppFeConProps
+#else
+    _Out_ NT_CONSOLE_PROPS* conProps,
+    _Out_ NT_FE_CONSOLE_PROPS* feConProps
+#endif
+    );
+
+HRESULT
+ConLnkReadSettingsEx(
+    _In_ PCWSTR FilePath,
+    _Out_writes_opt_z_(cchName) PWSTR pszName,
+    _In_ SIZE_T cchName,
+    _Out_writes_opt_z_(cchIconLocation) PWSTR pszIconLocation,
+    _In_ SIZE_T cchIconLocation,
+    _Out_opt_ PINT piIcon,
+    _Out_opt_ PINT piShowCmd,
+    _Out_opt_ PWORD pwHotkey,
+#ifdef ConLnkGetConsoleProperties_USE_OUTPTR
+    _Outptr_ /*__drv_allocatesMem(Mem)*/ NT_CONSOLE_PROPS** ppConProps,
+    _Outptr_ /*__drv_allocatesMem(Mem)*/ NT_FE_CONSOLE_PROPS** ppFeConProps
+#else
+    _Out_ NT_CONSOLE_PROPS* conProps,
+    _Out_ NT_FE_CONSOLE_PROPS* feConProps
+#endif
+    );
+
+HRESULT
+ConLnkReadSettings(
+    _Inout_ PCONSOLE_STATE_INFO ConsoleInfo,
+    _In_ PCWSTR FilePath);
+
+HRESULT
+ConLnkWriteSettings(
+    _In_ PCONSOLE_STATE_INFO ConsoleInfo,
+    _In_ PCWSTR FilePath);
 
 /* EOF */

@@ -1,6 +1,7 @@
 
 list(APPEND SOURCE
     font.c
+    lnkprops.c
     settings.c
     precomp.h)
 

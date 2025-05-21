@@ -100,7 +100,7 @@ ConCfgOpenUserSettings(
     NTSTATUS Status;
     WCHAR szBuffer[MAX_PATH] = L"Console\\";
     WCHAR szBuffer2[MAX_PATH] = L"";
-    HKEY hKey; // CurrentUserKeyHandle
+    HKEY hKey;
 
     /*
      * Console properties are stored under the HKCU\Console\* key.
@@ -117,7 +117,7 @@ ConCfgOpenUserSettings(
      */
 
     /* Open the per-user registry key where the console properties are saved */
-    Status = RtlOpenCurrentUser(/*samDesired*/MAXIMUM_ALLOWED, (PHANDLE)&/*CurrentUserKeyHandle*/hKey);
+    Status = RtlOpenCurrentUser(/*samDesired*/MAXIMUM_ALLOWED, (PHANDLE)&hKey);
     if (!NT_SUCCESS(Status))
     {
         DPRINT1("RtlOpenCurrentUser() failed, Status = 0x%08lx\n", Status);
@@ -441,9 +441,6 @@ ConCfgInitDefaultSettings(
     // ASSERT(ConsoleInfo->cbSize >= sizeof(CONSOLE_STATE_INFO));
 
 /// HKCU,"Console","LoadConIme",0x00010003,1
-
-    // wcsncpy(ConsoleInfo->FaceName, L"DejaVu Sans Mono", LF_FACESIZE);
-    // ConsoleInfo->FontSize = MAKELONG(8, 12); // 0x000C0008; // font is 8x12
 
     StringCchCopyW(ConsoleInfo->FaceName, ARRAYSIZE(ConsoleInfo->FaceName), L"VGA"); // HACK: !!
     // ConsoleInfo->FaceName[0] = UNICODE_NULL;
