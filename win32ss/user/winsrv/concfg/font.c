@@ -24,9 +24,10 @@
 
 /* GLOBALS ********************************************************************/
 
-#define TERMINAL_FACENAME           L"Terminal"
-#define DEFAULT_NON_DBCS_FONTFACE   L"Lucida Console" // L"Consolas"
-#define DEFAULT_TT_FONT_FACENAME    L"__DefaultTTFont__"
+#define TERMINAL_FACENAME               L"Terminal"
+#define DEFAULT_RASTER_FONT_FACENAME    TERMINAL_FACENAME
+#define DEFAULT_NON_DBCS_FONTFACE       L"Lucida Console" // L"Consolas"
+#define DEFAULT_TT_FONT_FACENAME        L"__DefaultTTFont__"
 
 /* TrueType font list cache */
 SINGLE_LIST_ENTRY TTFontCache = { NULL };
@@ -48,14 +49,59 @@ SINGLE_LIST_ENTRY TTFontCache = { NULL };
  * The character set corresponding to the code page, or @b DEFAULT_CHARSET.
  **/
 BYTE
-CodePageToCharSet(
+CodePageToCharSet/*__Original*/(
     _In_ UINT CodePage)
 {
     CHARSETINFO CharInfo;
-    if (TranslateCharsetInfo(UlongToPtr(CodePage), &CharInfo, TCI_SRCCODEPAGE))
+    if (TranslateCharsetInfo(UintToPtr(CodePage), &CharInfo, TCI_SRCCODEPAGE))
         return (BYTE)CharInfo.ciCharset;
     else
         return DEFAULT_CHARSET;
+}
+
+BYTE
+CodePageToCharSet__NewTest(
+    _In_ UINT CodePage)
+{
+    CHARSETINFO CharInfo;
+#ifdef __REACTOS__
+    if ((CodePage == CP_UTF7) || (CodePage == CP_UTF8))
+        return DEFAULT_CHARSET;
+#endif
+    if (!TranslateCharsetInfo(UintToPtr(CodePage), &CharInfo, TCI_SRCCODEPAGE))
+    {
+        /* On OneCore-based editions of Windows, the extension apiset containing
+         * TranslateCharsetInfo is not hosted. OneCoreUAP hosts it, but the lower
+         * editions do not. If we find that we failed to delay-load it, fall back
+         * to our "simple" OneCore-OK implementation. */
+        if (GetLastError() == ERROR_PROC_NOT_FOUND)
+        {
+            switch (CodePage)
+            {
+            case CP_JAPANESE:
+                CharInfo.ciCharset = SHIFTJIS_CHARSET;
+                break;
+            case CP_KOREAN:
+                CharInfo.ciCharset = HANGEUL_CHARSET;
+                break;
+            case CP_CHINESE_SIMPLIFIED:
+                CharInfo.ciCharset = GB2312_CHARSET;
+                break;
+            case CP_CHINESE_TRADITIONAL:
+                CharInfo.ciCharset = CHINESEBIG5_CHARSET;
+                break;
+            default:
+                CharInfo.ciCharset = OEM_CHARSET;
+                break;
+            }
+        }
+        else
+        {
+            CharInfo.ciCharset = OEM_CHARSET;
+        }
+    }
+
+    return (BYTE)CharInfo.ciCharset;
 }
 
 /*****************************************************************************/
@@ -153,9 +199,13 @@ FindSuitableFontProc(
             return TRUE;
         }
 
-        /* NOTE: We are making the font enumeration at fixed CharSet,
-         * with the one specified in the parameter block. */
-        ASSERT(lplf->lfCharSet == SearchFont->CharSet);
+        /* NOTE: We are enumerating fonts at fixed CharSet, specified
+         * in the parameter block. If this is DEFAULT_CHARSET, then
+         * fonts are enumerated with whatever default charset they have. */
+        DBGFNT1("lplf->lfCharSet = %u ; SearchFont->CharSet = %u\n",
+                lplf->lfCharSet, SearchFont->CharSet);
+        ASSERT((SearchFont->CharSet == DEFAULT_CHARSET) ||
+               (lplf->lfCharSet == SearchFont->CharSet));
 
         if ((FontType != TRUETYPE_FONTTYPE) && // !TM_IS_TT_FONT(lpntm->tmPitchAndFamily)
             (lplf->lfCharSet != SearchFont->CharSet) &&
@@ -322,6 +372,8 @@ FindSuitableFont(
     Param.SearchFont = *FontData;
 
     Param.SearchFont.CharSet = CodePageToCharSet(CodePage);
+DBGFNT1("Trying to find suitable font with codepage %u ; CharSet %u\n",
+        CodePage, Param.SearchFont.CharSet);
     Param.CodePage = CodePage;
 
     if (/* !FaceName || */ !*FaceName)
@@ -343,13 +395,9 @@ FindSuitableFont(
         /* Find and use a default TrueType font */
         FontEntry = FindCachedTTFont(NULL, CodePage);
         if (FontEntry)
-        {
             StringCchCopyW(FaceName, LF_FACESIZE, FontEntry->FaceName);
-        }
         else
-        {
             StringCchCopyW(FaceName, LF_FACESIZE, DEFAULT_NON_DBCS_FONTFACE);
-        }
         FontData->Family |= TMPF_TRUETYPE;
     }
 
