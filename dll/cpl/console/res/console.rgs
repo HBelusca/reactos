@@ -1,0 +1,49 @@
+HKCR
+{
+	NoRemove CLSID
+	{
+		ForceRemove '%CLSID%' = s 'Console Shortcut Property Sheet Handler'
+		{
+			InprocServer32 = s '%MODULE%'
+			{
+				val ThreadingModel = s 'Apartment'
+			}
+		}
+	}
+
+	NoRemove lnkfile
+	{
+		NoRemove shellex
+		{
+			NoRemove PropertySheetHandlers
+			{
+				ForceRemove Console = s '%CLSID%'
+				{
+				}
+			}
+		}
+	}
+}
+
+HKLM
+{
+	NoRemove Software
+	{
+		NoRemove Microsoft
+		{
+			NoRemove Windows
+			{
+				NoRemove CurrentVersion
+				{
+					NoRemove 'Control Panel'
+					{
+						NoRemove Cpls
+						{
+							val Console = s '%MODULE%'
+						}
+					}
+				}
+			}
+		}
+	}
+}

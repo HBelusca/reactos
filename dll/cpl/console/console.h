@@ -1,5 +1,5 @@
-#ifndef CONSOLE_H__
-#define CONSOLE_H__
+#ifndef _CONSOLE_H_
+#define _CONSOLE_H_
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -16,7 +16,7 @@
 #include <winreg.h>
 
 #include <winuser.h>
-#include <commctrl.h>
+//#include <commctrl.h>
 #include <cpl.h>
 
 #include <strsafe.h>
@@ -111,4 +111,4 @@ BisectListSortedByValue(
     OUT PUINT pValueItem OPTIONAL,
     IN BOOL BisectRightOrLeft);
 
-#endif /* CONSOLE_H__ */
+#endif /* _CONSOLE_H_ */

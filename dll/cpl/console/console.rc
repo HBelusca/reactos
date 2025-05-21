@@ -21,8 +21,10 @@ LANGUAGE LANG_NEUTRAL, SUBLANG_NEUTRAL
 #include <reactos/version.rc>
 
 IDC_CPLICON ICON "res/terminal.ico"
+IDR_CONSOLE REGISTRY "res/console.rgs"
 
-#include <reactos/manifest_hosted.rc>
+#include <reactos/manifest_hosted.rc> // For rundll32 Control Panel
+/// #include <reactos/manifest_dll.rc>
 
 /* UTF-8 */
 #pragma code_page(65001)

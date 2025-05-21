@@ -1,0 +1,39 @@
+[Version]
+Signature="$CHICAGO$"
+
+[RegisterDll]
+AddReg=PropPages.Reg, Cpl.Reg
+
+[UnregisterDll]
+DelReg=PropPages.Reg, Cpl.Reg
+
+[PropPages.Reg]
+HKCR,"CLSID\%CLSID_ConsoleProperties%",,,"%DESC_ConsoleProperties%"
+;; "%SystemRoot%\system32\console.dll"
+HKCR,"CLSID\%CLSID_ConsoleProperties%\InProcServer32",,%REGEXSZ%,"%MODULE%"
+HKCR,"CLSID\%CLSID_ConsoleProperties%\InProcServer32","ThreadingModel",,"Apartment"
+;HKCR,"lnkfile\shellex\PropertySheetHandlers\ConsoleProps",,,"%CLSID_ConsoleProperties%"
+HKCR,"lnkfile\shellex\PropertySheetHandlers\Console",,,"%CLSID_ConsoleProperties%"
+;; TODO: HKLM\Software\Microsoft\Windows\CurrentVersion\Shell Extensions\Approved
+
+[Cpl.Reg]
+HKLM,"SOFTWARE\Microsoft\Windows\CurrentVersion\Control Panel\Cpls",,0x00000012
+HKLM,"SOFTWARE\Microsoft\Windows\CurrentVersion\Control Panel\Cpls","Console",%REGEXSZ%,"%MODULE%"
+;; TODO? https://learn.microsoft.com/en-us/windows/win32/shell/how-to-register-dll-control-panel-item-registration-#step-4
+
+;; NoRemove 'don't load'
+;; {
+;;	 val Console = s '%MODULE%'
+;; }
+
+[Strings]
+;; Non-localizable strings
+REGEXSZ=0x00020000
+REGDW=0x00010001
+REGMULSZ=0x00010000
+;ROS-specific: CLSID_ConsoleProperties = "{86FFDF58-CF11-482F-96D5-0B72BEC65890}"
+CLSID_ConsoleProperties = "{D2942F8E-478E-41D3-870A-35A16238F4EE}"
+
+;; Localizable strings
+;ROS-specific: DESC_ConsoleProperties = "Console Properties"
+DESC_ConsoleProperties = "Console Shortcut Property Sheet Handler"

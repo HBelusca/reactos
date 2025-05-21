@@ -33,7 +33,7 @@ static BOOL SetConsoleInfo  = FALSE;
 static BOOL SaveConsoleInfo = FALSE;
 
 
-/*static*/ ErrOut(HRESULT hr, DWORD dwLastError, PCWSTR pszWhere)
+/*static*/ VOID ErrOut(HRESULT hr, DWORD dwLastError, PCWSTR pszWhere)
 {
     WCHAR szBuffer[260];
     StringCchPrintfW(szBuffer, _countof(szBuffer),
@@ -44,9 +44,12 @@ static BOOL SaveConsoleInfo = FALSE;
 
 
 static VOID
-InitPropSheetPage(PROPSHEETPAGEW *psp,
-                  WORD idDlg,
-                  DLGPROC DlgProc)
+InitPropSheetPage(
+    _Out_ PROPSHEETPAGEW* psp,
+    _In_ WORD idDlg,
+    _In_ DLGPROC DlgProc,
+    _In_opt_ LPARAM lParam,
+    _In_opt_ LPFNPSPCALLBACKW pfnCallback)
 {
     ZeroMemory(psp, sizeof(*psp));
     psp->dwSize      = sizeof(*psp);
@@ -54,7 +57,31 @@ InitPropSheetPage(PROPSHEETPAGEW *psp,
     psp->hInstance   = hApplet;
     psp->pszTemplate = MAKEINTRESOURCEW(idDlg);
     psp->pfnDlgProc  = DlgProc;
-    psp->lParam      = 0;
+    psp->lParam      = lParam;
+
+    if (pfnCallback)
+    {
+        psp->pfnCallback = pfnCallback;
+        psp->dwFlags    |= PSP_USECALLBACK;
+    }
+}
+
+BOOL
+PopulatePropSheetPageArray(
+    _Out_writes_(cPsps) PROPSHEETPAGEW* psp,
+    _In_ UINT cPsps,
+    _In_opt_ LPFNPSPCALLBACKW pfnCallback)
+{
+    UINT i = 0;
+
+    if (cPsps < 4)
+        return FALSE;
+
+    InitPropSheetPage(&psp[i++], IDD_PROPPAGEOPTIONS, OptionsProc, 0, pfnCallback);
+    InitPropSheetPage(&psp[i++], IDD_PROPPAGEFONT   , FontProc   , 0, pfnCallback);
+    InitPropSheetPage(&psp[i++], IDD_PROPPAGELAYOUT , LayoutProc , 0, pfnCallback);
+    InitPropSheetPage(&psp[i++], IDD_PROPPAGECOLORS , ColorsProc , 0, pfnCallback);
+    return TRUE;
 }
 
 static VOID
@@ -219,7 +246,6 @@ InitApplet(HANDLE hSectionOrWnd)
     WCHAR szTitle[MAX_PATH + 1];
     PROPSHEETPAGEW psp[4];
     PROPSHEETHEADERW psh;
-    INT i = 0;
 
     /*
      * Because of Windows compatibility, we need to behave the same concerning
@@ -237,7 +263,7 @@ InitApplet(HANDLE hSectionOrWnd)
      * global parameters (and we were either called by CONSRV or directly by
      * the user via the Control Panel, etc...)
      */
-__debugbreak();
+//__debugbreak();
     pSharedInfo = MapViewOfFile(hSectionOrWnd, FILE_MAP_READ, 0, 0, 0);
     if (pSharedInfo)
     {
@@ -291,17 +317,6 @@ __debugbreak();
         InitDefaultConsoleInfo(ConInfo);
     }
 
-////////////
-#if 0
-{
-HRESULT hr;
-pszStartedLnkPath = L"X:\\reactos\\dll\\cpl\\console\\test.lnk";
-hr = ConLnkReadSettings(ConInfo, pszStartedLnkPath);
-hr = hr;
-}
-#endif
-////////////
-
     /* Initialize the font support -- additional TrueType font cache and current preview font */
     InitTTFontCache();
     RefreshFontPreview(&FontPreview, ConInfo);
@@ -345,10 +360,7 @@ hr = hr;
     psh.ppsp = psp;
     psh.pfnCallback = PropSheetProc;
 
-    InitPropSheetPage(&psp[i++], IDD_PROPPAGEOPTIONS, OptionsProc);
-    InitPropSheetPage(&psp[i++], IDD_PROPPAGEFONT   , FontProc   );
-    InitPropSheetPage(&psp[i++], IDD_PROPPAGELAYOUT , LayoutProc );
-    InitPropSheetPage(&psp[i++], IDD_PROPPAGECOLORS , ColorsProc );
+    PopulatePropSheetPageArray(psp, psh.nPages, NULL);
 
     /* Display the property sheet */
     RegisterWinPrevClass(hApplet);

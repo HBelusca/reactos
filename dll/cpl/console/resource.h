@@ -4,9 +4,13 @@
 #define IDC_STATIC  -1
 #endif
 
+/* Control Panel info */
 #define IDC_CPLICON             40
 #define IDS_CPLNAME             41
 #define IDS_CPLDESCRIPTION      42
+
+/* COM registration */
+#define IDR_CONSOLE             50
 
 /* Property page dialogs */
 #define IDD_PROPPAGEOPTIONS 100
