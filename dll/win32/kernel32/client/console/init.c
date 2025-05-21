@@ -109,12 +109,73 @@ Quit:
 }
 
 
+/**
+ * @brief
+ * Parses a legacy ProgMan shell information string, that is found in either
+ * the STARTUPINFO::lpReserved or the RTL_USER_PROCESS_PARAMETERS::ShellInfo.Buffer
+ * UNICODE string pointers.
+ *
+ * The string has the following format:
+ *   "dde.#,hotkey.#,ntvdm.#"
+ * (the `ntvdm.` part is optional and is only specified if a DOS or Win16/WoW
+ * process is started for NTVDM).
+ * Each field is comma-separated, where the hash-signs `#` are decimal values.
+ *
+ * @see https://www.catch22.net/tuts/system/undocumented-createprocess/
+ * @note Contrary to what is mentioned in the article, the numerical values
+ *       are *NOT* in hexadecimal format, but are decimal values.
+ **/
 static INT
-ParseShellInfo(LPCWSTR lpszShellInfo,
-               LPCWSTR lpszKeyword)
+ParseShellInfo(
+    _In_ PCWSTR pszShellInfo,
+    _In_ PCWSTR pszKeyword)
 {
-    DPRINT("ParseShellInfo is UNIMPLEMENTED\n");
-    return 0;
+#define IS_FIELD_SEPARATOR(ch) ((ch) == L',' || (ch) == L' ' || (ch) == L'\t')
+    INT Value = 0;
+
+    // if (!pszShellInfo) return 0;
+    // if (!*pszShellInfo) return 0;
+    // if (!*pszKeyword) return 0;
+    // if (pszKeyword[wcslen(pszKeyword)-1] != L'.') return 0;
+
+    _SEH2_TRY
+    {
+        PCWSTR pch = pszShellInfo;
+        // wcschr(pszShellInfo, L',');
+        while ((pch = wcsstr(pch, pszKeyword)))
+        {
+            if (pch == pszShellInfo ||
+                /* Check whether the keyword was preceded by a separator:
+                 * the comma, but also allow for natural whitespace characters */
+                (pch > pszShellInfo && IS_FIELD_SEPARATOR(*(pch-1))))
+            {
+                /* Keyword indeed either starts the string
+                 * or follows a separator */
+                PWCHAR endptr;
+
+                /* Advance and check for a numerical value.
+                 * Accept whatever value we retrieve, but warn
+                 * in case something weird happened */
+                pch += wcslen(pszKeyword);
+                Value = wcstol(pch, &endptr, 0);
+                if (endptr && *endptr != UNICODE_NULL && !IS_FIELD_SEPARATOR(*endptr))
+                    DPRINT1("Potentially invalid shell-info string '%S'\n", pszShellInfo);
+                break;
+            }
+
+            /* Keyword was a "substring" but invalid, as it was
+             * part of something else; advance and retry again */
+            pch += wcslen(pszKeyword);
+            // ++pch;
+        }
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+    }
+    _SEH2_END;
+
+    return Value;
+#undef IS_FIELD_SEPARATOR
 }
 
 
@@ -233,16 +294,37 @@ SetUpConsoleInfo(IN BOOLEAN CaptureTitle,
         ConsoleStartInfo->dwWindowSize.Y = (SHORT)Parameters->CountY;
     }
 
-    /* Get shell information (ShellInfo.Buffer is NULL-terminated) */
-    if (Parameters->ShellInfo.Buffer != NULL)
-    {
+    /*
+     * Retrieve private shell-specific information: icon handle/index
+     * and window activation hotkey.
+     * See: https://www.catch22.net/tuts/system/undocumented-createprocess/
+     *
+     * For each parameter, check first whether the new-shell (WinNT4+)
+     * information has been set in the STARTUPINFO structure; if not,
+     * check for their presence in the legacy (WinNT3.x) ProgMan
+     * string buffer (NOTE: ShellInfo.Buffer is NULL-terminated).
+     *
+     * Note that Windows does it in a broken manner: this information
+     * is retrieved *ONLY* if the legacy ShellInfo string is specified.
+     * If so, it looks for a ProgMan icon index, without looking at the
+     * newer field. Then, it looks for a hotkey, but this time, checks
+     * first the newer field, before looking if nothing has been specified,
+     * at the legacy ShellInfo string.
+     * In ReactOS we don't do this, but instead use a more sane logic.
+     */
+    /* NOTE: StandardOutput (and hIcon) may actually specify a monitor handle
+     * where to open the console (Win2000+ feature); this ambiguity will be
+     * resolved in CONSRV side. */
+__debugbreak();
+    if (Parameters->WindowFlags & STARTF_SHELLPRIVATE)
+        ConsoleStartInfo->hIcon = (HICON)Parameters->StandardOutput;
+    else if (Parameters->ShellInfo.Buffer)
         ConsoleStartInfo->IconIndex = ParseShellInfo(Parameters->ShellInfo.Buffer, L"dde.");
 
-        if ((Parameters->WindowFlags & STARTF_USEHOTKEY) == 0)
-            ConsoleStartInfo->dwHotKey = ParseShellInfo(Parameters->ShellInfo.Buffer, L"hotkey.");
-        else
-            ConsoleStartInfo->dwHotKey = HandleToUlong(Parameters->StandardInput);
-    }
+    if (Parameters->WindowFlags & STARTF_USEHOTKEY)
+        ConsoleStartInfo->dwHotKey = HandleToUlong(Parameters->StandardInput);
+    else if (Parameters->ShellInfo.Buffer)
+        ConsoleStartInfo->dwHotKey = ParseShellInfo(Parameters->ShellInfo.Buffer, L"hotkey.");
 }
 
 
@@ -252,13 +334,9 @@ SetUpHandles(IN PCONSOLE_START_INFO ConsoleStartInfo)
     PRTL_USER_PROCESS_PARAMETERS Parameters = NtCurrentPeb()->ProcessParameters;
 
     if (ConsoleStartInfo->dwStartupFlags & STARTF_USEHOTKEY)
-    {
         Parameters->WindowFlags &= ~STARTF_USEHOTKEY;
-    }
     if (ConsoleStartInfo->dwStartupFlags & STARTF_SHELLPRIVATE)
-    {
         Parameters->WindowFlags &= ~STARTF_SHELLPRIVATE;
-    }
 
     /* We got the handles, let's set them */
     Parameters->ConsoleHandle = ConsoleStartInfo->ConsoleHandle;

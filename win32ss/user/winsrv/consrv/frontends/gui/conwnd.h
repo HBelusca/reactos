@@ -59,6 +59,7 @@ typedef struct _GUI_CONSOLE_DATA
     BOOL IsWndMax;
     WINDOWPLACEMENT WndPl;
 
+    DWORD dwHotKey;             /* Window activation hotkey for hWindow */
     HWND hWindow;               /* Handle to the console's window            */
     HDC  hMemDC;                /* Memory DC holding the console framebuffer */
     HBITMAP  hBitmap;           /* Console framebuffer                       */

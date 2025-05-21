@@ -38,6 +38,7 @@ typedef struct _GUI_INIT_INFO
     HDESK Desktop;
     HICON hIcon;
     HICON hIconSm;
+    DWORD dwHotKey;
     BOOLEAN IsWindowVisible;
     GUI_CONSOLE_INFO TermInfo;
 } GUI_INIT_INFO, *PGUI_INIT_INFO;
@@ -165,7 +166,7 @@ GuiConsoleInputThread(PVOID Param)
                                             NULL,
                                             ConSrvDllInstance,
                                             (PVOID)GuiData);
-                if (NewWindow == NULL)
+                if (!NewWindow)
                 {
                     DPRINT1("Failed to create a new console window\n");
                     continue;
@@ -195,6 +196,10 @@ GuiConsoleInputThread(PVOID Param)
 
                 // FIXME: HACK: Potential HACK for CORE-8129; see revision 63595.
                 CreateSysMenu(GuiData->hWindow);
+
+                /* Set the window activation hotkey */
+                if (GuiData->dwHotKey && GuiData->IsWindowVisible)
+                    SendMessageW(GuiData->hWindow, WM_SETHOTKEY, GuiData->dwHotKey, 0);
 
                 if (GuiData->IsWindowVisible)
                 {
@@ -523,8 +528,12 @@ GuiInitFrontEnd(IN OUT PFRONTEND This,
         GuiData->hIconSm = GuiInitInfo->hIconSm;
     else
         GuiData->hIconSm = ghDefaultIconSm;
+    // NOTE: If we had an IconIndex given instead, callback ProgMan to query it.
+    // TODO: Do it once we have the console window ready.
 
     ASSERT(GuiData->hIcon && GuiData->hIconSm);
+
+    GuiData->dwHotKey = GuiInitInfo->dwHotKey;
 
     /* Mouse is shown by default with its default cursor shape */
     GuiData->hCursor = ghDefaultCursor;
@@ -1325,6 +1334,8 @@ GuiLoadFrontEnd(IN OUT PFRONTEND FrontEnd,
         // GuiInitInfo->hIconSm = ghDefaultIconSm;
 
     // ASSERT(GuiInitInfo->hIcon && GuiInitInfo->hIconSm);
+
+    GuiInitInfo->dwHotKey = ConsoleStartInfo->dwHotKey;
 
     /* Finally, initialize the frontend structure */
     FrontEnd->Vtbl     = &GuiVtbl;

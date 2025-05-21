@@ -12,10 +12,6 @@
 
 #include "consrv.h"
 
-/* This is for COM usage */
-#define COBJMACROS
-#include <shlobj.h>
-
 #include "../concfg/font.h"
 #include <alias.h>
 #include <history.h>
@@ -372,21 +368,50 @@ LoadShellLinkConsoleInfo(IN OUT PCONSOLE_STATE_INFO ConsoleInfo,
 {
 #define PATH_SEPARATOR L'\\'
 
+    PCONSOLE_START_INFO ConsoleStartInfo = ConsoleInitInfo->ConsoleStartInfo;
     BOOL    RetVal   = FALSE;
-    HRESULT hRes     = S_OK;
+    HRESULT hr;
     SIZE_T  Length   = 0;
     LPWSTR  LinkName = NULL;
     LPWSTR  IconPath = NULL;
     WCHAR   Buffer[MAX_PATH + 1];
 
-    ConsoleInitInfo->ConsoleStartInfo->IconIndex = 0;
+    /////// ConsoleStartInfo->IconIndex = 0;
+    //
+    // Different cases:
+    // - IconIndex == 0 and hIcon(sm) == NULL ---> get icon from link if any;, otherwise use default.
+    // - IconIndex == 0 and hIcon(sm) != NULL ---> use given hIcon
+    // - IconIndex != 0 and hIcon(sm) == NULL ---> use ProgMan
+    // - IconIndex != 0 and hIcon(sm) != NULL ---> shouldn't happen, but if so use hIcon.
 
-    if ((ConsoleInitInfo->ConsoleStartInfo->dwStartupFlags & STARTF_TITLEISLINKNAME) == 0)
+
+    /* If STARTF_SHELLPRIVATE flag is set, hIcon was initialized from
+     * PEB::ProcessParameters->StandardOutput, but may contain either
+     * a valid icon handle or a monitor handle. Determine which one it is. */
+    if (ConsoleStartInfo->dwStartupFlags & STARTF_SHELLPRIVATE)
     {
-        // return FALSE; // FIXME!! (for icon loading)
-        RetVal = TRUE;
-        goto Finish;
+        MONITORINFO mi = { sizeof(mi) };
+        HMONITOR hMonitor = (HMONITOR)ConsoleStartInfo->hIcon;
+        if (GetMonitorInfoW(hMonitor, &mi) /* || GetLastError() != ERROR_INVALID_MONITOR_HANDLE */)
+        {
+            /* The handle was actually a valid monitor handle,
+             * so it cannot be an icon: invalidate hIcon */
+            ConsoleStartInfo->hIcon = NULL;
+            ConsoleStartInfo->dwStartupFlags &= ~STARTF_SHELLPRIVATE;
+        }
     }
+
+
+    if ((ConsoleStartInfo->dwStartupFlags & STARTF_TITLEISLINKNAME) == 0)
+        goto Finish; // return FALSE; // We do icon loading below.
+
+    /*
+     * IMPORTANT NOTE: If STARTF_TITLEISLINKNAME is set, it overrides any other
+     * "legacy" setting it would replace, specified e.g. by STARTF_USEHOTKEY or
+     * STARTF_SHELLPRIVATE.
+     * ???? However, these settings will be really used for initializing
+     * the console, only if their corresponding STARTF_* flags are set. ????
+     */
 
     /* 1- Find the last path separator if any */
     LinkName = wcsrchr(ConsoleInfo->ConsoleTitle, PATH_SEPARATOR);
@@ -398,132 +423,222 @@ LoadShellLinkConsoleInfo(IN OUT PCONSOLE_STATE_INFO ConsoleInfo,
     /* 2- Check for the link extension. The name ".lnk" is considered invalid. */
     Length = wcslen(LinkName);
     if ( (Length <= 4) || (_wcsicmp(LinkName + (Length - 4), L".lnk") != 0) )
-        return FALSE;
+        goto Finish; // return FALSE; // We do icon loading done below.
 
-    /* 3- It may be a link. Try to retrieve some properties */
-    hRes = CoInitialize(NULL);
-    if (SUCCEEDED(hRes))
+    /* 3- It may be a link. Try to load it and retrieve console properties. */
+    // GetSettingsFromLink()
+    // https://github.com/microsoft/terminal/blob/main/src/interactivity/win32/SystemConfigurationProvider.cpp#L58
+    _SEH2_TRY
     {
-        /* Get a pointer to the IShellLink interface */
-        IShellLinkW* pshl = NULL;
-        hRes = CoCreateInstance(&CLSID_ShellLink,
-                                NULL,
-                                CLSCTX_INPROC_SERVER,
-                                &IID_IShellLinkW,
-                                (LPVOID*)&pshl);
-        if (SUCCEEDED(hRes))
+    INT ShowCmd = 0;
+    WORD HotKey = 0;
+    INT IconIndex = 0;
+#ifdef ConLnkGetConsoleProperties_USE_OUTPTR
+    NT_CONSOLE_PROPS *pConProps = NULL;
+    NT_FE_CONSOLE_PROPS *pFeConProps = NULL;
+#else
+    NT_CONSOLE_PROPS conProps = {0}, *const pConProps = &conProps;
+    NT_FE_CONSOLE_PROPS feConProps = {0}, *const pFeConProps = &feConProps;
+#endif
+
+    hr = ConLnkReadSettingsEx(ConsoleInfo->ConsoleTitle,
+                              NULL, // pszName,
+                              0,    // cchName,
+                              Buffer,
+                              _countof(Buffer) - 1,
+                              &IconIndex, // &ConsoleStartInfo->IconIndex,
+                              &ShowCmd,
+                              &HotKey,
+#ifdef ConLnkGetConsoleProperties_USE_OUTPTR
+                              &pConProps,
+                              &pFeConProps
+#else
+                              &conProps,
+                              &feConProps
+#endif
+        );
+
+    /*
+     * Finally we can get the properties! Update the old ones if needed.
+     */
+    if (SUCCEEDED(hr))
+    {
+        /* Reset the name of the console with the name of the shortcut */
+        Length = min(/*Length*/ Length - 4, // 4 == len(".lnk")
+                     (ConsoleInfo->cbSize - FIELD_OFFSET(CONSOLE_STATE_INFO, ConsoleTitle) - sizeof(UNICODE_NULL)) / sizeof(WCHAR));
+        wcsncpy(ConsoleInfo->ConsoleTitle, LinkName, Length);
+        ConsoleInfo->ConsoleTitle[Length] = UNICODE_NULL;
+
+        /* Get the window show command */
+        // if (ShowCmd != 0)
+        ConsoleStartInfo->wShowWindow = (WORD)ShowCmd;
+
+        /* Get the hotkey */
+        // if (HotKey != 0)
+        ConsoleStartInfo->dwHotKey = HotKey;
+
+        //// if (/*!(ConsoleStartInfo->dwStartupFlags & STARTF_SHELLPRIVATE) ||*/
+        ////     !ConsoleStartInfo->hIcon)
         {
-            /* Get a pointer to the IPersistFile interface */
-            IPersistFile* ppf = NULL;
-            hRes = IPersistFile_QueryInterface(pshl, &IID_IPersistFile, (LPVOID*)&ppf);
-            if (SUCCEEDED(hRes))
-            {
-                /* Load the shortcut */
-                hRes = IPersistFile_Load(ppf, ConsoleInfo->ConsoleTitle, STGM_READ);
-                if (SUCCEEDED(hRes))
-                {
-                    /*
-                     * Finally we can get the properties !
-                     * Update the old ones if needed.
-                     */
-                    INT ShowCmd = 0;
-                    // WORD HotKey = 0;
-
-                    /* Reset the name of the console with the name of the shortcut */
-                    Length = min(/*Length*/ Length - 4, // 4 == len(".lnk")
-                                 (ConsoleInfo->cbSize - FIELD_OFFSET(CONSOLE_STATE_INFO, ConsoleTitle) - sizeof(UNICODE_NULL)) / sizeof(WCHAR));
-                    wcsncpy(ConsoleInfo->ConsoleTitle, LinkName, Length);
-                    ConsoleInfo->ConsoleTitle[Length] = UNICODE_NULL;
-
-                    /* Get the window showing command */
-                    hRes = IShellLinkW_GetShowCmd(pshl, &ShowCmd);
-                    if (SUCCEEDED(hRes)) ConsoleInitInfo->ConsoleStartInfo->wShowWindow = (WORD)ShowCmd;
-
-                    /* Get the hotkey */
-                    // hRes = pshl->GetHotkey(&ShowCmd);
-                    // if (SUCCEEDED(hRes)) ConsoleInitInfo->ConsoleStartInfo->HotKey = HotKey;
-
-                    /* Get the icon location, if any */
-                    hRes = IShellLinkW_GetIconLocation(pshl,
-                                                       Buffer,
-                                                       sizeof(Buffer)/sizeof(Buffer[0]) - 1, // == MAX_PATH
-                                                       &ConsoleInitInfo->ConsoleStartInfo->IconIndex);
-                    if (!SUCCEEDED(hRes))
-                    {
-                        ConsoleInitInfo->ConsoleStartInfo->IconIndex = 0;
-                    }
-                    else
-                    {
-                        IconPath = Buffer;
-                    }
-
-                    // FIXME: Since we still don't load console properties from the shortcut,
-                    // return false. When this will be done, we will return true instead.
-                    RetVal = TRUE; // FALSE;
-                }
-                IPersistFile_Release(ppf);
-            }
-            IShellLinkW_Release(pshl);
+        /* Get the icon location, if any */
+        if (*Buffer)
+        {
+            IconPath = Buffer;
+            ConsoleStartInfo->IconIndex = IconIndex;
         }
-        CoUninitialize();
+        else
+        {
+            ConsoleStartInfo->IconIndex = 0;
+        }
+        }
+
+        /*
+         * Now retrieve the optional console-specific properties.
+         */
+#ifdef ConLnkGetConsoleProperties_USE_OUTPTR
+        if (pConProps)
+#endif
+        if (pConProps->dbh.cbSize == sizeof(*pConProps))
+        {
+            /*
+             * The CONSOLE_START_INFO::CONSOLE_PROPERTIES data
+             * is *almost* laid out like NT_CONSOLE_PROPS,
+             * except that it contains extra fields between
+             * wFillAttribute/wPopupFillAttribute and the rest,
+             * hence we do a two-step copy.
+             */
+            ConsoleStartInfo->wFillAttribute = pConProps->wFillAttribute;
+            ConsoleStartInfo->wPopupFillAttribute = pConProps->wPopupFillAttribute;
+
+            /* We can copy directly from dwScreenBufferSize
+             * all the way up to ColorTable[16] */
+            RtlCopyMemory((PVOID)&ConsoleStartInfo->dwScreenBufferSize,
+                          (PVOID)&pConProps->dwScreenBufferSize,
+                          RTL_SIZEOF_THROUGH_FIELD(NT_CONSOLE_PROPS, ColorTable)
+                                - FIELD_OFFSET(NT_CONSOLE_PROPS, dwScreenBufferSize));
+
+            /* Return TRUE as we successfully loaded console properties from a shortcut */
+            RetVal = TRUE;
+        }
+
+        if (RetVal)
+        {
+#ifdef ConLnkGetConsoleProperties_USE_OUTPTR
+            if (pFeConProps)
+#endif
+            if (pFeConProps->dbh.cbSize == sizeof(*pFeConProps))
+            {
+                ConsoleStartInfo->uCodePage = pFeConProps->uCodePage;
+            }
+
+// FIXME: TEMP HACK: Mirror the retrieved info from ConsoleStartInfo into ConsoleInfo
+#if 1
+            /* Now the link is loaded, generate new console settings section
+             * to replace the one in the link */
+            ConsoleInfo->ScreenAttributes = pConProps->wFillAttribute;
+            ConsoleInfo->PopupAttributes = pConProps->wPopupFillAttribute;
+            ConsoleInfo->ScreenBufferSize = pConProps->dwScreenBufferSize;
+            ConsoleInfo->WindowSize = pConProps->dwWindowSize;
+            ConsoleInfo->WindowPosition.x = (LONG)(ULONG)pConProps->dwWindowOrigin.X;
+            ConsoleInfo->WindowPosition.y = (LONG)(ULONG)pConProps->dwWindowOrigin.Y;
+            // pConProps->nFont;             // FIXME?
+            // pConProps->nInputBufferSize;  // FIXME?
+            ConsoleInfo->FontSize = pConProps->dwFontSize;
+            ConsoleInfo->FontFamily = pConProps->uFontFamily;
+            ConsoleInfo->FontWeight = pConProps->uFontWeight;
+            RtlCopyMemory(ConsoleInfo->FaceName, pConProps->FaceName, sizeof(ConsoleInfo->FaceName));
+            ConsoleInfo->CursorSize = pConProps->uCursorSize;
+            ConsoleInfo->FullScreen = pConProps->bFullScreen;
+            ConsoleInfo->QuickEdit = pConProps->bQuickEdit;
+            ConsoleInfo->InsertMode = pConProps->bInsertMode;
+            ConsoleInfo->AutoPosition = pConProps->bAutoPosition;
+            ConsoleInfo->HistoryBufferSize = pConProps->uHistoryBufferSize;
+            ConsoleInfo->NumberOfHistoryBuffers = pConProps->uNumberOfHistoryBuffers;
+            ConsoleInfo->HistoryNoDup = pConProps->bHistoryNoDup;
+            RtlCopyMemory(ConsoleInfo->ColorTable, pConProps->ColorTable, sizeof(ConsoleInfo->ColorTable));
+////////////
+            ConsoleInfo->CodePage = pFeConProps->uCodePage;
+#endif
+        }
+
+#ifdef ConLnkGetConsoleProperties_USE_OUTPTR
+        if (pConProps)
+            LocalFree(pConProps);
+        if (pFeConProps)
+            LocalFree(pFeConProps);
+#endif
     }
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        NTSTATUS Status = _SEH2_GetExceptionCode();
+        DPRINT1("LoadShellLinkConsoleInfo - Got an exception, Status = 0x%08lx\n", Status);
+    }
+    _SEH2_END;
 
 Finish:
 
-    if (RetVal)
+    if (!RetVal)
     {
-        /* Get the associated icon, if any */
-        if (IconPath == NULL)
-        {
-            // Question: How to retrieve the full path name
-            // of the app we are going to run??
-            Length = RtlDosSearchPath_U(ConsoleInitInfo->CurDir,
-                                        ConsoleInitInfo->AppName,
-                                        NULL,
-                                        sizeof(Buffer),
-                                        Buffer,
-                                        NULL);
-            if (Length > 0 && Length < sizeof(Buffer))
-                IconPath = Buffer;
-            else
-                IconPath = ConsoleInitInfo->AppName;
-
-            // ConsoleInitInfo->ConsoleStartInfo->IconIndex = 0;
-        }
-        DPRINT("IconPath = '%S' ; IconIndex = %lu\n",
-               IconPath, ConsoleInitInfo->ConsoleStartInfo->IconIndex);
-        if (IconPath && *IconPath)
-        {
-            HICON hIcon = NULL, hIconSm = NULL;
-            /*
-             * FIXME!! Because of a strange bug we have in PrivateExtractIconExW
-             * (see r65683 for more details), we cannot use this API to extract
-             * at the same time the large and small icons from the app.
-             * Instead we just use PrivateExtractIconsW.
-             *
-            PrivateExtractIconExW(IconPath,
-                                  ConsoleInitInfo->ConsoleStartInfo->IconIndex,
-                                  &hIcon,
-                                  &hIconSm,
-                                  1);
-             */
-            PrivateExtractIconsW(IconPath,
-                                 ConsoleInitInfo->ConsoleStartInfo->IconIndex,
-                                 32, 32,
-                                 &hIcon, NULL, 1, LR_COPYFROMRESOURCE);
-            PrivateExtractIconsW(IconPath,
-                                 ConsoleInitInfo->ConsoleStartInfo->IconIndex,
-                                 16, 16,
-                                 &hIconSm, NULL, 1, LR_COPYFROMRESOURCE);
-
-            DPRINT("hIcon = 0x%p ; hIconSm = 0x%p\n", hIcon, hIconSm);
-            if (hIcon   != NULL) ConsoleInitInfo->ConsoleStartInfo->hIcon   = hIcon;
-            if (hIconSm != NULL) ConsoleInitInfo->ConsoleStartInfo->hIconSm = hIconSm;
-        }
+        /* If we didn't find any console properties, or otherwise failed
+         * to load link properties, pretend like we weren't launched from
+         * a shortcut. This allows us to at least try to find registry
+         * settings based on title. */
+        // ConsoleStartInfo->dwStartupFlags &= ~STARTF_TITLEISLINKNAME; // This is done outside the function.
     }
 
-    // FIXME: See the previous FIXME above.
-    RetVal = FALSE;
+    /* Get the associated icon, if any */
+    if (!IconPath)
+    {
+        // Question: How to retrieve the full path name
+        // of the app we are going to run??
+        Length = RtlDosSearchPath_U(ConsoleInitInfo->CurDir,
+                                    ConsoleInitInfo->AppName,
+                                    NULL,
+                                    sizeof(Buffer),
+                                    Buffer,
+                                    NULL);
+        if (Length > 0 && Length < sizeof(Buffer))
+            IconPath = Buffer;
+        else
+            IconPath = ConsoleInitInfo->AppName;
+        // ConsoleStartInfo->IconIndex = 0;
+    }
+    DPRINT("IconPath = '%S' ; IconIndex = %lu\n",
+           IconPath, ConsoleStartInfo->IconIndex);
+    if (IconPath && *IconPath)
+    {
+        HICON hIcon = NULL, hIconSm = NULL;
+        /*
+         * FIXME!! Because of a strange bug we have in PrivateExtractIconExW
+         * (see r65683 for more details), we cannot use this API to extract
+         * at the same time the large and small icons from the app.
+         * Instead we just use PrivateExtractIconsW.
+         *
+        PrivateExtractIconExW(IconPath,
+                              ConsoleStartInfo->IconIndex,
+                              &hIcon,
+                              &hIconSm,
+                              1);
+         */
+        PrivateExtractIconsW(IconPath,
+                             ConsoleStartInfo->IconIndex,
+                             GetSystemMetrics(SM_CXICON),
+                             GetSystemMetrics(SM_CYICON),
+                             &hIcon, NULL, 1, LR_COPYFROMRESOURCE);
+        PrivateExtractIconsW(IconPath,
+                             ConsoleStartInfo->IconIndex,
+                             GetSystemMetrics(SM_CXSMICON),
+                             GetSystemMetrics(SM_CYSMICON),
+                             &hIconSm, NULL, 1, LR_COPYFROMRESOURCE);
+
+        DPRINT("hIcon = 0x%p ; hIconSm = 0x%p\n", hIcon, hIconSm);
+        if (hIcon   != NULL) ConsoleStartInfo->hIcon   = hIcon;
+        if (hIconSm != NULL) ConsoleStartInfo->hIconSm = hIconSm;
+    }
+    /* Reset IconIndex to zero, so as to not mistake it
+     * later with an icon index passed from ProgMan */
+    ConsoleStartInfo->IconIndex = 0;
 
     return RetVal;
 }
@@ -537,6 +652,7 @@ ConSrvInitConsole(OUT PHANDLE NewConsoleHandle,
     NTSTATUS Status;
     HANDLE ConsoleHandle;
     PCONSRV_CONSOLE Console;
+    PCONSOLE_START_INFO ConsoleStartInfo = ConsoleInitInfo->ConsoleStartInfo;
 
     BYTE ConsoleInfoBuffer[sizeof(CONSOLE_STATE_INFO) + MAX_PATH * sizeof(WCHAR)]; // CONSRV console information
     PCONSOLE_STATE_INFO ConsoleInfo = (PCONSOLE_STATE_INFO)&ConsoleInfoBuffer;
@@ -573,6 +689,7 @@ ConSrvInitConsole(OUT PHANDLE NewConsoleHandle,
         return STATUS_BAD_IMPERSONATION_LEVEL;
 
     /* 3. Load the default settings */
+__debugbreak();
     ConCfgGetDefaultSettings(ConsoleInfo);
 
     /*
@@ -582,18 +699,18 @@ ConSrvInitConsole(OUT PHANDLE NewConsoleHandle,
      * a shell-link. ConsoleInfo->ConsoleTitle may be updated with the
      * name of the shortcut, and ConsoleStartInfo->Icon[Path|Index] too.
      */
-    // if (ConsoleInitInfo->ConsoleStartInfo->dwStartupFlags & STARTF_TITLEISLINKNAME) // FIXME!! (for icon loading)
+    // if (ConsoleStartInfo->dwStartupFlags & STARTF_TITLEISLINKNAME) // Disabled, for icon loading!
     {
         if (!LoadShellLinkConsoleInfo(ConsoleInfo, ConsoleInitInfo))
-        {
-            ConsoleInitInfo->ConsoleStartInfo->dwStartupFlags &= ~STARTF_TITLEISLINKNAME;
-        }
+            ConsoleStartInfo->dwStartupFlags &= ~STARTF_TITLEISLINKNAME;
     }
+
+    // TODO: Move icon stuff here?
 
     /*
      * 5. Load the remaining console settings via the registry.
      */
-    if ((ConsoleInitInfo->ConsoleStartInfo->dwStartupFlags & STARTF_TITLEISLINKNAME) == 0)
+    if ((ConsoleStartInfo->dwStartupFlags & STARTF_TITLEISLINKNAME) == 0)
     {
         /*
          * Either we weren't created by an app launched via a shell-link,
@@ -608,33 +725,31 @@ ConSrvInitConsole(OUT PHANDLE NewConsoleHandle,
          * (and which was transmitted via the ConsoleStartInfo structure).
          * We therefore overwrite the values read in the registry.
          */
-        if (ConsoleInitInfo->ConsoleStartInfo->dwStartupFlags & STARTF_USEFILLATTRIBUTE)
+        // ApplyStartupInfo()
+        // https://github.com/microsoft/terminal/blob/main/src/host/settings.cpp#L122
+        if (ConsoleStartInfo->dwStartupFlags & STARTF_USEFILLATTRIBUTE)
         {
-            ConsoleInfo->ScreenAttributes = (USHORT)ConsoleInitInfo->ConsoleStartInfo->wFillAttribute;
+            ConsoleInfo->ScreenAttributes = (USHORT)ConsoleStartInfo->wFillAttribute;
         }
-        if (ConsoleInitInfo->ConsoleStartInfo->dwStartupFlags & STARTF_USECOUNTCHARS)
+        if (ConsoleStartInfo->dwStartupFlags & STARTF_USECOUNTCHARS)
         {
-            ConsoleInfo->ScreenBufferSize = ConsoleInitInfo->ConsoleStartInfo->dwScreenBufferSize;
+            ConsoleInfo->ScreenBufferSize = ConsoleStartInfo->dwScreenBufferSize;
         }
-        if (ConsoleInitInfo->ConsoleStartInfo->dwStartupFlags & STARTF_USESIZE)
+        if (ConsoleStartInfo->dwStartupFlags & STARTF_USESIZE)
         {
-            ConsoleInfo->WindowSize = ConsoleInitInfo->ConsoleStartInfo->dwWindowSize;
+            // WARNING: If coming from CreateProcess() STARTUPINFO,
+            // this is in pixels, not in number of characters!
+            ConsoleInfo->WindowSize = ConsoleStartInfo->dwWindowSize;
         }
 
-#if 0
-        /*
-         * Now, update them with the properties the user might gave to us
-         * via the STARTUPINFO structure before calling CreateProcess
-         * (and which was transmitted via the ConsoleStartInfo structure).
-         * We therefore overwrite the values read in the registry.
-         */
-        if (ConsoleInitInfo->ConsoleStartInfo->dwStartupFlags & STARTF_USEPOSITION)
+#if 0 // See frontends/gui/guiterm.c!GuiLoadFrontEnd()
+        if (ConsoleStartInfo->dwStartupFlags & STARTF_USEPOSITION)
         {
             ConsoleInfo->AutoPosition = FALSE;
-            ConsoleInfo->WindowPosition.x = ConsoleInitInfo->ConsoleStartInfo->dwWindowOrigin.X;
-            ConsoleInfo->WindowPosition.y = ConsoleInitInfo->ConsoleStartInfo->dwWindowOrigin.Y;
+            ConsoleInfo->WindowPosition.x = ConsoleStartInfo->dwWindowOrigin.X;
+            ConsoleInfo->WindowPosition.y = ConsoleStartInfo->dwWindowOrigin.Y;
         }
-        if (ConsoleInitInfo->ConsoleStartInfo->dwStartupFlags & STARTF_RUNFULLSCREEN)
+        if (ConsoleStartInfo->dwStartupFlags & STARTF_RUNFULLSCREEN)
         {
             ConsoleInfo->FullScreen = TRUE;
         }
@@ -644,8 +759,9 @@ ConSrvInitConsole(OUT PHANDLE NewConsoleHandle,
     /* 6. Revert impersonation */
     CsrRevertToSelf();
 
-    /* Set-up the code page */
-    ConsoleInfo->CodePage = GetOEMCP();
+    /* Validate the code page */
+    if (!IsValidCodePage(ConsoleInfo->CodePage))
+        ConsoleInfo->CodePage = GetOEMCP();
 
     /*
      * Initialize the ConSrv terminal and give it a chance to load
@@ -975,6 +1091,7 @@ ConSrvAllocateConsole(
     NTSTATUS Status = STATUS_SUCCESS;
     HANDLE ConsoleHandle;
     PCONSRV_CONSOLE Console;
+    PCONSOLE_START_INFO ConsoleStartInfo = ConsoleInitInfo->ConsoleStartInfo;
 
     /*
      * We are about to create a new console. However when ConSrvNewProcess()
@@ -1020,7 +1137,7 @@ ConSrvAllocateConsole(
     Status = NtDuplicateObject(NtCurrentProcess(),
                                Console->InitEvents[INIT_SUCCESS],
                                ProcessData->Process->ProcessHandle,
-                               &ConsoleInitInfo->ConsoleStartInfo->InitEvents[INIT_SUCCESS],
+                               &ConsoleStartInfo->InitEvents[INIT_SUCCESS],
                                EVENT_ALL_ACCESS, 0, 0);
     if (!NT_SUCCESS(Status))
     {
@@ -1034,13 +1151,13 @@ ConSrvAllocateConsole(
     Status = NtDuplicateObject(NtCurrentProcess(),
                                Console->InitEvents[INIT_FAILURE],
                                ProcessData->Process->ProcessHandle,
-                               &ConsoleInitInfo->ConsoleStartInfo->InitEvents[INIT_FAILURE],
+                               &ConsoleStartInfo->InitEvents[INIT_FAILURE],
                                EVENT_ALL_ACCESS, 0, 0);
     if (!NT_SUCCESS(Status))
     {
         DPRINT1("NtDuplicateObject(InitEvents[INIT_FAILURE]) failed: %lu\n", Status);
         NtDuplicateObject(ProcessData->Process->ProcessHandle,
-                          ConsoleInitInfo->ConsoleStartInfo->InitEvents[INIT_SUCCESS],
+                          ConsoleStartInfo->InitEvents[INIT_SUCCESS],
                           NULL, NULL, 0, 0, DUPLICATE_CLOSE_SOURCE);
         ConSrvFreeHandlesTable(ProcessData);
         ConSrvDeleteConsole(Console);
@@ -1052,16 +1169,16 @@ ConSrvAllocateConsole(
     Status = NtDuplicateObject(NtCurrentProcess(),
                                Console->InputBuffer.ActiveEvent,
                                ProcessData->Process->ProcessHandle,
-                               &ConsoleInitInfo->ConsoleStartInfo->InputWaitHandle,
+                               &ConsoleStartInfo->InputWaitHandle,
                                EVENT_ALL_ACCESS, 0, 0);
     if (!NT_SUCCESS(Status))
     {
         DPRINT1("NtDuplicateObject(InputWaitHandle) failed: %lu\n", Status);
         NtDuplicateObject(ProcessData->Process->ProcessHandle,
-                          ConsoleInitInfo->ConsoleStartInfo->InitEvents[INIT_FAILURE],
+                          ConsoleStartInfo->InitEvents[INIT_FAILURE],
                           NULL, NULL, 0, 0, DUPLICATE_CLOSE_SOURCE);
         NtDuplicateObject(ProcessData->Process->ProcessHandle,
-                          ConsoleInitInfo->ConsoleStartInfo->InitEvents[INIT_SUCCESS],
+                          ConsoleStartInfo->InitEvents[INIT_SUCCESS],
                           NULL, NULL, 0, 0, DUPLICATE_CLOSE_SOURCE);
         ConSrvFreeHandlesTable(ProcessData);
         ConSrvDeleteConsole(Console);
@@ -1074,7 +1191,7 @@ ConSrvAllocateConsole(
     ProcessData->Process->Flags |= CsrProcessIsConsoleApp;
 
     /* Return the console handle to the caller */
-    ConsoleInitInfo->ConsoleStartInfo->ConsoleHandle = ProcessData->ConsoleHandle;
+    ConsoleStartInfo->ConsoleHandle = ProcessData->ConsoleHandle;
 
     /*
      * Insert the process into the processes list of the console,

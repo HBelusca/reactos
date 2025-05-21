@@ -1301,9 +1301,8 @@ GetStartupInfoW(IN LPSTARTUPINFOW lpStartupInfo)
     lpStartupInfo->lpReserved2 = (LPBYTE)Params->RuntimeData.Buffer;
 
     /* Check if the standard handles are being used for other features */
-    if (lpStartupInfo->dwFlags & (STARTF_USESTDHANDLES |
-                                  STARTF_USEHOTKEY |
-                                  STARTF_SHELLPRIVATE))
+    if (lpStartupInfo->dwFlags &
+        (STARTF_USESTDHANDLES | STARTF_USEHOTKEY | STARTF_SHELLPRIVATE))
     {
         /* These are, so copy the standard handles too */
         lpStartupInfo->hStdInput = Params->StandardInput;

@@ -688,7 +688,7 @@ OnNcCreate(HWND hWnd, LPCREATESTRUCTW Create)
     GuiData->hBitmap = NULL;
     GuiData->hSysPalette = NULL; /* Original system palette */
 
-    /* Update the icons of the window */
+    /* Update the console window icons */
     if (GuiData->hIcon != ghDefaultIcon)
     {
         DefWindowProcW(GuiData->hWindow, WM_SETICON, ICON_BIG  , (LPARAM)GuiData->hIcon  );
@@ -2653,7 +2653,7 @@ ConWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
             Beep(800, 200);
             break;
 
-         case PM_CONSOLE_SET_TITLE:
+        case PM_CONSOLE_SET_TITLE:
             SetWindowTextW(GuiData->hWindow, GuiData->Console->Title.Buffer);
             break;
 

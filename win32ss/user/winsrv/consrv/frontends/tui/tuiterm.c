@@ -78,6 +78,7 @@ typedef struct _TUI_CONSOLE_DATA
     // HANDLE hTuiInitEvent;
     // HANDLE hTuiTermEvent;
 
+    DWORD dwHotKey;             /* Window activation hotkey for hWindow */
     HWND hWindow;               /* Handle to the console's window (used for the window's procedure) */
 
     PCONSRV_CONSOLE Console;           /* Pointer to the owned console */
@@ -386,15 +387,20 @@ TuiConsoleThread(PVOID Param)
                               Console->Title.Buffer,
                               0,
                               -32000, -32000, 0, 0,
-                              NULL, NULL,
+                              HWND_DESKTOP, // HWND_MESSAGE
+                              NULL,
                               ConSrvDllInstance,
                               (PVOID)Console);
-    if (NULL == NewWindow)
+    if (!NewWindow)
     {
         DPRINT1("CONSRV: Unable to create console window\n");
         return 1;
     }
     TuiData->hWindow = NewWindow;
+
+    /* Set the window activation hotkey */
+    if (TuiData->dwHotKey)
+        SendMessageW(TuiData->hWindow, WM_SETHOTKEY, TuiData->dwHotKey, 0);
 
     SetForegroundWindow(TuiData->hWindow);
     NtUserConsoleControl(ConsoleAcquireDisplayOwnership, NULL, 0);
@@ -754,6 +760,7 @@ TuiInitFrontEnd(IN OUT PFRONTEND This,
     TuiData->Console      = Console;
     TuiData->ActiveBuffer = Console->ActiveBuffer;
     TuiData->hWindow = NULL;
+    TuiData->dwHotKey = (DWORD)(ULONG_PTR)FrontEnd->Context2;
 
     InitializeCriticalSection(&TuiData->Lock);
 
@@ -780,7 +787,7 @@ TuiInitFrontEnd(IN OUT PFRONTEND This,
                                 (PVOID)TuiData,
                                 0,
                                 NULL);
-    if (NULL == ThreadHandle)
+    if (!ThreadHandle)
     {
         DPRINT1("CONSRV: Unable to create console thread\n");
         // TuiDeinitFrontEnd(Console);
@@ -861,7 +868,7 @@ TuiDrawRegion(IN OUT PFRONTEND This,
     ConsoleDrawSize = sizeof(CONSOLE_DRAW) +
                       (ConioRectWidth(Region) * ConioRectHeight(Region)) * 2;
     ConsoleDraw = ConsoleAllocHeap(0, ConsoleDrawSize);
-    if (NULL == ConsoleDraw)
+    if (!ConsoleDraw)
     {
         DPRINT1("ConsoleAllocHeap failed\n");
         return;
@@ -1243,7 +1250,7 @@ TuiLoadFrontEnd(IN OUT PFRONTEND FrontEnd,
     /* Finally, initialize the frontend structure */
     FrontEnd->Vtbl     = &TuiVtbl;
     FrontEnd->Context  = NULL;
-    FrontEnd->Context2 = NULL;
+    FrontEnd->Context2 = (PVOID)(ULONG_PTR)ConsoleInitInfo->dwHotKey;
 
     return STATUS_SUCCESS;
 }

@@ -19,6 +19,7 @@
 #define _INC_WINDOWS
 #define COM_NO_WINDOWS_H
 
+#include <winbase_undoc.h>
 #include <winnls.h>
 #include <wincon.h>
 #include <wincon_undoc.h>
