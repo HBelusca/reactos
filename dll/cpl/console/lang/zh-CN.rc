@@ -137,7 +137,7 @@ BEGIN
 END
 
 IDD_APPLYOPTIONS DIALOGEX 0, 0, 220, 79
-STYLE DS_SHELLFONT | WS_POPUP | WS_CAPTION
+STYLE DS_SHELLFONT | DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "应用属性"
 FONT 9, "宋体"
 BEGIN
@@ -151,7 +151,10 @@ STRINGTABLE
 BEGIN
     IDS_CPLNAME "控制台"
     IDS_CPLDESCRIPTION "配置控制台属性。"
-    IDS_APPLY_SHORTCUT_ALL "修改启动此窗口的快捷方式(&S)"
     IDS_RASTERFONTS "点阵字体"
     IDS_GROUPBOX_FONT_NAME "所选字体："
+    IDS_APPLY_SHORTCUT_TITLE "Apply Properties To Shortcut"
+    IDS_APPLY_SHORTCUT_ALL "修改启动此窗口的快捷方式(&M)"
+    IDS_ERROR_SHORTCUT_TITLE "Error Updating Shortcut"
+    IDS_ERROR_SHORTCUT "Unable to modify the shortcut:\n%s\nCheck to make sure it has not been deleted or renamed."
 END

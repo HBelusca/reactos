@@ -9,21 +9,39 @@
 
 #include "console.h"
 
+#define NTOS_MODE_USER
+#include <ndk/rtlfuncs.h> // For PRTL_USER_PROCESS_PARAMETERS and NtCurrentPeb()
+
 #define NDEBUG
 #include <debug.h>
 
-INT_PTR CALLBACK OptionsProc(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
-INT_PTR CALLBACK FontProc(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
-INT_PTR CALLBACK LayoutProc(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
-INT_PTR CALLBACK ColorsProc(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
+INT_PTR CALLBACK OptionsProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
+INT_PTR CALLBACK FontProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
+INT_PTR CALLBACK LayoutProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
+INT_PTR CALLBACK ColorsProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
 
 HINSTANCE hApplet = NULL;
+
+/* Pointer to shell link (.lnk) file path, if the
+ * console program were started from a shell link. */
+PCWSTR pszStartedLnkPath = NULL;
 
 /* Local copy of the console information */
 PCONSOLE_STATE_INFO ConInfo = NULL;
 /* What to do with the console information */
 static BOOL SetConsoleInfo  = FALSE;
 static BOOL SaveConsoleInfo = FALSE;
+
+
+/*static*/ ErrOut(HRESULT hr, DWORD dwLastError, PCWSTR pszWhere)
+{
+    WCHAR szBuffer[260];
+    StringCchPrintfW(szBuffer, _countof(szBuffer),
+                     L"%s : HRESULT 0x%08x , LastError %lu",
+                     pszWhere ? pszWhere : L"n/a", hr, dwLastError);
+    MessageBoxW(NULL, szBuffer, L"lnkprops", MB_ICONERROR | MB_OK);
+}
+
 
 static VOID
 InitPropSheetPage(PROPSHEETPAGEW *psp,
@@ -46,12 +64,44 @@ InitDefaultConsoleInfo(PCONSOLE_STATE_INFO pConInfo)
     ConCfgGetDefaultSettings(pConInfo);
 }
 
+/**
+ * @brief
+ * Determines whether the Console Properties applet, started via the console,
+ * displays the properties for a console program started via a shell link.
+ *
+ * @remark
+ * The Console Properties applet is started in the context of the current
+ * leader process of the running console. To determine whether this process
+ * was started via a shell link, its process environment block is inspected,
+ * because this information is not provided by the passed initial console
+ * shared information block.
+ **/
+static PCWSTR
+IsStartedFromLnk(VOID)
+{
+    PRTL_USER_PROCESS_PARAMETERS Ppb = NtCurrentPeb()->ProcessParameters;
+    PCWSTR pszExt;
+
+    /* Check that the process is flagged as being started from a shell link,
+     * with its WindowTitle containing the path of the shortcut file */
+    if (!(Ppb->WindowFlags & STARTF_TITLEISLINKNAME))
+        return NULL;
+
+    /* Verify that the file extension is indeed '.lnk' */
+    pszExt = wcsrchr(Ppb->WindowTitle.Buffer, L'.'); // PathFindExtensionW(Ppb->WindowTitle.Buffer);
+    if (!(pszExt && _wcsicmp(pszExt, L".lnk") == 0))
+        return NULL;
+
+    return Ppb->WindowTitle.Buffer;
+}
+
 static INT_PTR
 CALLBACK
-ApplyProc(HWND hwndDlg,
-          UINT uMsg,
-          WPARAM wParam,
-          LPARAM lParam)
+ApplyProc(
+    _In_ HWND hDlg,
+    _In_ UINT uMsg,
+    _In_ WPARAM wParam,
+    _In_ LPARAM lParam)
 {
     UNREFERENCED_PARAMETER(lParam);
 
@@ -59,21 +109,30 @@ ApplyProc(HWND hwndDlg,
     {
         case WM_INITDIALOG:
         {
-            CheckDlgButton(hwndDlg, IDC_RADIO_APPLY_CURRENT, BST_CHECKED);
+            /* If started from a shortcut, modify the dialog title and 2nd item */
+            if (pszStartedLnkPath)
+            {
+                WCHAR szText[260];
+                LoadStringW(hApplet, IDS_APPLY_SHORTCUT_TITLE, szText, _countof(szText));
+                SetWindowTextW(hDlg, szText);
+                LoadStringW(hApplet, IDS_APPLY_SHORTCUT_ALL, szText, _countof(szText));
+                SetDlgItemTextW(hDlg, IDC_RADIO_APPLY_ALL, szText);
+            }
+            CheckDlgButton(hDlg, IDC_RADIO_APPLY_CURRENT, BST_CHECKED);
             return TRUE;
         }
         case WM_COMMAND:
         {
             if (LOWORD(wParam) == IDOK)
             {
-                if (IsDlgButtonChecked(hwndDlg, IDC_RADIO_APPLY_CURRENT) == BST_CHECKED)
-                    EndDialog(hwndDlg, IDC_RADIO_APPLY_CURRENT);
+                if (IsDlgButtonChecked(hDlg, IDC_RADIO_APPLY_CURRENT) == BST_CHECKED)
+                    EndDialog(hDlg, IDC_RADIO_APPLY_CURRENT);
                 else
-                    EndDialog(hwndDlg, IDC_RADIO_APPLY_ALL);
+                    EndDialog(hDlg, IDC_RADIO_APPLY_ALL);
             }
             else if (LOWORD(wParam) == IDCANCEL)
             {
-                EndDialog(hwndDlg, IDCANCEL);
+                EndDialog(hDlg, IDCANCEL);
             }
             break;
         }
@@ -178,8 +237,9 @@ InitApplet(HANDLE hSectionOrWnd)
      * global parameters (and we were either called by CONSRV or directly by
      * the user via the Control Panel, etc...)
      */
+__debugbreak();
     pSharedInfo = MapViewOfFile(hSectionOrWnd, FILE_MAP_READ, 0, 0, 0);
-    if (pSharedInfo != NULL)
+    if (pSharedInfo)
     {
         /*
          * We succeeded. We were called by CONSRV and are retrieving
@@ -202,7 +262,10 @@ InitApplet(HANDLE hSectionOrWnd)
         UnmapViewOfFile(pSharedInfo);
         CloseHandle(hSectionOrWnd);
 
-        if (!ConInfo) return 0;
+        if (!ConInfo)
+            return 0;
+
+        pszStartedLnkPath = IsStartedFromLnk();
     }
     else
     {
@@ -214,7 +277,8 @@ InitApplet(HANDLE hSectionOrWnd)
         ConInfo = HeapAlloc(GetProcessHeap(),
                             HEAP_ZERO_MEMORY,
                             sizeof(CONSOLE_STATE_INFO));
-        if (!ConInfo) return 0;
+        if (!ConInfo)
+            return 0;
 
         /*
          * Setting the console window handle to NULL indicates we are
@@ -227,6 +291,17 @@ InitApplet(HANDLE hSectionOrWnd)
         InitDefaultConsoleInfo(ConInfo);
     }
 
+////////////
+#if 0
+{
+HRESULT hr;
+pszStartedLnkPath = L"X:\\reactos\\dll\\cpl\\console\\test.lnk";
+hr = ConLnkReadSettings(ConInfo, pszStartedLnkPath);
+hr = hr;
+}
+#endif
+////////////
+
     /* Initialize the font support -- additional TrueType font cache and current preview font */
     InitTTFontCache();
     RefreshFontPreview(&FontPreview, ConInfo);
@@ -238,7 +313,12 @@ InitApplet(HANDLE hSectionOrWnd)
 
     if (ConInfo->ConsoleTitle[0] != UNICODE_NULL)
     {
-        StringCchPrintfW(szTitle, ARRAYSIZE(szTitle), L"\"%s\"", ConInfo->ConsoleTitle);
+        /* The ConsoleTitle may contain the name of the console program
+         * in an unexpanded form (e.g. containing %SystemRoot%) */
+        StringCchCopyW(szTitle, _countof(szTitle), L"\"");
+        ExpandEnvironmentStringsW(ConInfo->ConsoleTitle, szTitle + 1, _countof(szTitle) - 1);
+        StringCchCatW(szTitle, _countof(szTitle), L"\"");
+
         psh.pszCaption = szTitle;
     }
     else
@@ -246,14 +326,14 @@ InitApplet(HANDLE hSectionOrWnd)
         psh.pszCaption = MAKEINTRESOURCEW(IDS_CPLNAME);
     }
 
-    if (pSharedInfo != NULL)
+    if (pSharedInfo)
     {
         /* We were started from a console window: this is our parent (or ConInfo->hWnd is NULL) */
         psh.hwndParent = ConInfo->hWnd;
     }
     else
     {
-        /* We were started in another way (--> default parameters). Caller's window is our parent. */
+        /* We were started another way (for default parameters): caller's window is our parent */
         psh.hwndParent = (HWND)hSectionOrWnd;
     }
 
@@ -328,8 +408,27 @@ InitApplet(HANDLE hSectionOrWnd)
     /* Save the console settings */
     if (SaveConsoleInfo)
     {
-        /* Default settings saved when ConInfo->hWnd == NULL */
-        ConCfgWriteUserSettings(ConInfo, ConInfo->hWnd == NULL);
+        /* If we were started from a lnk file, modify it
+         * instead of saving it to the registry */
+        if (pszStartedLnkPath)
+        {
+            /* Save the settings in the shortcut file */
+            HRESULT hr = ConLnkWriteSettings(ConInfo, pszStartedLnkPath);
+            if (!SUCCEEDED(hr))
+            {
+                WCHAR szMessage[260];
+                LoadStringW(hApplet, IDS_ERROR_SHORTCUT, szTitle, _countof(szTitle));
+                StringCchPrintfW(szMessage, _countof(szMessage), szTitle, pszStartedLnkPath);
+                LoadStringW(hApplet, IDS_ERROR_SHORTCUT_TITLE, szTitle, _countof(szTitle));
+                MessageBoxW(psh.hwndParent, szMessage, szTitle, MB_ICONERROR | MB_OK);
+            }
+        }
+        else
+        {
+            /* Save the settings in the registry.
+             * These are default settings when ConInfo->hWnd == NULL. */
+            ConCfgWriteUserSettings(ConInfo, ConInfo->hWnd == NULL);
+        }
     }
 
 Quit:

@@ -142,7 +142,7 @@ BEGIN
 END
 
 IDD_APPLYOPTIONS DIALOGEX 0, 0, 220, 79
-STYLE DS_SHELLFONT | WS_POPUP | WS_CAPTION
+STYLE DS_SHELLFONT | DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "Применить свойства"
 FONT 8, "MS Shell Dlg"
 BEGIN
@@ -156,7 +156,10 @@ STRINGTABLE
 BEGIN
     IDS_CPLNAME "Командная строка"
     IDS_CPLDESCRIPTION "Настройка командной строки."
-    IDS_APPLY_SHORTCUT_ALL "&Изменить ярлык, которым было запущено это окно"
     IDS_RASTERFONTS "Растровые шрифты"
     IDS_GROUPBOX_FONT_NAME "Выбранный шрифт: "
+    IDS_APPLY_SHORTCUT_TITLE "Apply Properties To Shortcut"
+    IDS_APPLY_SHORTCUT_ALL "&Изменить ярлык, которым было запущено это окно"
+    IDS_ERROR_SHORTCUT_TITLE "Error Updating Shortcut"
+    IDS_ERROR_SHORTCUT "Unable to modify the shortcut:\n%s\nCheck to make sure it has not been deleted or renamed."
 END

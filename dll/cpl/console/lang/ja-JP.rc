@@ -134,7 +134,7 @@ BEGIN
 END
 
 IDD_APPLYOPTIONS DIALOGEX 0, 0, 220, 79
-STYLE DS_SHELLFONT | WS_POPUP | WS_CAPTION
+STYLE DS_SHELLFONT | DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "プロパティを適用する"
 FONT 9, "MS UI Gothic"
 BEGIN
@@ -148,7 +148,10 @@ STRINGTABLE
 BEGIN
     IDS_CPLNAME "コンソール"
     IDS_CPLDESCRIPTION "コンソールプロパティを設定します。"
-    IDS_APPLY_SHORTCUT_ALL "このウィンドウを開始したショートカットを編集します(&S)"
     IDS_RASTERFONTS "ラスターフォント"
     IDS_GROUPBOX_FONT_NAME "選択中のフォント: "
+    IDS_APPLY_SHORTCUT_TITLE "Apply Properties To Shortcut"
+    IDS_APPLY_SHORTCUT_ALL "このウィンドウを開始したショートカットを編集します(&M)"
+    IDS_ERROR_SHORTCUT_TITLE "Error Updating Shortcut"
+    IDS_ERROR_SHORTCUT "Unable to modify the shortcut:\n%s\nCheck to make sure it has not been deleted or renamed."
 END

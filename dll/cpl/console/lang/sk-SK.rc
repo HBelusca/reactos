@@ -137,7 +137,7 @@ BEGIN
 END
 
 IDD_APPLYOPTIONS DIALOGEX 0, 0, 220, 79
-STYLE DS_SHELLFONT | WS_POPUP | WS_CAPTION
+STYLE DS_SHELLFONT | DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "Apply Properties"
 FONT 8, "MS Shell Dlg"
 BEGIN
@@ -151,7 +151,10 @@ STRINGTABLE
 BEGIN
     IDS_CPLNAME "Konzola"
     IDS_CPLDESCRIPTION "Nastavuje vlastnosti Konzoly."
-    IDS_APPLY_SHORTCUT_ALL "Modify &shortcut that started this window"
     IDS_RASTERFONTS "Rasterové písma"
     IDS_GROUPBOX_FONT_NAME "Selected Font: "
+    IDS_APPLY_SHORTCUT_TITLE "Apply Properties To Shortcut"
+    IDS_APPLY_SHORTCUT_ALL "&Modify the shortcut that started this window"
+    IDS_ERROR_SHORTCUT_TITLE "Error Updating Shortcut"
+    IDS_ERROR_SHORTCUT "Unable to modify the shortcut:\n%s\nCheck to make sure it has not been deleted or renamed."
 END

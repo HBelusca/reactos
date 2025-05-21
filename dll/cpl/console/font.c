@@ -712,9 +712,9 @@ FontSizeChange(
     InvalidateRect(GetDlgItem(hDlg, IDC_STATIC_SELECT_FONT_PREVIEW), NULL, TRUE);
 
     StringCchPrintfW(szFontSize, ARRAYSIZE(szFontSize), L"%d", CharWidth);
-    SetDlgItemText(hDlg, IDC_FONT_SIZE_X, szFontSize);
+    SetDlgItemTextW(hDlg, IDC_FONT_SIZE_X, szFontSize);
     StringCchPrintfW(szFontSize, ARRAYSIZE(szFontSize), L"%d", CharHeight);
-    SetDlgItemText(hDlg, IDC_FONT_SIZE_Y, szFontSize);
+    SetDlgItemTextW(hDlg, IDC_FONT_SIZE_Y, szFontSize);
 
     return TRUE;
 }

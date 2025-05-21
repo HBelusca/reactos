@@ -134,11 +134,11 @@ BEGIN
 END
 
 IDD_APPLYOPTIONS DIALOGEX 0, 0, 220, 79
-STYLE DS_SHELLFONT | WS_POPUP | WS_CAPTION
+STYLE DS_SHELLFONT | DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "Godta innstillinger"
 FONT 8, "MS Shell Dlg"
 BEGIN
-    AUTORADIOBUTTON "&Godta innstillinger for bare nåværende vindu", IDC_RADIO_APPLY_CURRENT, 12, 12, 207, 10, WS_TABSTOP
+    AUTORADIOBUTTON "Godta innstillinger for &bare nåværende vindu", IDC_RADIO_APPLY_CURRENT, 12, 12, 207, 10, WS_TABSTOP
     AUTORADIOBUTTON "&Godta innstillinger for fremtidlige vinduer med samme navn", IDC_RADIO_APPLY_ALL, 12, 31, 207, 10, WS_TABSTOP
     PUSHBUTTON "OK", IDOK, 58, 58, 50, 14
     PUSHBUTTON "Avbryt", IDCANCEL, 114, 58, 50, 14
@@ -148,7 +148,10 @@ STRINGTABLE
 BEGIN
     IDS_CPLNAME "Konsoll"
     IDS_CPLDESCRIPTION "Konfigurere Konsoll innstillinger."
-    IDS_APPLY_SHORTCUT_ALL "Modify &shortcut that started this window"
     IDS_RASTERFONTS "Raster Fonts"
     IDS_GROUPBOX_FONT_NAME "Selected Font: "
+    IDS_APPLY_SHORTCUT_TITLE "Apply Properties To Shortcut"
+    IDS_APPLY_SHORTCUT_ALL "&Modify the shortcut that started this window"
+    IDS_ERROR_SHORTCUT_TITLE "Error Updating Shortcut"
+    IDS_ERROR_SHORTCUT "Unable to modify the shortcut:\n%s\nCheck to make sure it has not been deleted or renamed."
 END

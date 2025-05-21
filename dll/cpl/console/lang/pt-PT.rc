@@ -141,7 +141,7 @@ BEGIN
 END
 
 IDD_APPLYOPTIONS DIALOGEX 0, 0, 220, 79
-STYLE DS_SHELLFONT | WS_POPUP | WS_CAPTION
+STYLE DS_SHELLFONT | DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "Aplicar propriedades"
 FONT 8, "MS Shell Dlg"
 BEGIN
@@ -155,7 +155,10 @@ STRINGTABLE
 BEGIN
     IDS_CPLNAME "Consola"
     IDS_CPLDESCRIPTION "Configura as propriedades da consola."
-    IDS_APPLY_SHORTCUT_ALL "&Modificar o atalho que iniciou esta janela"
     IDS_RASTERFONTS "Fontes de varredura"
     IDS_GROUPBOX_FONT_NAME "Tipo de letra seleccionada: "
+    IDS_APPLY_SHORTCUT_TITLE "Apply Properties To Shortcut"
+    IDS_APPLY_SHORTCUT_ALL "&Modificar o atalho que iniciou esta janela"
+    IDS_ERROR_SHORTCUT_TITLE "Error Updating Shortcut"
+    IDS_ERROR_SHORTCUT "Unable to modify the shortcut:\n%s\nCheck to make sure it has not been deleted or renamed."
 END

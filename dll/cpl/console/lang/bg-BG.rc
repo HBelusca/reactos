@@ -134,12 +134,12 @@ BEGIN
 END
 
 IDD_APPLYOPTIONS DIALOGEX 0, 0, 265, 79
-STYLE DS_SHELLFONT | WS_POPUP | WS_CAPTION
+STYLE DS_SHELLFONT | DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "Прилагане на свойствата"
 FONT 8, "MS Shell Dlg"
 BEGIN
-    AUTORADIOBUTTON "Прилагане на свойствата само за &текущия прозорец", IDC_RADIO_APPLY_CURRENT, 12, 12, 207, 10, WS_TABSTOP
-    AUTORADIOBUTTON "Прилагане на свойствата за бъдещи прозорци със същото заглавие", IDC_RADIO_APPLY_ALL, 12, 31, 247, 10, WS_TABSTOP
+    AUTORADIOBUTTON "Прилагане на &свойствата само за &текущия прозорец", IDC_RADIO_APPLY_CURRENT, 12, 12, 207, 10, WS_TABSTOP
+    AUTORADIOBUTTON "&Прилагане на свойствата за бъдещи прозорци със същото заглавие", IDC_RADIO_APPLY_ALL, 12, 31, 247, 10, WS_TABSTOP
     PUSHBUTTON "Добре", IDOK, 58, 58, 50, 14
     PUSHBUTTON "Отказ", IDCANCEL, 114, 58, 50, 14
 END
@@ -148,7 +148,10 @@ STRINGTABLE
 BEGIN
     IDS_CPLNAME "Конзола"
     IDS_CPLDESCRIPTION "Настройка на конзолата."
-    IDS_APPLY_SHORTCUT_ALL "Промяна на &препратката, запуснала този прозорец"
     IDS_RASTERFONTS "Решетъчни шрифтове"
     IDS_GROUPBOX_FONT_NAME "Избор на шрифт: "
+    IDS_APPLY_SHORTCUT_TITLE "Apply Properties To Shortcut"
+    IDS_APPLY_SHORTCUT_ALL "&Промяна на препратката, запуснала този прозорец"
+    IDS_ERROR_SHORTCUT_TITLE "Error Updating Shortcut"
+    IDS_ERROR_SHORTCUT "Unable to modify the shortcut:\n%s\nCheck to make sure it has not been deleted or renamed."
 END

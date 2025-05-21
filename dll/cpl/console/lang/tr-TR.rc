@@ -136,7 +136,7 @@ BEGIN
 END
 
 IDD_APPLYOPTIONS DIALOGEX 0, 0, 220, 79
-STYLE DS_SHELLFONT | WS_POPUP | WS_CAPTION
+STYLE DS_SHELLFONT | DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "Özellikleri Uygula"
 FONT 8, "MS Shell Dlg"
 BEGIN
@@ -150,7 +150,10 @@ STRINGTABLE
 BEGIN
     IDS_CPLNAME "Konsol"
     IDS_CPLDESCRIPTION "Konsol özelliklerini yapılandırır."
-    IDS_APPLY_SHORTCUT_ALL "&Bu pencereyi başlatan kısayolu değiştir"
     IDS_RASTERFONTS "Taramalı Yazı Tipleri"
     IDS_GROUPBOX_FONT_NAME "Seçili Yazı Tipi: "
+    IDS_APPLY_SHORTCUT_TITLE "Apply Properties To Shortcut"
+    IDS_APPLY_SHORTCUT_ALL "&Bu pencereyi başlatan kısayolu değiştir"
+    IDS_ERROR_SHORTCUT_TITLE "Error Updating Shortcut"
+    IDS_ERROR_SHORTCUT "Unable to modify the shortcut:\n%s\nCheck to make sure it has not been deleted or renamed."
 END

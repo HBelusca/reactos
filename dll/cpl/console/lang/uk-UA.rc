@@ -136,11 +136,11 @@ BEGIN
 END
 
 IDD_APPLYOPTIONS DIALOGEX 0, 0, 220, 79
-STYLE DS_SHELLFONT | WS_POPUP | WS_CAPTION
+STYLE DS_SHELLFONT | DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "Зміна властивостей"
 FONT 8, "MS Shell Dlg"
 BEGIN
-    AUTORADIOBUTTON "&Змінити тільки для поточного вікна", IDC_RADIO_APPLY_CURRENT, 12, 12, 207, 10, WS_TABSTOP
+    AUTORADIOBUTTON "Змінити &тільки для поточного вікна", IDC_RADIO_APPLY_CURRENT, 12, 12, 207, 10, WS_TABSTOP
     AUTORADIOBUTTON "&Зберігти для майбутніх вікон з таким самим заголовком", IDC_RADIO_APPLY_ALL, 12, 31, 207, 10, WS_TABSTOP
     PUSHBUTTON "OK", IDOK, 58, 58, 50, 14
     PUSHBUTTON "Скасувати", IDCANCEL, 114, 58, 50, 14
@@ -150,7 +150,10 @@ STRINGTABLE
 BEGIN
     IDS_CPLNAME "Консоль"
     IDS_CPLDESCRIPTION "Настроювання властивостей консолі."
-    IDS_APPLY_SHORTCUT_ALL "Зміна &ярлика, який запустив це вікно"
     IDS_RASTERFONTS "Растрові шрифти"
     IDS_GROUPBOX_FONT_NAME "Обраний шрифт: "
+    IDS_APPLY_SHORTCUT_TITLE "Apply Properties To Shortcut"
+    IDS_APPLY_SHORTCUT_ALL "&Зміна ярлика, який запустив це вікно"
+    IDS_ERROR_SHORTCUT_TITLE "Error Updating Shortcut"
+    IDS_ERROR_SHORTCUT "Unable to modify the shortcut:\n%s\nCheck to make sure it has not been deleted or renamed."
 END

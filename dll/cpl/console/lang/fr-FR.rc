@@ -136,8 +136,8 @@ BEGIN
 END
 
 IDD_APPLYOPTIONS DIALOGEX 0, 0, 220, 79
-STYLE DS_SHELLFONT | WS_POPUP | WS_CAPTION
-CAPTION "Appliquer propriétés"
+STYLE DS_SHELLFONT | DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "Appliquer les propriétés"
 FONT 8, "MS Shell Dlg"
 BEGIN
     AUTORADIOBUTTON "&Appliquer les propriétés à la fenêtre actuelle seulement", IDC_RADIO_APPLY_CURRENT, 12, 12, 207, 10, WS_TABSTOP
@@ -150,7 +150,10 @@ STRINGTABLE
 BEGIN
     IDS_CPLNAME "Console"
     IDS_CPLDESCRIPTION "Configurer les propriétés de la console."
-    IDS_APPLY_SHORTCUT_ALL "Modify &shortcut that started this window"
     IDS_RASTERFONTS "Polices Raster"
     IDS_GROUPBOX_FONT_NAME "Police sélectionnée : "
+    IDS_APPLY_SHORTCUT_TITLE "Appliquer les propriétés au raccourci"
+    IDS_APPLY_SHORTCUT_ALL "&Modifier le raccourci qui a permis d'ouvrir cette fenêtre"
+    IDS_ERROR_SHORTCUT_TITLE "Erreur lors de la mise à jour du raccourci"
+    IDS_ERROR_SHORTCUT "Impossible de modifier le raccourci :\n%s\nVeuillez vous assurer qu'il n'a pas été supprimé ou renommé."
 END

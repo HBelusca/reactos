@@ -7,8 +7,8 @@
 #define IDC_CPLICON             40
 #define IDS_CPLNAME             41
 #define IDS_CPLDESCRIPTION      42
-#define IDS_APPLY_SHORTCUT_ALL  43
 
+/* Property page dialogs */
 #define IDD_PROPPAGEOPTIONS 100
 #define IDD_PROPPAGEFONT    101
 #define IDD_PROPPAGELAYOUT  102
@@ -96,5 +96,9 @@
 #define IDC_STATIC_COLOR16  627
 
 /* String IDs */
-#define IDS_RASTERFONTS         700
-#define IDS_GROUPBOX_FONT_NAME  701
+#define IDS_RASTERFONTS             700
+#define IDS_GROUPBOX_FONT_NAME      701
+#define IDS_APPLY_SHORTCUT_TITLE    702
+#define IDS_APPLY_SHORTCUT_ALL      703
+#define IDS_ERROR_SHORTCUT_TITLE    704
+#define IDS_ERROR_SHORTCUT          705

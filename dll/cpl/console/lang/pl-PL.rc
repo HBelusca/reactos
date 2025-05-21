@@ -141,12 +141,12 @@ BEGIN
 END
 
 IDD_APPLYOPTIONS DIALOGEX 0, 0, 220, 100
-STYLE DS_SHELLFONT | WS_POPUP | WS_CAPTION
+STYLE DS_SHELLFONT | DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "Zastosuj właściwości"
 FONT 8, "MS Shell Dlg"
 BEGIN
-    AUTORADIOBUTTON "&Zastosuj właściwości tylko do aktualnego okna", IDC_RADIO_APPLY_CURRENT, 25, 25, 150, 10, WS_TABSTOP
-    AUTORADIOBUTTON "Z&apisz właściwości na przyszłe okna z tym samym tytułem", IDC_RADIO_APPLY_ALL, 25, 40, 185, 10, WS_TABSTOP
+    AUTORADIOBUTTON "Zastosuj właściwości &tylko do aktualnego okna", IDC_RADIO_APPLY_CURRENT, 25, 25, 150, 10, WS_TABSTOP
+    AUTORADIOBUTTON "&Zapisz właściwości na przyszłe okna z tym samym tytułem", IDC_RADIO_APPLY_ALL, 25, 40, 185, 10, WS_TABSTOP
     PUSHBUTTON "OK", IDOK, 25, 80, 40, 15
     PUSHBUTTON "Anuluj", IDCANCEL, 120, 80, 50, 15
 END
@@ -155,7 +155,10 @@ STRINGTABLE
 BEGIN
     IDS_CPLNAME "Konsola"
     IDS_CPLDESCRIPTION "Konfiguruje właściwości konsoli."
-    IDS_APPLY_SHORTCUT_ALL "Zmodyfikuj skrót, który wywołał to okno"
     IDS_RASTERFONTS "Czcionki rastrowe"
     IDS_GROUPBOX_FONT_NAME "Wybrana czcionka: "
+    IDS_APPLY_SHORTCUT_TITLE "Apply Properties To Shortcut"
+    IDS_APPLY_SHORTCUT_ALL "&Zmodyfikuj skrót, który wywołał to okno"
+    IDS_ERROR_SHORTCUT_TITLE "Error Updating Shortcut"
+    IDS_ERROR_SHORTCUT "Unable to modify the shortcut:\n%s\nCheck to make sure it has not been deleted or renamed."
 END
