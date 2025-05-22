@@ -372,10 +372,8 @@ HRESULT STDMETHODCALLTYPE CShellLink::Save(LPCOLESTR pszFileName, BOOL fRemember
         if (SUCCEEDED(hr))
         {
             GetFullPathNameW(pszFileName, _countof(szFullPath), szFullPath, NULL);
-            if (bAlreadyExists)
-                SHChangeNotify(SHCNE_UPDATEITEM, SHCNF_PATHW, szFullPath, NULL);
-            else
-                SHChangeNotify(SHCNE_CREATE, SHCNF_PATHW, szFullPath, NULL);
+            SHChangeNotify(bAlreadyExists ? SHCNE_UPDATEITEM : SHCNE_CREATE, SHCNF_PATHW, szFullPath, NULL);
+            SHChangeNotify(SHCNE_FREESPACE, SHCNF_PATHW, szFullPath, NULL);
 
             /* Update the file path only on a "Save As" operation. For "Save",
              * the NULL pszFileName has already been set to m_sLinkPath above. */

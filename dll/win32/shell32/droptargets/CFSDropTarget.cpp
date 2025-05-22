@@ -721,6 +721,7 @@ HRESULT CFSDropTarget::_DoDrop(IDataObject *pDataObject,
                     break;
                 }
                 SHChangeNotify(SHCNE_CREATE, SHCNF_PATHW, wszNewLnk, NULL);
+                SHChangeNotify(SHCNE_FREESPACE, SHCNF_PATHW, wszNewLnk, NULL);
             }
         }
         else

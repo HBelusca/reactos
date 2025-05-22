@@ -915,6 +915,7 @@ static DWORD SHNotifyCopyFileW(FILE_OPERATION *op, LPCWSTR src, LPCWSTR dest, BO
         }
 
         SHChangeNotify(SHCNE_CREATE, SHCNF_PATHW, dest, NULL);
+        SHChangeNotify(SHCNE_FREESPACE, SHCNF_PATHW, dest, NULL);
         return ERROR_SUCCESS;
     }
     return CheckForError(op, error, src);
@@ -2096,8 +2097,16 @@ int SHELL32_FileOperation(LPSHFILEOPSTRUCTW lpFileOp, FILEOPCALLBACK Callback, v
     FILE_LIST flFrom, flTo;
     int ret = 0;
 
-    if (!lpFileOp)
+    if (!lpFileOp || !lpFileOp->pFrom)
         return ERROR_INVALID_PARAMETER;
+
+    if (lpFileOp->wFunc != FO_MOVE
+        && lpFileOp->wFunc != FO_COPY
+        && lpFileOp->wFunc != FO_DELETE
+        && lpFileOp->wFunc != FO_RENAME)
+    {
+        return ERROR_INVALID_PARAMETER;
+    }
 
     ret = CoInitialize(NULL);
     if (FAILED(ret))
@@ -2158,6 +2167,7 @@ int SHELL32_FileOperation(LPSHFILEOPSTRUCTW lpFileOp, FILEOPCALLBACK Callback, v
             ret = rename_files(&op, &flFrom, &flTo);
             break;
         default:
+            assert(0); /* Should never be here. */
             ret = ERROR_INVALID_PARAMETER;
             break;
     }
@@ -2165,6 +2175,36 @@ int SHELL32_FileOperation(LPSHFILEOPSTRUCTW lpFileOp, FILEOPCALLBACK Callback, v
     if (op.progress) {
         op.progress->StopProgressDialog();
         op.progress->Release();
+    }
+
+    /* Send a free-space change notification if necessary */
+    if (lpFileOp->wFunc != FO_RENAME)
+    {
+        DWORD nDriveFrom, nDriveTo = -1;
+        DWORD nDrives = 0;
+
+        if (lpFileOp->wFunc == FO_COPY)
+            nDriveFrom = -1; /* Copy is done on the same drive (nDriveTo) */
+        else
+            nDriveFrom = PathGetDriveNumberW(lpFileOp->pFrom);
+        if (lpFileOp->pTo)
+            nDriveTo = PathGetDriveNumberW(lpFileOp->pTo);
+
+        /* If this is a move to the same drive, don't send
+         * a free-space change notification */
+        if ((lpFileOp->wFunc == FO_MOVE) && (nDriveTo == nDriveFrom))
+        {
+            nDriveFrom = -1;
+            nDriveTo = -1;
+        }
+
+        /* Build the resulting drives map and send the notification if needed */
+        if (nDriveFrom != -1)
+            nDrives = (1 << nDriveFrom);
+        if (nDriveTo != -1)
+            nDrives |= (1 << nDriveTo);
+        if (nDrives)
+            SHChangeNotify(SHCNE_FREESPACE, SHCNF_DWORD, UlongToPtr(nDrives), 0);
     }
 
 cleanup:
