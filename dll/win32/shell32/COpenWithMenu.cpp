@@ -480,16 +480,16 @@ BOOL COpenWithList::LoadInfo(COpenWithList::SApp *pApp)
     /* query lang code */
     if (VerQueryValueW(pBuf, L"VarFileInfo\\Translation", (LPVOID*)&lpLangCode, &cbSize))
     {
-                /* FIXME: find language from current locale / if not available,
-                 * default to english
-                 * for now default to first available language
-                 */
-                wLang = lpLangCode->lang;
-                wCode = lpLangCode->code;
+        /* FIXME: find language from current locale / if not available,
+         * default to english
+         * for now default to first available language
+         */
+        wLang = lpLangCode->lang;
+        wCode = lpLangCode->code;
     }
 
     /* Query name */
-    swprintf(wszBuf, L"\\StringFileInfo\\%04x%04x\\FileDescription", wLang, wCode);
+    swprintf(wszBuf, _countof(wszBuf), L"\\StringFileInfo\\%04x%04x\\FileDescription", wLang, wCode);
     success = VerQueryValueW(pBuf, wszBuf, (LPVOID *)&pResult, &cchLen) && (cchLen > 1);
     if (success)
         StringCchCopyNW(pApp->wszName, _countof(pApp->wszName), pResult, cchLen);
@@ -497,10 +497,12 @@ BOOL COpenWithList::LoadInfo(COpenWithList::SApp *pApp)
         ERR("Cannot get app name\n");
 
     /* Query manufacturer */
-    /*swprintf(wszBuf, L"\\StringFileInfo\\%04x%04x\\CompanyName", wLang, wCode);
+#if 0
+    swprintf(wszBuf, _countof(wszBuf), L"\\StringFileInfo\\%04x%04x\\CompanyName", wLang, wCode);
 
     if (VerQueryValueW(pBuf, wszBuf, (LPVOID *)&pResult, &cchLen))
-        StringCchCopyNW(pApp->wszManufacturer, _countof(pApp->wszManufacturer), pResult, cchLen);*/
+        StringCchCopyNW(pApp->wszManufacturer, _countof(pApp->wszManufacturer), pResult, cchLen);
+#endif
     HeapFree(GetProcessHeap(), 0, pBuf);
     return success;
 }

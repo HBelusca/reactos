@@ -19,8 +19,6 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
  */
 
-#include <wine/config.h>
-
 #include <stdio.h>
 
 #define WIN32_NO_STATUS
@@ -33,7 +31,6 @@
 #include <shlguid_undoc.h>
 #include <shlwapi.h>
 #include <wine/debug.h>
-#include <wine/unicode.h>
 #ifdef __REACTOS__
 #include <strsafe.h>
 #endif
@@ -276,10 +273,10 @@ static BOOL HCR_RegGetIconW(HKEY hkey, LPWSTR szDest, LPCWSTR szName, DWORD len,
         ExpandEnvironmentStringsW(szDest, sTemp, MAX_PATH);
         lstrcpynW(szDest, sTemp, len);
       }
-        if (ParseFieldW (szDest, 2, sNum, _countof(sNum)))
-             *picon_idx = atoiW(sNum);
-          else
-             *picon_idx=0; /* sometimes the icon number is missing */
+      if (ParseFieldW (szDest, 2, sNum, _countof(sNum)))
+          *picon_idx = wcstol(sNum, NULL, 10);
+      else
+          *picon_idx=0; /* sometimes the icon number is missing */
       ParseFieldW (szDest, 1, szDest, len);
           PathUnquoteSpacesW(szDest);
       return TRUE;
@@ -435,7 +432,7 @@ BOOL HCR_GetClassNameW(REFIID riid, LPWSTR szDest, DWORD len)
         if (StringFromCLSID(riid, &pStr) == S_OK)
         {
             DWORD dwLen = buflen * sizeof(WCHAR);
-            swprintf(szName, L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\CLSID\\%s", pStr);
+            swprintf(szName, _countof(szName), L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\CLSID\\%s", pStr);
             if (!RegGetValueW(HKEY_CURRENT_USER, szName, NULL, RRF_RT_REG_SZ, NULL, (PVOID)szDest, &dwLen))
             {
                 ret = TRUE;

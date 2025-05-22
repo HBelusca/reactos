@@ -192,7 +192,7 @@ static BOOL
 GetFileTypeIconsEx(PFILE_TYPE_ENTRY Entry, LPCWSTR IconLocation, UINT IconSize)
 {
     Entry->hIconSmall = NULL;
-    if (lstrcmpW(IconLocation, L"%1") == 0)
+    if (wcscmp(IconLocation, L"%1") == 0)
     {
         LPCWSTR ext = Entry->FileExtension;
         if (!lstrcmpiW(ext, L".exe") || !lstrcmpiW(ext, L".scr"))
@@ -1210,7 +1210,7 @@ EditTypeDlg_WriteClass(HWND hwndDlg, PEDITTYPE_DIALOG pEditType,
             DWORD type = REG_SZ;
             WCHAR buf[ICONLOCATION_CCHMAX];
             LPCWSTR fmt = L"%s,%d";
-            if (!lstrcmpW(pEntry->IconPath, L"%1"))
+            if (!wcscmp(pEntry->IconPath, L"%1"))
             {
                 fmt = L"%s"; // No icon index for "%1"
             }

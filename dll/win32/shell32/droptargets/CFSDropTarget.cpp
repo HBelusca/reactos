@@ -173,7 +173,7 @@ CFSDropTarget::~CFSDropTarget()
 }
 
 BOOL
-CFSDropTarget::_GetUniqueFileName(LPCWSTR pwszBasePath, LPCWSTR pwszExt, LPWSTR pwszTarget, BOOL bShortcut)
+CFSDropTarget::_GetUniqueFileName(LPCWSTR pwszBasePath, LPCWSTR pwszExt, LPWSTR pwszTarget, SIZE_T cchTargetLen, BOOL bShortcut)
 {
     WCHAR wszLink[40];
 
@@ -184,16 +184,16 @@ CFSDropTarget::_GetUniqueFileName(LPCWSTR pwszBasePath, LPCWSTR pwszExt, LPWSTR 
     }
 
     if (!bShortcut)
-        swprintf(pwszTarget, L"%s%s%s", wszLink, pwszBasePath, pwszExt);
+        swprintf(pwszTarget, cchTargetLen, L"%s%s%s", wszLink, pwszBasePath, pwszExt);
     else
-        swprintf(pwszTarget, L"%s%s", pwszBasePath, pwszExt);
+        swprintf(pwszTarget, cchTargetLen, L"%s%s", pwszBasePath, pwszExt);
 
     for (UINT i = 2; PathFileExistsW(pwszTarget); ++i)
     {
         if (!bShortcut)
-            swprintf(pwszTarget, L"%s%s (%u)%s", wszLink, pwszBasePath, i, pwszExt);
+            swprintf(pwszTarget, cchTargetLen, L"%s%s (%u)%s", wszLink, pwszBasePath, i, pwszExt);
         else
-            swprintf(pwszTarget, L"%s (%u)%s", pwszBasePath, i, pwszExt);
+            swprintf(pwszTarget, cchTargetLen, L"%s (%u)%s", pwszBasePath, i, pwszExt);
     }
 
     return TRUE;
@@ -677,7 +677,7 @@ HRESULT CFSDropTarget::_DoDrop(IDataObject *pDataObject,
                 }
 
                 // Create a pathname to save the new link.
-                _GetUniqueFileName(wszCombined, L".lnk", wszNewLnk, TRUE);
+                _GetUniqueFileName(wszCombined, L".lnk", wszNewLnk, _countof(wszNewLnk), TRUE);
 
                 CComPtr<IPersistFile> ppf;
                 if (fSourceIsLink)

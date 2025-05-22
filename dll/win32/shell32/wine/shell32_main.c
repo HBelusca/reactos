@@ -20,8 +20,6 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
  */
 
-#include <wine/config.h>
-
 #define WIN32_NO_STATUS
 #define _INC_WINDOWS
 #define COBJMACROS
@@ -40,7 +38,6 @@
 #include "shresdef.h"
 
 #include <wine/debug.h>
-#include <wine/unicode.h>
 
 #include <reactos/version.h>
 #include <reactos/buildno.h>
@@ -190,11 +187,11 @@ LPWSTR* WINAPI CommandLineToArgvW(LPCWSTR lpCmdline, int* numargs)
      * with it. This way the caller can make a single LocalFree() call to free
      * both, as per MSDN.
      */
-    argv=LocalAlloc(LMEM_FIXED, (argc+1)*sizeof(LPWSTR)+(strlenW(lpCmdline)+1)*sizeof(WCHAR));
+    argv=LocalAlloc(LMEM_FIXED, (argc+1)*sizeof(LPWSTR)+(lstrlenW(lpCmdline)+1)*sizeof(WCHAR));
     if (!argv)
         return NULL;
     cmdline=(LPWSTR)(argv+argc+1);
-    strcpyW(cmdline, lpCmdline);
+    lstrcpyW(cmdline, lpCmdline);
 
     /* --- Then split and copy the arguments */
     argv[0]=d=cmdline;
@@ -630,12 +627,12 @@ DWORD_PTR WINAPI SHGetFileInfoW(LPCWSTR path,DWORD dwFileAttributes,
                      HCR_MapTypeToValueW(szExt, sTemp, MAX_PATH, TRUE) &&
                      HCR_GetIconW(sTemp, sTemp, NULL, MAX_PATH, &psfi->iIcon))
                 {
-                    if (lstrcmpW(L"%1", sTemp))
-                        strcpyW(psfi->szDisplayName, sTemp);
+                    if (wcscmp(L"%1", sTemp))
+                        lstrcpyW(psfi->szDisplayName, sTemp);
                     else
                     {
                         /* the icon is in the file */
-                        strcpyW(psfi->szDisplayName, szFullPath);
+                        lstrcpyW(psfi->szDisplayName, szFullPath);
                     }
                 }
                 else
@@ -685,8 +682,8 @@ DWORD_PTR WINAPI SHGetFileInfoW(LPCWSTR path,DWORD dwFileAttributes,
                      HCR_MapTypeToValueW(szExt, sTemp, MAX_PATH, TRUE) &&
                      HCR_GetIconW(sTemp, sTemp, NULL, MAX_PATH, &icon_idx))
                 {
-                    if (!lstrcmpW(L"%1",sTemp))            /* icon is in the file */
-                        strcpyW(sTemp, szFullPath);
+                    if (!wcscmp(L"%1",sTemp))            /* icon is in the file */
+                        lstrcpyW(sTemp, szFullPath);
 
                     if (flags & SHGFI_SYSICONINDEX) 
                     {
@@ -1109,7 +1106,7 @@ static INT_PTR CALLBACK AboutDlgProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM
                 SendDlgItemMessageW(hWnd, IDC_ABOUT_ICON, STM_SETICON, (WPARAM)info->hIcon, 0);
 
                 GetWindowTextW(hWnd, szAppTitleTemplate, ARRAY_SIZE(szAppTitleTemplate));
-                swprintf(szAppTitle, szAppTitleTemplate, info->szApp);
+                swprintf(szAppTitle, _countof(szAppTitle), szAppTitleTemplate, info->szApp);
                 SetWindowTextW(hWnd, szAppTitle);
 
                 SetDlgItemTextW(hWnd, IDC_ABOUT_APPNAME, info->szApp);
@@ -1184,13 +1181,13 @@ static INT_PTR CALLBACK AboutDlgProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM
                             uDecimals = (UCHAR)((UINT)(dTotalPhys * 100) - uIntegral * 100);
 
                             // Display the RAM size with 2 decimals
-                            swprintf(szBuf, L"%u%s%02u %s", uIntegral, szDecimalSeparator, uDecimals, szUnits);
+                            swprintf(szBuf, _countof(szBuf), L"%u%s%02u %s", uIntegral, szDecimalSeparator, uDecimals, szUnits);
                         }
                     }
                     else
                     {
                         // We're dealing with MBs, don't show any decimals
-                        swprintf(szBuf, L"%u MB", (UINT)MemStat.ullTotalPhys / 1024 / 1024);
+                        swprintf(szBuf, _countof(szBuf), L"%u MB", (UINT)MemStat.ullTotalPhys / 1024 / 1024);
                     }
 
                     SetDlgItemTextW(hWnd, IDC_ABOUT_PHYSMEM, szBuf);

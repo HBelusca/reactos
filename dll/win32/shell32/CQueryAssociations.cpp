@@ -266,7 +266,7 @@ HRESULT STDMETHODCALLTYPE CQueryAssociations::GetString(
             hr = this->GetCommand(pszExtra, &command);
             if (SUCCEEDED(hr))
             {
-                hr = this->ReturnString(flags, pszOut, pcchOut, command, strlenW(command) + 1);
+                hr = this->ReturnString(flags, pszOut, pcchOut, command, lstrlenW(command) + 1);
                 HeapFree(GetProcessHeap(), 0, command);
             }
             return hr;
@@ -300,7 +300,7 @@ HRESULT STDMETHODCALLTYPE CQueryAssociations::GetString(
                     ret = RegGetValueW(HKEY_CLASSES_ROOT, pszFileType, NULL, RRF_RT_REG_SZ, NULL, docName, &size);
                     if (ret == ERROR_SUCCESS)
                     {
-                        hr = this->ReturnString(flags, pszOut, pcchOut, docName, strlenW(docName) + 1);
+                        hr = this->ReturnString(flags, pszOut, pcchOut, docName, lstrlenW(docName) + 1);
                     }
                     else
                     {
@@ -353,12 +353,13 @@ HRESULT STDMETHODCALLTYPE CQueryAssociations::GetString(
                 DWORD *langCodeDesc = (DWORD *)bufW;
                 for (i = 0; i < flen / sizeof(DWORD); i++)
                 {
-                    sprintfW(fileDescW, L"\\StringFileInfo\\%04x%04x\\FileDescription",
+                    swprintf(fileDescW, ARRAY_SIZE(fileDescW),
+                             L"\\StringFileInfo\\%04x%04x\\FileDescription",
                              LOWORD(langCodeDesc[i]), HIWORD(langCodeDesc[i]));
                     if (VerQueryValueW(verinfoW, fileDescW, (LPVOID *)&bufW, &flen))
                     {
-                        /* Does strlenW(bufW) == 0 mean we use the filename? */
-                        len = strlenW(bufW) + 1;
+                        /* Does lstrlenW(bufW) == 0 mean we use the filename? */
+                        len = lstrlenW(bufW) + 1;
                         TRACE("found FileDescription: %s\n", debugstr_w(bufW));
                         hr = this->ReturnString(flags, pszOut, pcchOut, bufW, len);
                         HeapFree(GetProcessHeap(), 0, verinfoW);
@@ -370,7 +371,7 @@ HRESULT STDMETHODCALLTYPE CQueryAssociations::GetString(
             PathRemoveExtensionW(path);
             PathStripPathW(path);
             TRACE("using filename: %s\n", debugstr_w(path));
-            hr = this->ReturnString(flags, pszOut, pcchOut, path, strlenW(path) + 1);
+            hr = this->ReturnString(flags, pszOut, pcchOut, path, lstrlenW(path) + 1);
             HeapFree(GetProcessHeap(), 0, verinfoW);
             return hr;
         }
@@ -388,7 +389,7 @@ HRESULT STDMETHODCALLTYPE CQueryAssociations::GetString(
                 ret = RegGetValueW(this->hkeySource, NULL, L"Content Type", RRF_RT_REG_SZ, NULL, contentType, &size);
                 if (ret == ERROR_SUCCESS)
                 {
-                    hr = this->ReturnString(flags, pszOut, pcchOut, contentType, strlenW(contentType) + 1);
+                    hr = this->ReturnString(flags, pszOut, pcchOut, contentType, lstrlenW(contentType) + 1);
                 }
                 else
                 {
@@ -415,7 +416,7 @@ HRESULT STDMETHODCALLTYPE CQueryAssociations::GetString(
                     ret = RegGetValueW(this->hkeyProgID, L"DefaultIcon", NULL, RRF_RT_REG_SZ, NULL, icon, &size);
                     if (ret == ERROR_SUCCESS)
                     {
-                        hr = this->ReturnString(flags, pszOut, pcchOut, icon, strlenW(icon) + 1);
+                        hr = this->ReturnString(flags, pszOut, pcchOut, icon, lstrlenW(icon) + 1);
                     }
                     else
                     {
@@ -445,8 +446,8 @@ HRESULT STDMETHODCALLTYPE CQueryAssociations::GetString(
             {
                 return hr;
             }
-            strcpyW(keypath, L"ShellEx\\");
-            strcatW(keypath, pszExtra);
+            lstrcpyW(keypath, L"ShellEx\\");
+            lstrcatW(keypath, pszExtra);
             LONG ret = RegOpenKeyExW(this->hkeySource, keypath, 0, KEY_READ, &hkey);
             if (ret)
             {
@@ -738,7 +739,7 @@ HRESULT CQueryAssociations::GetExecutable(LPCWSTR pszExtra, LPWSTR path, DWORD p
     if (pszCommand[0] == '"')
     {
         pszStart = pszCommand + 1;
-        pszEnd = strchrW(pszStart, '"');
+        pszEnd = wcschr(pszStart, '"');
         if (pszEnd)
         {
             *pszEnd = 0;
@@ -748,7 +749,7 @@ HRESULT CQueryAssociations::GetExecutable(LPCWSTR pszExtra, LPWSTR path, DWORD p
     else
     {
         pszStart = pszCommand;
-        for (pszEnd = pszStart; (pszEnd = strchrW(pszEnd, ' ')); pszEnd++)
+        for (pszEnd = pszStart; (pszEnd = wcschr(pszEnd, ' ')); pszEnd++)
         {
             WCHAR c = *pszEnd;
             *pszEnd = 0;

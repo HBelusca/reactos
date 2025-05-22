@@ -12,6 +12,7 @@
  */
 
 #include <stdarg.h>
+#include <tchar.h>
 
 #define WIN32_NO_STATUS
 #define _INC_WINDOWS
@@ -19,13 +20,13 @@
 
 #include <windef.h>
 #include <winbase.h>
+#include <winnls.h>
 #include <winreg.h>
 #include <winuser.h>
 #define NTOS_MODE_USER
 #include <ndk/rtlfuncs.h>
 
 #include <wine/debug.h>
-#include <wine/unicode.h>
 
 WINE_DEFAULT_DEBUG_CHANNEL(shell);
 

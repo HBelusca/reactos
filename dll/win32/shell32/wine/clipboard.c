@@ -42,7 +42,6 @@
 #include <winbase.h>
 #include <shlobj.h>
 #include <wine/debug.h>
-#include <wine/unicode.h>
 
 #include "shell32_main.h"
 
@@ -84,7 +83,7 @@ HGLOBAL RenderHDROP(LPITEMIDLIST pidlRoot, LPITEMIDLIST * apidl, UINT cidl)
 #ifndef __REACTOS__
 	SHGetPathFromIDListW(pidlRoot, wszRootPath);
 	PathAddBackslashW(wszRootPath);
-	rootlen = strlenW(wszRootPath);
+	rootlen = lstrlenW(wszRootPath);
 #endif
 
 	for (i=0; i<cidl;i++)
@@ -95,7 +94,7 @@ HGLOBAL RenderHDROP(LPITEMIDLIST pidlRoot, LPITEMIDLIST * apidl, UINT cidl)
           size += (wcslen(wszFileName) + 1) * sizeof(WCHAR);
 #else
 	  _ILSimpleGetTextW(apidl[i], wszFileName, MAX_PATH);
-	  size += (rootlen + strlenW(wszFileName) + 1) * sizeof(WCHAR);
+	  size += (rootlen + lstrlenW(wszFileName) + 1) * sizeof(WCHAR);
 #endif
 	}
 
@@ -115,7 +114,7 @@ HGLOBAL RenderHDROP(LPITEMIDLIST pidlRoot, LPITEMIDLIST * apidl, UINT cidl)
         pDropFiles->fWide = TRUE;
 
 #ifndef __REACTOS__
-	strcpyW(wszFileName, wszRootPath);
+	lstrcpyW(wszFileName, wszRootPath);
 #endif
 
 	for (i=0; i<cidl;i++)
@@ -128,8 +127,8 @@ HGLOBAL RenderHDROP(LPITEMIDLIST pidlRoot, LPITEMIDLIST * apidl, UINT cidl)
           ILFree(pidls[i]);
 #else
 	  _ILSimpleGetTextW(apidl[i], wszFileName + rootlen, MAX_PATH - rootlen);
-	  strcpyW(((WCHAR*)pDropFiles)+offset, wszFileName);
-	  offset += strlenW(wszFileName) + 1;
+	  lstrcpyW(((WCHAR*)pDropFiles)+offset, wszFileName);
+	  offset += lstrlenW(wszFileName) + 1;
 #endif
 	}
 
@@ -239,7 +238,7 @@ HGLOBAL RenderFILENAMEW (LPITEMIDLIST pidlRoot, LPITEMIDLIST * apidl, UINT cidl)
 	if (!bSuccess)
 		return 0;
 
-	size = (strlenW(szTemp)+1) * sizeof(WCHAR);
+	size = (lstrlenW(szTemp)+1) * sizeof(WCHAR);
 
 	/* fill the structure */
 	hGlobal = GlobalAlloc(GHND|GMEM_SHARE, size);

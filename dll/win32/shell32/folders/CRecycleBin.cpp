@@ -1184,7 +1184,7 @@ TRASH_CanTrashFile(LPCWSTR wszPath)
         return FALSE;
     }
 
-    swprintf(szBuffer, L"%04X-%04X", LOWORD(VolSerialNumber), HIWORD(VolSerialNumber));
+    swprintf(szBuffer, _countof(szBuffer), L"%04X-%04X", LOWORD(VolSerialNumber), HIWORD(VolSerialNumber));
     wcscat(szKey, szBuffer);
 
     if (RegCreateKeyExW(HKEY_CURRENT_USER, szKey, 0, NULL, 0, KEY_READ | KEY_WRITE, NULL, &hKey, &dwDisposition) != ERROR_SUCCESS)

@@ -27,7 +27,6 @@
 #include <shlwapi.h>
 #include <undocshell.h>
 #include <shlwapi_undoc.h>
-#include <wine/unicode.h>
 #include <wine/debug.h>
 
 #include "shell32_main.h"
@@ -149,8 +148,8 @@ static int StrToOleStrW (LPWSTR lpWideCharStr, LPCWSTR lpWString)
 	TRACE("(%p, %p %s)\n",
 	lpWideCharStr, lpWString, debugstr_w(lpWString));
 
-	strcpyW (lpWideCharStr, lpWString );
-	return strlenW(lpWideCharStr);
+	lstrcpyW (lpWideCharStr, lpWString );
+	return lstrlenW(lpWideCharStr);
 }
 
 BOOL WINAPI StrToOleStrAW (LPWSTR lpWideCharStr, LPCVOID lpString)

@@ -1667,7 +1667,7 @@ static BOOL confirm_delete_list(HWND hWnd, DWORD fFlags, BOOL fTrash, const FILE
     {
         WCHAR tmp[8];
 
-        wnsprintfW(tmp, sizeof(tmp)/sizeof(tmp[0]), L"%d", flFrom->dwNumFiles);
+        wnsprintfW(tmp, ARRAY_SIZE(tmp), L"%d", flFrom->dwNumFiles);
         return SHELL_ConfirmDialogW(hWnd, (fTrash?ASK_TRASH_MULTIPLE_ITEM:ASK_DELETE_MULTIPLE_ITEM), tmp, NULL);
     }
     else

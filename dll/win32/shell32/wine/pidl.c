@@ -22,8 +22,6 @@
  *
  */
 
-#include <wine/config.h>
-
 #define WIN32_NO_STATUS
 #define _INC_WINDOWS
 #define COBJMACROS
@@ -38,7 +36,6 @@
 #include <shlwapi.h>
 #include <shlguid_undoc.h>
 #include <wine/debug.h>
-#include <wine/unicode.h>
 #include <shellutils.h>
 
 #include "pidl.h"

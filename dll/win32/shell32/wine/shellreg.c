@@ -18,8 +18,6 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
  */
 
-#include <wine/config.h>
-
 #include <stdio.h>
 
 #define WIN32_NO_STATUS
@@ -161,7 +159,7 @@ SHCreateSessionKey(REGSAM samDesired, PHKEY phKey)
 
             if (GetTokenInformation(hToken, TokenStatistics, &Stats, sizeof(Stats), &ReturnLength))
             {
-                swprintf(wszSessionKey,
+                swprintf(wszSessionKey, ARRAY_SIZE(wszSessionKey),
                          L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\SessionInfo\\%08x%08x",
                          Stats.AuthenticationId.HighPart, Stats.AuthenticationId.LowPart);
             }

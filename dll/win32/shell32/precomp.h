@@ -115,7 +115,6 @@
 #include "utils.h"
 
 #include <wine/debug.h>
-#include <wine/unicode.h>
 
 extern const GUID CLSID_AdminFolderShortcut;
 extern const GUID CLSID_FontsFolderShortcut;

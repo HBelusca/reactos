@@ -20,8 +20,6 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
  */
 
-#include <wine/config.h>
-
 #define WIN32_NO_STATUS
 #define _INC_WINDOWS
 #define COBJMACROS
@@ -37,7 +35,6 @@
 #include "../shellrecyclebin/recyclebin.h"
 
 #include <wine/debug.h>
-#include <wine/unicode.h>
 
 #include "pidl.h"
 #include "shell32_main.h"
@@ -2578,7 +2575,7 @@ BOOL WINAPI SHGetNewLinkInfoW(LPCWSTR pszLinkTo, LPCWSTR pszDir, LPWSTR pszName,
     if (GetFileAttributesW(pszLinkTo) == INVALID_FILE_ATTRIBUTES)
         return FALSE;
 
-    basename = strrchrW(pszLinkTo, '\\');
+    basename = wcsrchr(pszLinkTo, '\\');
     if (basename)
         basename = basename+1;
     else
@@ -2588,13 +2585,13 @@ BOOL WINAPI SHGetNewLinkInfoW(LPCWSTR pszLinkTo, LPCWSTR pszDir, LPWSTR pszName,
     if (!PathAddBackslashW(pszName))
         return FALSE;
 
-    dst_basename = pszName + strlenW(pszName);
+    dst_basename = pszName + lstrlenW(pszName);
 
-    snprintfW(dst_basename, pszName + MAX_PATH - dst_basename, L"%s.lnk", basename);
+    swprintf(dst_basename, pszName + MAX_PATH - dst_basename, L"%s.lnk", basename);
 
     while (GetFileAttributesW(pszName) != INVALID_FILE_ATTRIBUTES)
     {
-        snprintfW(dst_basename, pszName + MAX_PATH - dst_basename, L"%s (%d).lnk", basename, i);
+        swprintf(dst_basename, pszName + MAX_PATH - dst_basename, L"%s (%d).lnk", basename, i);
         i++;
     }
 

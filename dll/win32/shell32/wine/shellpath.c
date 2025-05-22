@@ -29,8 +29,6 @@
 #define _INC_WINDOWS
 #define COBJMACROS
 
-#include <wine/config.h>
-
 #include <windef.h>
 #include <winbase.h>
 #include <shlobj.h>
@@ -39,7 +37,6 @@
 #include <sddl.h>
 #include <strsafe.h>
 #include <wine/debug.h>
-#include <wine/unicode.h>
 #include <assert.h>
 
 #include <shlwapi_undoc.h>
@@ -92,9 +89,9 @@ DoGetProductType(PNT_PRODUCT_TYPE ProductType)
     error = RegGetValueW(hKey, NULL, L"ProductType", RRF_RT_REG_SZ, NULL, (PVOID)szValue, &cbValue);
     if (!error)
     {
-        if (lstrcmpW(szValue, L"WinNT") == 0)
+        if (wcscmp(szValue, L"WinNT") == 0)
             *ProductType = NtProductWinNt;
-        else if (lstrcmpW(szValue, L"LanmanNT") == 0)
+        else if (wcscmp(szValue, L"LanmanNT") == 0)
             *ProductType = NtProductLanManNt;
     }
 
@@ -855,7 +852,7 @@ BOOL WINAPI PathYetAnotherMakeUniqueName(LPWSTR buffer, LPCWSTR path, LPCWSTR sh
 
     file = longname ? longname : shortname;
     PathCombineW(pathW, path, file);
-    strcpyW(retW, pathW);
+    lstrcpyW(retW, pathW);
     PathRemoveExtensionW(pathW);
 
     ext = PathFindExtensionW(file);
@@ -863,11 +860,11 @@ BOOL WINAPI PathYetAnotherMakeUniqueName(LPWSTR buffer, LPCWSTR path, LPCWSTR sh
     /* now try to make it unique */
     while (PathFileExistsW(retW))
     {
-        sprintfW(retW, L"%s (%d)%s", pathW, i, ext);
+        swprintf(retW, ARRAY_SIZE(retW), L"%s (%d)%s", pathW, i, ext);
         i++;
     }
 
-    strcpyW(buffer, retW);
+    lstrcpyW(buffer, retW);
     TRACE("ret - %s\n", debugstr_w(buffer));
 
     return TRUE;
@@ -895,7 +892,7 @@ int WINAPI PathCleanupSpec( LPCWSTR lpszPathW, LPWSTR lpszFileW )
         TRACE("Cleanup %s\n",debugstr_w(lpszFileW));
 
         if (lpszPathW)
-            length = strlenW(lpszPathW);
+            length = lstrlenW(lpszPathW);
 
         while (*p)
         {
@@ -1143,8 +1140,8 @@ static LONG PathProcessCommandW (
 	FIXME("(%s, %p, 0x%04x, 0x%04x) stub\n",
 	debugstr_w(lpszPath), lpszBuff, dwBuffSize, dwFlags);
 	if(!lpszPath) return -1;
-	if(lpszBuff) strcpyW(lpszBuff, lpszPath);
-	return strlenW(lpszPath);
+	if(lpszBuff) lstrcpyW(lpszBuff, lpszPath);
+	return lstrlenW(lpszPath);
 }
 #endif
 
@@ -2039,13 +2036,13 @@ static HRESULT _SHGetUserShellFolderPath(HKEY rootKey, HANDLE hToken, LPCWSTR us
 
     if (userPrefix)
     {
-        strcpyW(shellFolderPath, userPrefix);
+        lstrcpyW(shellFolderPath, userPrefix);
         PathAddBackslashW(shellFolderPath);
-        strcatW(shellFolderPath, szSHFolders);
+        lstrcatW(shellFolderPath, szSHFolders);
         pShellFolderPath = shellFolderPath;
-        strcpyW(userShellFolderPath, userPrefix);
+        lstrcpyW(userShellFolderPath, userPrefix);
         PathAddBackslashW(userShellFolderPath);
-        strcatW(userShellFolderPath, szSHUserFolders);
+        lstrcatW(userShellFolderPath, szSHUserFolders);
         pUserShellFolderPath = userShellFolderPath;
     }
     else
@@ -2088,7 +2085,7 @@ static HRESULT _SHGetUserShellFolderPath(HKEY rootKey, HANDLE hToken, LPCWSTR us
             lstrcpynW(path, szTemp, MAX_PATH);
         }
         ret = RegSetValueExW(shellFolderKey, value, 0, REG_SZ, (LPBYTE)path,
-         (strlenW(path) + 1) * sizeof(WCHAR));
+         (lstrlenW(path) + 1) * sizeof(WCHAR));
         if (ret != ERROR_SUCCESS)
             hr = HRESULT_FROM_WIN32(ret);
         else
@@ -2189,11 +2186,11 @@ static HRESULT _SHGetDefaultValue(HANDLE hToken, BYTE folder, LPWSTR pszPath)
     switch (CSIDL_Data[folder].type)
     {
         case CSIDL_Type_User:
-            strcpyW(pszPath, L"%USERPROFILE%");
+            lstrcpyW(pszPath, L"%USERPROFILE%");
             break;
 #ifdef __REACTOS__
         case CSIDL_Type_InMyDocuments:
-            strcpyW(pszPath, L"%USERPROFILE%");
+            lstrcpyW(pszPath, L"%USERPROFILE%");
             if (DoGetProductType(&ProductType) && ProductType == NtProductWinNt)
             {
                 if (IS_INTRESOURCE(CSIDL_Data[CSIDL_MYDOCUMENTS].szDefaultPath))
@@ -2213,13 +2210,13 @@ static HRESULT _SHGetDefaultValue(HANDLE hToken, BYTE folder, LPWSTR pszPath)
 #endif
         case CSIDL_Type_AllUsers:
 #ifndef __REACTOS__
-            strcpyW(pszPath, L"%PUBLIC%");
+            lstrcpyW(pszPath, L"%PUBLIC%");
 #else
-            strcpyW(pszPath, L"%ALLUSERSPROFILE%");
+            lstrcpyW(pszPath, L"%ALLUSERSPROFILE%");
 #endif
             break;
         case CSIDL_Type_CurrVer:
-            strcpyW(pszPath, L"%SystemDrive%");
+            lstrcpyW(pszPath, L"%SystemDrive%");
             break;
         default:
             ; /* no corresponding env. var, do nothing */
@@ -2311,7 +2308,7 @@ static HRESULT _SHGetCurrentVersionPath(DWORD dwFlags, BYTE folder,
                     /* fall through */
                 default:
                     RegSetValueExW(hKey, CSIDL_Data[folder].szValueName, 0, dwType,
-                                   (LPBYTE)pszPath, (strlenW(pszPath)+1)*sizeof(WCHAR));
+                                   (LPBYTE)pszPath, (lstrlenW(pszPath)+1)*sizeof(WCHAR));
                 }
             }
             else
@@ -2537,7 +2534,7 @@ static HRESULT _SHGetProfilesValue(HKEY profilesKey, LPCWSTR szValueName,
                                                   debugstr_w(szValue));
         lRet = RegSetValueExW(profilesKey, szValueName, 0, REG_EXPAND_SZ,
                               (LPBYTE)szValue,
-                              (strlenW(szValue) + 1) * sizeof(WCHAR));
+                              (lstrlenW(szValue) + 1) * sizeof(WCHAR));
         if (lRet)
             hr = HRESULT_FROM_WIN32(lRet);
         else
@@ -2581,7 +2578,7 @@ static HRESULT _SHExpandEnvironmentStrings(HANDLE hToken, LPCWSTR szSrc, LPWSTR 
     /* short-circuit if there's nothing to expand */
     if (szSrc[0] != '%')
     {
-        strcpyW(szDest, szSrc);
+        lstrcpyW(szDest, szSrc);
         hr = S_OK;
         goto end;
     }
@@ -2594,7 +2591,7 @@ static HRESULT _SHExpandEnvironmentStrings(HANDLE hToken, LPCWSTR szSrc, LPWSTR 
 
         /* get the system drive */
         GetSystemDirectoryW(def_val, MAX_PATH);
-        strcpyW( def_val + 3, L"Users" );
+        lstrcpyW( def_val + 3, L"Users" );
 
         hr = _SHGetProfilesValue(key, L"ProfilesDirectory", szProfilesPrefix, def_val );
     }
@@ -2603,15 +2600,15 @@ static HRESULT _SHExpandEnvironmentStrings(HANDLE hToken, LPCWSTR szSrc, LPWSTR 
 #endif
 
     *szDest = 0;
-    strcpyW(szTemp, szSrc);
+    lstrcpyW(szTemp, szSrc);
     while (SUCCEEDED(hr) && szTemp[0] == '%')
     {
-        if (!strncmpiW(szTemp, L"%ALLUSERSPROFILE%", ARRAY_SIZE(L"%ALLUSERSPROFILE%")-1))
+        if (!wcsnicmp(szTemp, L"%ALLUSERSPROFILE%", ARRAY_SIZE(L"%ALLUSERSPROFILE%")-1))
         {
 #ifndef __REACTOS__
             WCHAR szAllUsers[MAX_PATH];
 
-            strcpyW(szDest, szProfilesPrefix);
+            lstrcpyW(szDest, szProfilesPrefix);
             hr = _SHGetProfilesValue(key, L"AllUsersProfile", szAllUsers, L"Public");
             PathAppendW(szDest, szAllUsers);
 #else
@@ -2622,25 +2619,25 @@ static HRESULT _SHExpandEnvironmentStrings(HANDLE hToken, LPCWSTR szSrc, LPWSTR 
             PathAppendW(szDest, szTemp + ARRAY_SIZE(L"%ALLUSERSPROFILE%")-1);
         }
 #ifndef __REACTOS__
-        else if (!strncmpiW(szTemp, L"%PUBLIC%", ARRAY_SIZE(L"%PUBLIC%")-1))
+        else if (!wcsnicmp(szTemp, L"%PUBLIC%", ARRAY_SIZE(L"%PUBLIC%")-1))
         {
             WCHAR szAllUsers[MAX_PATH], def_val[MAX_PATH];
 
             GetSystemDirectoryW(def_val, MAX_PATH);
-            strcpyW( def_val + 3, L"Users\\Public" );
+            lstrcpyW( def_val + 3, L"Users\\Public" );
 
             hr = _SHGetProfilesValue(key, L"Public", szAllUsers, def_val);
             PathAppendW(szDest, szAllUsers);
             PathAppendW(szDest, szTemp + ARRAY_SIZE(L"%PUBLIC%")-1);
         }
 #endif
-        else if (!strncmpiW(szTemp, L"%USERPROFILE%", ARRAY_SIZE(L"%USERPROFILE%")-1))
+        else if (!wcsnicmp(szTemp, L"%USERPROFILE%", ARRAY_SIZE(L"%USERPROFILE%")-1))
         {
 #ifndef __REACTOS__
             WCHAR userName[MAX_PATH];
             DWORD userLen = MAX_PATH;
 
-            strcpyW(szDest, szProfilesPrefix);
+            lstrcpyW(szDest, szProfilesPrefix);
             GetUserNameW(userName, &userLen);
             PathAppendW(szDest, userName);
 #else
@@ -2650,7 +2647,7 @@ static HRESULT _SHExpandEnvironmentStrings(HANDLE hToken, LPCWSTR szSrc, LPWSTR 
 #endif
             PathAppendW(szDest, szTemp + ARRAY_SIZE(L"%USERPROFILE%")-1);
         }
-        else if (!strncmpiW(szTemp, L"%SystemDrive%", ARRAY_SIZE(L"%SystemDrive%")-1))
+        else if (!wcsnicmp(szTemp, L"%SystemDrive%", ARRAY_SIZE(L"%SystemDrive%")-1))
         {
 #ifndef __REACTOS__
             GetSystemDirectoryW(szDest, MAX_PATH);
@@ -2658,7 +2655,7 @@ static HRESULT _SHExpandEnvironmentStrings(HANDLE hToken, LPCWSTR szSrc, LPWSTR 
             if (!GetSystemDirectoryW(szDest, cchDest))
                 goto fallback_expand;
 #endif
-            strcpyW(szDest + 3, szTemp + ARRAY_SIZE(L"%SystemDrive%")-1 + 1);
+            lstrcpyW(szDest + 3, szTemp + ARRAY_SIZE(L"%SystemDrive%")-1 + 1);
         }
         else
 #ifdef __REACTOS__
@@ -2679,9 +2676,9 @@ fallback_expand:
                 hr = E_NOT_SUFFICIENT_BUFFER;
             else if (ret == 0)
                 hr = HRESULT_FROM_WIN32(GetLastError());
-            else if (!strcmpW( szTemp, szDest )) break;  /* nothing expanded */
+            else if (!wcscmp( szTemp, szDest )) break;  /* nothing expanded */
         }
-        if (SUCCEEDED(hr)) strcpyW(szTemp, szDest);
+        if (SUCCEEDED(hr)) lstrcpyW(szTemp, szDest);
     }
 end:
 #ifndef __REACTOS__
@@ -2821,7 +2818,7 @@ HRESULT WINAPI SHGetFolderPathAndSubDirW(
              *CSIDL_Data[folder].szDefaultPath)
             {
                 PathAddBackslashW(szTemp);
-                strcatW(szTemp, CSIDL_Data[folder].szDefaultPath);
+                lstrcatW(szTemp, CSIDL_Data[folder].szDefaultPath);
             }
             hr = S_OK;
             break;
@@ -2832,7 +2829,7 @@ HRESULT WINAPI SHGetFolderPathAndSubDirW(
              *CSIDL_Data[folder].szDefaultPath)
             {
                 PathAddBackslashW(szTemp);
-                strcatW(szTemp, CSIDL_Data[folder].szDefaultPath);
+                lstrcatW(szTemp, CSIDL_Data[folder].szDefaultPath);
             }
             hr = S_OK;
             break;
@@ -2843,7 +2840,7 @@ HRESULT WINAPI SHGetFolderPathAndSubDirW(
              *CSIDL_Data[folder].szDefaultPath)
             {
                 PathAddBackslashW(szTemp);
-                strcatW(szTemp, CSIDL_Data[folder].szDefaultPath);
+                lstrcatW(szTemp, CSIDL_Data[folder].szDefaultPath);
             }
             hr = S_OK;
             break;
@@ -2873,7 +2870,7 @@ HRESULT WINAPI SHGetFolderPathAndSubDirW(
         hr = _SHExpandEnvironmentStrings(hToken, szTemp, szBuildPath, _countof(szBuildPath));
 #endif
     else
-        strcpyW(szBuildPath, szTemp);
+        lstrcpyW(szBuildPath, szTemp);
 
     if (FAILED(hr)) goto end;
 
@@ -2889,7 +2886,7 @@ HRESULT WINAPI SHGetFolderPathAndSubDirW(
     }
     /* Copy the path if it's available before we might return */
     if (SUCCEEDED(hr) && pszPath)
-        strcpyW(pszPath, szBuildPath);
+        lstrcpyW(pszPath, szBuildPath);
 
     /* if we don't care about existing directories we are ready */
     if(nFolder & CSIDL_FLAG_DONT_VERIFY) goto end;
@@ -3060,7 +3057,7 @@ static HRESULT _SHRegisterFolders(HKEY hRootKey, HANDLE hToken,
                     !IS_INTRESOURCE(CSIDL_Data[folders[i]].szDefaultPath))
                 {
                     PathAddBackslashW(path);
-                    strcatW(path, CSIDL_Data[folders[i]].szDefaultPath);
+                    lstrcatW(path, CSIDL_Data[folders[i]].szDefaultPath);
                 }
             }
             else
@@ -3068,7 +3065,7 @@ static HRESULT _SHRegisterFolders(HKEY hRootKey, HANDLE hToken,
             if (*path)
             {
                 ret = RegSetValueExW(hUserKey, szValueName, 0, REG_EXPAND_SZ,
-                 (LPBYTE)path, (strlenW(path) + 1) * sizeof(WCHAR));
+                 (LPBYTE)path, (lstrlenW(path) + 1) * sizeof(WCHAR));
                 if (ret)
                     hr = HRESULT_FROM_WIN32(ret);
                 else
@@ -3076,7 +3073,7 @@ static HRESULT _SHRegisterFolders(HKEY hRootKey, HANDLE hToken,
                     hr = SHGetFolderPathW(NULL, folders[i] | CSIDL_FLAG_CREATE,
                      hToken, SHGFP_TYPE_CURRENT, path);
                     ret = RegSetValueExW(hKey, szValueName, 0, REG_SZ,
-                     (LPBYTE)path, (strlenW(path) + 1) * sizeof(WCHAR));
+                     (LPBYTE)path, (lstrlenW(path) + 1) * sizeof(WCHAR));
                     if (ret)
                         hr = HRESULT_FROM_WIN32(ret);
                 }
@@ -3137,13 +3134,13 @@ static HRESULT _SHRegisterUserShellFolders(BOOL bDefault)
     {
         hToken = (HANDLE)-1;
         hRootKey = HKEY_USERS;
-        strcpyW(userShellFolderPath, L".Default");
+        lstrcpyW(userShellFolderPath, L".Default");
         PathAddBackslashW(userShellFolderPath);
-        strcatW(userShellFolderPath, szSHUserFolders);
+        lstrcatW(userShellFolderPath, szSHUserFolders);
         pUserShellFolderPath = userShellFolderPath;
-        strcpyW(shellFolderPath, L".Default");
+        lstrcpyW(shellFolderPath, L".Default");
         PathAddBackslashW(shellFolderPath);
-        strcatW(shellFolderPath, szSHFolders);
+        lstrcatW(shellFolderPath, szSHFolders);
         pShellFolderPath = shellFolderPath;
     }
     else

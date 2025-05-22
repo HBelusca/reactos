@@ -19,8 +19,6 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
  */
 
-#include <wine/config.h>
-
 #include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
@@ -38,7 +36,6 @@
 #include <debughlp.h>
 
 #include <wine/debug.h>
-#include <wine/unicode.h>
 
 #include "shell32_main.h"
 
@@ -142,7 +139,7 @@ HRESULT WINAPI SHCoCreateInstance(
 
 	/* we look up the dll path in the registry */
 	SHStringFromGUIDW(myclsid, sClassID, ARRAY_SIZE(sClassID));
-	swprintf(sKeyName, L"CLSID\\%s\\InprocServer32", sClassID);
+	swprintf( sKeyName, ARRAY_SIZE(sKeyName), L"CLSID\\%s\\InprocServer32", sClassID );
 
 	if (RegOpenKeyExW(HKEY_CLASSES_ROOT, sKeyName, 0, KEY_READ, &hKey))
             return E_ACCESSDENIED;
@@ -675,7 +672,7 @@ UINT WINAPI DragQueryFileW(
 	  }
 	}
 
-	i = strlenW(lpwDrop);
+	i = lstrlenW(lpwDrop);
 	if ( !lpszwFile) goto end;   /* needed buffer size */
 	lstrcpynW (lpszwFile, lpwDrop, lLength);
 end:

@@ -111,7 +111,7 @@ HRESULT WINAPI CExeDropHandler::IsDirty()
 
 HRESULT WINAPI CExeDropHandler::Load(LPCOLESTR pszFileName, DWORD dwMode)
 {
-    UINT len = strlenW(pszFileName);
+    UINT len = lstrlenW(pszFileName);
     sPathTarget = (WCHAR *)SHAlloc((len + 1) * sizeof(WCHAR));
     memcpy(sPathTarget, pszFileName, (len + 1) * sizeof(WCHAR));
     return S_OK;

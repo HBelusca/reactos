@@ -30,6 +30,10 @@ extern "C" {
 
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof(*(a)))
 
+#ifdef _CRT_NON_CONFORMING_SWPRINTFS
+#define swprintf _snwprintf
+#endif
+
 /*******************************************
 *  global SHELL32.DLL variables
 */

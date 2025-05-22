@@ -424,11 +424,11 @@ static LPWSTR RunDlg_GetParentDir(LPCWSTR cmdline)
     const WCHAR *src;
     WCHAR *dest, *result, *result_end=NULL;
 
-    result = (WCHAR *)HeapAlloc(GetProcessHeap(), 0, sizeof(WCHAR)*(strlenW(cmdline)+5));
+    result = (WCHAR *)HeapAlloc(GetProcessHeap(), 0, sizeof(WCHAR)*(lstrlenW(cmdline)+5));
 
     if (NULL == result)
     {
-        TRACE("HeapAlloc couldn't allocate %d bytes\n", sizeof(WCHAR)*(strlenW(cmdline)+5));
+        TRACE("HeapAlloc couldn't allocate %d bytes\n", sizeof(WCHAR)*(lstrlenW(cmdline)+5));
         return NULL;
     }
 
@@ -448,12 +448,12 @@ static LPWSTR RunDlg_GetParentDir(LPCWSTR cmdline)
     else {
         while (*src)
         {
-            if (isspaceW(*src))
+            if (iswspace(*src))
             {
                 *dest = 0;
                 if (INVALID_FILE_ATTRIBUTES != GetFileAttributesW(result))
                     break;
-                strcatW(dest, L".exe");
+                lstrcatW(dest, L".exe");
                 if (INVALID_FILE_ATTRIBUTES != GetFileAttributesW(result))
                     break;
             }
