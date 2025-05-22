@@ -368,7 +368,6 @@ HRESULT STDMETHODCALLTYPE CShellLink::Save(LPCOLESTR pszFileName, BOOL fRemember
     if (SUCCEEDED(hr))
     {
         hr = Save(stm, FALSE);
-
         if (SUCCEEDED(hr))
         {
             GetFullPathNameW(pszFileName, _countof(szFullPath), szFullPath, NULL);
@@ -423,6 +422,34 @@ HRESULT STDMETHODCALLTYPE CShellLink::GetCurFile(LPOLESTR *ppszFileName)
     wcscpy(*ppszFileName, m_sLinkPath);
 
     return S_OK;
+}
+
+static HRESULT
+ShellLink_GetFindDataForPath(
+    _In_ PCWSTR pFileName,
+    _Out_ WIN32_FIND_DATAW* pwfd)
+{
+    if (!PathFileExistsW(pFileName))
+        return HResultFromWin32(GetLastError());
+
+    /* Retrieve target attributes */
+    HANDLE hFind = FindFirstFileW(pFileName, pwfd);
+    if (hFind == INVALID_HANDLE_VALUE)
+        return HResultFromWin32(GetLastError());
+    FindClose(hFind);
+    return S_OK;
+}
+
+static VOID
+ShellLink_SetFindData(
+    _Out_ SHELL_LINK_HEADER* pLnkHdr,
+    _In_ const WIN32_FIND_DATAW* pwfd)
+{
+    pLnkHdr->dwFileAttributes = pwfd->dwFileAttributes;
+    pLnkHdr->ftCreationTime = pwfd->ftCreationTime;
+    pLnkHdr->ftLastAccessTime = pwfd->ftLastAccessTime;
+    pLnkHdr->ftLastWriteTime = pwfd->ftLastWriteTime;
+    pLnkHdr->nFileSizeLow = pwfd->nFileSizeLow;
 }
 
 static HRESULT Stream_LoadString(IStream* stm, BOOL unicode, LPWSTR *pstr)
@@ -792,10 +819,7 @@ HRESULT STDMETHODCALLTYPE CShellLink::Load(IStream *stm)
         }
     }
 
-    if (m_Header.dwFlags & SLDF_RUNAS_USER)
-        m_bRunAs = TRUE;
-    else
-        m_bRunAs = FALSE;
+    m_bRunAs = !!(m_Header.dwFlags & SLDF_RUNAS_USER);
 
     TRACE("OK\n");
 
@@ -914,17 +938,9 @@ HRESULT STDMETHODCALLTYPE CShellLink::Save(IStream *stm, BOOL fClearDirty)
     /* Store target attributes */
     WIN32_FIND_DATAW wfd = {};
     WCHAR FsTarget[MAX_PATH];
-    if (GetPath(FsTarget, _countof(FsTarget), NULL, 0) == S_OK && PathFileExistsW(FsTarget))
-    {
-        HANDLE hFind = FindFirstFileW(FsTarget, &wfd);
-        if (hFind != INVALID_HANDLE_VALUE)
-            FindClose(hFind);
-    }
-    m_Header.dwFileAttributes = wfd.dwFileAttributes;
-    m_Header.ftCreationTime = wfd.ftCreationTime;
-    m_Header.ftLastAccessTime = wfd.ftLastAccessTime;
-    m_Header.ftLastWriteTime = wfd.ftLastWriteTime;
-    m_Header.nFileSizeLow = wfd.nFileSizeLow;
+    if (GetPath(FsTarget, _countof(FsTarget), NULL, 0) == S_OK)
+        ShellLink_GetFindDataForPath(FsTarget, &wfd);
+    ShellLink_SetFindData(&m_Header, &wfd);
 
     /*
      * Reset the flags: keep only the flags related to data blocks as they were
@@ -2275,14 +2291,19 @@ HRESULT CShellLink::SetTargetFromPIDLOrPath(LPCITEMIDLIST pidl, LPCWSTR pszFile)
             pszFile = szPath;
     }
 
-    // TODO: Fully update link info, tracker, file attribs...
-
     // if (pszFile)
     if (!pszFile)
     {
         *szPath = L'\0';
         pszFile = szPath;
     }
+
+    // TODO: Fully update link info, tracker...
+
+    WIN32_FIND_DATAW wfd = {};
+    if (pszFile && *pszFile)
+        ShellLink_GetFindDataForPath(pszFile, &wfd);
+    ShellLink_SetFindData(&m_Header, &wfd);
 
     /* Update the cached path (for link info) */
     ShellLink_GetVolumeInfo(pszFile, &volume);
