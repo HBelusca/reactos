@@ -358,7 +358,7 @@ HRESULT STDMETHODCALLTYPE CShellLink::Save(LPCOLESTR pszFileName, BOOL fRemember
         if (!m_sLinkPath)
             return S_OK;
         pszFileName = m_sLinkPath;
-        fRemember = FALSE;
+        fRemember = TRUE;
     }
 
     bAlreadyExists = PathFileExistsW(pszFileName);
@@ -367,7 +367,8 @@ HRESULT STDMETHODCALLTYPE CShellLink::Save(LPCOLESTR pszFileName, BOOL fRemember
     HRESULT hr = SHCreateStreamOnFileW(pszFileName, STGM_READWRITE | STGM_CREATE | STGM_SHARE_DENY_WRITE, &stm);
     if (SUCCEEDED(hr))
     {
-        hr = Save(stm, FALSE);
+        /* Save the stream, clearing the dirty flag or not */
+        hr = Save(stm, fRemember);
         if (SUCCEEDED(hr))
         {
             GetFullPathNameW(pszFileName, _countof(szFullPath), szFullPath, NULL);
@@ -376,14 +377,13 @@ HRESULT STDMETHODCALLTYPE CShellLink::Save(LPCOLESTR pszFileName, BOOL fRemember
             else
                 SHChangeNotify(SHCNE_CREATE, SHCNF_PATHW, szFullPath, NULL);
 
-            if (fRemember)
+            /* Update the file path only on a "Save As" operation. For "Save",
+             * the NULL pszFileName has already been set to m_sLinkPath above. */
+            if (fRemember && (pszFileName != m_sLinkPath))
             {
-                /* update file path */
                 free(m_sLinkPath);
                 m_sLinkPath = wcsdup(pszFileName);
             }
-
-            m_bDirty = FALSE;
         }
         else
         {
@@ -1050,7 +1050,7 @@ HRESULT STDMETHODCALLTYPE CShellLink::Save(IStream *stm, BOOL fClearDirty)
     if (FAILED(hr))
         return hr;
 
-    /* Clear the dirty bit if requested */
+    /* Clear the dirty flag if requested */
     if (fClearDirty)
         m_bDirty = FALSE;
 
