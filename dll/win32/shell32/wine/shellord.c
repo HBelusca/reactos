@@ -1,6 +1,6 @@
 /*
  * The parameters of many functions changes between different OS versions
- * (NT uses Unicode strings, 95 uses ASCII strings)
+ * (NT uses Unicode strings, 95 uses ANSI strings)
  *
  * Copyright 1997 Marcus Meissner
  *           1998 Jürgen Schmied
@@ -1273,7 +1273,6 @@ Quit:
     CHAR new_lnk_filepath[MAX_PATH];
     CHAR new_lnk_name[MAX_PATH];
     CHAR * ext;
-    IMalloc *ppM;
     LPITEMIDLIST pidl;
     HWND hwnd = 0;       /* FIXME:  get real window handle */
     INT ret;
@@ -1328,24 +1327,18 @@ Quit:
 
     /* Get path to user's "Recent" directory
      */
-    if(SUCCEEDED(SHGetMalloc(&ppM))) {
-	if (SUCCEEDED(SHGetSpecialFolderLocation(hwnd, CSIDL_RECENT,
-						 &pidl))) {
-	    SHGetPathFromIDListA(pidl, link_dir);
-	    IMalloc_Free(ppM, pidl);
-	}
-	else {
-	    /* serious issues */
-	    link_dir[0] = 0;
-	    ERR("serious issues 1\n");
-	}
-	IMalloc_Release(ppM);
+    if (SUCCEEDED(SHGetSpecialFolderLocation(hwnd, CSIDL_RECENT, &pidl)))
+    {
+        SHGetPathFromIDListA(pidl, link_dir);
+        ILFree(pidl);
     }
-    else {
-	/* serious issues */
-	link_dir[0] = 0;
-	ERR("serious issues 2\n");
+    else
+    {
+        /* serious issues */
+        link_dir[0] = 0;
+        ERR("serious issues 1\n");
     }
+
     TRACE("Users Recent dir %s\n", link_dir);
 
     /* If no input, then go clear the lists */

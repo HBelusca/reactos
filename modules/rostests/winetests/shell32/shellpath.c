@@ -92,7 +92,6 @@ static BOOL    (WINAPI *pSHGetSpecialFolderPathA)(HWND, LPSTR, int, BOOL);
 static HRESULT (WINAPI *pSHGetSpecialFolderLocation)(HWND, int, LPITEMIDLIST *);
 static LPITEMIDLIST (WINAPI *pILFindLastID)(LPCITEMIDLIST);
 static int (WINAPI *pSHFileOperationA)(LPSHFILEOPSTRUCTA);
-static HRESULT (WINAPI *pSHGetMalloc)(LPMALLOC *);
 static UINT (WINAPI *pGetSystemWow64DirectoryA)(LPSTR,UINT);
 static HRESULT (WINAPI *pSHGetKnownFolderPath)(REFKNOWNFOLDERID, DWORD, HANDLE, PWSTR *);
 static HRESULT (WINAPI *pSHSetKnownFolderPath)(REFKNOWNFOLDERID, DWORD, HANDLE, PWSTR);
@@ -101,7 +100,6 @@ static BOOL (WINAPI *pPathYetAnotherMakeUniqueName)(PWSTR, PCWSTR, PCWSTR, PCWST
 static HRESULT (WINAPI *pSHGetKnownFolderIDList)(REFKNOWNFOLDERID, DWORD, HANDLE, PIDLIST_ABSOLUTE*);
 
 static DLLVERSIONINFO shellVersion = { 0 };
-static LPMALLOC pMalloc;
 static const BYTE guidType[] = { PT_GUID };
 static const BYTE controlPanelType[] = { PT_SHELLEXT, PT_GUID, PT_CPL };
 static const BYTE folderType[] = { PT_FOLDER, PT_FOLDERW };
@@ -204,18 +202,8 @@ static void loadShell32(void)
     if (!pILFindLastID)
         pILFindLastID = (void *)GetProcAddress(hShell32, (LPCSTR)16);
     GET_PROC(SHFileOperationA)
-    GET_PROC(SHGetMalloc)
     GET_PROC(PathYetAnotherMakeUniqueName)
     GET_PROC(SHGetKnownFolderIDList)
-
-    ok(pSHGetMalloc != NULL, "shell32 is missing SHGetMalloc\n");
-    if (pSHGetMalloc)
-    {
-        HRESULT hr = pSHGetMalloc(&pMalloc);
-
-        ok(hr == S_OK, "SHGetMalloc failed: 0x%08x\n", hr);
-        ok(pMalloc != NULL, "SHGetMalloc returned a NULL IMalloc\n");
-    }
 
     if (pDllGetVersion)
     {
@@ -1322,13 +1310,11 @@ static void test_parameters(void)
         pidl = NULL;
         hr = pSHGetFolderLocation(NULL, 0xeeee, NULL, 0, &pidl);
         ok(hr == E_INVALIDARG, "got 0x%08x, expected E_INVALIDARG\n", hr);
-        if (hr == S_OK) IMalloc_Free(pMalloc, pidl);
 
         /* check a bogus user token: */
         pidl = NULL;
         hr = pSHGetFolderLocation(NULL, CSIDL_FAVORITES, (HANDLE)2, 0, &pidl);
         ok(hr == E_FAIL || hr == E_HANDLE, "got 0x%08x, expected E_FAIL or E_HANDLE\n", hr);
-        if (hr == S_OK) IMalloc_Free(pMalloc, pidl);
 
         /* a NULL pidl pointer crashes, so don't test it */
     }
@@ -1394,7 +1380,7 @@ static BYTE testSHGetFolderLocation(int folder)
              getFolderName(folder));
             if (pidlLast)
                 ret = pidlLast->mkid.abID[0];
-            IMalloc_Free(pMalloc, pidl);
+            ILFree(pidl);
         }
     }
     return ret;
@@ -1422,7 +1408,7 @@ static BYTE testSHGetSpecialFolderLocation(int folder)
                 "%s: ILFindLastID failed\n", getFolderName(folder));
             if (pidlLast)
                 ret = pidlLast->mkid.abID[0];
-            IMalloc_Free(pMalloc, pidl);
+            ILFree(pidl);
         }
     }
     return ret;
@@ -1555,7 +1541,7 @@ static void matchGUID(int folder, const GUID *guid, const GUID *guid_alt)
               "%s: got GUID %s, expected %s or %s\n", getFolderName(folder),
               wine_dbgstr_guid(shellGuid), wine_dbgstr_guid(guid), wine_dbgstr_guid(guid_alt));
         }
-        IMalloc_Free(pMalloc, pidl);
+        ILFree(pidl);
     }
 }
 
@@ -1711,7 +1697,6 @@ static void doChild(const char *arg)
         hr = pSHGetFolderLocation(NULL, CSIDL_FAVORITES, NULL, 0, &pidl);
         ok(hr == E_FAIL || hr == HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND),
             "SHGetFolderLocation returned 0x%08x\n", hr);
-        if (hr == S_OK && pidl) IMalloc_Free(pMalloc, pidl);
 
         ok(!pSHGetSpecialFolderPathA(NULL, path, CSIDL_FAVORITES, FALSE),
             "SHGetSpecialFolderPath succeeded, expected failure\n");
@@ -1720,8 +1705,6 @@ static void doChild(const char *arg)
         hr = pSHGetSpecialFolderLocation(NULL, CSIDL_FAVORITES, &pidl);
         ok(hr == E_FAIL || hr == HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND),
             "SHGetFolderLocation returned 0x%08x\n", hr);
-
-        if (hr == S_OK && pidl) IMalloc_Free(pMalloc, pidl);
 
         /* now test success: */
         hr = pSHGetFolderPathA(NULL, CSIDL_FAVORITES | CSIDL_FLAG_CREATE, NULL,

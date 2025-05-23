@@ -190,30 +190,19 @@ struct volume_info
 
 static HRESULT ShellLink_UpdatePath(LPCWSTR sPathRel, LPCWSTR path, LPCWSTR sWorkDir, LPWSTR* psPath);
 
-/* strdup on the process heap */
-static LPWSTR __inline HEAP_strdupAtoW(HANDLE heap, DWORD flags, LPCSTR str)
+static inline WCHAR *strdupAtoW(const char *str)
 {
-    INT len;
-    LPWSTR p;
+    WCHAR *ret;
+    DWORD len;
 
-    assert(str);
+    if (!str) return NULL;
 
     len = MultiByteToWideChar(CP_ACP, 0, str, -1, NULL, 0);
-    p = (LPWSTR)HeapAlloc(heap, flags, len * sizeof(WCHAR));
-    if (!p)
-        return p;
-    MultiByteToWideChar(CP_ACP, 0, str, -1, p, len);
-    return p;
-}
+    ret = (WCHAR*)malloc(len * sizeof(WCHAR));
+    if (ret)
+        MultiByteToWideChar(CP_ACP, 0, str, -1, ret, len);
 
-static LPWSTR __inline strdupW(LPCWSTR src)
-{
-    LPWSTR dest;
-    if (!src) return NULL;
-    dest = (LPWSTR)HeapAlloc(GetProcessHeap(), 0, (wcslen(src) + 1) * sizeof(WCHAR));
-    if (dest)
-        wcscpy(dest, src);
-    return dest;
+    return ret;
 }
 
 static BOOL PathEnvSubstIsDirectory(LPCWSTR pszPath)
@@ -238,19 +227,19 @@ VOID CShellLink::Reset()
     ILFree(m_pPidl);
     m_pPidl = NULL;
 
-    HeapFree(GetProcessHeap(), 0, m_sPath);
+    free(m_sPath);
     m_sPath = NULL;
     ZeroMemory(&volume, sizeof(volume));
 
-    HeapFree(GetProcessHeap(), 0, m_sDescription);
+    free(m_sDescription);
     m_sDescription = NULL;
-    HeapFree(GetProcessHeap(), 0, m_sPathRel);
+    free(m_sPathRel);
     m_sPathRel = NULL;
-    HeapFree(GetProcessHeap(), 0, m_sWorkDir);
+    free(m_sWorkDir);
     m_sWorkDir = NULL;
-    HeapFree(GetProcessHeap(), 0, m_sArgs);
+    free(m_sArgs);
     m_sArgs = NULL;
-    HeapFree(GetProcessHeap(), 0, m_sIcoPath);
+    free(m_sIcoPath);
     m_sIcoPath = NULL;
 
     m_bRunAs = FALSE;
@@ -306,14 +295,14 @@ CShellLink::~CShellLink()
 
     ILFree(m_pPidl);
 
-    HeapFree(GetProcessHeap(), 0, m_sPath);
+    free(m_sPath);
 
-    HeapFree(GetProcessHeap(), 0, m_sDescription);
-    HeapFree(GetProcessHeap(), 0, m_sPathRel);
-    HeapFree(GetProcessHeap(), 0, m_sWorkDir);
-    HeapFree(GetProcessHeap(), 0, m_sArgs);
-    HeapFree(GetProcessHeap(), 0, m_sIcoPath);
-    HeapFree(GetProcessHeap(), 0, m_sLinkPath);
+    free(m_sDescription);
+    free(m_sPathRel);
+    free(m_sWorkDir);
+    free(m_sArgs);
+    free(m_sIcoPath);
+    free(m_sLinkPath);
     SHFreeDataBlockList(m_pDBList);
 }
 
@@ -338,22 +327,22 @@ HRESULT STDMETHODCALLTYPE CShellLink::IsDirty()
 
 HRESULT STDMETHODCALLTYPE CShellLink::Load(LPCOLESTR pszFileName, DWORD dwMode)
 {
-    TRACE("(%p, %s, %x)\n", this, debugstr_w(pszFileName), dwMode);
+    TRACE("(%p, %s, %lx)\n", this, debugstr_w(pszFileName), dwMode);
 
     if (dwMode == 0)
-        dwMode = STGM_READ | STGM_SHARE_DENY_WRITE;
+        dwMode = STGM_READ;
 
     CComPtr<IStream> stm;
     HRESULT hr = SHCreateStreamOnFileW(pszFileName, dwMode, &stm);
     if (SUCCEEDED(hr))
     {
-        HeapFree(GetProcessHeap(), 0, m_sLinkPath);
-        m_sLinkPath = strdupW(pszFileName);
+        free(m_sLinkPath);
+        m_sLinkPath = wcsdup(pszFileName);
         hr = Load(stm);
         ShellLink_UpdatePath(m_sPathRel, pszFileName, m_sWorkDir, &m_sPath);
         m_bDirty = FALSE;
     }
-    TRACE("-- returning hr %08x\n", hr);
+    TRACE("-- returning hr %08lx\n", hr);
     return hr;
 }
 
@@ -365,12 +354,17 @@ HRESULT STDMETHODCALLTYPE CShellLink::Save(LPCOLESTR pszFileName, BOOL fRemember
     TRACE("(%p)->(%s)\n", this, debugstr_w(pszFileName));
 
     if (!pszFileName)
-        return E_FAIL;
+    {
+        if (!m_sLinkPath)
+            return S_OK;
+        pszFileName = m_sLinkPath;
+        fRemember = FALSE;
+    }
 
     bAlreadyExists = PathFileExistsW(pszFileName);
 
     CComPtr<IStream> stm;
-    HRESULT hr = SHCreateStreamOnFileW(pszFileName, STGM_READWRITE | STGM_CREATE | STGM_SHARE_EXCLUSIVE, &stm);
+    HRESULT hr = SHCreateStreamOnFileW(pszFileName, STGM_READWRITE | STGM_CREATE | STGM_SHARE_DENY_WRITE, &stm);
     if (SUCCEEDED(hr))
     {
         hr = Save(stm, FALSE);
@@ -383,10 +377,13 @@ HRESULT STDMETHODCALLTYPE CShellLink::Save(LPCOLESTR pszFileName, BOOL fRemember
             else
                 SHChangeNotify(SHCNE_CREATE, SHCNF_PATHW, szFullPath, NULL);
 
-            if (m_sLinkPath)
-                HeapFree(GetProcessHeap(), 0, m_sLinkPath);
+            if (fRemember)
+            {
+                /* update file path */
+                free(m_sLinkPath);
+                m_sLinkPath = wcsdup(pszFileName);
+            }
 
-            m_sLinkPath = strdupW(pszFileName);
             m_bDirty = FALSE;
         }
         else
@@ -442,14 +439,14 @@ static HRESULT Stream_LoadString(IStream* stm, BOOL unicode, LPWSTR *pstr)
         len *= sizeof(WCHAR);
 
     TRACE("reading %d\n", len);
-    LPSTR temp = (LPSTR)HeapAlloc(GetProcessHeap(), 0, len + sizeof(WCHAR));
+    LPSTR temp = (LPSTR)malloc(len + sizeof(WCHAR));
     if (!temp)
         return E_OUTOFMEMORY;
     count = 0;
     hr = stm->Read(temp, len, &count);
     if (FAILED(hr) || count != len)
     {
-        HeapFree(GetProcessHeap(), 0, temp);
+        free(temp);
         return E_FAIL;
     }
 
@@ -460,14 +457,14 @@ static HRESULT Stream_LoadString(IStream* stm, BOOL unicode, LPWSTR *pstr)
     if (!unicode)
     {
         count = MultiByteToWideChar(CP_ACP, 0, temp, len, NULL, 0);
-        str = (LPWSTR)HeapAlloc(GetProcessHeap(), 0, (count + 1) * sizeof(WCHAR));
+        str = (LPWSTR)malloc((count + 1) * sizeof(WCHAR));
         if (!str)
         {
-            HeapFree(GetProcessHeap(), 0, temp);
+            free(temp);
             return E_OUTOFMEMORY;
         }
         MultiByteToWideChar(CP_ACP, 0, temp, len, str, count);
-        HeapFree(GetProcessHeap(), 0, temp);
+        free(temp);
     }
     else
     {
@@ -491,7 +488,7 @@ static BOOL ShellLink_GetVolumeInfo(LPCWSTR path, CShellLink::volume_info *volum
 
     volume->type = GetDriveTypeW(drive);
     BOOL bRet = GetVolumeInformationW(drive, volume->label, _countof(volume->label), &volume->serial, NULL, NULL, NULL, 0);
-    TRACE("ret = %d type %d serial %08x name %s\n", bRet,
+    TRACE("ret = %d type %ld serial %08lx name %s\n", bRet,
           volume->type, volume->serial, debugstr_w(volume->label));
     return bRet;
 }
@@ -512,7 +509,7 @@ static HRESULT Stream_ReadChunk(IStream* stm, LPVOID *data)
     if (FAILED(hr) || count != sizeof(size))
         return E_FAIL;
 
-    chunk = static_cast<sized_chunk *>(HeapAlloc(GetProcessHeap(), 0, size));
+    chunk = static_cast<sized_chunk *>(malloc(size));
     if (!chunk)
         return E_OUTOFMEMORY;
 
@@ -520,11 +517,11 @@ static HRESULT Stream_ReadChunk(IStream* stm, LPVOID *data)
     hr = stm->Read(chunk->data, size - sizeof(size), &count);
     if (FAILED(hr) || count != (size - sizeof(size)))
     {
-        HeapFree(GetProcessHeap(), 0, chunk);
+        free(chunk);
         return E_FAIL;
     }
 
-    TRACE("Read %d bytes\n", chunk->size);
+    TRACE("Read %ld bytes\n", chunk->size);
 
     *data = chunk;
 
@@ -557,7 +554,7 @@ static LPWSTR Stream_LoadPath(LPCSTR p, DWORD maxlen)
         len++;
 
     UINT wlen = MultiByteToWideChar(CP_ACP, 0, p, len, NULL, 0);
-    LPWSTR path = (LPWSTR)HeapAlloc(GetProcessHeap(), 0, (wlen + 1) * sizeof(WCHAR));
+    LPWSTR path = (LPWSTR)malloc((wlen + 1) * sizeof(WCHAR));
     if (!path)
         return NULL;
     MultiByteToWideChar(CP_ACP, 0, p, len, path, wlen);
@@ -577,7 +574,7 @@ static HRESULT Stream_LoadLocation(IStream *stm,
     LOCATION_INFO *loc = reinterpret_cast<LOCATION_INFO *>(p);
     if (loc->dwTotalSize < sizeof(LOCATION_INFO))
     {
-        HeapFree(GetProcessHeap(), 0, p);
+        free(p);
         return E_FAIL;
     }
 
@@ -596,10 +593,10 @@ static HRESULT Stream_LoadLocation(IStream *stm,
     if (n && n < loc->dwTotalSize)
         *path = Stream_LoadPath(&p[n], loc->dwTotalSize - n); // FIXME: Unicode offset (if present)
 
-    TRACE("type %d serial %08x name %s path %s\n", volume->type,
+    TRACE("type %ld serial %08lx name %s path %s\n", volume->type,
           volume->serial, debugstr_w(volume->label), debugstr_w(*path));
 
-    HeapFree(GetProcessHeap(), 0, p);
+    free(p);
     return S_OK;
 }
 
@@ -611,7 +608,7 @@ static HRESULT Stream_LoadLocation(IStream *stm,
  *  ------     -----------
  *    0          Length of the block (4 bytes, usually 0x314)
  *    4          tag (dword)
- *    8          string data in ASCII
+ *    8          string data in ANSI
  *    8+0x104    string data in UNICODE
  *
  * In the original Win32 implementation the buffers are not initialized
@@ -634,7 +631,7 @@ HRESULT CShellLink::GetAdvertiseInfo(LPWSTR *str, DWORD dwSig)
         return E_FAIL;
     }
 
-    TRACE("dwSig %08x  string = '%s'\n", pInfo->dbh.dwSignature, debugstr_w(pInfo->szwDarwinID));
+    TRACE("dwSig %08lx  string = '%s'\n", pInfo->dbh.dwSignature, debugstr_w(pInfo->szwDarwinID));
 
     *str = pInfo->szwDarwinID;
     return S_OK;
@@ -708,7 +705,7 @@ HRESULT STDMETHODCALLTYPE CShellLink::Load(IStream *stm)
     /* ... but if it is required not to use it, clear it */
     if (m_Header.dwFlags & SLDF_FORCE_NO_LINKINFO)
     {
-        HeapFree(GetProcessHeap(), 0, m_sPath);
+        free(m_sPath);
         m_sPath = NULL;
         ZeroMemory(&volume, sizeof(volume));
     }
@@ -771,7 +768,7 @@ HRESULT STDMETHODCALLTYPE CShellLink::Load(IStream *stm)
             {
                 ILFree(m_pPidl);
                 m_pPidl = pidl;
-                TRACE("Replaced pidl base with CSIDL %u up to %ub.\n", pSpecial->idSpecialFolder, pSpecial->cbOffset);
+                TRACE("Replaced pidl base with CSIDL %u up to %u.\n", pSpecial->idSpecialFolder, pSpecial->cbOffset);
             }
             ILFree(folder);
         }
@@ -866,7 +863,7 @@ static HRESULT Stream_WriteLocationInfo(IStream* stm, LPCWSTR path,
     DWORD total_size = sizeof(*loc) + volume_info_size + path_size + final_path_size;
 
     /* create pointers to everything */
-    loc = static_cast<LOCATION_INFO *>(HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, total_size));
+    loc = static_cast<LOCATION_INFO *>(calloc(1, total_size));
     vol = (LOCAL_VOLUME_INFO*) &loc[1];
     LPSTR szLabel = (LPSTR) &vol[1];
     LPSTR szPath = &szLabel[label_size];
@@ -896,7 +893,7 @@ static HRESULT Stream_WriteLocationInfo(IStream* stm, LPCWSTR path,
 
     ULONG count = 0;
     HRESULT hr = stm->Write(loc, total_size, &count);
-    HeapFree(GetProcessHeap(), 0, loc);
+    free(loc);
 
     return hr;
 }
@@ -1107,7 +1104,7 @@ static HRESULT ShellLink_UpdatePath(LPCWSTR sPathRel, LPCWSTR path, LPCWSTR sWor
         if (!*abs_path)
             wcscpy(abs_path, sPathRel);
 
-        *psPath = strdupW(abs_path);
+        *psPath = wcsdup(abs_path);
         if (!*psPath)
             return E_OUTOFMEMORY;
     }
@@ -1125,7 +1122,7 @@ HRESULT STDMETHODCALLTYPE CShellLink::GetPath(LPSTR pszFile, INT cchMaxPath, WIN
           this, pszFile, cchMaxPath, pfd, fFlags, debugstr_w(m_sPath));
 
     /* Allocate a temporary UNICODE buffer */
-    pszFileW = (LPWSTR)HeapAlloc(GetProcessHeap(), 0, max(cchMaxPath, MAX_PATH) * sizeof(WCHAR));
+    pszFileW = (LPWSTR)malloc(max(cchMaxPath, MAX_PATH) * sizeof(WCHAR));
     if (!pszFileW)
         return E_OUTOFMEMORY;
 
@@ -1137,7 +1134,7 @@ HRESULT STDMETHODCALLTYPE CShellLink::GetPath(LPSTR pszFile, INT cchMaxPath, WIN
                         pszFile, cchMaxPath, NULL, NULL);
 
     /* Free the temporary buffer */
-    HeapFree(GetProcessHeap(), 0, pszFileW);
+    free(pszFileW);
 
     if (pfd)
     {
@@ -1202,12 +1199,12 @@ HRESULT STDMETHODCALLTYPE CShellLink::SetDescription(LPCSTR pszName)
 {
     TRACE("(%p)->(pName=%s)\n", this, pszName);
 
-    HeapFree(GetProcessHeap(), 0, m_sDescription);
+    free(m_sDescription);
     m_sDescription = NULL;
 
     if (pszName)
     {
-        m_sDescription = HEAP_strdupAtoW(GetProcessHeap(), 0, pszName);
+        m_sDescription = strdupAtoW(pszName);
         if (!m_sDescription)
             return E_OUTOFMEMORY;
     }
@@ -1234,12 +1231,12 @@ HRESULT STDMETHODCALLTYPE CShellLink::SetWorkingDirectory(LPCSTR pszDir)
 {
     TRACE("(%p)->(dir=%s)\n", this, pszDir);
 
-    HeapFree(GetProcessHeap(), 0, m_sWorkDir);
+    free(m_sWorkDir);
     m_sWorkDir = NULL;
 
     if (pszDir)
     {
-        m_sWorkDir = HEAP_strdupAtoW(GetProcessHeap(), 0, pszDir);
+        m_sWorkDir = strdupAtoW(pszDir);
         if (!m_sWorkDir)
             return E_OUTOFMEMORY;
     }
@@ -1266,12 +1263,12 @@ HRESULT STDMETHODCALLTYPE CShellLink::SetArguments(LPCSTR pszArgs)
 {
     TRACE("(%p)->(args=%s)\n", this, pszArgs);
 
-    HeapFree(GetProcessHeap(), 0, m_sArgs);
+    free(m_sArgs);
     m_sArgs = NULL;
 
     if (pszArgs)
     {
-        m_sArgs = HEAP_strdupAtoW(GetProcessHeap(), 0, pszArgs);
+        m_sArgs = strdupAtoW(pszArgs);
         if (!m_sArgs)
             return E_OUTOFMEMORY;
     }
@@ -1299,7 +1296,7 @@ HRESULT STDMETHODCALLTYPE CShellLink::SetHotkey(WORD wHotkey)
 
 HRESULT STDMETHODCALLTYPE CShellLink::GetShowCmd(INT *piShowCmd)
 {
-    TRACE("(%p)->(%p) %d\n", this, piShowCmd, m_Header.nShowCommand);
+    TRACE("(%p)->(%p) %ld\n", this, piShowCmd, m_Header.nShowCommand);
     *piShowCmd = m_Header.nShowCommand;
     return S_OK;
 }
@@ -1322,7 +1319,7 @@ HRESULT STDMETHODCALLTYPE CShellLink::GetIconLocation(LPSTR pszIconPath, INT cch
     TRACE("(%p)->(%p len=%u iicon=%p)\n", this, pszIconPath, cchIconPath, piIcon);
 
     /* Allocate a temporary UNICODE buffer */
-    pszIconPathW = (LPWSTR)HeapAlloc(GetProcessHeap(), 0, cchIconPath * sizeof(WCHAR));
+    pszIconPathW = (LPWSTR)malloc(cchIconPath * sizeof(WCHAR));
     if (!pszIconPathW)
         return E_OUTOFMEMORY;
 
@@ -1334,7 +1331,7 @@ HRESULT STDMETHODCALLTYPE CShellLink::GetIconLocation(LPSTR pszIconPath, INT cch
                         pszIconPath, cchIconPath, NULL, NULL);
 
     /* Free the temporary buffer */
-    HeapFree(GetProcessHeap(), 0, pszIconPathW);
+    free(pszIconPathW);
 
     return hr;
 }
@@ -1347,7 +1344,7 @@ HRESULT STDMETHODCALLTYPE CShellLink::GetIconLocation(UINT uFlags, PSTR pszIconF
     TRACE("(%p)->(%u %p len=%u piIndex=%p pwFlags=%p)\n", this, uFlags, pszIconFile, cchMax, piIndex, pwFlags);
 
     /* Allocate a temporary UNICODE buffer */
-    pszIconFileW = (LPWSTR)HeapAlloc(GetProcessHeap(), 0, cchMax * sizeof(WCHAR));
+    pszIconFileW = (LPWSTR)malloc(cchMax * sizeof(WCHAR));
     if (!pszIconFileW)
         return E_OUTOFMEMORY;
 
@@ -1359,7 +1356,7 @@ HRESULT STDMETHODCALLTYPE CShellLink::GetIconLocation(UINT uFlags, PSTR pszIconF
                         pszIconFile, cchMax, NULL, NULL);
 
     /* Free the temporary buffer */
-    HeapFree(GetProcessHeap(), 0, pszIconFileW);
+    free(pszIconFileW);
 
     return hr;
 }
@@ -1371,51 +1368,49 @@ HRESULT STDMETHODCALLTYPE CShellLink::Extract(PCSTR pszFile, UINT nIconIndex, HI
     LPWSTR str = NULL;
     if (pszFile)
     {
-        str = HEAP_strdupAtoW(GetProcessHeap(), 0, pszFile);
+        str = strdupAtoW(pszFile);
         if (!str)
             return E_OUTOFMEMORY;
     }
 
     HRESULT hr = Extract(str, nIconIndex, phiconLarge, phiconSmall, nIconSize);
-
-    if (str)
-        HeapFree(GetProcessHeap(), 0, str);
+    free(str);
 
     return hr;
 }
 
 HRESULT STDMETHODCALLTYPE CShellLink::SetIconLocation(LPCSTR pszIconPath, INT iIcon)
 {
-    TRACE("(%p)->(path=%s iicon=%u)\n", this, pszIconPath, iIcon);
+    TRACE("(%p)->(path=%s icon=%u)\n", this, pszIconPath, iIcon);
 
     LPWSTR str = NULL;
     if (pszIconPath)
     {
-        str = HEAP_strdupAtoW(GetProcessHeap(), 0, pszIconPath);
+        str = strdupAtoW(pszIconPath);
         if (!str)
             return E_OUTOFMEMORY;
     }
 
     HRESULT hr = SetIconLocation(str, iIcon);
-
-    if (str)
-        HeapFree(GetProcessHeap(), 0, str);
+    free(str);
 
     return hr;
 }
 
 HRESULT STDMETHODCALLTYPE CShellLink::SetRelativePath(LPCSTR pszPathRel, DWORD dwReserved)
 {
-    TRACE("(%p)->(path=%s %x)\n", this, pszPathRel, dwReserved);
+    TRACE("(%p)->(path=%s %lx)\n", this, pszPathRel, dwReserved);
 
-    HeapFree(GetProcessHeap(), 0, m_sPathRel);
+    free(m_sPathRel);
     m_sPathRel = NULL;
 
     if (pszPathRel)
     {
-        m_sPathRel = HEAP_strdupAtoW(GetProcessHeap(), 0, pszPathRel);
-        m_bDirty = TRUE;
+        m_sPathRel = strdupAtoW(pszPathRel);
+        if (!m_sPathRel)
+            return E_OUTOFMEMORY;
     }
+    m_bDirty = TRUE;
 
     return ShellLink_UpdatePath(m_sPathRel, m_sPath, m_sWorkDir, &m_sPath);
 }
@@ -1430,11 +1425,11 @@ shelllink_get_msi_component_path(LPWSTR component)
         return NULL;
 
     sz++;
-    LPWSTR path = (LPWSTR)HeapAlloc(GetProcessHeap(), 0, sz * sizeof(WCHAR));
+    LPWSTR path = (LPWSTR)malloc(sz * sizeof(WCHAR));
     Result = CommandLineFromMsiDescriptor(component, path, &sz);
     if (Result != ERROR_SUCCESS)
     {
-        HeapFree(GetProcessHeap(), 0, path);
+        free(path);
         path = NULL;
     }
 
@@ -1448,7 +1443,7 @@ HRESULT STDMETHODCALLTYPE CShellLink::Resolve(HWND hwnd, DWORD fFlags)
     HRESULT hr = S_OK;
     BOOL bSuccess;
 
-    TRACE("(%p)->(hwnd=%p flags=%x)\n", this, hwnd, fFlags);
+    TRACE("(%p)->(hwnd=%p flags=%lx)\n", this, hwnd, fFlags);
 
     /* FIXME: use IResolveShellLink interface? */
 
@@ -1472,7 +1467,7 @@ HRESULT STDMETHODCALLTYPE CShellLink::Resolve(HWND hwnd, DWORD fFlags)
             return E_FAIL;
 
         /* Clear the cached path */
-        HeapFree(GetProcessHeap(), 0, m_sPath);
+        free(m_sPath);
         m_sPath = shelllink_get_msi_component_path(component);
         if (!m_sPath)
             return E_FAIL;
@@ -1485,7 +1480,7 @@ HRESULT STDMETHODCALLTYPE CShellLink::Resolve(HWND hwnd, DWORD fFlags)
         bSuccess = SHGetPathFromIDListW(m_pPidl, buffer);
         if (bSuccess && *buffer)
         {
-            m_sPath = strdupW(buffer);
+            m_sPath = wcsdup(buffer);
             if (!m_sPath)
                 return E_OUTOFMEMORY;
 
@@ -1500,7 +1495,7 @@ HRESULT STDMETHODCALLTYPE CShellLink::Resolve(HWND hwnd, DWORD fFlags)
     // FIXME: Strange to do that here...
     if (!m_sIcoPath && m_sPath)
     {
-        m_sIcoPath = strdupW(m_sPath);
+        m_sIcoPath = wcsdup(m_sPath);
         if (!m_sIcoPath)
             return E_OUTOFMEMORY;
 
@@ -1519,12 +1514,12 @@ HRESULT STDMETHODCALLTYPE CShellLink::SetPath(LPCSTR pszFile)
     if (!pszFile)
         return E_INVALIDARG;
 
-    LPWSTR str = HEAP_strdupAtoW(GetProcessHeap(), 0, pszFile);
+    LPWSTR str = strdupAtoW(pszFile);
     if (!str)
         return E_OUTOFMEMORY;
 
     HRESULT hr = SetPath(str);
-    HeapFree(GetProcessHeap(), 0, str);
+    free(str);
 
     return hr;
 }
@@ -1625,12 +1620,12 @@ HRESULT STDMETHODCALLTYPE CShellLink::SetDescription(LPCWSTR pszName)
 {
     TRACE("(%p)->(desc=%s)\n", this, debugstr_w(pszName));
 
-    HeapFree(GetProcessHeap(), 0, m_sDescription);
+    free(m_sDescription);
     m_sDescription = NULL;
 
     if (pszName)
     {
-        m_sDescription = strdupW(pszName);
+        m_sDescription = wcsdup(pszName);
         if (!m_sDescription)
             return E_OUTOFMEMORY;
     }
@@ -1656,12 +1651,12 @@ HRESULT STDMETHODCALLTYPE CShellLink::SetWorkingDirectory(LPCWSTR pszDir)
 {
     TRACE("(%p)->(dir=%s)\n", this, debugstr_w(pszDir));
 
-    HeapFree(GetProcessHeap(), 0, m_sWorkDir);
+    free(m_sWorkDir);
     m_sWorkDir = NULL;
 
     if (pszDir)
     {
-        m_sWorkDir = strdupW(pszDir);
+        m_sWorkDir = wcsdup(pszDir);
         if (!m_sWorkDir)
             return E_OUTOFMEMORY;
     }
@@ -1687,12 +1682,12 @@ HRESULT STDMETHODCALLTYPE CShellLink::SetArguments(LPCWSTR pszArgs)
 {
     TRACE("(%p)->(args=%s)\n", this, debugstr_w(pszArgs));
 
-    HeapFree(GetProcessHeap(), 0, m_sArgs);
+    free(m_sArgs);
     m_sArgs = NULL;
 
     if (pszArgs)
     {
-        m_sArgs = strdupW(pszArgs);
+        m_sArgs = wcsdup(pszArgs);
         if (!m_sArgs)
             return E_OUTOFMEMORY;
     }
@@ -1723,12 +1718,11 @@ HRESULT STDMETHODCALLTYPE CShellLink::GetIconLocation(LPWSTR pszIconPath, INT cc
             SHExpandEnvironmentStringsW(pInfo->szwTarget, szPath, _countof(szPath));
 
             m_Header.dwFlags &= ~SLDF_HAS_ICONLOCATION;
-            HeapFree(GetProcessHeap(), 0, m_sIcoPath);
+            free(m_sIcoPath);
 
-            m_sIcoPath = strdupW(szPath);
+            m_sIcoPath = wcsdup(szPath);
             if (!m_sIcoPath)
                 return E_OUTOFMEMORY;
-
             m_Header.dwFlags |= SLDF_HAS_ICONLOCATION;
 
             m_bDirty = TRUE;
@@ -1916,10 +1910,9 @@ BOOL PathFullyUnExpandEnvStringsW(
 
 HRESULT STDMETHODCALLTYPE CShellLink::SetIconLocation(LPCWSTR pszIconPath, INT iIcon)
 {
-    HRESULT hr = E_FAIL;
     WCHAR szIconPath[MAX_PATH];
 
-    TRACE("(%p)->(path=%s iicon=%u)\n", this, debugstr_w(pszIconPath), iIcon);
+    TRACE("(%p)->(path=%s icon=%u)\n", this, debugstr_w(pszIconPath), iIcon);
 
     if (pszIconPath)
     {
@@ -1990,11 +1983,12 @@ HRESULT STDMETHODCALLTYPE CShellLink::SetIconLocation(LPCWSTR pszIconPath, INT i
             WideCharToMultiByte(CP_ACP, 0, pszIconPath, -1,
                                 pInfo->szTarget, _countof(pInfo->szTarget), NULL, NULL);
 
-            hr = S_OK;
+            HRESULT hr = S_OK;
             if (pInfo == &buffer)
                 hr = AddDataBlock(pInfo);
             if (hr == S_OK)
                 m_Header.dwFlags |= SLDF_HAS_EXP_ICON_SZ;
+            DBG_UNREFERENCED_LOCAL_VARIABLE(hr);
 
 #ifdef ICON_LINK_WINDOWS_COMPAT
             /* Set pszIconPath back to the original one */
@@ -2017,39 +2011,37 @@ HRESULT STDMETHODCALLTYPE CShellLink::SetIconLocation(LPCWSTR pszIconPath, INT i
         }
     }
 
+    m_Header.dwFlags &= ~SLDF_HAS_ICONLOCATION;
+    free(m_sIcoPath);
+    m_sIcoPath = NULL;
+
 #ifdef ICON_LINK_WINDOWS_COMPAT
     /* Store the original icon path location (may contain unexpanded environment strings) */
 #endif
     if (pszIconPath)
     {
-        m_Header.dwFlags &= ~SLDF_HAS_ICONLOCATION;
-        HeapFree(GetProcessHeap(), 0, m_sIcoPath);
-
-        m_sIcoPath = strdupW(pszIconPath);
+        m_sIcoPath = wcsdup(pszIconPath);
         if (!m_sIcoPath)
             return E_OUTOFMEMORY;
-
         m_Header.dwFlags |= SLDF_HAS_ICONLOCATION;
     }
-
-    hr = S_OK;
 
     m_Header.nIconIndex = iIcon;
     m_bDirty = TRUE;
 
-    return hr;
+    return S_OK;
 }
 
 HRESULT STDMETHODCALLTYPE CShellLink::SetRelativePath(LPCWSTR pszPathRel, DWORD dwReserved)
 {
     TRACE("(%p)->(path=%s %x)\n", this, debugstr_w(pszPathRel), dwReserved);
 
-    HeapFree(GetProcessHeap(), 0, m_sPathRel);
+    free(m_sPathRel);
     m_sPathRel = NULL;
 
     if (pszPathRel)
     {
-        m_sPathRel = strdupW(pszPathRel);
+        m_sPathRel = wcsdup(pszPathRel);
         if (!m_sPathRel)
             return E_OUTOFMEMORY;
     }
@@ -2068,10 +2060,9 @@ static LPWSTR GetAdvertisedArg(LPCWSTR str)
         return NULL;
 
     DWORD len = p - str;
-    LPWSTR ret = (LPWSTR)HeapAlloc(GetProcessHeap(), 0, sizeof(WCHAR) * (len + 1));
+    LPWSTR ret = (LPWSTR)malloc(sizeof(WCHAR) * (len + 1));
     if (!ret)
         return ret;
-
     memcpy(ret, str, sizeof(WCHAR)*len);
     ret[len] = 0;
     return ret;
@@ -2211,8 +2202,8 @@ HRESULT CShellLink::SetAdvertiseInfo(LPCWSTR str)
         // return hr;
 #endif
 
-    HeapFree(GetProcessHeap(), 0, (PVOID)szComponent);
-    HeapFree(GetProcessHeap(), 0, (PVOID)szProduct);
+    free((PVOID)szComponent);
+    free((PVOID)szProduct);
 
     if (TRACE_ON(shell))
     {
@@ -2296,10 +2287,8 @@ HRESULT CShellLink::SetTargetFromPIDLOrPath(LPCITEMIDLIST pidl, LPCWSTR pszFile)
     /* Update the cached path (for link info) */
     ShellLink_GetVolumeInfo(pszFile, &volume);
 
-    if (m_sPath)
-        HeapFree(GetProcessHeap(), 0, m_sPath);
-
-    m_sPath = strdupW(pszFile);
+    free(m_sPath);
+    m_sPath = wcsdup(pszFile);
     if (!m_sPath)
         return E_OUTOFMEMORY;
 
@@ -2328,7 +2317,7 @@ HRESULT STDMETHODCALLTYPE CShellLink::SetPath(LPCWSTR pszFile)
     SIZE_T len = wcslen(pszFile);
     if (pszFile[0] == L'"' && pszFile[len-1] == L'"')
     {
-        unquoted = strdupW(pszFile);
+        unquoted = wcsdup(pszFile);
         PathUnquoteSpacesW(unquoted);
         pszFile = unquoted;
     }
@@ -2341,7 +2330,7 @@ HRESULT STDMETHODCALLTYPE CShellLink::SetPath(LPCWSTR pszFile)
     }
 
     /* Clear the cached path */
-    HeapFree(GetProcessHeap(), 0, m_sPath);
+    free(m_sPath);
     m_sPath = NULL;
 
     /* Check for an advertised target (Logo3 or Darwin) */
@@ -2430,7 +2419,7 @@ HRESULT STDMETHODCALLTYPE CShellLink::SetPath(LPCWSTR pszFile)
     m_bDirty = TRUE;
 
 end:
-    HeapFree(GetProcessHeap(), 0, unquoted);
+    free(unquoted);
     return hr;
 }
 
@@ -2449,14 +2438,14 @@ HRESULT STDMETHODCALLTYPE CShellLink::CopyDataBlock(DWORD dwSig, void** ppDataBl
     DATABLOCK_HEADER* pBlock;
     PVOID pDataBlock;
 
-    TRACE("%p %08x %p\n", this, dwSig, ppDataBlock);
+    TRACE("%p %08lx %p\n", this, dwSig, ppDataBlock);
 
     *ppDataBlock = NULL;
 
     pBlock = SHFindDataBlock(m_pDBList, dwSig);
     if (!pBlock)
     {
-        ERR("unknown datablock %08x (not found)\n", dwSig);
+        ERR("unknown datablock %08lx (not found)\n", dwSig);
         return E_FAIL;
     }
 
@@ -2525,12 +2514,12 @@ HRESULT STDMETHODCALLTYPE CShellLink::Initialize(PCIDLIST_ABSOLUTE pidlFolder, I
     {
         count = DragQueryFileW((HDROP)stgm.hGlobal, 0, NULL, 0);
         count++;
-        LPWSTR path = (LPWSTR)HeapAlloc(GetProcessHeap(), 0, count * sizeof(WCHAR));
+        LPWSTR path = (LPWSTR)malloc(count * sizeof(WCHAR));
         if (path)
         {
             count = DragQueryFileW((HDROP)stgm.hGlobal, 0, path, count);
             hr = Load(path, 0);
-            HeapFree(GetProcessHeap(), 0, path);
+            free(path);
         }
     }
     ReleaseStgMedium(&stgm);
@@ -2607,7 +2596,7 @@ HRESULT STDMETHODCALLTYPE CShellLink::InvokeCommand(LPCMINVOKECOMMANDINFO lpici)
     HRESULT hr = Resolve(lpici->hwnd, (lpici->fMask & CMIC_MASK_FLAG_NO_UI) ? SLR_NO_UI : 0);
     if (FAILED(hr))
     {
-        TRACE("failed to resolve component error 0x%08x\n", hr);
+        TRACE("failed to resolve component error 0x%08lx\n", hr);
         return hr;
     }
 
@@ -2655,7 +2644,7 @@ HRESULT CShellLink::DoOpen(LPCMINVOKECOMMANDINFO lpici)
     WCHAR dir[MAX_PATH];
     SHELLEXECUTEINFOW sei = { sizeof(sei) };
     sei.fMask = SEE_MASK_HASLINKNAME | SEE_MASK_UNICODE | SEE_MASK_DOENVSUBST |
-               (lpici->fMask & (SEE_MASK_NOASYNC | SEE_MASK_ASYNCOK | SEE_MASK_FLAG_NO_UI));
+               (lpici->fMask & (SEE_MASK_NOASYNC | SEE_MASK_NO_CONSOLE | SEE_MASK_ASYNCOK | SEE_MASK_FLAG_NO_UI));
     sei.lpDirectory = m_sWorkDir;
     if (m_pPidl)
     {
@@ -2700,7 +2689,7 @@ HRESULT CShellLink::DoOpen(LPCMINVOKECOMMANDINFO lpici)
 
 HRESULT STDMETHODCALLTYPE CShellLink::GetCommandString(UINT_PTR idCmd, UINT uType, UINT* pwReserved, LPSTR pszName, UINT cchMax)
 {
-    FIXME("%p %lu %u %p %p %u\n", this, idCmd, uType, pwReserved, pszName, cchMax);
+    FIXME("%p %Iu %u %p %p %u\n", this, idCmd, uType, pwReserved, pszName, cchMax);
     return E_NOTIMPL;
 }
 
@@ -2773,7 +2762,7 @@ BOOL CShellLink::OnInitDialog(HWND hwndDlg, HWND hwndFocus, LPARAM lParam)
 {
     TRACE("CShellLink::OnInitDialog(hwnd %p hwndFocus %p lParam %p)\n", hwndDlg, hwndFocus, lParam);
 
-    Resolve(0, SLR_NO_UI | SLR_NOUPDATE | SLR_NOSEARCH | SLR_NOTRACK);
+    Resolve(NULL, SLR_NO_UI | SLR_NOUPDATE | SLR_NOSEARCH | SLR_NOTRACK);
 
     TRACE("m_sArgs: %S sComponent: %S m_sDescription: %S m_sIcoPath: %S m_sPath: %S m_sPathRel: %S sProduct: %S m_sWorkDir: %S\n", m_sArgs, sComponent, m_sDescription,
           m_sIcoPath, m_sPath, m_sPathRel, sProduct, m_sWorkDir);
