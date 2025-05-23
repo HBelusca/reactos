@@ -165,6 +165,9 @@ CDesktopFolder::ShellUrlParseDisplayName(
     return hr;
 }
 
+/* Undocumented functions from shdocvw */
+extern "C" HRESULT WINAPI IEParseDisplayNameWithBCW(DWORD codepage, LPCWSTR lpszDisplayName, LPBC pbc, LPITEMIDLIST *ppidl);
+
 STDMETHODIMP
 CDesktopFolder::HttpUrlParseDisplayName(
     HWND hwndOwner,
@@ -175,7 +178,7 @@ CDesktopFolder::HttpUrlParseDisplayName(
     DWORD *pdwAttributes)
 {
     FIXME("\n");
-    return E_NOTIMPL; // FIXME
+    return IEParseDisplayNameWithBCW(CP_ACP, lpszDisplayName, pbc, ppidl);
 }
 
 /*
@@ -192,9 +195,6 @@ CDesktopFolderEnum is only responsible for returning the physical items.
 CDesktopFolderViewCB is responsible for filtering hidden regitems.
 The enumerator always shows My Computer.
 */
-
-/* Undocumented functions from shdocvw */
-extern "C" HRESULT WINAPI IEParseDisplayNameWithBCW(DWORD codepage, LPCWSTR lpszDisplayName, LPBC pbc, LPITEMIDLIST *ppidl);
 
 class CDesktopFolderEnum :
     public CEnumIDListBase

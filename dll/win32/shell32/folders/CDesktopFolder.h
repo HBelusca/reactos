@@ -32,7 +32,7 @@ class CDesktopFolder :
     public IItemNameLimits
 {
     private:
-        /* both paths are parsible from the desktop */
+        /* Both paths are parsable from the desktop */
         CComPtr<IShellFolder2> m_DesktopFSFolder;
         CComPtr<IShellFolder2> m_SharedDesktopFSFolder;
         CComPtr<IShellFolder2> m_regFolder;
