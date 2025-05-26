@@ -1736,7 +1736,7 @@ inline HRESULT WINAPI AtlLoadTypeLib(HINSTANCE inst, LPCOLESTR lpszIndex,
 
     if (SUCCEEDED(hResult))
     {
-        *pbstrPath = SysAllocString(path);
+        *pbstrPath = ::SysAllocString(path);
         if (!*pbstrPath)
         {
             typelib.Release();
