@@ -9,6 +9,14 @@
 
 #pragma once
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#ifndef _WINCON_
+    #error concfg/settings.h requires wincon.h
+#endif
+
 /* STRUCTURES *****************************************************************/
 
 /*
@@ -138,5 +146,9 @@ HRESULT
 ConLnkWriteSettings(
     _In_ PCONSOLE_STATE_INFO ConsoleInfo,
     _In_ PCWSTR FilePath);
+
+#ifdef __cplusplus
+}
+#endif
 
 /* EOF */

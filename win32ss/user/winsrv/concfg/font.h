@@ -8,6 +8,17 @@
 
 #pragma once
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#ifndef _WINGDI_
+    #error concfg/font.h requires wingdi.h
+#endif
+#ifdef NOGDI
+    #error concfg/font.h requires NOGDI to _not_ be defined.
+#endif
+
 /* DEFINES ********************************************************************/
 
 #define INVALID_CP  ((UINT)-1)
@@ -133,5 +144,9 @@ FindCachedTTFont(
 
 #define IsAdditionalTTFontCP(FaceName, CodePage) \
     (FindCachedTTFont((FaceName), (CodePage)) != NULL)
+
+#ifdef __cplusplus
+}
+#endif
 
 /* EOF */
