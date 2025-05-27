@@ -128,7 +128,7 @@ UnRegisterWinPrevClass(
 
 
 
-EXTERN_C HINSTANCE hApplet; // TODO: Rename as g_hModule; HMODULE ?
+EXTERN_C HINSTANCE g_hModule; // TODO: Use HMODULE ?
 EXTERN_C PCONSOLE_STATE_INFO ConInfo;
 LONG g_ModuleRefCnt = 0;
 
@@ -202,7 +202,7 @@ public:
                     //     SaveConsoleSettingsIfNeeded(hWnd);
 
                     /// UninitializeConsoleState();
-                    UnRegisterWinPrevClass(hApplet);
+                    UnRegisterWinPrevClass(g_hModule);
                     ClearTTFontCache();
 
                     /* Cleanup */
@@ -445,7 +445,7 @@ MessageBoxW(NULL, (LPCWSTR)msg, L"Info", MB_OK);
 ///// We've ended shell-specific initialization.
 ///// Now continue with standard console stuff.
 
-msg.Format(L"hApplet = 0x%p", hApplet);
+msg.Format(L"g_hModule = 0x%p", g_hModule);
 MessageBoxW(NULL, (LPCWSTR)msg, L"Info", MB_OK);
 
     /* Allocate a local buffer to hold console information */
@@ -468,7 +468,7 @@ MessageBoxW(NULL, (LPCWSTR)msg, L"Info", MB_OK);
     }
 
     InitTTFontCache();
-    RegisterWinPrevClass(hApplet);
+    RegisterWinPrevClass(g_hModule);
 
     return S_OK;
 }
