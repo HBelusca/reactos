@@ -584,7 +584,7 @@ FontTypeChange(
      * Retrieve the read-only font group box label string template,
      * and set the group box label to the name of the selected font.
      */
-    Length = LoadStringW(hApplet, IDS_GROUPBOX_FONT_NAME, (LPWSTR)&FontGrpBoxLabelTpl, 0);
+    Length = LoadStringW(g_hModule, IDS_GROUPBOX_FONT_NAME, (LPWSTR)&FontGrpBoxLabelTpl, 0);
     if (FontGrpBoxLabelTpl && Length > 0)
     {
         StringCchCopyNW(FontGrpBoxLabel, ARRAYSIZE(FontGrpBoxLabel), FontGrpBoxLabelTpl, Length);

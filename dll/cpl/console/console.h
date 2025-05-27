@@ -43,7 +43,7 @@ typedef struct _FONT_PREVIEW
 } FONT_PREVIEW;
 
 /* Globals */
-extern HINSTANCE hApplet;
+extern HINSTANCE g_hModule;
 extern PCONSOLE_STATE_INFO ConInfo;
 extern FONT_PREVIEW FontPreview;
 

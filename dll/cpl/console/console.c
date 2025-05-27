@@ -20,7 +20,7 @@ INT_PTR CALLBACK FontProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
 INT_PTR CALLBACK LayoutProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
 INT_PTR CALLBACK ColorsProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
 
-HINSTANCE hApplet = NULL;
+HINSTANCE g_hModule = NULL;
 
 /* Pointer to shell link (.lnk) file path, if the
  * console program were started from a shell link. */
@@ -54,7 +54,7 @@ InitPropSheetPage(
     ZeroMemory(psp, sizeof(*psp));
     psp->dwSize      = sizeof(*psp);
     psp->dwFlags     = PSP_DEFAULT;
-    psp->hInstance   = hApplet;
+    psp->hInstance   = g_hModule;
     psp->pszTemplate = MAKEINTRESOURCEW(idDlg);
     psp->pfnDlgProc  = DlgProc;
     psp->lParam      = lParam;
@@ -140,9 +140,9 @@ ApplyProc(
             if (pszStartedLnkPath)
             {
                 WCHAR szText[260];
-                LoadStringW(hApplet, IDS_APPLY_SHORTCUT_TITLE, szText, _countof(szText));
+                LoadStringW(g_hModule, IDS_APPLY_SHORTCUT_TITLE, szText, _countof(szText));
                 SetWindowTextW(hDlg, szText);
-                LoadStringW(hApplet, IDS_APPLY_SHORTCUT_ALL, szText, _countof(szText));
+                LoadStringW(g_hModule, IDS_APPLY_SHORTCUT_ALL, szText, _countof(szText));
                 SetDlgItemTextW(hDlg, IDC_RADIO_APPLY_ALL, szText);
             }
             CheckDlgButton(hDlg, IDC_RADIO_APPLY_CURRENT, BST_CHECKED);
@@ -193,7 +193,7 @@ ApplyConsoleInfo(HWND hwndDlg)
     }
     else
     {
-        INT_PTR res = DialogBoxW(hApplet, MAKEINTRESOURCEW(IDD_APPLYOPTIONS), hwndDlg, ApplyProc);
+        INT_PTR res = DialogBoxW(g_hModule, MAKEINTRESOURCEW(IDD_APPLYOPTIONS), hwndDlg, ApplyProc);
 
         SetConsoleInfo  = (res != IDCANCEL);
         SaveConsoleInfo = (res == IDC_RADIO_APPLY_ALL);
@@ -228,7 +228,7 @@ PropSheetProc(HWND hwndDlg, UINT uMsg, LPARAM lParam)
     {
         case PSCB_INITIALIZED:
         {
-            hIcon = LoadIconW(hApplet, MAKEINTRESOURCEW(IDC_CPLICON));
+            hIcon = LoadIconW(g_hModule, MAKEINTRESOURCEW(IDC_CPLICON));
             SendMessageW(hwndDlg, WM_SETICON, ICON_BIG, (LPARAM)hIcon);
             break;
         }
@@ -352,8 +352,8 @@ InitApplet(HANDLE hSectionOrWnd)
         psh.hwndParent = (HWND)hSectionOrWnd;
     }
 
-    psh.hInstance = hApplet;
-    // psh.hIcon = LoadIcon(hApplet, MAKEINTRESOURCEW(IDC_CPLICON));
+    psh.hInstance = g_hModule;
+    // psh.hIcon = LoadIcon(g_hModule, MAKEINTRESOURCEW(IDC_CPLICON));
     psh.pszIcon = MAKEINTRESOURCEW(IDC_CPLICON);
     psh.nPages = ARRAYSIZE(psp);
     psh.nStartPage = 0;
@@ -363,9 +363,9 @@ InitApplet(HANDLE hSectionOrWnd)
     PopulatePropSheetPageArray(psp, psh.nPages, NULL);
 
     /* Display the property sheet */
-    RegisterWinPrevClass(hApplet);
+    RegisterWinPrevClass(g_hModule);
     Result = PropertySheetW(&psh);
-    UnRegisterWinPrevClass(hApplet);
+    UnRegisterWinPrevClass(g_hModule);
 
     /* Clear the font support */
     ResetFontPreview(&FontPreview);
@@ -429,9 +429,9 @@ InitApplet(HANDLE hSectionOrWnd)
             if (!SUCCEEDED(hr))
             {
                 WCHAR szMessage[260];
-                LoadStringW(hApplet, IDS_ERROR_SHORTCUT, szTitle, _countof(szTitle));
+                LoadStringW(g_hModule, IDS_ERROR_SHORTCUT, szTitle, _countof(szTitle));
                 StringCchPrintfW(szMessage, _countof(szMessage), szTitle, pszStartedLnkPath);
-                LoadStringW(hApplet, IDS_ERROR_SHORTCUT_TITLE, szTitle, _countof(szTitle));
+                LoadStringW(g_hModule, IDS_ERROR_SHORTCUT_TITLE, szTitle, _countof(szTitle));
                 MessageBoxW(psh.hwndParent, szMessage, szTitle, MB_ICONERROR | MB_OK);
             }
         }
@@ -488,18 +488,19 @@ CPlApplet(HWND hwndCPl,
     return FALSE;
 }
 
-INT
+BOOL
 WINAPI
-DllMain(HINSTANCE hinstDLL,
-        DWORD     dwReason,
-        LPVOID    lpvReserved)
+DllMain(
+    _In_ HINSTANCE hinstDLL,
+    _In_ DWORD dwReason,
+    _In_opt_ PVOID pReserved)
 {
-    UNREFERENCED_PARAMETER(lpvReserved);
+    UNREFERENCED_PARAMETER(pReserved);
 
     switch (dwReason)
     {
         case DLL_PROCESS_ATTACH:
-            hApplet = hinstDLL;
+            g_hModule = hinstDLL;
             DisableThreadLibraryCalls(hinstDLL);
             break;
     }
