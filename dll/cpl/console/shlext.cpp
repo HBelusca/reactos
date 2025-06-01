@@ -5,28 +5,10 @@
  * COPYRIGHT:   Copyright 2025 Hermès Bélusca-Maïto <hermes.belusca-maito@reactos.org>
  */
 
-// #include "console.h"
+#include "console.h"
 
-// #include <stdio.h>
-// #include <stdlib.h>
-#include <wchar.h>
-
-#define WIN32_NO_STATUS
-#define _INC_WINDOWS
-#define COM_NO_WINDOWS_H
-
-#include <windef.h>
-#include <winbase.h>
-#include <wincon.h>
-#include <wingdi.h>
 #include <shellapi.h>
 #include <shlobj.h>
-
-/* Shared header with the GUI Terminal Front-End from consrv.dll */
-#include "concfg.h" // in /winsrv/concfg/
-
-#include "resource.h"
-
 
 /*
  * Reduced ATL support for COM Inproc server
@@ -87,8 +69,6 @@ PropSysFreeString(LPOLESTR str);    // SysFreeString(str);
 // #include <statreg.h>
 // #endif
 
-#include <strsafe.h>
-
 
 /********
  ** TODO: This helper should be used throughout the whole console cpl
@@ -106,34 +86,14 @@ void ACDBG_FN(PCSTR FunctionName, PCWSTR Format, ...)
     va_end(ArgList);
     OutputDebugStringW(Buffer);
 }
-
 #define ACDBG(fmt, ...)  ACDBG_FN(__FUNCTION__, fmt, ##__VA_ARGS__ )
-
-/********/
+/**
+ ********/
 
 EXTERN_C VOID ErrOut(HRESULT hr, DWORD dwLastError, PCWSTR pszWhere);
-EXTERN_C BOOL
-PopulatePropSheetPageArray(
-    _Out_writes_(cPsps) PROPSHEETPAGEW* psp,
-    _In_ UINT cPsps,
-    _In_opt_ LPFNPSPCALLBACKW pfnCallback);
 
-EXTERN_C BOOL
-RegisterWinPrevClass(
-    IN HINSTANCE hInstance);
-
-EXTERN_C BOOL
-UnRegisterWinPrevClass(
-    IN HINSTANCE hInstance);
-
-
-
-EXTERN_C HINSTANCE g_hModule; // TODO: Use HMODULE ?
-EXTERN_C PCONSOLE_STATE_INFO ConInfo;
-LONG g_ModuleRefCnt = 0;
-
-// DEFINE_GUID(CLSID_ConsoleProperties, ...);
-const GUID CLSID_ConsoleProperties = { 0xD2942F8E, 0x478E, 0x41D3, { 0x87, 0x0A, 0x35, 0xA1, 0x62, 0x38, 0xF4, 0xEE } };
+#include <initguid.h>
+DEFINE_GUID(CLSID_ConsoleProperties, 0xD2942F8E, 0x478E, 0x41D3, 0x87, 0x0A, 0x35, 0xA1, 0x62, 0x38, 0xF4, 0xEE);
 // ROS-specific: {86FFDF58-CF11-482F-96D5-0B72BEC65890} = s 'Console Properties'
 
 class CConsoleModule : public CAtlDllModuleT<CConsoleModule>
@@ -166,101 +126,52 @@ class CConsoleModule : public CAtlDllModuleT<CConsoleModule>
 };
 
 CConsoleModule gModule;
+LONG g_ModuleRefCnt = 0;
 
-class ATL_NO_VTABLE CConsoleProps :
+
+EXTERN_C HRESULT
+ConLnkReadSettings2(
+    _Inout_ PCONSOLE_STATE_INFO ConsoleInfo,
+    _In_ IShellLinkW* psl);
+
+EXTERN_C HRESULT
+ConLnkWriteSettings2(
+    _In_ PCONSOLE_STATE_INFO ConsoleInfo,
+    _Inout_ IShellLinkW* psl,
+    _Inout_ IPersistFile* ppf);
+
+
+// LinkConsolePagesSave(*linkdata)
+HRESULT
+LinkConsolePagesSave(
+    _In_ PCONSOLE_PROPS_CTX pConProps,
+    _In_ IShellLinkW* psl)
+{
+    // TODO: Put the UpdateValues stuff there too?
+    CComPtr<IPersistFile> ppf;
+    HRESULT hr = psl->QueryInterface(IID_IPersistFile, (PVOID*)&ppf);
+    if (SUCCEEDED(hr))
+        hr = ConLnkWriteSettings2(pConProps->ConInfo, psl, ppf);
+    return hr;
+}
+
+/*
+ * References:
+ * https://learn.microsoft.com/en-us/windows/win32/shell/how-to-register-and-implement-a-property-sheet-handler-for-a-file-type
+ * https://www.codeproject.com/KB/shell/shellextguide5.aspx
+ */
+class ATL_NO_VTABLE // DECLSPEC_NOVTABLE
+DECLSPEC_UUID("D2942F8E-478E-41D3-870A-35A16238F4EE")
+CConsoleProps :
     public CComCoClass<CConsoleProps, &CLSID_ConsoleProperties>,
     public CComObjectRootEx</*CComMultiThreadModelNoCS*/CComSingleThreadModel>,
     public IShellExtInit,
     public IShellPropSheetExt
 {
-public:
-    /*
-     * For use by property sheets when added to shell file properties dialog.
-     * Maintain refcount of each page and release things we've registered
-     * when we hit 0. Needed because the lifetime of the property sheets isn't
-     * tied to the lifetime of our IShellPropSheetExt object.
-     */
-    static UINT
-    CALLBACK
-    PropSheetPageProc(
-        _In_ HWND hWnd,
-        _In_ UINT uMsg,
-        _Inout_ PROPSHEETPAGEW* /*ppsp*/)
-    {
-        // static UINT cRefs = 0;
-        switch (uMsg)
-        {
-            case PSPCB_ADDREF:
-                InterlockedIncrement(&g_ModuleRefCnt);
-                break;
-
-            case PSPCB_RELEASE:
-                if (InterlockedDecrement(&g_ModuleRefCnt) == 0)
-                {
-                    /* Only persist settings if they've changed */
-                    // if (gpStateInfo->UpdateValues)
-                    //     SaveConsoleSettingsIfNeeded(hWnd);
-
-                    /// UninitializeConsoleState();
-                    UnRegisterWinPrevClass(g_hModule);
-                    ClearTTFontCache();
-
-                    /* Cleanup */
-                    HeapFree(GetProcessHeap(), 0, ConInfo);
-                    ConInfo = NULL;
-                }
-                break;
-        }
-
-        return 1;
-    }
-
-public:
-
-    // IShellExtInit
-    STDMETHODIMP Initialize(
-        _In_ PCIDLIST_ABSOLUTE pidlFolder,
-        _In_ LPDATAOBJECT pdtobj,
-        _In_ HKEY hkeyProgID) override;
-
-
-    // IShellPropSheetExt
-    STDMETHODIMP AddPages(
-        _In_ LPFNSVADDPROPSHEETPAGE pfnAddPage,
-        _In_ LPARAM lParam) override
-    {
-        PROPSHEETPAGEW psp[4];
-        // HRESULT hr = S_OK;
-        UINT i = 0;
-
-        if (!PopulatePropSheetPageArray(psp, _countof(psp), PropSheetPageProc))
-            return E_FAIL;
-
-        for (i = 0; i < _countof(psp); ++i)
-        {
-            HPROPSHEETPAGE hPage = CreatePropertySheetPage(&psp[i]);
-            // hr = (hPage != NULL) ? S_OK : E_FAIL;
-            if (!hPage)
-                return E_FAIL;
-            if (!pfnAddPage(hPage, lParam))
-            {
-                DestroyPropertySheetPage(hPage);
-                return E_FAIL;
-            }
-        }
-
-        return S_OK;
-    }
-
-    STDMETHODIMP ReplacePage(
-        _In_ EXPPS uPageID,
-        _In_ LPFNSVADDPROPSHEETPAGE pfnReplaceWith,
-        _In_ LPARAM lParam)
-    {
-        return E_NOTIMPL;
-    }
-
-public:
+    BEGIN_COM_MAP(CConsoleProps)
+        COM_INTERFACE_ENTRY_IID(IID_IShellExtInit, IShellExtInit)
+        COM_INTERFACE_ENTRY_IID(IID_IShellPropSheetExt, IShellPropSheetExt)
+    END_COM_MAP()
 
     DECLARE_NOT_AGGREGATABLE(CConsoleProps)
     DECLARE_PROTECT_FINAL_CONSTRUCT()
@@ -301,50 +212,229 @@ MessageBoxW(NULL, (LPCWSTR)msg, L"Info", MB_OK);
             if (lRes == ERROR_SUCCESS)
                 lRes = rkDel.DeleteValue(L"Console");
             if (lRes != ERROR_SUCCESS)
-                ACDBG(L"Couldn't delete CPL value 'Console', error %d\r\n", lRes);
-            DBG_UNREFERENCED_LOCAL_VARIABLE(lRes);
+                ACDBG(L"Couldn't delete CPL value 'Console', error %d\n", lRes);
         }
 
         return ATL::_pAtlModule->UpdateRegistryFromResource(IDR_CONSOLE, bRegister, regMapEntries);
     }
 
-    BEGIN_COM_MAP(CConsoleProps)
-        COM_INTERFACE_ENTRY_IID(IID_IShellExtInit, IShellExtInit)
-        COM_INTERFACE_ENTRY_IID(IID_IShellPropSheetExt, IShellPropSheetExt)
-    END_COM_MAP()
+protected:
+    CONSOLE_PROPS_CTX m_ConProps;
+    CString m_LinkPath;
+    CComPtr<IShellLinkW> m_psl;
+    LONG m_cRefs = 0;
+
+public:
+    HRESULT
+    InitLink(
+        _In_ PCWSTR Filename);
+
+    CConsoleProps()
+    {
+MessageBoxW(NULL, L"CConsoleProps()", L"Info", MB_OK);
+    }
+
+    ~CConsoleProps()
+    {
+        /* Cleanup */
+MessageBoxW(NULL, L"~CConsoleProps()", L"Info", MB_OK);
+        HeapFree(GetProcessHeap(), 0, m_ConProps.ConInfo);
+        m_ConProps.ConInfo = NULL;
+    }
+
+public:
+    /*
+     * For use by property sheets when added to shell file properties dialog.
+     * Maintain refcount of each page and release things we've registered
+     * when we hit 0. Needed because the lifetime of the property sheets isn't
+     * tied to the lifetime of our IShellPropSheetExt object.
+     */
+    static UINT
+    CALLBACK
+    PropSheetPageProc(
+        _In_ HWND hWnd,
+        _In_ UINT uMsg,
+        _Inout_ PROPSHEETPAGEW* ppsp) // LPPROPSHEETPAGE
+    {
+        CConsoleProps* This =
+            (CConsoleProps*)CONTAINING_RECORD((PVOID)ppsp->lParam, CConsoleProps, m_ConProps);
+        ATLASSERT(&This->m_ConProps == ppsp->lParam);
+
+        switch (uMsg)
+        {
+            case PSPCB_ADDREF:
+            {
+                LONG oldModRefCnt = g_ModuleRefCnt;
+                LONG oldCRefs = This->m_cRefs;
+
+                LONG newModRefCnt = InterlockedIncrement(&g_ModuleRefCnt);
+                LONG newCRefs     = InterlockedIncrement(&This->m_cRefs);
+CString msg;
+msg.Format(L"old ModRefCnt: %d ; new ModRefCnt: %d\nold m_cRefs: %d ; new m_cRefs: %d",
+           oldModRefCnt, newModRefCnt, oldCRefs, newCRefs);
+MessageBoxW(hWnd, (PCWSTR)msg, L"Info", MB_OK);
+                break;
+            }
+
+            case PSPCB_RELEASE:
+            {
+                if (InterlockedDecrement(&This->m_cRefs) == 0)
+                {
+                    /* Only persist settings if they have changed */
+                    PCONSOLE_PROPS_CTX pConProps = &This->m_ConProps;
+                    if (pConProps->UpdateValues)
+                    {
+MessageBoxW(hWnd, L"SaveConsoleSettingsIfNeeded", L"Info", MB_OK);
+                        SaveConsoleSettings(pConProps, hWnd);
+                    }
+
+                    /* Finally, release and destroy the CConsoleProps object */
+                    This->Release();
+                }
+                if (InterlockedDecrement(&g_ModuleRefCnt) == 0)
+                {
+MessageBoxW(hWnd, L"UninitializeConsoleState", L"Info", MB_OK);
+                    UninitializeConsolePropsState();
+                }
+                break;
+            }
+
+            case PSPCB_CREATE:
+                break;
+        }
+
+        return 1;
+    }
+
+    // FIXME: Find the best way to do this and perhaps unify with the CPL code.
+    static BOOL
+    SaveConsoleSettings(
+        _In_ PCONSOLE_PROPS_CTX pConProps, // CplConProps
+        _In_opt_ HWND hWndParent)
+    {
+        CConsoleProps* This =
+            (CConsoleProps*)CONTAINING_RECORD(pConProps, CConsoleProps, m_ConProps);
+        ATLASSERT(&This->m_ConProps == ppsp->lParam);
+
+        if (!pConProps->UpdateValues) // !SaveConsoleInfo
+            return TRUE;
+
+        HRESULT hr = LinkConsolePagesSave(pConProps, This->m_psl);
+        if (!SUCCEEDED(hr))
+        {
+            WCHAR szTitle[260];
+            WCHAR szMessage[260];
+            /// IDS_LINKCANTSAVE 4217,   "Unable to save changes to '%2!ls!'.\n\n%1!ls!"
+            StringCchCopyW(szTitle, _countof(szTitle), L"Unable to save changes to '%2!ls!'.\n\n%1!ls!");
+            // LoadStringW(g_hModule, IDS_ERROR_SHORTCUT, szTitle, _countof(szTitle));
+            StringCchPrintfW(szMessage, _countof(szMessage), szTitle, hr, This->m_LinkPath);
+            LoadStringW(g_hModule, IDS_ERROR_SHORTCUT_TITLE, szTitle, _countof(szTitle));
+            MessageBoxW(hWndParent, szMessage, szTitle, MB_ICONERROR | MB_OK | MB_SETFOREGROUND);
+        }
+        pConProps->UpdateValues = FALSE; // SaveConsoleInfo
+        return SUCCEEDED(hr);
+    }
+
+    /**
+     * @brief
+     * Save the modified console properties into the link.
+     *
+     * @return
+     * TRUE if changes should be saved, FALSE if not.
+     **/
+    static BOOL
+    ApplyLinkConsoleInfo(
+        _In_opt_ HWND hDlg,
+        _In_ PCONSOLE_PROPS_CTX pConProps,
+        _In_ BOOL bApplyNow)
+    {
+        UNREFERENCED_PARAMETER(bApplyNow);
+        if (!bApplyNow)
+            return TRUE; // Defer saving to when the whole property page is unloaded.
+        pConProps->UpdateValues = TRUE;
+        return SaveConsoleSettings(pConProps, hDlg);
+    }
+
+
+public:
+
+// IShellExtInit
+    STDMETHODIMP Initialize(
+        _In_ PCIDLIST_ABSOLUTE pidlFolder,
+        _In_ LPDATAOBJECT pdtobj,
+        _In_ HKEY hkeyProgID) override;
+
+
+// IShellPropSheetExt
+    STDMETHODIMP AddPages(
+        _In_ LPFNSVADDPROPSHEETPAGE pfnAddPage,
+        _In_ LPARAM lParam) override
+    {
+        PROPSHEETPAGEW psp[4];
+
+        if (!PopulatePropSheetPageArray(psp, _countof(psp), (LPARAM)&m_ConProps, PropSheetPageProc))
+            return E_FAIL;
+
+        for (UINT i = 0; i < _countof(psp); ++i)
+        {
+            /* Don't use pcRefParent, because we want to have control
+             * of what to do when unloading the property pages.
+             * REACTOS-specific: Wine's comctl32 still doesn't implement
+             * support for it! */
+            // psp[i].dwFlags    |= PSP_USEREFPARENT;
+            // psp[i].pcRefParent = (UINT*)&g_ModuleRefCnt;
+
+            HPROPSHEETPAGE hPage = CreatePropertySheetPage(&psp[i]);
+            if (!hPage)
+                return E_FAIL;
+            if (!pfnAddPage(hPage, lParam))
+            {
+                DestroyPropertySheetPage(hPage);
+                return E_FAIL;
+            }
+        }
+
+        return S_OK;
+    }
+
+    STDMETHODIMP ReplacePage(
+        _In_ EXPPS uPageID,
+        _In_ LPFNSVADDPROPSHEETPAGE pfnReplaceWith,
+        _In_ LPARAM lParam)
+    {
+        return E_NOTIMPL;
+    }
 };
 
-#if 0 // If using CComModule
-BEGIN_OBJECT_MAP(ObjectMap)
-    OBJECT_ENTRY(CLSID_ConsoleProperties, CConsoleProps)
-END_OBJECT_MAP()
-#else
 OBJECT_ENTRY_AUTO(CLSID_ConsoleProperties, CConsoleProps)
-#endif
 
-#if 1
+
 #include <shellutils.h>
-// EXTERN_C
-BOOL WINAPI GetExeFromLnk(PCWSTR pszLnk, PWSTR pszExe, size_t cchSize)
+static BOOL
+GetLnkAndExe(
+    _In_ PCWSTR pszLnk,
+    _Out_ PWSTR pszExe,
+    _In_ size_t cchSize,
+    _COM_Outptr_ IShellLinkW** ppsl)
 {
-    CCoInit init;
-    if (FAILED_UNEXPECTEDLY(init.hr))
+    CComPtr<IShellLinkW> psl;
+    if (FAILED_UNEXPECTEDLY(SHCoCreateInstance(NULL, &CLSID_ShellLink, NULL, IID_PPV_ARG(IShellLinkW, &psl))))
         return FALSE;
 
-    CComPtr<IShellLinkW> spShellLink;
-    if (FAILED_UNEXPECTEDLY(CoCreateInstance(CLSID_ShellLink, NULL, CLSCTX_INPROC_SERVER, IID_PPV_ARG(IShellLinkW, &spShellLink))))
+    CComPtr<IPersistFile> ppf;
+    if (FAILED_UNEXPECTEDLY(psl->QueryInterface(IID_PPV_ARG(IPersistFile, &ppf))))
         return FALSE;
 
-    CComPtr<IPersistFile> spPersistFile;
-    if (FAILED_UNEXPECTEDLY(spShellLink->QueryInterface(IID_PPV_ARG(IPersistFile, &spPersistFile))))
+    if (FAILED_UNEXPECTEDLY(ppf->Load(pszLnk, STGM_READ)) || FAILED_UNEXPECTEDLY(psl->Resolve(NULL, SLR_NO_UI | SLR_NOUPDATE | SLR_NOSEARCH)))
         return FALSE;
 
-    if (FAILED_UNEXPECTEDLY(spPersistFile->Load(pszLnk, STGM_READ)) || FAILED_UNEXPECTEDLY(spShellLink->Resolve(NULL, SLR_NO_UI | SLR_NOUPDATE | SLR_NOSEARCH)))
+    if (FAILED_UNEXPECTEDLY(psl->GetPath(pszExe, cchSize, NULL, 0)))
         return FALSE;
 
-    return !FAILED_UNEXPECTEDLY(spShellLink->GetPath(pszExe, cchSize, NULL, 0/*SLGP_RAWPATH*/));
+    *ppsl = psl;
+    (*ppsl)->AddRef();
+    return TRUE;
 }
-#endif
 
 CString
 ExpandEnvironmentStrings(
@@ -359,18 +449,18 @@ ExpandEnvironmentStrings(
         if (dwRequired == dwReturned)
         {
             ExpandedString.ReleaseBufferSetLength(dwReturned - 1);
-            ACDBG(L"Expanded '%s' => '%s'\r\n", String, (PCWSTR)ExpandedString);
+            ACDBG(L"Expanded '%s' => '%s'\n", String, (PCWSTR)ExpandedString);
         }
         else
         {
             ExpandedString.ReleaseBufferSetLength(0);
             ExpandedString = String;
-            ACDBG(L"Failed during expansion '%s'\r\n", String);
+            ACDBG(L"Failed during expansion '%s'\n", String);
         }
     }
     else
     {
-        ACDBG(L"Failed to expand '%s'\r\n", String);
+        ACDBG(L"Failed to expand '%s'\n", String);
         ExpandedString = String;
     }
 
@@ -378,7 +468,7 @@ ExpandEnvironmentStrings(
 }
 
 HRESULT
-/*CConsoleProps::*/InitFile(
+CConsoleProps::InitLink(
     _In_ PCWSTR Filename)
 {
     CString ExpandedFilename = ExpandEnvironmentStrings(Filename);
@@ -390,54 +480,51 @@ MessageBoxW(NULL, (LPCWSTR)msg, L"Info", MB_OK);
     PCWSTR pwszExt = wcsrchr(ExpandedFilename, L'.');
     if (!pwszExt)
     {
-        ACDBG(L"Failed to find an extension: '%s'\r\n", (PCWSTR)ExpandedFilename);
+        ACDBG(L"Failed to find an extension: '%s'\n", (PCWSTR)ExpandedFilename);
         return E_FAIL;
     }
-#if 1
-    WCHAR Buffer[MAX_PATH]; // Target of link
-    if (!_wcsicmp(pwszExt, L".lnk"))
-    {
-        if (!GetExeFromLnk(ExpandedFilename, Buffer, _countof(Buffer)))
-        {
-            ACDBG(L"Failed to read link target from: '%s'\r\n", (PCWSTR)ExpandedFilename);
-            return E_FAIL;
-        }
-        if (!_wcsicmp(Buffer, ExpandedFilename))
-        {
-            ACDBG(L"Link redirects to itself: '%s'\r\n", (PCWSTR)ExpandedFilename);
-            return E_FAIL;
-        }
-        //// return InitFile(Buffer);
-    }
-    else
+    if (_wcsicmp(pwszExt, L".lnk") != 0)
     {
         /* Not a link file, fail */
         return E_FAIL;
     }
-#else
+
+    CComPtr<IShellLinkW> psl;
+    WCHAR Buffer[MAX_PATH]; // Link target
+    if (!GetLnkAndExe(ExpandedFilename, Buffer, _countof(Buffer), &psl))
+    {
+        ACDBG(L"Failed to read link target from: '%s'\n", (PCWSTR)ExpandedFilename);
+        return E_FAIL;
+    }
+    if (!_wcsicmp(Buffer, ExpandedFilename))
+    {
+        ACDBG(L"Link redirects to itself: '%s'\n", (PCWSTR)ExpandedFilename);
+        return E_FAIL;
+    }
+
+#if 0
     /// if (!_wcsicmp(pwszExt, L".bat") || !_wcsicmp(pwszExt, L".cmd"))
     ///     return S_OK; // Fast path that replaces the function call below.
 #endif
 
 msg = L"Link target file: '" + CString(Buffer);
 MessageBoxW(NULL, (LPCWSTR)msg, L"Info", MB_OK);
-// FIXME: Buffer (target) needs to be expanded before doing the type check below.
 
     /* Check whether the target is a Win32 console program
      * or a .bat or .cmd (that open with CMD.EXE) */
     DWORD dwExeType;
-    dwExeType = (DWORD)::SHGetFileInfoW((PCWSTR)Buffer, 0, NULL, 0, SHGFI_EXETYPE);
+    dwExeType = (DWORD)::SHGetFileInfoW(Buffer, 0, NULL, 0, SHGFI_EXETYPE);
     if (dwExeType != MAKELONG('EP', 0)) // If it's not Win32 .exe console or .bat or .cmd
     {
         // Note: MAKELONG('ZM', 0) would be for an MS-DOS .exe or .com file.
-        ACDBG(L"Target not recognized as Win32 exe or bat or cmd: '%s', %lu\r\n",
-              (PCWSTR)Buffer, dwExeType);
-        if (!::GetBinaryTypeW((PCWSTR)Buffer, &dwExeType) ||
+        ACDBG(L"Target not recognized as Win32 exe or bat or cmd: '%s', %lu\n",
+              Buffer, dwExeType);
+        if (!::GetBinaryTypeW(Buffer, &dwExeType) ||
             ((dwExeType != SCS_DOS_BINARY  ) && (dwExeType != SCS_PIF_BINARY) &&
              (dwExeType != SCS_POSIX_BINARY) && (dwExeType != SCS_OS216_BINARY)))
         {
-            ACDBG(L"Target not recognized as supported binary: '%s', %lu\r\n",
-                  (PCWSTR)Buffer, dwExeType);
+            ACDBG(L"Target not recognized as supported binary: '%s', %lu\n",
+                  Buffer, dwExeType);
             return E_FAIL;
         }
     }
@@ -449,26 +536,39 @@ msg.Format(L"g_hModule = 0x%p", g_hModule);
 MessageBoxW(NULL, (LPCWSTR)msg, L"Info", MB_OK);
 
     /* Allocate a local buffer to hold console information */
-    ConInfo = (PCONSOLE_STATE_INFO)HeapAlloc(GetProcessHeap(),
-                        HEAP_ZERO_MEMORY,
-                        sizeof(CONSOLE_STATE_INFO));
-    if (!ConInfo)
+    m_ConProps.ConInfo =
+        (PCONSOLE_STATE_INFO)HeapAlloc(GetProcessHeap(),
+                                       HEAP_ZERO_MEMORY,
+                                       sizeof(CONSOLE_STATE_INFO));
+    if (!m_ConProps.ConInfo)
         return E_OUTOFMEMORY;
 
 msg = L"Loading from: " + ExpandedFilename;
 MessageBoxW(NULL, (LPCWSTR)msg, L"Info", MB_OK);
-    HRESULT hr = ConLnkReadSettings(ConInfo, ExpandedFilename);
+    HRESULT hr = ConLnkReadSettings2(m_ConProps.ConInfo, psl/*ExpandedFilename*/);
     if (!SUCCEEDED(hr))
     {
 msg.Format(L"Failed to load from '%s', error 0x%p", ExpandedFilename, hr);
 MessageBoxW(NULL, (LPCWSTR)msg, L"Info", MB_OK);
-        // HeapFree(GetProcessHeap(), 0, ConInfo);
-        // return hr;
-        ConCfgGetDefaultSettings(ConInfo);
+        // TODO: Load instead the registry parameters for the target.
+        // If they don't exist, then load the default settings.
+        ConCfgGetDefaultSettings(m_ConProps.ConInfo);
     }
+    m_ConProps.UpdateValues = FALSE;
+    m_ConProps.ApplyInfo = ApplyLinkConsoleInfo;
+    m_LinkPath = ExpandedFilename;
+    m_psl = psl;
 
-    InitTTFontCache();
-    RegisterWinPrevClass(g_hModule);
+    /*
+     * Add a reference to ourselves, so that the CConsoleProps object
+     * does not go away once the shell has finished Initialize()'d and
+     * AddPages()'d us.
+     * NOTE: The Release() call is in PropSheetPageProc(), PSPCB_RELEASE case.
+     */
+    AddRef();
+
+    if (g_ModuleRefCnt == 0)
+        InitializeConsolePropsState();
 
     return S_OK;
 }
@@ -485,12 +585,11 @@ CConsoleProps::Initialize(
     FORMATETC etc = { CF_HDROP, NULL, DVASPECT_CONTENT, -1, TYMED_HGLOBAL };
     STGMEDIUM stg;
 
+__debugbreak();
     HRESULT hr = pdtobj->GetData(&etc, &stg);
     if (FAILED(hr))
-    {
-        ACDBG(L"Failed to retrieve Data from pdtobj.\r\n");
         return E_INVALIDARG;
-    }
+
     hr = E_FAIL;
     HDROP hdrop = (HDROP)::GlobalLock(stg.hGlobal);
     if (hdrop)
@@ -499,28 +598,36 @@ CConsoleProps::Initialize(
         /* The properties sheet is for one file only */
         if (uNumFiles == 1)
         {
-            WCHAR szFile[MAX_PATH * 2];
-            if (::DragQueryFileW(hdrop, 0, szFile, _countof(szFile)))
+            CString szFile;
+            DWORD dwRequired = ::DragQueryFileW(hdrop, 0, NULL, 0); // Doesn't count terminating NUL.
+            if (dwRequired > 0)
             {
-                /****this->AddRef();****/
-                // TODO: It's here that we should check the exe type, and accept
-                // whether we should continue to proceed with the property sheet.
-                hr = InitFile(szFile);
+                ++dwRequired; // Count the terminating NUL.
+                LPWSTR Buffer = szFile.GetBuffer(dwRequired);
+                DWORD dwReturned = ::DragQueryFileW(hdrop, 0, Buffer, dwRequired);
+                if (dwRequired == ++dwReturned)
+                {
+                    szFile.ReleaseBufferSetLength(dwReturned - 1);
+
+                    // TODO: It's here that we should check the exe type, and accept
+                    // whether we should continue to proceed with the property sheet.
+                    hr = InitLink(szFile);
+                }
+                else
+                {
+                    ACDBG(L"Failed to query the file.\n");
+                }
             }
             else
             {
-                ACDBG(L"Failed to query the file.\r\n");
+                ACDBG(L"Failed to query the file.\n");
             }
         }
         else
         {
-            ACDBG(L"Invalid number of files: %d\r\n", uNumFiles);
+            ACDBG(L"Invalid number of files: %d\n", uNumFiles);
         }
         ::GlobalUnlock(stg.hGlobal);
-    }
-    else
-    {
-        ACDBG(L"Could not lock stg.hGlobal\r\n");
     }
     ::ReleaseStgMedium(&stg);
     return hr;
@@ -530,7 +637,6 @@ CConsoleProps::Initialize(
 STDAPI DllCanUnloadNow(VOID)
 {
 CString msg;
-
 msg.Format(L"g_ModuleRefCnt = %d", g_ModuleRefCnt);
 MessageBoxW(NULL, (LPCWSTR)msg, L"DllCanUnloadNow", MB_OK);
     if (g_ModuleRefCnt)
@@ -546,13 +652,49 @@ STDAPI DllGetClassObject(REFCLSID rclsid, REFIID riid, LPVOID *ppv)
     return gModule.DllGetClassObject(rclsid, riid, ppv);
 }
 
+const LPCWSTR REG_SHELLEXT_APPROVED =
+    L"Software\\Microsoft\\Windows\\CurrentVersion\\Shell Extensions\\Approved";
+
 STDAPI DllRegisterServer(VOID)
 {
-    return gModule.DllRegisterServer(FALSE);
+    HRESULT hr = gModule.DllRegisterServer(FALSE);
+    if (!SUCCEEDED(hr))
+        return hr;
+
+    /*
+     * Optionally register the extension in the list of "approved" shell
+     * extensions (NT-specific). It is advisable to do it, because the
+     * REST_ENFORCESHELLEXTSECURITY system policy can be set to prevent
+     * extensions from being loaded if they are not on the approved list.
+     */
+    CRegKey rk;
+    LONG lRes = rk.Open(HKEY_LOCAL_MACHINE, REG_SHELLEXT_APPROVED, KEY_WRITE);
+    if (lRes == ERROR_SUCCESS)
+    {
+        CComBSTR CLSID_ConsoleProperties_STR(CLSID_ConsoleProperties);
+        lRes = rk.SetStringValue(CLSID_ConsoleProperties_STR, L"Console");
+    }
+    if (lRes != ERROR_SUCCESS)
+        ACDBG(L"Couldn't add extension to Approved Shell Extensions list, error %d\n", lRes);
+
+    // Ignore the error and hope for the best...
+    return S_OK; // HRESULT_FROM_WIN32(lRes);
 }
 
 STDAPI DllUnregisterServer(VOID)
 {
+    /* Unconditionally unregister from the list of "approved" shell extensions */
+    CRegKey rk;
+    LONG lRes = rk.Open(HKEY_LOCAL_MACHINE, REG_SHELLEXT_APPROVED, KEY_WRITE);
+    if (lRes == ERROR_SUCCESS)
+    {
+        CComBSTR CLSID_ConsoleProperties_STR(CLSID_ConsoleProperties);
+        lRes = rk.DeleteValue(CLSID_ConsoleProperties_STR);
+    }
+    if (lRes != ERROR_SUCCESS)
+        ACDBG(L"Couldn't delete extension from Approved Shell Extensions list, error %d\n", lRes);
+
+    /* Do the COM un-registration proper */
     return gModule.DllUnregisterServer(FALSE);
 }
 

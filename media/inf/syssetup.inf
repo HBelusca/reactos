@@ -53,6 +53,7 @@ AddReg=Classes
 11,,browseui.dll,1
 11,,cabview.dll,1
 11,,comcat.dll,1
+11,,console.dll,1
 11,,cryptdlg.dll,1
 11,,cryptnet.dll,1
 11,,d3dxof.dll,1
