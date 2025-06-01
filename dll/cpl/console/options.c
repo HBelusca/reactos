@@ -8,12 +8,11 @@
  */
 
 #include "console.h"
+#include <winnls.h>
+#include <winreg.h>
 
 #define NDEBUG
 #include <debug.h>
-
-#define MAX_VALUE_NAME 16383
-
 
 static INT
 List_GetCount(IN PLIST_CTL ListCtl)
@@ -162,25 +161,16 @@ UpdateDialogElements(
     {
         /* Small cursor */
         CheckRadioButton(hDlg, IDC_RADIO_SMALL_CURSOR, IDC_RADIO_LARGE_CURSOR, IDC_RADIO_SMALL_CURSOR);
-        // CheckDlgButton(hDlg, IDC_RADIO_SMALL_CURSOR , BST_CHECKED);
-        // CheckDlgButton(hDlg, IDC_RADIO_MEDIUM_CURSOR, BST_UNCHECKED);
-        // CheckDlgButton(hDlg, IDC_RADIO_LARGE_CURSOR , BST_UNCHECKED);
     }
     else if (pConInfo->CursorSize <= 50)
     {
         /* Medium cursor */
         CheckRadioButton(hDlg, IDC_RADIO_SMALL_CURSOR, IDC_RADIO_LARGE_CURSOR, IDC_RADIO_MEDIUM_CURSOR);
-        // CheckDlgButton(hDlg, IDC_RADIO_SMALL_CURSOR , BST_UNCHECKED);
-        // CheckDlgButton(hDlg, IDC_RADIO_MEDIUM_CURSOR, BST_CHECKED);
-        // CheckDlgButton(hDlg, IDC_RADIO_LARGE_CURSOR , BST_UNCHECKED);
     }
     else /* if (pConInfo->CursorSize <= 100) */
     {
         /* Large cursor */
         CheckRadioButton(hDlg, IDC_RADIO_SMALL_CURSOR, IDC_RADIO_LARGE_CURSOR, IDC_RADIO_LARGE_CURSOR);
-        // CheckDlgButton(hDlg, IDC_RADIO_SMALL_CURSOR , BST_UNCHECKED);
-        // CheckDlgButton(hDlg, IDC_RADIO_MEDIUM_CURSOR, BST_UNCHECKED);
-        // CheckDlgButton(hDlg, IDC_RADIO_LARGE_CURSOR , BST_CHECKED);
     }
 
     /* Update the number of history buffers */
@@ -196,18 +186,8 @@ UpdateDialogElements(
                    pConInfo->HistoryNoDup ? BST_CHECKED : BST_UNCHECKED);
 
     /* Update full/window screen state */
-    if (pConInfo->FullScreen)
-    {
-        CheckRadioButton(hDlg, IDC_RADIO_DISPLAY_WINDOW, IDC_RADIO_DISPLAY_FULL, IDC_RADIO_DISPLAY_FULL);
-        // CheckDlgButton(hDlg, IDC_RADIO_DISPLAY_WINDOW, BST_UNCHECKED);
-        // CheckDlgButton(hDlg, IDC_RADIO_DISPLAY_FULL  , BST_CHECKED);
-    }
-    else
-    {
-        CheckRadioButton(hDlg, IDC_RADIO_DISPLAY_WINDOW, IDC_RADIO_DISPLAY_FULL, IDC_RADIO_DISPLAY_WINDOW);
-        // CheckDlgButton(hDlg, IDC_RADIO_DISPLAY_WINDOW, BST_CHECKED);
-        // CheckDlgButton(hDlg, IDC_RADIO_DISPLAY_FULL  , BST_UNCHECKED);
-    }
+    CheckRadioButton(hDlg, IDC_RADIO_DISPLAY_WINDOW, IDC_RADIO_DISPLAY_FULL,
+                     pConInfo->FullScreen ? IDC_RADIO_DISPLAY_FULL : IDC_RADIO_DISPLAY_WINDOW);
 
     /* Update "Quick-edit" state */
     CheckDlgButton(hDlg, IDC_CHECK_QUICK_EDIT,
@@ -225,6 +205,17 @@ OptionsProc(HWND hDlg,
             WPARAM wParam,
             LPARAM lParam)
 {
+    PCONSOLE_PROPS_CTX pConProps = (PCONSOLE_PROPS_CTX)GetWindowLongPtr(hDlg, DWLP_USER);
+    PCONSOLE_STATE_INFO ConInfo;
+
+    if (uMsg == WM_INITDIALOG)
+    {
+        pConProps = (PCONSOLE_PROPS_CTX)((LPPROPSHEETPAGE)lParam)->lParam;
+        ASSERT(pConProps);
+        SetWindowLongPtrW(hDlg, DWLP_USER, (LONG_PTR)pConProps);
+    }
+    ConInfo = (pConProps ? pConProps->ConInfo : NULL);
+
     switch (uMsg)
     {
         case WM_INITDIALOG:
@@ -257,7 +248,9 @@ OptionsProc(HWND hDlg,
             }
             else if (lppsn->hdr.code == PSN_APPLY)
             {
-                ApplyConsoleInfo(hDlg);
+                /* PSHNOTIFY's lParam is TRUE if 'OK' or 'Close'
+                 * is pressed, and is FALSE if 'Apply' is pressed. */
+                ApplyConsoleInfo(hDlg, pConProps, !lppsn->lParam);
                 return TRUE;
             }
             break;
@@ -370,7 +363,7 @@ OptionsProc(HWND hDlg,
                 {
                     /* ... update the code page and change the property sheet state */
                     ConInfo->CodePage = CodePage;
-                    ResetFontPreview(&FontPreview);
+                    ResetFontPreview(&pConProps->FontPreview);
                     PropSheet_Changed(GetParent(hDlg), hDlg);
                 }
             }

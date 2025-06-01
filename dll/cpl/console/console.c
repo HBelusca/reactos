@@ -20,67 +20,68 @@ INT_PTR CALLBACK FontProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
 INT_PTR CALLBACK LayoutProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
 INT_PTR CALLBACK ColorsProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
 
+/* The console property pages */
+static const struct
+{
+    UINT uIDDlg; // idDlg
+    DLGPROC DlgProc;
+} PropPages[] =
+{
+    {IDD_PROPPAGEOPTIONS, OptionsProc},
+    {IDD_PROPPAGEFONT   , FontProc   },
+    {IDD_PROPPAGELAYOUT , LayoutProc },
+    {IDD_PROPPAGECOLORS , ColorsProc },
+};
+
 HINSTANCE g_hModule = NULL;
+
+/*
+ * Global data for CPL mode.
+ */
+
+static CONSOLE_PROPS_CTX CplConProps = {0}; // ConProps
 
 /* Pointer to shell link (.lnk) file path, if the
  * console program were started from a shell link. */
-PCWSTR pszStartedLnkPath = NULL;
+static PCWSTR pszStartedLnkPath = NULL;
 
-/* Local copy of the console information */
-PCONSOLE_STATE_INFO ConInfo = NULL;
 /* What to do with the console information */
 static BOOL SetConsoleInfo  = FALSE;
 static BOOL SaveConsoleInfo = FALSE;
 
 
-/*static*/ VOID ErrOut(HRESULT hr, DWORD dwLastError, PCWSTR pszWhere)
-{
-    WCHAR szBuffer[260];
-    StringCchPrintfW(szBuffer, _countof(szBuffer),
-                     L"%s : HRESULT 0x%08x , LastError %lu",
-                     pszWhere ? pszWhere : L"n/a", hr, dwLastError);
-    MessageBoxW(NULL, szBuffer, L"lnkprops", MB_ICONERROR | MB_OK);
-}
+// This thing is TEMP in concfg lib, for debug support. Will be removed after testings.
+VOID ErrOut(HRESULT hr, DWORD dwLastError, PCWSTR pszWhere);
 
-
-static VOID
-InitPropSheetPage(
-    _Out_ PROPSHEETPAGEW* psp,
-    _In_ WORD idDlg,
-    _In_ DLGPROC DlgProc,
-    _In_opt_ LPARAM lParam,
-    _In_opt_ LPFNPSPCALLBACKW pfnCallback)
-{
-    ZeroMemory(psp, sizeof(*psp));
-    psp->dwSize      = sizeof(*psp);
-    psp->dwFlags     = PSP_DEFAULT;
-    psp->hInstance   = g_hModule;
-    psp->pszTemplate = MAKEINTRESOURCEW(idDlg);
-    psp->pfnDlgProc  = DlgProc;
-    psp->lParam      = lParam;
-
-    if (pfnCallback)
-    {
-        psp->pfnCallback = pfnCallback;
-        psp->dwFlags    |= PSP_USECALLBACK;
-    }
-}
 
 BOOL
 PopulatePropSheetPageArray(
     _Out_writes_(cPsps) PROPSHEETPAGEW* psp,
     _In_ UINT cPsps,
+    _In_opt_ LPARAM lParam,
     _In_opt_ LPFNPSPCALLBACKW pfnCallback)
 {
-    UINT i = 0;
+    UINT i;
 
-    if (cPsps < 4)
+    if (cPsps < _countof(PropPages))
         return FALSE;
 
-    InitPropSheetPage(&psp[i++], IDD_PROPPAGEOPTIONS, OptionsProc, 0, pfnCallback);
-    InitPropSheetPage(&psp[i++], IDD_PROPPAGEFONT   , FontProc   , 0, pfnCallback);
-    InitPropSheetPage(&psp[i++], IDD_PROPPAGELAYOUT , LayoutProc , 0, pfnCallback);
-    InitPropSheetPage(&psp[i++], IDD_PROPPAGECOLORS , ColorsProc , 0, pfnCallback);
+    for (i = 0; i < cPsps; ++i, ++psp)
+    {
+        ZeroMemory(psp, sizeof(*psp));
+        psp->dwSize      = sizeof(*psp);
+        psp->dwFlags     = PSP_DEFAULT;
+        psp->hInstance   = g_hModule;
+        psp->pszTemplate = MAKEINTRESOURCEW(PropPages[i].uIDDlg);
+        psp->pfnDlgProc  = PropPages[i].DlgProc;
+        psp->lParam      = lParam;
+
+        if (pfnCallback)
+        {
+            psp->pfnCallback = pfnCallback;
+            psp->dwFlags    |= PSP_USECALLBACK;
+        }
+    }
     return TRUE;
 }
 
@@ -90,6 +91,26 @@ InitDefaultConsoleInfo(PCONSOLE_STATE_INFO pConInfo)
     // FIXME: Also retrieve the value of REG_DWORD CurrentPage.
     ConCfgGetDefaultSettings(pConInfo);
 }
+
+
+BOOL
+InitializeConsolePropsState(VOID)
+{
+    /* Register the custom window classes and initialize
+     * font support: additional TrueType font cache */
+    RegisterWinPrevClass(g_hModule);
+    InitTTFontCache();
+    return TRUE;
+}
+
+VOID
+UninitializeConsolePropsState(VOID)
+{
+    /* Clear the font cache and unregister the custom window classes */
+    ClearTTFontCache();
+    UnRegisterWinPrevClass(g_hModule);
+}
+
 
 /**
  * @brief
@@ -122,22 +143,23 @@ IsStartedFromLnk(VOID)
     return Ppb->WindowTitle.Buffer;
 }
 
+/**
+ * @brief   Confirmation & Apply dialog procedure.
+ **/
 static INT_PTR
 CALLBACK
-ApplyProc(
+ApplyDlgProc(
     _In_ HWND hDlg,
     _In_ UINT uMsg,
     _In_ WPARAM wParam,
     _In_ LPARAM lParam)
 {
-    UNREFERENCED_PARAMETER(lParam);
-
     switch (uMsg)
     {
         case WM_INITDIALOG:
         {
             /* If started from a shortcut, modify the dialog title and 2nd item */
-            if (pszStartedLnkPath)
+            if (!!lParam)
             {
                 WCHAR szText[260];
                 LoadStringW(g_hModule, IDS_APPLY_SHORTCUT_TITLE, szText, _countof(szText));
@@ -145,7 +167,7 @@ ApplyProc(
                 LoadStringW(g_hModule, IDS_APPLY_SHORTCUT_ALL, szText, _countof(szText));
                 SetDlgItemTextW(hDlg, IDC_RADIO_APPLY_ALL, szText);
             }
-            CheckDlgButton(hDlg, IDC_RADIO_APPLY_CURRENT, BST_CHECKED);
+            CheckRadioButton(hDlg, IDC_RADIO_APPLY_CURRENT, IDC_RADIO_APPLY_ALL, IDC_RADIO_APPLY_CURRENT);
             return TRUE;
         }
         case WM_COMMAND:
@@ -170,54 +192,125 @@ ApplyProc(
     return FALSE;
 }
 
-VOID
-ApplyConsoleInfo(HWND hwndDlg)
+/**
+ * @brief
+ * Remember whether to only apply, or also save, the modified
+ * console properties to the system, prompting the user if necessary.
+ *
+ * @return
+ * TRUE if changes should be applied/saved, FALSE if not.
+ **/
+static BOOL
+ApplyCPLConsoleInfo(
+    _In_opt_ HWND hDlg,
+    _In_ PCONSOLE_PROPS_CTX pConProps,
+    _In_ BOOL bApplyNow)
 {
-    static BOOL ConsoleInfoAlreadySaved = FALSE;
+    UNREFERENCED_PARAMETER(bApplyNow);
+
+    // TODO: Retrieve the currently active property page index,
+    // to be saved in the registry later.
 
     /*
-     * We already applied all the console properties (and saved if needed).
-     * Nothing more needs to be done.
+     * If we are setting the default parameters, remember doing this,
+     * otherwise display the Confirmation & Apply dialog before.
      */
-    if (ConsoleInfoAlreadySaved)
-        goto Done;
-
-    /*
-     * If we are setting the default parameters, just save them,
-     * otherwise display the confirmation & apply dialog.
-     */
-    if (ConInfo->hWnd == NULL)
+    if (pConProps->ConInfo->hWnd == NULL)
     {
         SetConsoleInfo  = FALSE;
         SaveConsoleInfo = TRUE;
     }
     else
     {
-        INT_PTR res = DialogBoxW(g_hModule, MAKEINTRESOURCEW(IDD_APPLYOPTIONS), hwndDlg, ApplyProc);
+        INT_PTR res = DialogBoxParamW(g_hModule, MAKEINTRESOURCEW(IDD_APPLYOPTIONS),
+                                      hDlg, ApplyDlgProc, !!pszStartedLnkPath);
 
         SetConsoleInfo  = (res != IDCANCEL);
         SaveConsoleInfo = (res == IDC_RADIO_APPLY_ALL);
 
         if (!SetConsoleInfo)
-        {
-            /* Don't destroy when the user presses cancel */
-            SetWindowLongPtr(hwndDlg, DWLP_MSGRESULT, PSNRET_INVALID_NOCHANGEPAGE);
-            return;
-        }
+            return FALSE; // Don't apply the changes if the user pressed cancel.
+    }
+    return TRUE;
+}
+
+/**
+ * @brief
+ * Apply/save the console properties. Depending on the running
+ * (CPL or shell link properties sheet) mode, the properties may
+ * be marked to be applied/saved at a later time, or immediately.
+ **/
+VOID
+ApplyConsoleInfo(
+    _In_ HWND hDlg,
+    _In_ PCONSOLE_PROPS_CTX pConProps,
+    _In_ BOOL bApplyNow)
+{
+    /*
+     * If console properties are going to be applied (and saved
+     * if needed) already, nothing more needs to be done.
+     */
+    if (pConProps->UpdateValues) // SaveConsoleInfo
+        goto Done;
+
+    if (!pConProps->ApplyInfo(hDlg, pConProps, bApplyNow)) // && !SetConsoleInfo && !SaveConsoleInfo
+    {
+        /* Don't destroy if the changes failed to be applied or saved */
+        SetWindowLongPtrW(hDlg, DWLP_MSGRESULT, PSNRET_INVALID_NOCHANGEPAGE);
+        // SetDlgMsgResult(hDlg, PSN_APPLY, PSNRET_INVALID_NOCHANGEPAGE);
+        return;
     }
 
-    /*
-     * We applied all the console properties (and saved if needed).
+    /* The user chose to apply (and save if needed) the console properties.
      * Set the flag so that if this function is called again, we won't
-     * need to redo everything again.
-     */
-    ConsoleInfoAlreadySaved = TRUE;
+     * need to redo everything again. */
+    pConProps->UpdateValues = !bApplyNow; // SaveConsoleInfo;
+
+    /* Signal the property sheet that changes have been dealt with */
+    PropSheet_UnChanged(GetParent(hDlg), NULL/*hDlg*/);
 
 Done:
-    /* Options have been applied */
-    SetWindowLongPtr(hwndDlg, DWLP_MSGRESULT, PSNRET_NOERROR);
-    return;
+    /* Options will be applied */
+    SetWindowLongPtrW(hDlg, DWLP_MSGRESULT, PSNRET_NOERROR);
+    // SetDlgMsgResult(hDlg, PSN_APPLY, PSNRET_NOERROR);
 }
+
+
+static VOID
+SaveConsoleSettings(
+    _In_ PCONSOLE_PROPS_CTX pConProps, // CplConProps
+    _In_opt_ HWND hWndParent)
+{
+    PCONSOLE_STATE_INFO ConInfo = pConProps->ConInfo;
+
+    if (!pConProps->UpdateValues) // !SaveConsoleInfo
+        return;
+
+    /* If we were started from a lnk file, modify it
+     * instead of saving it to the registry */
+    if (pszStartedLnkPath)
+    {
+        /* Save the settings in the shortcut file */
+        HRESULT hr = ConLnkWriteSettings(ConInfo, pszStartedLnkPath);
+        if (!SUCCEEDED(hr))
+        {
+            WCHAR szTitle[260];
+            WCHAR szMessage[260];
+            LoadStringW(g_hModule, IDS_ERROR_SHORTCUT, szTitle, _countof(szTitle));
+            StringCchPrintfW(szMessage, _countof(szMessage), szTitle, pszStartedLnkPath);
+            LoadStringW(g_hModule, IDS_ERROR_SHORTCUT_TITLE, szTitle, _countof(szTitle));
+            MessageBoxW(hWndParent, szMessage, szTitle, MB_ICONERROR | MB_OK | MB_SETFOREGROUND);
+        }
+    }
+    else
+    {
+        /* Save the settings in the registry.
+         * These are default settings when ConInfo->hWnd == NULL. */
+        ConCfgWriteUserSettings(ConInfo, ConInfo->hWnd == NULL);
+    }
+    pConProps->UpdateValues = FALSE; // SaveConsoleInfo = FALSE;
+}
+
 
 static int CALLBACK
 PropSheetProc(HWND hwndDlg, UINT uMsg, LPARAM lParam)
@@ -243,8 +336,9 @@ InitApplet(HANDLE hSectionOrWnd)
 {
     INT_PTR Result;
     PCONSOLE_STATE_INFO pSharedInfo = NULL;
+    PCONSOLE_STATE_INFO ConInfo;
     WCHAR szTitle[MAX_PATH + 1];
-    PROPSHEETPAGEW psp[4];
+    PROPSHEETPAGEW psp[_countof(PropPages)];
     PROPSHEETHEADERW psh;
 
     /*
@@ -263,7 +357,7 @@ InitApplet(HANDLE hSectionOrWnd)
      * global parameters (and we were either called by CONSRV or directly by
      * the user via the Control Panel, etc...)
      */
-//__debugbreak();
+__debugbreak();
     pSharedInfo = MapViewOfFile(hSectionOrWnd, FILE_MAP_READ, 0, 0, 0);
     if (pSharedInfo)
     {
@@ -274,8 +368,8 @@ InitApplet(HANDLE hSectionOrWnd)
 
         /* Copy the shared data into our allocated buffer */
         DPRINT1("pSharedInfo->cbSize == %lu ; sizeof(CONSOLE_STATE_INFO) == %u\n",
-                pSharedInfo->cbSize, sizeof(CONSOLE_STATE_INFO));
-        ASSERT(pSharedInfo->cbSize >= sizeof(CONSOLE_STATE_INFO));
+                pSharedInfo->cbSize, sizeof(*pSharedInfo));
+        ASSERT(pSharedInfo->cbSize >= sizeof(*pSharedInfo));
 
         /* Allocate a local buffer to hold console information */
         ConInfo = HeapAlloc(GetProcessHeap(),
@@ -302,7 +396,7 @@ InitApplet(HANDLE hSectionOrWnd)
         /* Allocate a local buffer to hold console information */
         ConInfo = HeapAlloc(GetProcessHeap(),
                             HEAP_ZERO_MEMORY,
-                            sizeof(CONSOLE_STATE_INFO));
+                            sizeof(*ConInfo));
         if (!ConInfo)
             return 0;
 
@@ -316,10 +410,21 @@ InitApplet(HANDLE hSectionOrWnd)
         /* Use defaults */
         InitDefaultConsoleInfo(ConInfo);
     }
+    CplConProps.ConInfo = ConInfo;
+    CplConProps.ApplyInfo = ApplyCPLConsoleInfo;
 
-    /* Initialize the font support -- additional TrueType font cache and current preview font */
-    InitTTFontCache();
-    RefreshFontPreview(&FontPreview, ConInfo);
+#if 0 // FIXME: TEST to remove
+{
+pszStartedLnkPath = L"X:\\reactos\\dll\\cpl\\console\\Test.lnk";
+HRESULT hr =
+    ConLnkReadSettings(ConInfo, pszStartedLnkPath);
+DBG_UNREFERENCED_LOCAL_VARIABLE(hr);
+}
+#endif
+
+    /* Initialize the global state and the current font preview */
+    InitializeConsolePropsState();
+    RefreshFontPreview(&CplConProps.FontPreview, ConInfo);
 
     /* Initialize the property sheet structure */
     ZeroMemory(&psh, sizeof(psh));
@@ -355,21 +460,19 @@ InitApplet(HANDLE hSectionOrWnd)
     psh.hInstance = g_hModule;
     // psh.hIcon = LoadIcon(g_hModule, MAKEINTRESOURCEW(IDC_CPLICON));
     psh.pszIcon = MAKEINTRESOURCEW(IDC_CPLICON);
-    psh.nPages = ARRAYSIZE(psp);
+    psh.nPages = _countof(psp);
     psh.nStartPage = 0;
     psh.ppsp = psp;
     psh.pfnCallback = PropSheetProc;
 
-    PopulatePropSheetPageArray(psp, psh.nPages, NULL);
+    PopulatePropSheetPageArray(psp, psh.nPages, (LPARAM)&CplConProps, NULL);
 
     /* Display the property sheet */
-    RegisterWinPrevClass(g_hModule);
     Result = PropertySheetW(&psh);
-    UnRegisterWinPrevClass(g_hModule);
 
-    /* Clear the font support */
-    ResetFontPreview(&FontPreview);
-    ClearTTFontCache();
+    /* Disable the font preview and cleanup the global state */
+    ResetFontPreview(&CplConProps.FontPreview);
+    UninitializeConsolePropsState();
 
     /* Apply the console settings if necessary */
     if (SetConsoleInfo)
@@ -419,34 +522,12 @@ InitApplet(HANDLE hSectionOrWnd)
 
     /* Save the console settings */
     if (SaveConsoleInfo)
-    {
-        /* If we were started from a lnk file, modify it
-         * instead of saving it to the registry */
-        if (pszStartedLnkPath)
-        {
-            /* Save the settings in the shortcut file */
-            HRESULT hr = ConLnkWriteSettings(ConInfo, pszStartedLnkPath);
-            if (!SUCCEEDED(hr))
-            {
-                WCHAR szMessage[260];
-                LoadStringW(g_hModule, IDS_ERROR_SHORTCUT, szTitle, _countof(szTitle));
-                StringCchPrintfW(szMessage, _countof(szMessage), szTitle, pszStartedLnkPath);
-                LoadStringW(g_hModule, IDS_ERROR_SHORTCUT_TITLE, szTitle, _countof(szTitle));
-                MessageBoxW(psh.hwndParent, szMessage, szTitle, MB_ICONERROR | MB_OK);
-            }
-        }
-        else
-        {
-            /* Save the settings in the registry.
-             * These are default settings when ConInfo->hWnd == NULL. */
-            ConCfgWriteUserSettings(ConInfo, ConInfo->hWnd == NULL);
-        }
-    }
+        SaveConsoleSettings(&CplConProps, psh.hwndParent);
 
 Quit:
     /* Cleanup */
     HeapFree(GetProcessHeap(), 0, ConInfo);
-    ConInfo = NULL;
+    CplConProps.ConInfo = NULL;
 
     return (Result != -1);
 }

@@ -18,11 +18,11 @@
 
 typedef struct _WINPREV_DATA
 {
-    HWND hWnd;      // The window which this structure refers to
-    RECT rcMaxArea; // Maximum rectangle in which the preview window can be sized
-    SIZE siPreview; // Actual size of the preview window
-    SIZE siVirtScr; // Width and Height of the virtual screen
-    PVOID pData;    // Private data
+    HWND hWnd;      ///< The window this structure refers to.
+    RECT rcMaxArea; ///< Maximum rectangle in which the preview window can be sized.
+    SIZE siPreview; ///< Actual size of the preview window.
+    SIZE siVirtScr; ///< Width and Height of the virtual screen.
+    PVOID pData;    ///< Private data.
 } WINPREV_DATA, *PWINPREV_DATA;
 
 static LRESULT CALLBACK
@@ -40,7 +40,7 @@ RegisterWinPrevClass(
     WndClass.hInstance = hInstance;
     WndClass.hIcon = NULL;
     WndClass.hCursor = LoadCursorW(NULL, IDC_ARROW);
-    WndClass.hbrBackground =  (HBRUSH)(COLOR_BACKGROUND + 1);
+    WndClass.hbrBackground = (HBRUSH)(COLOR_BACKGROUND + 1);
     WndClass.lpszMenuName = NULL;
     WndClass.cbClsExtra = 0;
     WndClass.cbWndExtra = 0; // sizeof(PWINPREV_DATA);
@@ -139,7 +139,8 @@ WinPrev_OnDraw(
     IN HDC hDC,
     IN PWINPREV_DATA pData)
 {
-    PCONSOLE_STATE_INFO pConInfo = (PCONSOLE_STATE_INFO)pData->pData;
+    PCONSOLE_PROPS_CTX pConProps = (PCONSOLE_PROPS_CTX)pData->pData;
+    PCONSOLE_STATE_INFO pConInfo;
     HBRUSH hBrush;
     RECT rcWin, fRect;
     SIZE /*siBorder,*/ siFrame, siButton, siScroll;
@@ -199,17 +200,21 @@ WinPrev_OnDraw(
     // FIXME: Use SM_CXMIN, SM_CYMIN ??
 
 
+    if (!pConProps)
+        return;
+    pConInfo = pConProps->ConInfo;
+
     /*
      * Compute the console window layout
      */
 
-    if (FontPreview.hFont == NULL)
-        RefreshFontPreview(&FontPreview, pConInfo);
+    if (pConProps->FontPreview.hFont == NULL)
+        RefreshFontPreview(&pConProps->FontPreview, pConInfo);
 
     /* We start with the console client area, rescaled for the preview */
     SetRect(&rcWin, 0, 0,
-            pConInfo->WindowSize.X * FontPreview.CharWidth,
-            pConInfo->WindowSize.Y * FontPreview.CharHeight);
+            pConInfo->WindowSize.X * pConProps->FontPreview.CharWidth,
+            pConInfo->WindowSize.Y * pConProps->FontPreview.CharHeight);
     RescaleRect(pData, rcWin);
 
     /* Add the scrollbars if needed (does not account for any frame) */
@@ -397,9 +402,7 @@ WinPrev_OnDraw(
 static LRESULT CALLBACK
 WinPrevProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
-    PWINPREV_DATA pData;
-
-    pData = (PWINPREV_DATA)GetWindowLongPtrW(hWnd, GWLP_USERDATA);
+    PWINPREV_DATA pData = (PWINPREV_DATA)GetWindowLongPtrW(hWnd, GWLP_USERDATA);
 
     switch (msg)
     {
@@ -408,17 +411,22 @@ WinPrevProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
             pData = (PWINPREV_DATA)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(*pData));
             if (!pData)
             {
-                /* We failed to allocate our private data, halt the window creation */
+                /* Private data allocation failed, halt the window creation */
                 return (LRESULT)-1;
             }
             pData->hWnd  = hWnd;
-            pData->pData = ConInfo;
+            pData->pData = NULL;
+            /* Use GetClientRect(), because LPCREATESTRUCT::cx and cy
+             * give instead window (not client) size. */
             GetClientRect(pData->hWnd, &pData->rcMaxArea);
-            // LPCREATESTRUCT::cx and cy give window (not client) size
-            WinPrev_OnDisplayChange(pData);
             SetWindowLongPtrW(hWnd, GWLP_USERDATA, (LONG_PTR)pData);
+            WinPrev_OnDisplayChange(pData);
             break;
         }
+
+        case WPM_INIT:
+            pData->pData = (PVOID)lParam;
+            break;
 
         case WM_DESTROY:
         {
@@ -470,9 +478,10 @@ const WCHAR szPreviewText[] =
 VOID
 PaintText(
     IN LPDRAWITEMSTRUCT drawItem,
-    IN PCONSOLE_STATE_INFO pConInfo,
+    IN PCONSOLE_PROPS_CTX pConProps,
     IN TEXT_TYPE TextMode)
 {
+    PCONSOLE_STATE_INFO pConInfo = pConProps->ConInfo;
     USHORT CurrentAttrib;
     COLORREF pbkColor, ptColor;
     COLORREF nbkColor, ntColor;
@@ -495,14 +504,14 @@ PaintText(
     if (hBrush) DeleteObject(hBrush);
 
     /* Refresh the font preview, getting a new font if necessary */
-    if (FontPreview.hFont == NULL)
-        RefreshFontPreview(&FontPreview, pConInfo);
+    if (pConProps->FontPreview.hFont == NULL)
+        RefreshFontPreview(&pConProps->FontPreview, pConInfo);
     /* Recheck hFont since RefreshFontPreview() may not have updated it */
-    if (FontPreview.hFont == NULL)
+    if (pConProps->FontPreview.hFont == NULL)
         return;
 
     /* Draw the preview text using the current font */
-    hOldFont = SelectObject(drawItem->hDC, FontPreview.hFont);
+    hOldFont = SelectObject(drawItem->hDC, pConProps->FontPreview.hFont);
     // if (!hOldFont) return;
 
     /* Add a few space between the preview window border and the text sample */
@@ -527,6 +536,17 @@ LayoutProc(HWND hDlg,
            WPARAM wParam,
            LPARAM lParam)
 {
+    PCONSOLE_PROPS_CTX pConProps = (PCONSOLE_PROPS_CTX)GetWindowLongPtr(hDlg, DWLP_USER);
+    PCONSOLE_STATE_INFO ConInfo;
+
+    if (uMsg == WM_INITDIALOG)
+    {
+        pConProps = (PCONSOLE_PROPS_CTX)((LPPROPSHEETPAGE)lParam)->lParam;
+        ASSERT(pConProps);
+        SetWindowLongPtrW(hDlg, DWLP_USER, (LONG_PTR)pConProps);
+    }
+    ConInfo = (pConProps ? pConProps->ConInfo : NULL);
+
     switch (uMsg)
     {
         case WM_INITDIALOG:
@@ -571,6 +591,8 @@ LayoutProc(HWND hDlg,
             CheckDlgButton(hDlg, IDC_CHECK_SYSTEM_POS_WINDOW,
                            ConInfo->AutoPosition ? BST_CHECKED : BST_UNCHECKED);
 
+            SendDlgItemMessageW(hDlg, IDC_STATIC_LAYOUT_WINDOW_PREVIEW,
+                                WPM_INIT, 0, (LPARAM)pConProps);
             return TRUE;
         }
 
@@ -690,6 +712,13 @@ LayoutProc(HWND hDlg,
 
                 InvalidateRect(GetDlgItem(hDlg, IDC_STATIC_LAYOUT_WINDOW_PREVIEW), NULL, TRUE);
                 PropSheet_Changed(GetParent(hDlg), hDlg);
+            }
+            else if (lppsn->hdr.code == PSN_APPLY)
+            {
+                /* PSHNOTIFY's lParam is TRUE if 'OK' or 'Close'
+                 * is pressed, and is FALSE if 'Apply' is pressed. */
+                ApplyConsoleInfo(hDlg, pConProps, !lppsn->lParam);
+                return TRUE;
             }
             break;
         }

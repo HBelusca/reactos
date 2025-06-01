@@ -12,13 +12,19 @@
 #define NDEBUG
 #include <debug.h>
 
-static DWORD ActiveStaticControl = 0;
+// Color page context
+typedef struct _COLORPAGE_CTX
+{
+    PCONSOLE_PROPS_CTX pConProps;
+    DWORD ActiveStaticControl;
+} COLORPAGE_CTX, *PCOLORPAGE_CTX;
 
 static VOID
 PaintStaticControls(
     IN LPDRAWITEMSTRUCT drawItem,
-    IN PCONSOLE_STATE_INFO pConInfo)
+    IN PCOLORPAGE_CTX pColorPage)
 {
+    PCONSOLE_STATE_INFO pConInfo = pColorPage->pConProps->ConInfo;
     HBRUSH hBrush;
     DWORD index;
 
@@ -29,7 +35,7 @@ PaintStaticControls(
     FillRect(drawItem->hDC, &drawItem->rcItem, hBrush ? hBrush : GetStockObject(BLACK_BRUSH));
     if (hBrush) DeleteObject(hBrush);
 
-    if (ActiveStaticControl == index)
+    if (pColorPage->ActiveStaticControl == index)
         DrawFocusRect(drawItem->hDC, &drawItem->rcItem);
 }
 
@@ -39,8 +45,27 @@ ColorsProc(HWND hDlg,
            WPARAM wParam,
            LPARAM lParam)
 {
+    PCOLORPAGE_CTX pColorPage = (PCOLORPAGE_CTX)GetWindowLongPtrW(hDlg, DWLP_USER);
+    PCONSOLE_PROPS_CTX pConProps;
+    PCONSOLE_STATE_INFO ConInfo;
+
     DWORD colorIndex;
     COLORREF color;
+
+    if (uMsg == WM_INITDIALOG)
+    {
+        pColorPage = (PCOLORPAGE_CTX)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(*pColorPage));
+        if (!pColorPage)
+        {
+            EndDialog(hDlg, 0);
+            return (INT_PTR)TRUE;
+        }
+        pColorPage->pConProps = (PCONSOLE_PROPS_CTX)((LPPROPSHEETPAGE)lParam)->lParam;
+        ASSERT(pColorPage->pConProps);
+        SetWindowLongPtrW(hDlg, DWLP_USER, (LONG_PTR)pColorPage);
+    }
+    pConProps = (pColorPage ? pColorPage->pConProps : NULL);
+    ConInfo = (pConProps ? pConProps->ConInfo : NULL);
 
     switch (uMsg)
     {
@@ -63,11 +88,11 @@ ColorsProc(HWND hDlg,
             LPDRAWITEMSTRUCT drawItem = (LPDRAWITEMSTRUCT)lParam;
 
             if (IDC_STATIC_COLOR1 <= drawItem->CtlID && drawItem->CtlID <= IDC_STATIC_COLOR16)
-                PaintStaticControls(drawItem, ConInfo);
+                PaintStaticControls(drawItem, pColorPage);
             else if (drawItem->CtlID == IDC_STATIC_SCREEN_COLOR)
-                PaintText(drawItem, ConInfo, Screen);
+                PaintText(drawItem, pConProps, Screen);
             else if (drawItem->CtlID == IDC_STATIC_POPUP_COLOR)
-                PaintText(drawItem, ConInfo, Popup);
+                PaintText(drawItem, pConProps, Popup);
 
             return TRUE;
         }
@@ -78,7 +103,9 @@ ColorsProc(HWND hDlg,
             {
                 case PSN_APPLY:
                 {
-                    ApplyConsoleInfo(hDlg);
+                    /* PSHNOTIFY's lParam is TRUE if 'OK' or 'Close'
+                     * is pressed, and is FALSE if 'Apply' is pressed. */
+                    ApplyConsoleInfo(hDlg, pConProps, !((LPPSHNOTIFY)lParam)->lParam);
                     return TRUE;
                 }
 
@@ -87,7 +114,7 @@ ColorsProc(HWND hDlg,
                     LPNMUPDOWN lpnmud = (LPNMUPDOWN)lParam;
 
                     /* Get the current color */
-                    colorIndex = ActiveStaticControl;
+                    colorIndex = pColorPage->ActiveStaticControl;
                     color = ConInfo->ColorTable[colorIndex];
 
                     if (lpnmud->hdr.idFrom == IDC_UPDOWN_COLOR_RED)
@@ -165,9 +192,9 @@ ColorsProc(HWND hDlg,
                     SetDlgItemInt(hDlg, IDC_EDIT_COLOR_GREEN, GetGValue(color), FALSE);
                     SetDlgItemInt(hDlg, IDC_EDIT_COLOR_BLUE , GetBValue(color), FALSE);
 
-                    InvalidateRect(GetDlgItem(hDlg, IDC_STATIC_COLOR1 + ActiveStaticControl), NULL, TRUE);
-                    ActiveStaticControl = colorIndex;
-                    InvalidateRect(GetDlgItem(hDlg, IDC_STATIC_COLOR1 + ActiveStaticControl), NULL, TRUE);
+                    InvalidateRect(GetDlgItem(hDlg, IDC_STATIC_COLOR1 + pColorPage->ActiveStaticControl), NULL, TRUE);
+                    pColorPage->ActiveStaticControl = colorIndex;
+                    InvalidateRect(GetDlgItem(hDlg, IDC_STATIC_COLOR1 + pColorPage->ActiveStaticControl), NULL, TRUE);
                     break;
                 }
                 else
@@ -176,7 +203,7 @@ ColorsProc(HWND hDlg,
                     colorIndex = ctrlIndex - IDC_STATIC_COLOR1;
 
                     /* If the same static control was re-clicked, don't take it into account */
-                    if (colorIndex == ActiveStaticControl)
+                    if (colorIndex == pColorPage->ActiveStaticControl)
                         break;
 
                     color = ConInfo->ColorTable[colorIndex];
@@ -203,9 +230,9 @@ ColorsProc(HWND hDlg,
                         ConInfo->PopupAttributes = MakeAttrib(TextAttribFromAttrib(ConInfo->PopupAttributes), colorIndex);
                     }
 
-                    InvalidateRect(GetDlgItem(hDlg, IDC_STATIC_COLOR1 + ActiveStaticControl), NULL, TRUE);
-                    ActiveStaticControl = colorIndex;
-                    InvalidateRect(GetDlgItem(hDlg, IDC_STATIC_COLOR1 + ActiveStaticControl), NULL, TRUE);
+                    InvalidateRect(GetDlgItem(hDlg, IDC_STATIC_COLOR1 + pColorPage->ActiveStaticControl), NULL, TRUE);
+                    pColorPage->ActiveStaticControl = colorIndex;
+                    InvalidateRect(GetDlgItem(hDlg, IDC_STATIC_COLOR1 + pColorPage->ActiveStaticControl), NULL, TRUE);
                     InvalidateRect(GetDlgItem(hDlg, IDC_STATIC_SCREEN_COLOR), NULL, TRUE);
                     InvalidateRect(GetDlgItem(hDlg, IDC_STATIC_POPUP_COLOR) , NULL, TRUE);
 
@@ -224,7 +251,7 @@ ColorsProc(HWND hDlg,
                     DWORD value;
 
                     /* Get the current colour */
-                    colorIndex = ActiveStaticControl;
+                    colorIndex = pColorPage->ActiveStaticControl;
                     color = ConInfo->ColorTable[colorIndex];
 
                     /* Modify the colour component */

@@ -13,14 +13,6 @@
 #define NDEBUG
 #include <debug.h>
 
-
-/*
- * Current active font, corresponding to the active console font,
- * and used for painting the text samples.
- */
-FONT_PREVIEW FontPreview = {NULL, 0, 0};
-
-
 /*
  * Standard font pixel/point heights for TrueType fonts
  */
@@ -40,12 +32,18 @@ typedef struct _FONTSIZE_LIST_CTL
     LONG CurrentTTSize;         // In whatever unit (pixels or points) currently selected.
 } FONTSIZE_LIST_CTL, *PFONTSIZE_LIST_CTL;
 
-/* Used by FontTypeChange() only */
-static INT   CurrentSelFont  = LB_ERR;
-static DWORD CurrentFontType = (DWORD)-1;   // Invalid font type
+// Font page context
+typedef struct _FONTPAGE_CTX
+{
+    PCONSOLE_PROPS_CTX pConProps;
+    FONTSIZE_LIST_CTL SizeList;
 
-/* Detect whether the current code page has changed */
-static UINT CurrentCodePage = INVALID_CP;
+/* Used by FontTypeChange() only */
+    INT   CurrentSelFont;
+    DWORD CurrentFontType;
+/* Used to detect whether the current code page has changed */
+    UINT  CurrentCodePage;
+} FONTPAGE_CTX, *PFONTPAGE_CTX;
 
 
 VOID
@@ -535,15 +533,15 @@ UpdateFontSizeList(
 static BOOL
 FontSizeChange(
     IN HWND hDlg,
-    IN PFONTSIZE_LIST_CTL SizeList,
-    IN OUT PCONSOLE_STATE_INFO pConInfo);
+    IN PFONTPAGE_CTX pFontPage);
 
 static BOOL
 FontTypeChange(
     IN HWND hDlg,
-    IN PFONTSIZE_LIST_CTL SizeList,
-    IN OUT PCONSOLE_STATE_INFO pConInfo)
+    IN PFONTPAGE_CTX pFontPage)
 {
+    PFONTSIZE_LIST_CTL SizeList = &pFontPage->SizeList;
+    PCONSOLE_STATE_INFO pConInfo = pFontPage->pConProps->ConInfo;
     HWND hFontList = GetDlgItem(hDlg, IDC_LBOX_FONTTYPE);
     INT Length, nSel;
     LPWSTR FaceName;
@@ -561,7 +559,7 @@ FontTypeChange(
      */
 #if 0
     /* Check whether the selection has changed */
-    if (nSel == CurrentSelFont)
+    if (nSel == pFontPage->CurrentSelFont)
         return FALSE;
 #endif
 
@@ -607,13 +605,13 @@ FontTypeChange(
     {
         SizeList->UseRasterOrTTList = (FontType == RASTER_FONTTYPE);
 
-        /* Display the correct font size list (if needed) */
-        if (CurrentFontType != FontType)
+        /* Display the correct font size list, if needed */
+        if (pFontPage->CurrentFontType != FontType)
             UpdateFontSizeList(hDlg, SizeList);
 
         /* Enumerate the available sizes for the selected font */
-        if ((CurrentFontType != FontType) ||
-            (FontType == RASTER_FONTTYPE && CurrentSelFont != nSel))
+        if ((pFontPage->CurrentFontType != FontType) ||
+            (FontType == RASTER_FONTTYPE && pFontPage->CurrentSelFont != nSel))
         {
             LOGFONTW lf;
             HDC hDC;
@@ -645,19 +643,20 @@ FontTypeChange(
         SizeList->UseRasterOrTTList = TRUE;
         UpdateFontSizeList(hDlg, SizeList);
     }
-    CurrentFontType = FontType;
-    CurrentSelFont  = nSel;
+    pFontPage->CurrentFontType = FontType;
+    pFontPage->CurrentSelFont  = nSel;
 
-    FontSizeChange(hDlg, SizeList, pConInfo);
+    FontSizeChange(hDlg, pFontPage);
     return TRUE;
 }
 
 static BOOL
 FontSizeChange(
     IN HWND hDlg,
-    IN PFONTSIZE_LIST_CTL SizeList,
-    IN OUT PCONSOLE_STATE_INFO pConInfo)
+    IN PFONTPAGE_CTX pFontPage)
 {
+    PFONTSIZE_LIST_CTL SizeList = &pFontPage->SizeList;
+    PCONSOLE_STATE_INFO pConInfo = pFontPage->pConProps->ConInfo;
     LONG FontSize;
     UINT CharWidth, CharHeight;
     HFONT hFont;
@@ -695,7 +694,7 @@ FontSizeChange(
      * freed at later update or when the font preview is refreshed or reset.
      * For TrueType fonts, the preview will show the actual character width.
      */
-    UpdateFontPreview(&FontPreview, hFont, CharWidth, CharHeight);
+    UpdateFontPreview(&pFontPage->pConProps->FontPreview, hFont, CharWidth, CharHeight);
 
     /*
      * Format:
@@ -727,26 +726,40 @@ FontProc(HWND hDlg,
          WPARAM wParam,
          LPARAM lParam)
 {
+    PFONTPAGE_CTX pFontPage = (PFONTPAGE_CTX)GetWindowLongPtrW(hDlg, DWLP_USER);
+    PCONSOLE_PROPS_CTX pConProps;
+    PCONSOLE_STATE_INFO ConInfo;
     PFONTSIZE_LIST_CTL SizeList;
 
-    SizeList = (PFONTSIZE_LIST_CTL)GetWindowLongPtrW(hDlg, DWLP_USER);
+    if (uMsg == WM_INITDIALOG)
+    {
+        pFontPage = (PFONTPAGE_CTX)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(*pFontPage));
+        if (!pFontPage)
+        {
+            EndDialog(hDlg, 0);
+            return (INT_PTR)TRUE;
+        }
+        pFontPage->pConProps = (PCONSOLE_PROPS_CTX)((LPPROPSHEETPAGE)lParam)->lParam;
+        ASSERT(pFontPage->pConProps);
+        SetWindowLongPtrW(hDlg, DWLP_USER, (LONG_PTR)pFontPage);
+    }
+    pConProps = (pFontPage ? pFontPage->pConProps : NULL);
+    ConInfo = (pConProps ? pConProps->ConInfo : NULL);
+    SizeList = (pFontPage ? &pFontPage->SizeList : NULL);
 
     switch (uMsg)
     {
         case WM_INITDIALOG:
         {
-            SizeList = (PFONTSIZE_LIST_CTL)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(*SizeList));
-            if (!SizeList)
-            {
-                EndDialog(hDlg, 0);
-                return (INT_PTR)TRUE;
-            }
+            pFontPage->CurrentSelFont  = LB_ERR;
+            pFontPage->CurrentFontType = (DWORD)-1; // Invalid font type
+            pFontPage->CurrentCodePage = INVALID_CP;
+
             SizeList->RasterSizeList.hWndList = GetDlgItem(hDlg, IDC_LBOX_FONTSIZE);
             SizeList->RasterSizeList.GetCount = RasterSizeList_GetCount;
             SizeList->RasterSizeList.GetData  = RasterSizeList_GetData;
             SizeList->hWndTTSizeList = GetDlgItem(hDlg, IDC_CBOX_FONTSIZE);
             SizeList->bIsTTSizeDirty = FALSE;
-            SetWindowLongPtrW(hDlg, DWLP_USER, (LONG_PTR)SizeList);
 
             /* By default show the raster font size list */
             SizeList->UseRasterOrTTList = TRUE;
@@ -756,19 +769,20 @@ FontProc(HWND hDlg,
             SizeList->TTSizePixelUnit = TRUE;
 
             UpdateFontSizeList(hDlg, SizeList);
+            /* Face names list and current font selection
+             * will be done during PSN_SETACTIVE notification */
 
             DPRINT1("ConInfo->FaceName = '%S'\n", ConInfo->FaceName);
 
-            /* Face names list and current font selection will be done during PSN_SETACTIVE notification */
-            // CurrentCodePage = INVALID_CP;
-
+            SendDlgItemMessageW(hDlg, IDC_STATIC_FONT_WINDOW_PREVIEW,
+                                WPM_INIT, 0, (LPARAM)pConProps);
             return TRUE;
         }
 
         case WM_DESTROY:
         {
-            if (SizeList)
-                HeapFree(GetProcessHeap(), 0, SizeList);
+            if (pFontPage)
+                HeapFree(GetProcessHeap(), 0, pFontPage);
             return (INT_PTR)TRUE;
         }
 
@@ -777,7 +791,7 @@ FontProc(HWND hDlg,
             LPDRAWITEMSTRUCT drawItem = (LPDRAWITEMSTRUCT)lParam;
 
             if (drawItem->CtlID == IDC_STATIC_SELECT_FONT_PREVIEW)
-                PaintText(drawItem, ConInfo, Screen);
+                PaintText(drawItem, pConProps, Screen);
 
             return TRUE;
         }
@@ -807,7 +821,7 @@ FontProc(HWND hDlg,
                                     ConInfo->FontSize);
 
             /* Refresh everything */
-            FontTypeChange(hDlg, SizeList, ConInfo);
+            FontTypeChange(hDlg, pFontPage);
             break;
         }
 
@@ -817,7 +831,9 @@ FontProc(HWND hDlg,
             {
                 case PSN_APPLY:
                 {
-                    ApplyConsoleInfo(hDlg);
+                    /* PSHNOTIFY's lParam is TRUE if 'OK' or 'Close'
+                     * is pressed, and is FALSE if 'Apply' is pressed. */
+                    ApplyConsoleInfo(hDlg, pConProps, !((LPPSHNOTIFY)lParam)->lParam);
                     return TRUE;
                 }
 
@@ -825,14 +841,12 @@ FontProc(HWND hDlg,
                 {
                     /* Check whether the current code page has changed.
                      * If so, re-enumerate the fonts. */
-                    if (CurrentCodePage != ConInfo->CodePage)
+                    if (pFontPage->CurrentCodePage != ConInfo->CodePage)
                     {
-                        HWND hFontList;
+                        HWND hFontList = GetDlgItem(hDlg, IDC_LBOX_FONTTYPE);
 
                         /* Save the new code page */
-                        CurrentCodePage = ConInfo->CodePage;
-
-                        hFontList = GetDlgItem(hDlg, IDC_LBOX_FONTTYPE);
+                        pFontPage->CurrentCodePage = ConInfo->CodePage;
 
                         /* Initialize the font list */
                         FaceNameList_Initialize(hFontList, ConInfo->CodePage);
@@ -846,7 +860,7 @@ FontProc(HWND hDlg,
                                                 ConInfo->FontSize);
 
                         /* Refresh everything */
-                        FontTypeChange(hDlg, SizeList, ConInfo);
+                        FontTypeChange(hDlg, pFontPage);
                     }
 
                     /* Fall back to default behaviour */
@@ -866,7 +880,7 @@ FontProc(HWND hDlg,
                     case IDC_LBOX_FONTTYPE:
                     {
                         /* Change the property sheet state only if the font has really changed */
-                        if (FontTypeChange(hDlg, SizeList, ConInfo))
+                        if (FontTypeChange(hDlg, pFontPage))
                             PropSheet_Changed(GetParent(hDlg), hDlg);
                         break;
                     }
@@ -875,7 +889,7 @@ FontProc(HWND hDlg,
                     case IDC_CBOX_FONTSIZE:
                     {
                         /* Change the property sheet state only if the font has really changed */
-                        if (FontSizeChange(hDlg, SizeList, ConInfo))
+                        if (FontSizeChange(hDlg, pFontPage))
                             PropSheet_Changed(GetParent(hDlg), hDlg);
                         break;
                     }
@@ -905,7 +919,7 @@ FontProc(HWND hDlg,
             else if (HIWORD(wParam) == CBN_KILLFOCUS && LOWORD(wParam) == IDC_CBOX_FONTSIZE)
             {
                 /* Change the property sheet state only if the font has really changed */
-                if (FontSizeChange(hDlg, SizeList, ConInfo))
+                if (FontSizeChange(hDlg, pFontPage))
                     PropSheet_Changed(GetParent(hDlg), hDlg);
             }
             else
@@ -920,7 +934,7 @@ FontProc(HWND hDlg,
                     else
                         ConInfo->FontWeight = FW_NORMAL;
 
-                    FontTypeChange(hDlg, SizeList, ConInfo);
+                    FontTypeChange(hDlg, pFontPage);
                     PropSheet_Changed(GetParent(hDlg), hDlg);
                     break;
                 }
@@ -931,11 +945,11 @@ FontProc(HWND hDlg,
                     SizeList->TTSizePixelUnit = (LOWORD(wParam) == IDC_RADIO_PIXEL_UNIT);
 
                     /* The call is valid only for TrueType fonts */
-                    if (CurrentFontType != TRUETYPE_FONTTYPE)
+                    if (pFontPage->CurrentFontType != TRUETYPE_FONTTYPE)
                         break;
 
                     /* Change the property sheet state only if the font has really changed */
-                    if (FontSizeChange(hDlg, SizeList, ConInfo))
+                    if (FontSizeChange(hDlg, pFontPage))
                         PropSheet_Changed(GetParent(hDlg), hDlg);
                     break;
                 }
