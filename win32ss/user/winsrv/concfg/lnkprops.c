@@ -17,6 +17,16 @@
 
 /* FUNCTIONS ******************************************************************/
 
+VOID ErrOut(HRESULT hr, DWORD dwLastError, PCWSTR pszWhere)
+{
+    WCHAR szBuffer[260];
+    StringCchPrintfW(szBuffer, _countof(szBuffer),
+                     L"%s : HRESULT 0x%08x , LastError %lu",
+                     pszWhere ? pszWhere : L"n/a", hr, dwLastError);
+    MessageBoxW(NULL, szBuffer, L"lnkprops", MB_ICONERROR | MB_OK);
+}
+
+
 /**
  * @brief
  * Opens a shell shortcut link file and retrieves the interface pointers
@@ -41,14 +51,15 @@ ConLnkOpen(
                             NULL,
                             &IID_IShellLinkW,
                             (PVOID*)ppsl);
-    if (!SUCCEEDED(hr))
-        return hr;
+    if (!SUCCEEDED(hr)) { ErrOut(hr, GetLastError(), L"SHCoCreateInstance");
+        return hr; }
 
     /* Get a pointer to the IPersistFile interface */
     *pppf = NULL;
     hr = IPersistFile_QueryInterface(*ppsl, &IID_IPersistFile, (PVOID*)pppf);
     if (!SUCCEEDED(hr))
     {
+ErrOut(hr, GetLastError(), L"IPersistFile_QueryInterface");
         IShellLinkW_Release(*ppsl);
         *ppsl = NULL;
     }
@@ -60,6 +71,7 @@ ConLnkOpen(
                                            : STGM_READWRITE | STGM_SHARE_EXCLUSIVE /*STGM_SHARE_DENY_WRITE*/);
     if (!SUCCEEDED(hr))
     {
+ErrOut(hr, GetLastError(), L"IPersistFile_Load");
         IPersistFile_Release(*pppf);
         *pppf = NULL;
         IShellLinkW_Release(*ppsl);
@@ -133,8 +145,8 @@ ConLnkGetConsoleProperties2(
 #endif
 
     hr = IShellLinkW_QueryInterface(psl, &IID_IShellLinkDataList, (PVOID*)&psldl);
-    if (!SUCCEEDED(hr))
-        return hr;
+    if (!SUCCEEDED(hr)) { ErrOut(hr, GetLastError(), L"IID_IShellLinkDataList");
+        return hr; }
 
 #ifdef ConLnkGetConsoleProperties_USE_OUTPTR
     *ppConProps = NULL;
@@ -145,6 +157,8 @@ ConLnkGetConsoleProperties2(
 #endif
 
     hr = IShellLinkDataList_CopyDataBlock(psldl, NT_CONSOLE_PROPS_SIG, (PVOID*)ppConProps);
+ErrOut(hr, GetLastError(), L"NT_CONSOLE_PROPS_SIG");
+if (!*ppConProps) MessageBoxW(NULL, L"pConProps NULL", NULL, MB_OK);
     if (SUCCEEDED(hr) && *ppConProps)
     {
         ASSERT((*ppConProps)->dbh.cbSize == sizeof(**ppConProps) &&
@@ -165,6 +179,7 @@ ConLnkGetConsoleProperties2(
          * the NT_FE_CONSOLE_PROPS are optional */
         HRESULT hr2;
         hr2 = IShellLinkDataList_CopyDataBlock(psldl, NT_FE_CONSOLE_PROPS_SIG, (PVOID*)ppFeConProps);
+ErrOut(hr, GetLastError(), L"NT_FE_CONSOLE_PROPS_SIG");
         if (SUCCEEDED(hr2) && *ppFeConProps)
         {
             ASSERT((*ppFeConProps)->dbh.cbSize == sizeof(**ppFeConProps) &&
