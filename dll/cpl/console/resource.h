@@ -35,8 +35,8 @@
 #define IDL_CODEPAGE                    212
 
 /* Apply dialog */
-#define IDC_RADIO_APPLY_ALL     300
-#define IDC_RADIO_APPLY_CURRENT 301
+#define IDC_RADIO_APPLY_CURRENT 300
+#define IDC_RADIO_APPLY_ALL     301
 
 /* Font dialog */
 #define IDC_CHECK_BOLD_FONTS            400
