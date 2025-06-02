@@ -11,7 +11,10 @@
 #include <shlobj.h>
 
 /*
- * Reduced ATL support for COM Inproc server
+ * Reduced ATL support for COM Inproc server:
+ * Try to disable as much as possible typelib support that is not used here.
+ * Also, avoid importing from oleaut32 by stubplementing the unused functions
+ * and using ole32->oleaut32 forwarders.
  */
 #define _WINDLL
 #define _ATL_STATIC_REGISTRY
@@ -50,17 +53,17 @@ UnRegisterTypeLib(
     return S_OK;
 }
 
-// Forward to oleaut32.
+/* Use the ole32->oleaut32 forwarders instead of the direct oleaut32 functions */
 #define SysAllocString  PropSysAllocString
 #define SysFreeString   PropSysFreeString
 
 EXTERN_C
 BSTR WINAPI
-PropSysAllocString(LPCOLESTR str);  // return SysAllocString(str);
+PropSysAllocString(LPCOLESTR str);
 
 EXTERN_C
 void WINAPI
-PropSysFreeString(LPOLESTR str);    // SysFreeString(str);
+PropSysFreeString(LPOLESTR str);
 
 #include <atlbase.h>
 #include <atlcom.h>
@@ -219,7 +222,7 @@ MessageBoxW(NULL, (LPCWSTR)msg, L"Info", MB_OK);
     }
 
 protected:
-    CONSOLE_PROPS_CTX m_ConProps;
+    CONSOLE_PROPS_CTX m_ConProps = {0};
     CString m_LinkPath;
     CComPtr<IShellLinkW> m_psl;
     LONG m_cRefs = 0;
@@ -284,9 +287,12 @@ MessageBoxW(hWnd, (PCWSTR)msg, L"Info", MB_OK);
                     PCONSOLE_PROPS_CTX pConProps = &This->m_ConProps;
                     if (pConProps->UpdateValues)
                     {
-MessageBoxW(hWnd, L"SaveConsoleSettingsIfNeeded", L"Info", MB_OK);
+MessageBoxW(hWnd, L"SaveConsoleSettings", L"Info", MB_OK);
                         SaveConsoleSettings(pConProps, hWnd);
                     }
+
+                    /* Disable the font preview */
+                    ResetFontPreview(&pConProps->FontPreview);
 
                     /* Finally, release and destroy the CConsoleProps object */
                     This->Release();
@@ -306,10 +312,9 @@ MessageBoxW(hWnd, L"UninitializeConsoleState", L"Info", MB_OK);
         return 1;
     }
 
-    // FIXME: Find the best way to do this and perhaps unify with the CPL code.
     static BOOL
     SaveConsoleSettings(
-        _In_ PCONSOLE_PROPS_CTX pConProps, // CplConProps
+        _In_ PCONSOLE_PROPS_CTX pConProps,
         _In_opt_ HWND hWndParent)
     {
         CConsoleProps* This =
@@ -394,13 +399,15 @@ public:
             }
         }
 
+        /* Initialize the current font preview */
+        RefreshFontPreview(&m_ConProps.FontPreview, m_ConProps.ConInfo);
         return S_OK;
     }
 
     STDMETHODIMP ReplacePage(
         _In_ EXPPS uPageID,
         _In_ LPFNSVADDPROPSHEETPAGE pfnReplaceWith,
-        _In_ LPARAM lParam)
+        _In_ LPARAM lParam) override
     {
         return E_NOTIMPL;
     }
@@ -410,30 +417,39 @@ OBJECT_ENTRY_AUTO(CLSID_ConsoleProperties, CConsoleProps)
 
 
 #include <shellutils.h>
-static BOOL
+static HRESULT
 GetLnkAndExe(
     _In_ PCWSTR pszLnk,
     _Out_ PWSTR pszExe,
     _In_ size_t cchSize,
     _COM_Outptr_ IShellLinkW** ppsl)
 {
+    HRESULT hr;
+
     CComPtr<IShellLinkW> psl;
-    if (FAILED_UNEXPECTEDLY(SHCoCreateInstance(NULL, &CLSID_ShellLink, NULL, IID_PPV_ARG(IShellLinkW, &psl))))
-        return FALSE;
+    hr = SHCoCreateInstance(NULL, &CLSID_ShellLink, NULL, IID_PPV_ARG(IShellLinkW, &psl));
+    if (FAILED_UNEXPECTEDLY(hr))
+        return hr;
 
     CComPtr<IPersistFile> ppf;
-    if (FAILED_UNEXPECTEDLY(psl->QueryInterface(IID_PPV_ARG(IPersistFile, &ppf))))
-        return FALSE;
+    hr = psl->QueryInterface(IID_PPV_ARG(IPersistFile, &ppf));
+    if (FAILED_UNEXPECTEDLY(hr))
+        return hr;
 
-    if (FAILED_UNEXPECTEDLY(ppf->Load(pszLnk, STGM_READ)) || FAILED_UNEXPECTEDLY(psl->Resolve(NULL, SLR_NO_UI | SLR_NOUPDATE | SLR_NOSEARCH)))
-        return FALSE;
+    hr = ppf->Load(pszLnk, STGM_READ);
+    if (FAILED_UNEXPECTEDLY(hr))
+        return hr;
+    hr = psl->Resolve(NULL, SLR_NO_UI | SLR_NOUPDATE | SLR_NOSEARCH /*| SLR_NOTRACK*/);
+    if (FAILED_UNEXPECTEDLY(hr))
+        return hr;
 
-    if (FAILED_UNEXPECTEDLY(psl->GetPath(pszExe, cchSize, NULL, 0)))
-        return FALSE;
+    hr = psl->GetPath(pszExe, cchSize, NULL, 0);
+    if (FAILED_UNEXPECTEDLY(hr))
+        return hr;
 
     *ppsl = psl;
     (*ppsl)->AddRef();
-    return TRUE;
+    return hr;
 }
 
 CString
@@ -473,28 +489,22 @@ CConsoleProps::InitLink(
 {
     CString ExpandedFilename = ExpandEnvironmentStrings(Filename);
 
-CString msg = L"Opening file '" + CString(Filename) + L"' , expanded: '" + ExpandedFilename + L"'";
-MessageBoxW(NULL, (LPCWSTR)msg, L"Info", MB_OK);
-
     // PCWSTR pwszExt = PathFindExtensionW(ExpandedFilename);
     PCWSTR pwszExt = wcsrchr(ExpandedFilename, L'.');
-    if (!pwszExt)
-    {
-        ACDBG(L"Failed to find an extension: '%s'\n", (PCWSTR)ExpandedFilename);
-        return E_FAIL;
-    }
-    if (_wcsicmp(pwszExt, L".lnk") != 0)
+    if (!pwszExt || (_wcsicmp(pwszExt, L".lnk") != 0))
     {
         /* Not a link file, fail */
+        ACDBG(L"Not a link file: '%s'\n", (PCWSTR)ExpandedFilename);
         return E_FAIL;
     }
 
     CComPtr<IShellLinkW> psl;
     WCHAR Buffer[MAX_PATH]; // Link target
-    if (!GetLnkAndExe(ExpandedFilename, Buffer, _countof(Buffer), &psl))
+    HRESULT hr = GetLnkAndExe(ExpandedFilename, Buffer, _countof(Buffer), &psl);
+    if (!SUCCEEDED(hr))
     {
         ACDBG(L"Failed to read link target from: '%s'\n", (PCWSTR)ExpandedFilename);
-        return E_FAIL;
+        return hr;
     }
     if (!_wcsicmp(Buffer, ExpandedFilename))
     {
@@ -502,20 +512,18 @@ MessageBoxW(NULL, (LPCWSTR)msg, L"Info", MB_OK);
         return E_FAIL;
     }
 
-#if 0
-    /// if (!_wcsicmp(pwszExt, L".bat") || !_wcsicmp(pwszExt, L".cmd"))
-    ///     return S_OK; // Fast path that replaces the function call below.
-#endif
-
-msg = L"Link target file: '" + CString(Buffer);
+CString msg;
+msg = L"Link target: '" + CString(Buffer);
 MessageBoxW(NULL, (LPCWSTR)msg, L"Info", MB_OK);
 
-    /* Check whether the target is a Win32 console program
+    /* Check whether the target is a Win32 console program,
      * or a .bat or .cmd (that open with CMD.EXE) */
     DWORD dwExeType;
     dwExeType = (DWORD)::SHGetFileInfoW(Buffer, 0, NULL, 0, SHGFI_EXETYPE);
-    if (dwExeType != MAKELONG('EP', 0)) // If it's not Win32 .exe console or .bat or .cmd
+    // MAKELONG('EP', 0)
+    if (dwExeType != MAKELONG(MAKEWORD('P','E'), 0)) // If it's not Win32 .exe console or .bat or .cmd
     {
+        //// MAKELONG(MAKEWORD('M','Z'), 0)
         // Note: MAKELONG('ZM', 0) would be for an MS-DOS .exe or .com file.
         ACDBG(L"Target not recognized as Win32 exe or bat or cmd: '%s', %lu\n",
               Buffer, dwExeType);
@@ -532,9 +540,6 @@ MessageBoxW(NULL, (LPCWSTR)msg, L"Info", MB_OK);
 ///// We've ended shell-specific initialization.
 ///// Now continue with standard console stuff.
 
-msg.Format(L"g_hModule = 0x%p", g_hModule);
-MessageBoxW(NULL, (LPCWSTR)msg, L"Info", MB_OK);
-
     /* Allocate a local buffer to hold console information */
     m_ConProps.ConInfo =
         (PCONSOLE_STATE_INFO)HeapAlloc(GetProcessHeap(),
@@ -543,16 +548,21 @@ MessageBoxW(NULL, (LPCWSTR)msg, L"Info", MB_OK);
     if (!m_ConProps.ConInfo)
         return E_OUTOFMEMORY;
 
+    /* Load the default settings */
+    ConCfgGetDefaultSettings(m_ConProps.ConInfo);
+
+    /* And override them with those in the link */
 msg = L"Loading from: " + ExpandedFilename;
 MessageBoxW(NULL, (LPCWSTR)msg, L"Info", MB_OK);
-    HRESULT hr = ConLnkReadSettings2(m_ConProps.ConInfo, psl/*ExpandedFilename*/);
+    hr = ConLnkReadSettings2(m_ConProps.ConInfo, psl/*ExpandedFilename*/);
     if (!SUCCEEDED(hr))
     {
 msg.Format(L"Failed to load from '%s', error 0x%p", ExpandedFilename, hr);
 MessageBoxW(NULL, (LPCWSTR)msg, L"Info", MB_OK);
         // TODO: Load instead the registry parameters for the target.
         // If they don't exist, then load the default settings.
-        ConCfgGetDefaultSettings(m_ConProps.ConInfo);
+        // FIXME: Specify the shortcut path in ConInfo->ConsoleTitle ??
+        // ConCfgReadUserSettings(m_ConProps.ConInfo, FALSE);
     }
     m_ConProps.UpdateValues = FALSE;
     m_ConProps.ApplyInfo = ApplyLinkConsoleInfo;
@@ -577,60 +587,61 @@ STDMETHODIMP
 CConsoleProps::Initialize(
     _In_ PCIDLIST_ABSOLUTE pidlFolder,  // LPCITEMIDLIST
     _In_ LPDATAOBJECT pdtobj,           // pDataObj
-    _In_ HKEY hkeyProgID)               // hProgID
+    _In_ HKEY hkeyProgID)
 {
     UNREFERENCED_PARAMETER(pidlFolder);
     UNREFERENCED_PARAMETER(hkeyProgID);
 
+    CString szFile;
+
     FORMATETC etc = { CF_HDROP, NULL, DVASPECT_CONTENT, -1, TYMED_HGLOBAL };
     STGMEDIUM stg;
 
-__debugbreak();
+    if (IsDebuggerPresent())
+        __debugbreak();
+
     HRESULT hr = pdtobj->GetData(&etc, &stg);
     if (FAILED(hr))
         return E_INVALIDARG;
 
     hr = E_FAIL;
     HDROP hdrop = (HDROP)::GlobalLock(stg.hGlobal);
-    if (hdrop)
-    {
-        UINT uNumFiles = ::DragQueryFileW(hdrop, 0xFFFFFFFF, NULL, 0);
-        /* The properties sheet is for one file only */
-        if (uNumFiles == 1)
-        {
-            CString szFile;
-            DWORD dwRequired = ::DragQueryFileW(hdrop, 0, NULL, 0); // Doesn't count terminating NUL.
-            if (dwRequired > 0)
-            {
-                ++dwRequired; // Count the terminating NUL.
-                LPWSTR Buffer = szFile.GetBuffer(dwRequired);
-                DWORD dwReturned = ::DragQueryFileW(hdrop, 0, Buffer, dwRequired);
-                if (dwRequired == ++dwReturned)
-                {
-                    szFile.ReleaseBufferSetLength(dwReturned - 1);
+    if (!hdrop)
+        goto Quit;
 
-                    // TODO: It's here that we should check the exe type, and accept
-                    // whether we should continue to proceed with the property sheet.
-                    hr = InitLink(szFile);
-                }
-                else
-                {
-                    ACDBG(L"Failed to query the file.\n");
-                }
-            }
-            else
-            {
-                ACDBG(L"Failed to query the file.\n");
-            }
-        }
-        else
-        {
-            ACDBG(L"Invalid number of files: %d\n", uNumFiles);
-        }
-        ::GlobalUnlock(stg.hGlobal);
+    /* The properties sheet is for one file only */
+    UINT uNumFiles = ::DragQueryFileW(hdrop, 0xFFFFFFFF, NULL, 0);
+    if (uNumFiles != 1)
+    {
+        ACDBG(L"Invalid number of files: %d\n", uNumFiles);
+        goto Quit;
     }
+
+    DWORD dwRequired = ::DragQueryFileW(hdrop, 0, NULL, 0);
+    if (dwRequired > 0) // Doesn't count terminating NUL.
+    {
+        ++dwRequired; // Count the terminating NUL.
+        LPWSTR Buffer = szFile.GetBuffer(dwRequired);
+        DWORD dwReturned = ::DragQueryFileW(hdrop, 0, Buffer, dwRequired);
+        if (dwRequired == ++dwReturned)
+        {
+            szFile.ReleaseBufferSetLength(dwReturned - 1);
+            hr = S_OK;
+        }
+    }
+    if (!SUCCEEDED(hr))
+        ACDBG(L"Failed to query the file.\n");
+
+Quit:
+    if (hdrop)
+        ::GlobalUnlock(stg.hGlobal);
     ::ReleaseStgMedium(&stg);
-    return hr;
+    if (!SUCCEEDED(hr))
+        return hr;
+
+    /* Initialize with the link file and determine
+     * whether the property pages should be created. */
+    return InitLink(szFile);
 }
 
 
