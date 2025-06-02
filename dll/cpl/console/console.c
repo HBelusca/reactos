@@ -15,12 +15,12 @@
 #define NDEBUG
 #include <debug.h>
 
+/* The console property pages */
 INT_PTR CALLBACK OptionsProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
 INT_PTR CALLBACK FontProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
 INT_PTR CALLBACK LayoutProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
 INT_PTR CALLBACK ColorsProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
 
-/* The console property pages */
 static const struct
 {
     UINT uIDDlg; // idDlg
@@ -257,7 +257,6 @@ ApplyConsoleInfo(
     {
         /* Don't destroy if the changes failed to be applied or saved */
         SetWindowLongPtrW(hDlg, DWLP_MSGRESULT, PSNRET_INVALID_NOCHANGEPAGE);
-        // SetDlgMsgResult(hDlg, PSN_APPLY, PSNRET_INVALID_NOCHANGEPAGE);
         return;
     }
 
@@ -272,13 +271,12 @@ ApplyConsoleInfo(
 Done:
     /* Options will be applied */
     SetWindowLongPtrW(hDlg, DWLP_MSGRESULT, PSNRET_NOERROR);
-    // SetDlgMsgResult(hDlg, PSN_APPLY, PSNRET_NOERROR);
 }
 
 
 static VOID
 SaveConsoleSettings(
-    _In_ PCONSOLE_PROPS_CTX pConProps, // CplConProps
+    _In_ PCONSOLE_PROPS_CTX pConProps,
     _In_opt_ HWND hWndParent)
 {
     PCONSOLE_STATE_INFO ConInfo = pConProps->ConInfo;
@@ -341,6 +339,9 @@ InitApplet(HANDLE hSectionOrWnd)
     PROPSHEETPAGEW psp[_countof(PropPages)];
     PROPSHEETHEADERW psh;
 
+    if (IsDebuggerPresent())
+        __debugbreak();
+
     /*
      * Because of Windows compatibility, we need to behave the same concerning
      * information sharing with CONSRV. For some obscure reason the designers
@@ -357,7 +358,6 @@ InitApplet(HANDLE hSectionOrWnd)
      * global parameters (and we were either called by CONSRV or directly by
      * the user via the Control Panel, etc...)
      */
-__debugbreak();
     pSharedInfo = MapViewOfFile(hSectionOrWnd, FILE_MAP_READ, 0, 0, 0);
     if (pSharedInfo)
     {
