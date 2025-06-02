@@ -56,10 +56,10 @@ ConLnkOpen(
 
     /* Get a pointer to the IPersistFile interface */
     *pppf = NULL;
-    hr = IPersistFile_QueryInterface(*ppsl, &IID_IPersistFile, (PVOID*)pppf);
+    hr = IShellLinkW_QueryInterface(*ppsl, &IID_IPersistFile, (PVOID*)pppf);
     if (!SUCCEEDED(hr))
     {
-ErrOut(hr, GetLastError(), L"IPersistFile_QueryInterface");
+ErrOut(hr, GetLastError(), L"IShellLinkW_QueryInterface");
         IShellLinkW_Release(*ppsl);
         *ppsl = NULL;
     }
@@ -86,15 +86,10 @@ ConLnkClose(
     _In_ IShellLinkW* psl,
     _In_ IPersistFile* ppf)
 {
-    HRESULT hr = S_OK;
-
-    /* Release all the pointers we have */
+    /* Release all the given pointers */
     IPersistFile_Release(ppf);
-    // *pppf = NULL;
     IShellLinkW_Release(psl);
-    // *ppsl = NULL;
-
-    return hr;
+    return S_OK;
 }
 
 /**
