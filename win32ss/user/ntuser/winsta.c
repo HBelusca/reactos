@@ -1999,6 +1999,7 @@ NtUserLockWorkStation(VOID)
     }
     else
     {
+        ERR("NtUserLockWorkStation(): Error: not on the active desktop!\n");
         ret = FALSE;
     }
 
