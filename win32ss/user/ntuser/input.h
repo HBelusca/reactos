@@ -92,7 +92,7 @@ UINT FASTCALL IntImmProcessKey(
 VOID FASTCALL IntFreeImeHotKeys(VOID);
 
 extern DWORD gSystemFS;
-extern UINT gSystemCPCharSet; 
+extern UINT gSystemCPCharSet;
 extern HANDLE ghKeyboardDevice;
 extern PTHREADINFO ptiRawInput;
 extern BYTE gafAsyncKeyState[256 * 2 / 8]; // 2 bits per key

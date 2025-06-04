@@ -677,7 +677,9 @@ UpdateAsyncKeyState(WORD wVk, BOOL bIsDown)
         gafAsyncKeyStateRecentDown[wVk / 8] |= (1 << (wVk % 8));
     }
     else
+    {
         SET_KEY_DOWN(gafAsyncKeyState, wVk, FALSE);
+    }
 }
 
 /*
@@ -940,9 +942,10 @@ ProcessKeyEvent(WORD wVk, WORD wScanCode, DWORD dwFlags, BOOL bInjected, DWORD d
     }
 
     /* Check if this is a hotkey */
-    if (co_UserProcessHotKeys(wSimpleVk, bIsDown)) //// Check if this is correct, refer to hotkey sequence message tests.
+    // TODO: Check if this is correct, refer to hotkey sequence message tests.
+    if (co_UserProcessHotKeys(wSimpleVk, bIsDown))
     {
-        TRACE("HotKey Processed\n");
+        TRACE("HotKey processed\n");
         bPostMsg = FALSE;
     }
 
@@ -954,8 +957,8 @@ ProcessKeyEvent(WORD wVk, WORD wScanCode, DWORD dwFlags, BOOL bInjected, DWORD d
     pFocusQueue = IntGetFocusMessageQueue();
     TRACE("ProcessKeyEvent Q 0x%p Active pWnd 0x%p Focus pWnd 0x%p\n",
            pFocusQueue,
-           (pFocusQueue ?  pFocusQueue->spwndActive : 0),
-           (pFocusQueue ?  pFocusQueue->spwndFocus : 0));
+           (pFocusQueue ? pFocusQueue->spwndActive : 0),
+           (pFocusQueue ? pFocusQueue->spwndFocus : 0));
 
     /* If it is F10 or ALT is down and CTRL is up, it's a system key */
     if ( wVk == VK_F10 ||
@@ -976,7 +979,9 @@ ProcessKeyEvent(WORD wVk, WORD wScanCode, DWORD dwFlags, BOOL bInjected, DWORD d
             }
         }
         else
+        {
             Msg.message = WM_SYSKEYUP;
+        }
     }
     else
     {
@@ -996,7 +1001,7 @@ ProcessKeyEvent(WORD wVk, WORD wScanCode, DWORD dwFlags, BOOL bInjected, DWORD d
         !IS_KEY_DOWN(gafAsyncKeyState, VK_CONTROL) &&
         (wVk == VK_ESCAPE || wVk == VK_TAB))
     {
-       TRACE("Alt-Tab/Esc Pressed wParam %x\n",wVk);
+        TRACE("Alt-Tab/Esc Pressed wParam %x\n",wVk);
     }
 
     /*
@@ -1044,7 +1049,9 @@ ProcessKeyEvent(WORD wVk, WORD wScanCode, DWORD dwFlags, BOOL bInjected, DWORD d
             SnapWindow(pFocusQueue->spwndActive ? UserHMGetHandle(pFocusQueue->spwndActive) : 0);
         }
         else
+        {
             SnapWindow(NULL); // Snap Desktop.
+        }
     }
     else if (pFocusQueue && bPostMsg)
     {
@@ -1054,10 +1061,11 @@ ProcessKeyEvent(WORD wVk, WORD wScanCode, DWORD dwFlags, BOOL bInjected, DWORD d
 
         if (!Wnd && pFocusQueue->spwndActive) // SysInit.....
         {
-           // Going with Active. WM_SYSKEYXXX last wine Win test_keyboard_input.
-           Wnd = pFocusQueue->spwndActive;
+            // Going with Active. WM_SYSKEYXXX last wine Win test_keyboard_input.
+            Wnd = pFocusQueue->spwndActive;
         }
-        if (Wnd) pti = Wnd->head.pti;
+        if (Wnd)
+            pti = Wnd->head.pti;
 
         /* Init message */
         Msg.hwnd = Wnd ? UserHMGetHandle(Wnd) : NULL;
@@ -1068,14 +1076,14 @@ ProcessKeyEvent(WORD wVk, WORD wScanCode, DWORD dwFlags, BOOL bInjected, DWORD d
 
         if ( Msg.message == WM_KEYDOWN || Msg.message == WM_SYSKEYDOWN )
         {
-           if ( (Msg.wParam == VK_SHIFT ||
-                 Msg.wParam == VK_CONTROL ||
-                 Msg.wParam == VK_MENU ) &&
-               !IS_KEY_DOWN(gafAsyncKeyState, Msg.wParam))
-           {
-              ERR("Set last input\n");
-              //ptiLastInput = pti;
-           }
+            if ( (Msg.wParam == VK_SHIFT ||
+                  Msg.wParam == VK_CONTROL ||
+                  Msg.wParam == VK_MENU ) &&
+                !IS_KEY_DOWN(gafAsyncKeyState, Msg.wParam))
+            {
+                ERR("Set last input\n");
+                //ptiLastInput = pti;
+            }
         }
 
         /* If it is VK_PACKET, high word of wParam is used for wchar */
@@ -1096,10 +1104,10 @@ ProcessKeyEvent(WORD wVk, WORD wScanCode, DWORD dwFlags, BOOL bInjected, DWORD d
                 Msg.lParam |= KF_MENUMODE << 16;
         }
 
-        // Post mouse move before posting key buttons, to keep it syned.
+        // Post mouse move before posting key buttons, to keep it synced.
         if (pFocusQueue->QF_flags & QF_MOUSEMOVED)
         {
-           IntCoalesceMouseMove(pti);
+            IntCoalesceMouseMove(pti);
         }
 
         /* Post a keyboard message */
@@ -1414,7 +1422,7 @@ IntMapVirtualKeyEx(UINT uCode, UINT Type, PKBDTABLES pKbdTbl)
 
         case MAPVK_VK_TO_CHAR:
             uRet = (UINT)IntVkToChar(uCode, pKbdTbl);
-        break;
+            break;
 
         case MAPVK_VSC_TO_VK_EX:
             uRet = IntVscToVk(uCode, pKbdTbl) & 0xFF;

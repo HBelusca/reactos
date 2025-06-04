@@ -8,8 +8,8 @@
 
 /*
  * FIXME: Hotkey notifications are triggered by keyboard input (physical or programmatically)
- * and since only desktops on WinSta0 can receive input in seems very wrong to allow
- * windows/threads on destops not belonging to WinSta0 to set hotkeys (receive notifications).
+ * and since only desktops on WinSta0 can receive input, it seems very wrong to allow
+ * windows/threads on desktops not belonging to WinSta0 to set hotkeys (receive notifications).
  *     -- Gunnar
  */
 
@@ -28,9 +28,9 @@ DBG_DEFAULT_CHANNEL(UserHotkey);
  * see https://learn.microsoft.com/en-us/previous-versions/windows/it-pro/windows-server-2003/cc786263(v=ws.10)
  * and https://flylib.com/books/en/4.441.1.33/1/ for more details.
  * By default the key is VK-F12 on a 101-key keyboard, and is VK_SUBTRACT
- * (hyphen / substract sign) on a 82-key keyboard.
+ * (hyphen / subtract sign) on a 82-key keyboard.
  */
-/*                       pti   pwnd  modifiers  vk      id  next */
+/*                       pti   pwnd  modifiers  vk      id             next */
 // HOT_KEY hkF12 =      {NULL, 1,    0,         VK_F12, IDHK_F12,      NULL};
 // HOT_KEY hkShiftF12 = {NULL, 1,    MOD_SHIFT, VK_F12, IDHK_SHIFTF12, &hkF12};
 // HOT_KEY hkWinKey =   {NULL, 1,    MOD_WIN,   0,      IDHK_WINKEY,   &hkShiftF12};
@@ -57,38 +57,35 @@ SetDebugHotKeys(VOID)
     TRACE("Debugger hotkeys set up! If you see this you enabled Debug Prints. Congrats!\n");
 }
 
-/*
- * IntGetModifiers
- *
- * Returns a value that indicates if the key is a modifier key, and
- * which one.
- */
+/**
+ * @brief
+ * Returns a value that indicates which modifier keys are being pressed down.
+ **/
 static
 UINT FASTCALL
-IntGetModifiers(PBYTE pKeyState)
+IntGetModifiers(_In_ PBYTE pKeyState)
 {
-    UINT fModifiers = 0;
+    UINT fsModifiers = 0;
 
     if (IS_KEY_DOWN(pKeyState, VK_SHIFT))
-        fModifiers |= MOD_SHIFT;
+        fsModifiers |= MOD_SHIFT;
 
     if (IS_KEY_DOWN(pKeyState, VK_CONTROL))
-        fModifiers |= MOD_CONTROL;
+        fsModifiers |= MOD_CONTROL;
 
     if (IS_KEY_DOWN(pKeyState, VK_MENU))
-        fModifiers |= MOD_ALT;
+        fsModifiers |= MOD_ALT;
 
     if (IS_KEY_DOWN(pKeyState, VK_LWIN) || IS_KEY_DOWN(pKeyState, VK_RWIN))
-        fModifiers |= MOD_WIN;
+        fsModifiers |= MOD_WIN;
 
-    return fModifiers;
+    return fsModifiers;
 }
 
-/*
- * IntSwapModHKF
- *
- * Maps to/from MOD_/HOTKEYF_ (swaps the SHIFT and ALT bits)
- */
+/**
+ * @brief
+ * Maps to/from MOD_/HOTKEYF_ (swaps the SHIFT and ALT bits).
+ **/
 static inline
 UCHAR
 IntSwapModHKF(UINT Input)
@@ -96,11 +93,12 @@ IntSwapModHKF(UINT Input)
     return (Input & 2) | ((Input & 1) << 2) | ((Input >> 2) & 1);
 }
 
-/*
- * UnregisterWindowHotKeys
+/**
+ * @brief
+ * Removes hotkeys registered by the specified window on its cleanup.
  *
- * Removes hotkeys registered by specified window on its cleanup
- */
+ * @see UnregisterThreadHotKeys(), UserUnregisterHotKey().
+ **/
 VOID FASTCALL
 UnregisterWindowHotKeys(PWND pWnd)
 {
@@ -118,19 +116,23 @@ UnregisterWindowHotKeys(PWND pWnd)
             *pLink = phkNext;
             ExFreePoolWithTag(pHotKey, USERTAG_HOTKEY);
         }
-        else /* This hotkey will stay, use its next ptr */
+        else
+        {
+            /* This hotkey will stay, use its next ptr */
             pLink = &pHotKey->pNext;
+        }
 
         /* Move to the next entry */
         pHotKey = phkNext;
     }
 }
 
-/*
- * UnregisterThreadHotKeys
+/**
+ * @brief
+ * Removes hotkeys registered by the specified thread on its cleanup.
  *
- * Removes hotkeys registered by specified thread on its cleanup
- */
+ * @see UnregisterWindowHotKeys(), UserUnregisterHotKey().
+ **/
 VOID FASTCALL
 UnregisterThreadHotKeys(PTHREADINFO pti)
 {
@@ -148,8 +150,11 @@ UnregisterThreadHotKeys(PTHREADINFO pti)
             *pLink = phkNext;
             ExFreePoolWithTag(pHotKey, USERTAG_HOTKEY);
         }
-        else /* This hotkey will stay, use its next ptr */
+        else
+        {
+            /* This hotkey will stay, use its next ptr */
             pLink = &pHotKey->pNext;
+        }
 
         /* Move to the next entry */
         pHotKey = phkNext;
@@ -182,18 +187,16 @@ IsHotKey(UINT fsModifiers, WORD wVk)
     return NULL;
 }
 
-/*
- * co_UserProcessHotKeys
- *
- * Sends WM_HOTKEY message if given keys are hotkey
- */
-BOOL NTAPI
-co_UserProcessHotKeys(WORD wVk, BOOL bIsDown)
+/**
+ * @brief
+ * Sends a WM_HOTKEY message if the given keys are a registered hotkey.
+ **/
+BOOL FASTCALL
+co_UserProcessHotKeys(_In_ WORD wVk, _In_ BOOL bIsDown)
 {
-    UINT fModifiers;
+    UINT fsModifiers;
     PHOT_KEY pHotKey;
     PWND pWnd;
-    BOOL DoNotPostMsg = FALSE;
     BOOL IsModifier = FALSE;
 
     if (wVk == VK_SHIFT || wVk == VK_CONTROL || wVk == VK_MENU ||
@@ -203,20 +206,20 @@ co_UserProcessHotKeys(WORD wVk, BOOL bIsDown)
         IsModifier = TRUE;
     }
 
-    fModifiers = IntGetModifiers(gafAsyncKeyState);
+    fsModifiers = IntGetModifiers(gafAsyncKeyState);
 
     if (bIsDown)
     {
         if (IsModifier)
         {
             /* Modifier key down -- no hotkey trigger, but remember this */
-            gfsModOnlyCandidate = fModifiers;
+            gfsModOnlyCandidate = fsModifiers;
             return FALSE;
         }
         else
         {
             /* Regular key down -- check for hotkey, and reset mod candidates */
-            pHotKey = IsHotKey(fModifiers, wVk);
+            pHotKey = IsHotKey(fsModifiers, wVk);
             gfsModOnlyCandidate = 0;
         }
     }
@@ -236,96 +239,93 @@ co_UserProcessHotKeys(WORD wVk, BOOL bIsDown)
         }
     }
 
-    if (pHotKey)
+    if (!pHotKey)
+        return FALSE;
+
+    TRACE("Hotkey pressed (pWnd %p, id %d)\n", pHotKey->pWnd, pHotKey->id);
+
+    /* FIXME: See comment about "UserDebuggerHotKey" on top of this file. */
+    if (pHotKey->id == IDHK_SHIFTF12 || pHotKey->id == IDHK_F12)
     {
-        TRACE("Hot key pressed (pWnd %p, id %d)\n", pHotKey->pWnd, pHotKey->id);
-
-        /* FIXME: See comment about "UserDebuggerHotKey" on top of this file. */
-        if (pHotKey->id == IDHK_SHIFTF12 || pHotKey->id == IDHK_F12)
+        BOOL DoNotPostMsg = FALSE;
+        if (bIsDown)
         {
-            if (bIsDown)
-            {
-                ERR("Hot key pressed for Debug Activation! ShiftF12 = %d or F12 = %d\n",pHotKey->id == IDHK_SHIFTF12 , pHotKey->id == IDHK_F12);
-                //DoNotPostMsg = co_ActivateDebugger(); // FIXME
-            }
-            return DoNotPostMsg;
+            ERR("Hotkey pressed for Debug Activation! ShiftF12 = %d or F12 = %d\n",
+                pHotKey->id == IDHK_SHIFTF12, pHotKey->id == IDHK_F12);
+            //DoNotPostMsg = co_ActivateDebugger(); // FIXME
         }
+        return DoNotPostMsg;
+    }
 
-        /* WIN and F12 keys are not hardcoded here. See comments on top of this file. */
-        if (pHotKey->id == IDHK_WINKEY)
+    /* WIN and F12 keys are not hardcoded here. See comments on top of this file. */
+    if (pHotKey->id == IDHK_WINKEY)
+    {
+        ASSERT(!bIsDown);
+        pWnd = ValidateHwndNoErr(InputWindowStation->ShellWindow);
+        if (pWnd)
         {
-            ASSERT(!bIsDown);
-            pWnd = ValidateHwndNoErr(InputWindowStation->ShellWindow);
-            if (pWnd)
-            {
-               TRACE("System Hot key Id %d Key %u\n", pHotKey->id, wVk );
-               UserPostMessage(UserHMGetHandle(pWnd), WM_SYSCOMMAND, SC_TASKLIST, 0);
-               co_IntShellHookNotify(HSHELL_TASKMAN, 0, 0);
-               return FALSE;
-            }
-        }
-        
-        if (pHotKey->id == IDHK_SNAP_LEFT ||
-            pHotKey->id == IDHK_SNAP_RIGHT ||
-            pHotKey->id == IDHK_SNAP_UP ||
-            pHotKey->id == IDHK_SNAP_DOWN)
-        {
-            HWND topWnd = UserGetForegroundWindow();
-            if (topWnd)
-            {
-                UserPostMessage(topWnd, WM_KEYDOWN, wVk, 0);
-            }
-            return TRUE;
-        }
-
-        if (!pHotKey->pWnd)
-        {
-            TRACE("UPTM Hot key Id %d Key %u\n", pHotKey->id, wVk );
-            UserPostThreadMessage(pHotKey->pti, WM_HOTKEY, pHotKey->id, MAKELONG(fModifiers, wVk));
-            //ptiLastInput = pHotKey->pti;
-            return TRUE; /* Don't send any message */
-        }
-        else
-        {
-            pWnd = pHotKey->pWnd;
-            if (pWnd == PWND_BOTTOM)
-            {
-                if (gpqForeground == NULL)
-                    return FALSE;
-
-                pWnd = gpqForeground->spwndFocus;
-            }
-
-            if (pWnd)
-            {
-                //  pWnd->head.rpdesk->pDeskInfo->spwndShell needs testing.
-                if (pWnd == ValidateHwndNoErr(InputWindowStation->ShellWindow) && pHotKey->id == SC_TASKLIST)
-                {
-                    UserPostMessage(UserHMGetHandle(pWnd), WM_SYSCOMMAND, SC_TASKLIST, 0);
-                    co_IntShellHookNotify(HSHELL_TASKMAN, 0, 0);
-                }
-                else if (IsWindowHotKey(pHotKey))
-                {
-                    /* WM_SETHOTKEY notifies with WM_SYSCOMMAND, not WM_HOTKEY */
-                    if (bIsDown)
-                    {
-                        if (gpqForeground && gpqForeground->spwndActive)
-                            pWnd = gpqForeground->spwndActive;
-                        UserPostMessage(UserHMGetHandle(pWnd), WM_SYSCOMMAND,
-                                        SC_HOTKEY, (LPARAM)UserHMGetHandle(pHotKey->pWnd));
-                    }
-                }
-                else
-                {
-                    TRACE("UPM Hot key Id %d Key %u\n", pHotKey->id, wVk );
-                    UserPostMessage(UserHMGetHandle(pWnd), WM_HOTKEY, pHotKey->id, MAKELONG(fModifiers, wVk));
-                }
-                //ptiLastInput = pWnd->head.pti;
-                return TRUE; /* Don't send any message */
-            }
+            TRACE("System Hotkey Id %d Key %u\n", pHotKey->id, wVk);
+            UserPostMessage(UserHMGetHandle(pWnd), WM_SYSCOMMAND, SC_TASKLIST, 0);
+            co_IntShellHookNotify(HSHELL_TASKMAN, 0, 0);
+            return FALSE;
         }
     }
-    return FALSE;
+
+    /* Handle window snapping hotkeys */
+    if (pHotKey->id == IDHK_SNAP_LEFT ||
+        pHotKey->id == IDHK_SNAP_RIGHT ||
+        pHotKey->id == IDHK_SNAP_UP ||
+        pHotKey->id == IDHK_SNAP_DOWN)
+    {
+        HWND topWnd = UserGetForegroundWindow();
+        if (topWnd)
+            UserPostMessage(topWnd, WM_KEYDOWN, wVk, 0);
+        return TRUE;
+    }
+
+    if (!pHotKey->pWnd)
+    {
+        TRACE("UPTM Hotkey Id %d Key %u\n", pHotKey->id, wVk);
+        UserPostThreadMessage(pHotKey->pti, WM_HOTKEY, pHotKey->id, MAKELONG(fsModifiers, wVk));
+        //ptiLastInput = pHotKey->pti;
+        return TRUE; /* Don't send any message */
+    }
+
+    /* Retrieve the window where to send the hotkey */
+    pWnd = pHotKey->pWnd;
+    if (pWnd == PWND_BOTTOM)
+    {
+        if (!gpqForeground)
+            return FALSE;
+        pWnd = gpqForeground->spwndFocus;
+    }
+    if (!pWnd)
+        return FALSE;
+
+    //  pWnd->head.rpdesk->pDeskInfo->spwndShell needs testing.
+    if (pWnd == ValidateHwndNoErr(InputWindowStation->ShellWindow) && pHotKey->id == SC_TASKLIST)
+    {
+        UserPostMessage(UserHMGetHandle(pWnd), WM_SYSCOMMAND, SC_TASKLIST, 0);
+        co_IntShellHookNotify(HSHELL_TASKMAN, 0, 0);
+    }
+    else if (IsWindowHotKey(pHotKey))
+    {
+        /* WM_SETHOTKEY notifies with WM_SYSCOMMAND, not WM_HOTKEY */
+        if (bIsDown)
+        {
+            if (gpqForeground && gpqForeground->spwndActive)
+                pWnd = gpqForeground->spwndActive;
+            UserPostMessage(UserHMGetHandle(pWnd), WM_SYSCOMMAND,
+                            SC_HOTKEY, (LPARAM)UserHMGetHandle(pHotKey->pWnd));
+        }
+    }
+    else
+    {
+        TRACE("UPM Hotkey Id %d Key %u\n", pHotKey->id, wVk);
+        UserPostMessage(UserHMGetHandle(pWnd), WM_HOTKEY, pHotKey->id, MAKELONG(fsModifiers, wVk));
+    }
+    //ptiLastInput = pWnd->head.pti;
+    return TRUE; /* Don't send any message */
 }
 
 
@@ -338,9 +338,6 @@ UINT FASTCALL
 DefWndGetHotKey(PWND pWnd)
 {
     PHOT_KEY pHotKey = gphkFirst;
-
-    WARN("DefWndGetHotKey\n");
-
     while (pHotKey)
     {
         if (pHotKey->pWnd == pWnd && IsWindowHotKey(pHotKey))
@@ -369,13 +366,11 @@ DefWndSetHotKey(PWND pWnd, WPARAM wParam)
     PHOT_KEY pHotKey, *pLink;
     INT iRet = 1;
 
-    WARN("DefWndSetHotKey wParam 0x%x\n", wParam);
-
-    // A hot key cannot be associated with a child window.
+    // A hotkey cannot be associated with a child window.
     if (pWnd->style & WS_CHILD)
         return 0;
 
-    // VK_ESCAPE, VK_SPACE, VK_TAB and VK_PACKET are invalid hot keys.
+    // VK_ESCAPE, VK_SPACE, VK_TAB and VK_PACKET are invalid hotkeys.
     if (vk == VK_ESCAPE || vk == VK_SPACE || vk == VK_TAB || vk == VK_PACKET)
     {
         return -1;
@@ -391,7 +386,7 @@ DefWndSetHotKey(PWND pWnd, WPARAM wParam)
                 IsWindowHotKey(pHotKey))
             {
                 if (pHotKey->pWnd != pWnd)
-                    iRet = 2; // Another window already has the same hot key.
+                    iRet = 2; // Another window already has the same hotkey.
                 break;
             }
 
@@ -425,13 +420,13 @@ DefWndSetHotKey(PWND pWnd, WPARAM wParam)
                 return 0;
 
             pHotKey->pWnd = pWnd;
-            pHotKey->id = IDHK_WNDKEY; // Don't care, these hot keys are unrelated to the hot keys set by RegisterHotKey
+            pHotKey->id = IDHK_WNDKEY; // Don't care, these hotkeys are unrelated to the hotkeys set by RegisterHotKey
             pHotKey->pNext = gphkFirst;
             gphkFirst = pHotKey;
         }
 
-        /* A window can only have one hot key. If the window already has a
-           hot key associated with it, the new hot key replaces the old one. */
+        /* A window can only have one hotkey. If the window already has a
+           hotkey associated with it, the new hotkey replaces the old one. */
         pHotKey->pti = NULL; /* IsWindowHotKey */
         pHotKey->fsModifiers = fsModifiers;
         pHotKey->vk = vk;
@@ -499,6 +494,13 @@ UserRegisterHotKey(PWND pWnd,
     return TRUE;
 }
 
+/**
+ * @brief
+ * Removes hotkeys previously registered by the user.
+ *
+ * @see NtUserUnregisterHotKey(), UserRegisterHotKey(),
+ *      UnregisterWindowHotKeys(), UnregisterThreadHotKeys().
+ **/
 BOOL FASTCALL
 UserUnregisterHotKey(PWND pWnd, int id)
 {
