@@ -114,12 +114,16 @@ extern "C" {
 // Definitions used by WM_LOGONNOTIFY
 //
 #define LN_LOGOFF             0x0
+#define LN_START_SCREENSAVE   0x1
 #define LN_SHELL_EXITED       0x2
-#define LN_START_TASK_MANAGER 0x4
-#define LN_LOCK_WORKSTATION   0x5
-#define LN_UNLOCK_WORKSTATION 0x6
+#define LN_ACCESSIBILITY      0x3
+#define LN_POWERSTATE         0x4
+#define LN_LOCK_WORKSTATION   0x5   // and fast_user_switch
+#define LN_UNLOCK_WORKSTATION 0x6   // session_reconnect
+// 0x7
+#define LN_REMOTE_LOGOFF      0x8
 #define LN_MESSAGE_BEEP       0x9
-#define LN_START_SCREENSAVE   0xA
+#define LN_POWER_EVENT        0xA
 #define LN_LOGOFF_CANCELED    0xB
 
 //
@@ -168,6 +172,7 @@ extern "C" {
 #endif
 
 
+/* Undocumented key modifier (fsModifiers) for RegisterHotKey */
 #define MOD_WINLOGON_SAS 0x8000
 
 #define CW_USEDEFAULT16 ((short)0x8000)
