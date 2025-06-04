@@ -66,19 +66,17 @@ StartTaskManager(
     if (!Session->Gina.Functions.WlxStartApplication)
         return FALSE;
 
-    if (!CreateEnvironmentBlock(
-        &lpEnvironment,
-        Session->UserToken,
-        TRUE))
+    if (!CreateEnvironmentBlock(&lpEnvironment,
+                                Session->UserToken,
+                                TRUE))
     {
         return FALSE;
     }
 
-    ret = Session->Gina.Functions.WlxStartApplication(
-        Session->Gina.Context,
-        L"Default",
-        lpEnvironment,
-        L"taskmgr.exe");
+    ret = Session->Gina.Functions.WlxStartApplication(Session->Gina.Context,
+                                                      L"Default",
+                                                      lpEnvironment,
+                                                      L"taskmgr.exe");
 
     DestroyEnvironmentBlock(lpEnvironment);
     return ret;
@@ -104,11 +102,10 @@ StartUserShell(
     /* FIXME: reverting to lower privileges after creating user shell? */
     RtlAdjustPrivilege(SE_ASSIGNPRIMARYTOKEN_PRIVILEGE, TRUE, FALSE, &Old);
 
-    ret = Session->Gina.Functions.WlxActivateUserShell(
-                Session->Gina.Context,
-                L"Default",
-                NULL, /* FIXME */
-                lpEnvironment);
+    ret = Session->Gina.Functions.WlxActivateUserShell(Session->Gina.Context,
+                                                       L"Default",
+                                                       NULL, /* FIXME */
+                                                       lpEnvironment);
 
     DestroyEnvironmentBlock(lpEnvironment);
     return ret;
@@ -994,7 +991,6 @@ CreateLogoffSecurityAttributes(
     if (SetEntriesInAcl(1, &Access, NULL, &pACL) != ERROR_SUCCESS)
     {
         ERR("Failed to set Access Rights for logoff thread. Logging out will most likely fail.\n");
-
         HeapFree(GetProcessHeap(), 0, pMem);
         return STATUS_UNSUCCESSFUL;
     }
@@ -1031,9 +1027,7 @@ DestroyLogoffSecurityAttributes(
     IN PSECURITY_ATTRIBUTES psa)
 {
     if (psa)
-    {
         HeapFree(GetProcessHeap(), 0, psa);
-    }
 }
 
 
@@ -1367,20 +1361,17 @@ DispatchSAS(
 
                 case STATE_LOGGED_OFF:
                     Session->LogonState = STATE_LOGGED_OFF_SAS;
-
                     CloseAllDialogWindows();
-
                     Session->Options = 0;
-
                     wlxAction = (DWORD)Session->Gina.Functions.WlxLoggedOutSAS(
-                        Session->Gina.Context,
-                        Session->SASAction,
-                        &Session->LogonId,
-                        LogonSid,
-                        &Session->Options,
-                        &Session->UserToken,
-                        &Session->MprNotifyInfo,
-                        (PVOID*)&Session->Profile);
+                                            Session->Gina.Context,
+                                            Session->SASAction,
+                                            &Session->LogonId,
+                                            LogonSid,
+                                            &Session->Options,
+                                            &Session->UserToken,
+                                            &Session->MprNotifyInfo,
+                                            (PVOID*)&Session->Profile);
                     break;
 
                 case STATE_LOGGED_OFF_SAS:
@@ -1417,9 +1408,7 @@ DispatchSAS(
 
                 case STATE_LOCKED:
                     Session->LogonState = STATE_LOCKED_SAS;
-
                     CloseAllDialogWindows();
-
                     wlxAction = (DWORD)Session->Gina.Functions.WlxWkstaLockedSAS(Session->Gina.Context, dwSasType);
                     break;
 
@@ -1526,7 +1515,7 @@ HandleMessageBeep(
             EventName = NULL;
             break;
         case MB_OK:
-            EventName = L"SystemDefault";
+            EventName = L"SystemDefault"; // L".Default";
             break;
         case MB_ICONASTERISK:
             EventName = L"SystemAsterisk";
@@ -1594,6 +1583,7 @@ SASWindowProc(
             }
             break;
         }
+
         case WM_CREATE:
         {
             /* Get the session pointer from the create data */
@@ -1605,6 +1595,7 @@ SASWindowProc(
                 return TRUE;
             return RegisterHotKeys(Session, hwndDlg);
         }
+
         case WM_DESTROY:
         {
             if (!GetSetupType())
@@ -1612,6 +1603,7 @@ SASWindowProc(
             PostQuitMessage(0);
             return TRUE;
         }
+
         case WM_SETTINGCHANGE:
         {
             UINT uiAction = (UINT)wParam;
@@ -1622,6 +1614,7 @@ SASWindowProc(
             }
             return TRUE;
         }
+
         case WM_LOGONNOTIFY:
         {
             switch(wParam)
@@ -1745,6 +1738,7 @@ SASWindowProc(
             }
             return 0;
         }
+
         case WM_TIMER:
         {
             if (wParam == 1)
@@ -1754,6 +1748,7 @@ SASWindowProc(
             }
             break;
         }
+
         case WLX_WM_SAS:
         {
             DispatchSAS(Session, (DWORD)wParam);
