@@ -41,6 +41,9 @@ UserProcessMouseInput(PMOUSE_INPUT_DATA mid)
 {
     MOUSEINPUT mi;
 
+    // TODO: Handle pti->rpdesk->BlockInputThread
+    // If set, block mouse input by directly returning.
+
     /* Convert MOUSE_INPUT_DATA to MOUSEINPUT. First init all fields. */
     mi.dx = mid->LastX;
     mi.dy = mid->LastY;

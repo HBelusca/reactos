@@ -990,6 +990,10 @@ ProcessKeyEvent(WORD wVk, WORD wScanCode, DWORD dwFlags, BOOL bInjected, DWORD d
         }
     }
 
+    // TODO: Handle pti->rpdesk->BlockInputThread
+    // If set, block keyboard input by directly returning.
+    // If we have a SAS keypress, unblock input instead!
+
     /* Check if this is a hotkey */
     // TODO: Check if this is correct, refer to hotkey sequence message tests.
     if (co_UserProcessHotKeys(wSimpleVk, bIsDown))
