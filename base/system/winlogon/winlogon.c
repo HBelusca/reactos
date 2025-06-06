@@ -503,6 +503,7 @@ WinMain(
     hAppInstance = hInstance;
 
     /* Make us critical */
+    // TODO: Get the session ID first, then do this only for the session 0 process.
     RtlSetProcessIsCritical(TRUE, NULL, FALSE);
     RtlSetThreadIsCritical(TRUE, NULL, FALSE);
 
