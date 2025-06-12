@@ -926,6 +926,49 @@ cleanup:
     return ret;
 }
 
+static
+BOOL
+QueryVerboseStatus(VOID)
+{
+    HKEY hKey;
+    LONG lError;
+    DWORD dwValue, dwType, cbData;
+
+    /* Check the Policies value first, it overrides the one in CurrentVersion\Winlogon */
+    lError = RegOpenKeyExW(HKEY_LOCAL_MACHINE,
+                           L"Software\\Microsoft\\Windows\\CurrentVersion\\Policies\\System",
+                           0,
+                           KEY_QUERY_VALUE,
+                           &hKey);
+    if (lError == ERROR_SUCCESS)
+    {
+        cbData = sizeof(dwValue);
+        lError = RegQueryValueExW(hKey, L"VerboseStatus", 0, &dwType, (PBYTE)&dwValue, &cbData);
+        RegCloseKey(hKey);
+
+        if ((lError == ERROR_SUCCESS) && (dwType == REG_DWORD) && (cbData == sizeof(dwValue)))
+            return !!dwValue;
+    }
+
+    /* Fallback to the value in CurrentVersion\Winlogon */
+    lError = RegOpenKeyExW(HKEY_LOCAL_MACHINE,
+                           L"Software\\Microsoft\\Windows NT\\CurrentVersion\\Winlogon",
+                           0,
+                           KEY_QUERY_VALUE,
+                           &hKey);
+    if (lError == ERROR_SUCCESS)
+    {
+        cbData = sizeof(dwValue);
+        lError = RegQueryValueExW(hKey, L"VerboseStatus", 0, &dwType, (PBYTE)&dwValue, &cbData);
+        RegCloseKey(hKey);
+
+        if ((lError == ERROR_SUCCESS) && (dwType == REG_DWORD) && (cbData == sizeof(dwValue)))
+            return !!dwValue;
+    }
+
+    return FALSE;
+}
+
 BOOL
 GinaInit(
     IN OUT PWLSESSION Session)
@@ -938,7 +981,8 @@ GinaInit(
     Session->Gina.Context = NULL;
     Session->Gina.Version = GinaDllVersion;
     Session->Gina.UseCtrlAltDelete = FALSE;
-    Session->SuppressStatus = FALSE;
+    Session->DisableStatus = FALSE;
+    Session->VerboseStatus = QueryVerboseStatus();
 
     TRACE("Calling WlxInitialize(\"%S\")\n", Session->InteractiveWindowStationName);
     return Session->Gina.Functions.WlxInitialize(

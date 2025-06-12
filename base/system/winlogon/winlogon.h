@@ -221,7 +221,8 @@ typedef struct _WLSESSION
 {
     GINAINSTANCE Gina;
     DWORD SASAction;
-    BOOL SuppressStatus;
+    BOOL DisableStatus;
+    BOOL VerboseStatus;
     BOOL TaskManHotkey;
     BOOL LockWkStaHotkey;
     BOOL UtilManHotkey;
@@ -415,9 +416,19 @@ PlaySoundRoutine(IN LPCWSTR FileName,
                  IN UINT Flags);
 
 BOOL
-DisplayStatusMessage(IN PWLSESSION Session,
-                     IN HDESK hDesktop,
-                     IN UINT ResourceId);
+DisplayStatusMessageEx(
+    _In_ PWLSESSION Session,
+    _In_ HDESK hDesktop,
+    _In_ BOOL bVerbose,
+    _In_ DWORD dwOptions,
+    _In_opt_ PCWSTR pTitle,
+    _In_opt_ PCWSTR pMessageOrResId);
+
+BOOL
+DisplayStatusMessage(
+    _In_ PWLSESSION Session,
+    _In_ HDESK hDesktop,
+    _In_ UINT ResourceId);
 
 BOOL
 RemoveStatusMessage(IN PWLSESSION Session);

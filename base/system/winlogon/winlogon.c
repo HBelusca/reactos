@@ -367,23 +367,55 @@ InitKeyboardLayouts(VOID)
 
 
 BOOL
-DisplayStatusMessage(
-     IN PWLSESSION Session,
-     IN HDESK hDesktop,
-     IN UINT ResourceId)
+DisplayStatusMessageEx(
+    _In_ PWLSESSION Session,
+    _In_ HDESK hDesktop,
+    _In_ BOOL bVerbose,
+    _In_ DWORD dwOptions,
+    _In_opt_ PCWSTR pTitle,
+    _In_opt_ PCWSTR pMessageOrResId)
 {
     WCHAR StatusMsg[MAX_PATH];
 
     if (Session->Gina.Version < WLX_VERSION_1_3)
-        return TRUE;
-
-    if (Session->SuppressStatus)
-        return TRUE;
-
-    if (LoadStringW(hAppInstance, ResourceId, StatusMsg, MAX_PATH) == 0)
         return FALSE;
 
-    return Session->Gina.Functions.WlxDisplayStatusMessage(Session->Gina.Context, hDesktop, 0, NULL, StatusMsg);
+    /* Don't show the message if messages are disabled, or, this
+     * is a verbose message but verbose messages are disabled */
+    if (Session->DisableStatus)
+        return FALSE;
+    if (bVerbose && !Session->VerboseStatus)
+        return FALSE;
+
+    if (IS_INTRESOURCE(pMessageOrResId))
+    {
+        if (LoadStringW(hAppInstance, PtrToUint(pMessageOrResId),
+                        StatusMsg, ARRAYSIZE(StatusMsg)) == 0)
+        {
+            return FALSE;
+        }
+        pMessageOrResId = StatusMsg;
+    }
+
+    return Session->Gina.Functions.WlxDisplayStatusMessage(Session->Gina.Context,
+                                                           hDesktop,
+                                                           dwOptions,
+                                                           (PWSTR)pTitle,
+                                                           (PWSTR)pMessageOrResId);
+}
+
+BOOL
+DisplayStatusMessage(
+    _In_ PWLSESSION Session,
+    _In_ HDESK hDesktop,
+    _In_ UINT ResourceId)
+{
+    return DisplayStatusMessageEx(Session,
+                                  hDesktop,
+                                  FALSE,
+                                  0,
+                                  NULL,
+                                  MAKEINTRESOURCEW(ResourceId));
 }
 
 
