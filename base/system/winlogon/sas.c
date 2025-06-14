@@ -1182,7 +1182,9 @@ HandleShutdown(
         uMsgId = IDS_REACTOSISSHUTTINGDOWN;
 
     // SwitchDesktop(Session->WinlogonDesktop);
-    DisplayStatusMessage(Session, Session->WinlogonDesktop, uMsgId);
+    DisplayStatusMessageEx(Session, Session->WinlogonDesktop,
+                           FALSE, STATUSMSG_OPTION_SETFOREGROUND,
+                           NULL, MAKEINTRESOURCEW(uMsgId));
 
     /* Invoke Shutdown notifications and notify GINA */
     CallNotificationDlls(Session, ShutdownHandler);
@@ -1195,7 +1197,9 @@ HandleShutdown(
 
     /* Show again the shutdown message */
     // SwitchDesktop(Session->WinlogonDesktop); // Re-enable if you notice the desktop may have switched to something else.
-    DisplayStatusMessage(Session, Session->WinlogonDesktop, uMsgId);
+    DisplayStatusMessageEx(Session, Session->WinlogonDesktop,
+                           FALSE, STATUSMSG_OPTION_SETFOREGROUND,
+                           NULL, MAKEINTRESOURCEW(uMsgId));
 
     /* Destroy SAS window */
     UninitializeSAS(Session);
