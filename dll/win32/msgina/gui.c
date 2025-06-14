@@ -12,6 +12,8 @@
 #include <winnls.h>
 #include <ndk/exfuncs.h>
 
+#define WM_SETSTATUSMSG     (WM_USER + 1000)
+
 typedef struct _DISPLAYSTATUSMSG
 {
     PGINA_CONTEXT Context;
@@ -39,6 +41,7 @@ typedef struct _DLG_DATA
     HBITMAP hLogoBitmap;
     HBITMAP hBarBitmap;
     HWND hWndBarCtrl;
+    BOOL HasTimer;
     DWORD BarCounter;
     DWORD LogoWidth;
     DWORD LogoHeight;
@@ -253,7 +256,6 @@ StatusDialogProc(
     IN LPARAM lParam)
 {
     PDLG_DATA pDlgData;
-    UNREFERENCED_PARAMETER(wParam);
 
     pDlgData = (PDLG_DATA)GetWindowLongPtrW(hwndDlg, GWLP_USERDATA);
 
@@ -265,32 +267,58 @@ StatusDialogProc(
             if (!msg)
                 return FALSE;
 
-            msg->Context->hStatusWindow = hwndDlg;
-
-            if (msg->pTitle)
-                SetWindowTextW(hwndDlg, msg->pTitle);
-            SetDlgItemTextW(hwndDlg, IDC_STATUS_MESSAGE, msg->pMessage);
-            SetEvent(msg->StartupEvent);
-
             pDlgData = DlgData_Create(hwndDlg, msg->Context);
-            if (pDlgData == NULL)
+            if (!pDlgData)
                 return FALSE;
+
+            msg->Context->hStatusWindow = hwndDlg;
 
             DlgData_LoadBitmaps(pDlgData);
             if (pDlgData->hBarBitmap)
             {
-                if (SetTimer(hwndDlg, IDT_BAR, 20, NULL) == 0)
+                /* Get the animation bar control */
+                pDlgData->hWndBarCtrl = GetDlgItem(hwndDlg, IDC_BAR);
+            }
+            AdjustStatusMessageWindow(hwndDlg, pDlgData);
+
+            // PostMessage(hwndDlg, WM_SETSTATUSMSG, (WPARAM)msg, 0);
+            SetEvent(msg->StartupEvent);
+            return TRUE;
+        }
+
+        case WM_SETSTATUSMSG:
+        {
+            PDISPLAYSTATUSMSG msg = (PDISPLAYSTATUSMSG)wParam;
+            if (!msg)
+                return FALSE;
+
+            if (msg->pTitle)
+                SetWindowTextW(hwndDlg, msg->pTitle);
+            SetDlgItemTextW(hwndDlg, IDC_STATUS_MESSAGE, msg->pMessage);
+            if (msg->dwOptions & STATUSMSG_OPTION_SETFOREGROUND)
+                SetForegroundWindow(hwndDlg);
+
+            /* Start/update or stop the animation accordingly */
+            if (pDlgData && pDlgData->hBarBitmap)
+            {
+                if (!(msg->dwOptions & STATUSMSG_OPTION_NOANIMATION))
                 {
-                    ERR("SetTimer(IDT_BAR) failed: %d\n", GetLastError());
+                    if (!pDlgData->HasTimer)
+                        pDlgData->HasTimer = (SetTimer(hwndDlg, IDT_BAR, 20, NULL) != 0);
+                    if (!pDlgData->HasTimer)
+                        ERR("SetTimer(IDT_BAR) failed: %d\n", GetLastError());
                 }
-                else
+                else if (pDlgData->HasTimer)
                 {
-                    /* Get the animation bar control */
-                    pDlgData->hWndBarCtrl = GetDlgItem(hwndDlg, IDC_BAR);
+                    /* Kill the timer and reset the bar */
+                    KillTimer(hwndDlg, IDT_BAR);
+                    pDlgData->HasTimer = FALSE;
+                    pDlgData->BarCounter = 0;
+                    InvalidateRect(pDlgData->hWndBarCtrl, NULL, FALSE);
+                    UpdateWindow(pDlgData->hWndBarCtrl);
                 }
             }
 
-            AdjustStatusMessageWindow(hwndDlg, pDlgData);
             return TRUE;
         }
 
@@ -314,9 +342,7 @@ StatusDialogProc(
             LPDRAWITEMSTRUCT lpDis = (LPDRAWITEMSTRUCT)lParam;
 
             if (lpDis->CtlID != IDC_BAR)
-            {
                 return FALSE;
-            }
 
             if (pDlgData && pDlgData->hBarBitmap)
             {
@@ -341,9 +367,7 @@ StatusDialogProc(
         case WM_DESTROY:
         {
             if (pDlgData && pDlgData->hBarBitmap)
-            {
                 KillTimer(hwndDlg, IDT_BAR);
-            }
             DlgData_Destroy(hwndDlg);
             return TRUE;
         }
@@ -354,39 +378,38 @@ StatusDialogProc(
 static DWORD WINAPI
 StartupWindowThread(LPVOID lpParam)
 {
-    HDESK hDesk;
     PDISPLAYSTATUSMSG msg = (PDISPLAYSTATUSMSG)lpParam;
+    HDESK hDesk;
 
     /* When SetThreadDesktop is called the system closes the desktop handle when needed
-       so we have to create a new handle because this handle may still be in use by winlogon  */
-    if (!DuplicateHandle (  GetCurrentProcess(),
-                            msg->hDesktop,
-                            GetCurrentProcess(),
-                            (HANDLE*)&hDesk,
-                            0,
-                            FALSE,
-                            DUPLICATE_SAME_ACCESS))
+     * so we have to create a new handle because this handle may still be in use by winlogon. */
+    if (!DuplicateHandle(GetCurrentProcess(),
+                         msg->hDesktop,
+                         GetCurrentProcess(),
+                         (HANDLE*)&hDesk,
+                         0,
+                         FALSE,
+                         DUPLICATE_SAME_ACCESS))
     {
         ERR("Duplicating handle failed!\n");
-        HeapFree(GetProcessHeap(), 0, lpParam);
+        HeapFree(GetProcessHeap(), 0, msg);
         return FALSE;
     }
 
-    if(!SetThreadDesktop(hDesk))
+    if (!SetThreadDesktop(hDesk))
     {
         ERR("Setting thread desktop failed!\n");
-        HeapFree(GetProcessHeap(), 0, lpParam);
+        HeapFree(GetProcessHeap(), 0, msg);
         return FALSE;
     }
 
-    DialogBoxParamW(
-        hDllInstance,
-        MAKEINTRESOURCEW(IDD_STATUS),
-        GetDesktopWindow(),
-        StatusDialogProc,
-        (LPARAM)lpParam);
+    DialogBoxParamW(hDllInstance,
+                    MAKEINTRESOURCEW(IDD_STATUS),
+                    GetDesktopWindow(),
+                    StatusDialogProc,
+                    (LPARAM)lpParam);
 
-    HeapFree(GetProcessHeap(), 0, lpParam);
+    HeapFree(GetProcessHeap(), 0, msg);
     return TRUE;
 }
 
@@ -398,37 +421,42 @@ GUIDisplayStatusMessage(
     IN PWSTR pTitle,
     IN PWSTR pMessage)
 {
-    PDISPLAYSTATUSMSG msg;
-    HANDLE Thread;
-    DWORD ThreadId;
+    DISPLAYSTATUSMSG dsmsg;
 
     TRACE("GUIDisplayStatusMessage(%ws)\n", pMessage);
 
+    // TODO: Consider moving this PDISPLAYSTATUSMSG as a global structure
+    // inside GINA_CONTEXT in order to implement WlxGetStatusMessage() ?
+    dsmsg.Context = pgContext;
+    dsmsg.hDesktop = hDesktop;
+    dsmsg.dwOptions = dwOptions;
+    dsmsg.pTitle = pTitle;
+    dsmsg.pMessage = pMessage;
+    dsmsg.StartupEvent = NULL;
+
     if (!pgContext->hStatusWindow)
     {
-        /*
-         * If everything goes correctly, 'msg' is freed
-         * by the 'StartupWindowThread' thread.
-         */
+        PDISPLAYSTATUSMSG msg;
+        HANDLE StartupEvent;
+        HANDLE Thread;
+        DWORD ThreadId;
+
+        /* If everything goes correctly, 'msg' is freed
+         * by the 'StartupWindowThread' thread. */
         msg = (PDISPLAYSTATUSMSG)HeapAlloc(GetProcessHeap(),
                                            HEAP_ZERO_MEMORY,
                                            sizeof(*msg));
-        if(!msg)
+        if (!msg)
             return FALSE;
+        RtlCopyMemory(msg, &dsmsg, sizeof(dsmsg));
 
-        msg->Context = pgContext;
-        msg->dwOptions = dwOptions;
-        msg->pTitle = pTitle;
-        msg->pMessage = pMessage;
-        msg->hDesktop = hDesktop;
-
-        msg->StartupEvent = CreateEventW(NULL, TRUE, FALSE, NULL);
-
-        if (!msg->StartupEvent)
+        StartupEvent = CreateEventW(NULL, TRUE, FALSE, NULL);
+        if (!StartupEvent)
         {
             HeapFree(GetProcessHeap(), 0, msg);
             return FALSE;
         }
+        msg->StartupEvent = StartupEvent;
 
         Thread = CreateThread(NULL,
                               0,
@@ -436,32 +464,24 @@ GUIDisplayStatusMessage(
                               (PVOID)msg,
                               0,
                               &ThreadId);
-        if (Thread)
+        if (!Thread)
         {
-            /* 'msg' will be freed by 'StartupWindowThread' */
-
-            CloseHandle(Thread);
-            WaitForSingleObject(msg->StartupEvent, INFINITE);
-            CloseHandle(msg->StartupEvent);
-            return TRUE;
-        }
-        else
-        {
-            /*
-             * The 'StartupWindowThread' thread couldn't be created,
-             * so we need to free the allocated 'msg'.
-             */
+            /* The 'StartupWindowThread' thread couldn't be created,
+             * so we need to free the allocated 'msg'. */
+            CloseHandle(StartupEvent);
             HeapFree(GetProcessHeap(), 0, msg);
+            return FALSE;
         }
 
-        return FALSE;
+        /* 'msg' will be freed by 'StartupWindowThread' */
+        CloseHandle(Thread);
+        WaitForSingleObject(StartupEvent, INFINITE);
+        CloseHandle(StartupEvent);
+        // return TRUE;
     }
 
-    if (pTitle)
-        SetWindowTextW(pgContext->hStatusWindow, pTitle);
-
-    SetDlgItemTextW(pgContext->hStatusWindow, IDC_STATUS_MESSAGE, pMessage);
-
+    /* Update the displayed status message */
+    SendMessageW(pgContext->hStatusWindow, WM_SETSTATUSMSG, (WPARAM)&dsmsg, 0);
     return TRUE;
 }
 

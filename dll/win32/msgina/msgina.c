@@ -612,6 +612,11 @@ WlxDisplayStatusMessage(
 
     TRACE("WlxDisplayStatusMessage(\"%S\")\n", pMessage);
 
+    // TODO: Read both the HKEY_LOCAL_MACHINE L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Winlogon"
+    // and HKEY_LOCAL_MACHINE "Software\\Microsoft\\Windows\\CurrentVersion\\Policies\\System"
+    // (i.e. Winlogon policies) for the "DisableStatusMessages" key.
+    // If set to non-zero, don't display the message.
+
     return pGinaUI->DisplayStatusMessage(pgContext, hDesktop, dwOptions, pTitle, pMessage);
 }
 
