@@ -566,6 +566,33 @@ FreeWlxMprInfo(
     }
 }
 
+// static // FIXME: Currently unused.
+VOID
+LogoffCleanup(
+    _Inout_ PWLSESSION Session)
+{
+__debugbreak();
+    /* Unload the user profile */
+    if (Session->hProfileInfo != INVALID_HANDLE_VALUE &&
+        Session->hProfileInfo != NULL)
+    {
+        UnloadUserProfile(Session->UserToken, Session->hProfileInfo);
+    }
+    Session->hProfileInfo = NULL;
+
+    /* Restore default system parameters */
+    UpdatePerUserSystemParameters(0, FALSE);
+
+    /* Switch back to default SYSTEM user */
+    CloseHandle(Session->UserToken);
+    Session->UserToken = NULL;
+    Session->LogonId = LuidNone;
+    SetWindowStationUser(Session->InteractiveWindowStation,
+                         &LuidNone, NULL, 0);
+
+    // Session->LogonState = STATE_LOGGED_OFF;
+}
+
 static
 BOOL
 HandleLogon(
