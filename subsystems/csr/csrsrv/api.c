@@ -531,6 +531,15 @@ CsrApiRequestThread(IN PVOID Parameter)
             else if (MessageType == LPC_REQUEST)
             {
                 /* This is an API Message coming from a non-CSR Thread */
+#ifdef CSR_DBG
+                DPRINT1("[%02x] CSRSS: [%02x,%02x] - Api %lx for server %lx called from non-CSR thread (Vista+ app?)\n",
+                        Teb->ClientId.UniqueThread,
+                        ReceiveMsg.Header.ClientId.UniqueProcess,
+                        ReceiveMsg.Header.ClientId.UniqueThread,
+                        CSR_API_NUMBER_TO_API_ID(ReceiveMsg.ApiNumber),
+                        CSR_API_NUMBER_TO_SERVER_ID(ReceiveMsg.ApiNumber));
+                if (NtCurrentPeb()->BeingDebugged) DbgBreakPoint();
+#endif
                 ReplyMsg = &ReceiveMsg;
                 ReplyPort = CsrApiPort;
                 ReplyMsg->Status = STATUS_ILLEGAL_FUNCTION;
