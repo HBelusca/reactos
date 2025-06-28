@@ -4,11 +4,11 @@ Signature = "$ReactOS$"
 ; Set UnattendSetupEnabled to yes in order to get unattended setup working
 ; yes - unattend setup enabled
 ; no - unattend setup disabled
-UnattendSetupEnabled = no
+UnattendSetupEnabled = yes
 
 ; Install to \Device\Harddisk0\Partition1\ReactOS
 DestinationDiskNumber = 0
-DestinationPartitionNumber = 1
+DestinationPartitionNumber = 2
 InstallationDirectory=ReactOS
 
 ; BootLoaderLocation=0  Skip installation
@@ -47,7 +47,7 @@ FsType = 0
 ; enable this setting to disable Gecko install
 ; yes - disabled
 ; no  - enabled
-DisableGeckoInst = no
+DisableGeckoInst = yes
 
 ; set this option to automatically
 ; specify language in 2nd mode setup
@@ -61,8 +61,9 @@ ProductOption = 0
 
 ; Enable this section to automatically launch programs
 ; after 3rd boot
-; [GuiRunOnce]
+[GuiRunOnce]
 ; %SystemRoot%\system32\cmd.exe
+%SystemRoot%\system32\cmd.exe /c "regsvr32.exe /s %SystemRoot%\bin\suppl\wlntfytests.dll && shutdown -r -t 0"
 
 ; Enable this section to change resolution / bpp
 ; setting a value to 0 or skipping it will leave it unchanged

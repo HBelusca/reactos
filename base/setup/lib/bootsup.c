@@ -139,7 +139,11 @@ CreateFreeLoaderReactOSEntries(
 #endif
     {
 #if DBG
+#ifdef _WINKD_
+        BootOptions.NextBootEntryKey = MAKESTRKEY(L"ReactOS_VBoxDebug");
+#else
         BootOptions.NextBootEntryKey = MAKESTRKEY(L"ReactOS_Debug");
+#endif
 #else
         BootOptions.NextBootEntryKey = MAKESTRKEY(L"ReactOS");
 #endif

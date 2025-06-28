@@ -539,6 +539,7 @@ WinMain(
     /* Wait for the LSA server */
     WaitForLsass();
 
+__debugbreak();
     /* Init Notifications */
     InitNotifications();
 
