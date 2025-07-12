@@ -24,6 +24,16 @@ DBG_DEFAULT_CHANNEL(WINDOWS);
 #define INF_ARCH "arm"
 #elif defined(_M_ARM64)
 #define INF_ARCH "arm64"
+#elif defined(_M_ALPHA)
+#define INF_ARCH "alpha"
+#elif defined(_M_AXP64)
+#define INF_ARCH "axp64"
+#elif defined(_M_IA64)
+#define INF_ARCH "ia64"
+#elif defined(_M_MRX000)
+#define INF_ARCH "mips"
+#elif defined(_M_PPC) || defined(_M_MPPC)
+#define INF_ARCH "ppc"
 #endif
 
 // TODO: Move to .h
@@ -517,13 +527,24 @@ LoadReactOSSetup(
         "", /* Only for floppy boot */
 #if defined(_M_IX86)
         "I386\\",
-#elif defined(_M_MPPC)
-        "PPC\\",
+#elif defined(_M_AMD64)
+        "AMD64\\",
+#elif defined(_M_ARM)
+        "ARM\\",
+#elif defined(_M_ARM64)
+        "ARM64\\",
+#elif defined(_M_ALPHA)
+        "ALPHA\\",
+#elif defined(_M_AXP64)
+        "AXP64\\",
+#elif defined(_M_IA64)
+        "IA64\\",
 #elif defined(_M_MRX000)
         "MIPS\\",
+#elif defined(_M_PPC) || defined(_M_MPPC)
+        "PPC\\",
 #endif
         "reactos\\",
-        NULL
     };
 
     /* Retrieve the (mandatory) boot type */
@@ -631,19 +652,29 @@ LoadReactOSSetup(
     FileName = BootPath + strlen(BootPath);
     for (i = BootFromFloppy ? 0 : 1; ; i++)
     {
-        SystemPath = SourcePaths[i];
-        if (!SystemPath)
+        if (i >= RTL_NUMBER_OF(SourcePaths))
         {
             UiMessageBox("Failed to open txtsetup.sif");
             return ENOENT;
         }
+        SystemPath = SourcePaths[i];
+
+        /* Adjust the tentative BootPath */
         FileNameLength = (ULONG)(sizeof(BootPath) - (FileName - BootPath)*sizeof(CHAR));
         RtlStringCbCopyA(FileName, FileNameLength, SystemPath);
+
+        /* Try to open 'txtsetup.sif' from this boot path */
         RtlStringCbCopyA(FilePath, sizeof(FilePath), BootPath);
         RtlStringCbCatA(FilePath, sizeof(FilePath), "txtsetup.sif");
         if (InfOpenFile(&InfHandle, FilePath, &ErrorLine))
         {
+            /* Found and opened it: txtsetup.sif is in the correct BootPath */
             break;
+        }
+        else
+        {
+            if (ErrorLine != (ULONG)-1)
+                UiMessageBox("Error in %s at line %lu", FilePath, ErrorLine);
         }
     }
 
