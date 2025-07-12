@@ -32,12 +32,17 @@ LookupDirectoryById(
 {
     BOOL Success;
 
+    // TODO: Windows supports both a platform-specific section and a generic one.
     // ReactOS-specific
-    Success = SpInfFindFirstLine(InfHandle, L"Directories", DirId, InfContext);
+    Success = SpInfFindFirstLine(InfHandle, L"Directories." INF_ARCH, DirId, InfContext);
+    if (!Success)
+        Success = SpInfFindFirstLine(InfHandle, L"Directories", DirId, InfContext);
     if (!Success)
     {
         // Windows-compatible
-        Success = SpInfFindFirstLine(InfHandle, L"WinntDirectories", DirId, InfContext);
+        Success = SpInfFindFirstLine(InfHandle, L"WinntDirectories." INF_ARCH, DirId, InfContext);
+        if (!Success)
+            Success = SpInfFindFirstLine(InfHandle, L"WinntDirectories", DirId, InfContext);
         if (!Success)
             DPRINT1("SpInfFindFirstLine() failed\n");
     }
@@ -90,15 +95,12 @@ GetSourceFileAndTargetLocation(
     /* InfContext to a file was not given, retrieve one corresponding to SourceFileName */
     if (!InfContext)
     {
-        /* Search for the SourceDisksFiles section */
-
-        /* Search in the optional platform-specific first (currently hardcoded; make it runtime-dependent?) */
+        /* Search in the 'SourceDisksFiles' section, first in the optional
+         * platform-specific one, and if not found, in the generic section. */
+        // TODO: currently hardcoded; make it runtime-dependent?
         Success = SpInfFindFirstLine(InfHandle, L"SourceDisksFiles." INF_ARCH, SourceFileName, &FileContext);
         if (!Success)
-        {
-            /* Search in the global section */
             Success = SpInfFindFirstLine(InfHandle, L"SourceDisksFiles", SourceFileName, &FileContext);
-        }
         if (!Success)
         {
             // pSetupData->LastErrorNumber = ERROR_TXTSETUP_SECTION;
@@ -123,11 +125,13 @@ GetSourceFileAndTargetLocation(
     }
 
     /* Lookup source root directory -- SetupGetSourceInfo() */
-    /* Search in the optional platform-specific first (currently hardcoded; make it runtime-dependent?) */
+
+    /* Search in the 'SourceDisksNames' section, first in the optional
+     * platform-specific one, and if not found, in the generic section. */
+    // TODO: currently hardcoded; make it runtime-dependent?
     Success = SpInfFindFirstLine(InfHandle, L"SourceDisksNames." INF_ARCH, SourceRootDirId, &DirContext);
     if (!Success)
     {
-        /* Search in the global section */
         Success = SpInfFindFirstLine(InfHandle, L"SourceDisksNames", SourceRootDirId, &DirContext);
         if (!Success)
             DPRINT1("SpInfFindFirstLine(\"SourceDisksNames\", \"%S\") failed\n", SourceRootDirId);
@@ -511,12 +515,14 @@ PrepareCopyInfFile(
     INFCONTEXT DirContext;
     PWCHAR AdditionalSectionName = NULL;
     PCWSTR DirKeyValue;
+    UINT8 Pass;
     WCHAR PathBuffer[MAX_PATH];
 
     if (SourceCabinet == NULL)
     {
-        /* Add common files -- Search for the SourceDisksFiles section */
-        /* Search in the optional platform-specific first (currently hardcoded; make it runtime-dependent?) */
+        /* Add common files: Process the 'SourceDisksFiles' section, first
+         * the optional platform-specific one, then the generic section. */
+        // TODO: currently hardcoded; make it runtime-dependent?
         Success = AddSectionToCopyQueue(pSetupData, InfFile,
                                         L"SourceDisksFiles." INF_ARCH,
                                         &pSetupData->DestinationPath);
@@ -524,7 +530,6 @@ PrepareCopyInfFile(
         {
             DPRINT1("AddSectionToCopyQueue(%S) failed!\n", L"SourceDisksFiles." INF_ARCH);
         }
-        /* Search in the global section */
         Success = AddSectionToCopyQueue(pSetupData, InfFile,
                                         L"SourceDisksFiles",
                                         &pSetupData->DestinationPath);
@@ -611,20 +616,35 @@ PrepareCopyInfFile(
     }
 
     /* Search for the 'Directories' section */
+
+    for (Pass = 0; Pass <= 1; ++Pass)
+    {
+    PCWSTR pRosDirsSection[] = {"Directories", "Directories." INF_ARCH};
+    PCWSTR pDirsSection[] = {"WinntDirectories", "WinntDirectories." INF_ARCH};
+
+    // TODO: Windows supports both a generic and a platform-specific section.
     // ReactOS-specific
     if (!SpInfFindFirstLine(InfFile, L"Directories", NULL, &DirContext))
     {
         // Windows-compatible
         if (!SpInfFindFirstLine(InfFile, L"WinntDirectories", NULL, &DirContext))
         {
-            if (SourceCabinet)
-                pSetupData->LastErrorNumber = ERROR_CABINET_SECTION;
-            else
-                pSetupData->LastErrorNumber = ERROR_TXTSETUP_SECTION;
+            /* Only the generic section is mandatory */
+            if (Pass == 0)
+            {
+                if (SourceCabinet)
+                    pSetupData->LastErrorNumber = ERROR_CABINET_SECTION;
+                else
+                    pSetupData->LastErrorNumber = ERROR_TXTSETUP_SECTION;
 
-            if (pSetupData->ErrorRoutine)
-                pSetupData->ErrorRoutine(pSetupData, L"Directories");
-            return FALSE;
+                if (pSetupData->ErrorRoutine)
+                    pSetupData->ErrorRoutine(pSetupData, L"Directories");
+                return FALSE;
+            }
+            else
+            {
+                continue;
+            }
         }
     }
 
