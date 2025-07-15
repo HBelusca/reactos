@@ -2081,14 +2081,14 @@ DlgDirSelectExW(
 BOOL
 WINAPI
 EndDialog(
-  HWND hwnd,
-  INT_PTR retval)
+    HWND hwnd,
+    INT_PTR retval)
 {
-    DIALOGINFO * dlgInfo;
+    DIALOGINFO* dlgInfo;
     HWND owner;
     BOOL wasActive;
 
-    TRACE("%p %ld\n", hwnd, retval );
+    TRACE("%p %ld\n", hwnd, retval);
 
     if (!(dlgInfo = GETDLGINFO(hwnd)))
     {
@@ -2099,30 +2099,36 @@ EndDialog(
     dlgInfo->idResult = retval;
     dlgInfo->flags |= DF_END;
 
-    if ((GetWindowLongW( hwnd, GWL_STYLE ) & (WS_POPUP|WS_CHILD)) == WS_CHILD)
-    {
-       owner = GetAncestor( hwnd, GA_PARENT);
-    }
+    if ((GetWindowLongW(hwnd, GWL_STYLE) & (WS_POPUP|WS_CHILD)) == WS_CHILD)
+        owner = GetAncestor(hwnd, GA_PARENT);
     else
-       owner = GetWindow( hwnd, GW_OWNER );    
+        owner = GetWindow(hwnd, GW_OWNER);
+
+if (owner == hwnd)
+{
+ERR("EndDialog(%p): owner == hwnd ?!?!\n", hwnd);
+__debugbreak();
+}
 
     if (owner)
-        EnableWindow( owner, TRUE );
+    {
+        // TODO: Re-enable only if the window was originally enabled.
+        EnableWindow(owner, TRUE);
+    }
 
     /* Windows sets the focus to the dialog itself in EndDialog */
 
     if (wasActive && IsChild(hwnd, GetFocus()))
-       SetFocus( hwnd );
+        SetFocus(hwnd);
 
     /* Don't have to send a ShowWindow(SW_HIDE), just do
        SetWindowPos with SWP_HIDEWINDOW as done in Windows */
-
     SetWindowPos(hwnd, NULL, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE
                  | SWP_NOZORDER | SWP_NOACTIVATE | SWP_HIDEWINDOW);
 
     if (wasActive && owner)
     {
-        /* If this dialog was given an owner then set the focus to that owner. */
+        /* If this dialog was given an owner then set the focus to that owner */
         SetActiveWindow(owner);
     }
     else if (hwnd == GetActiveWindow()) // Check it again!
@@ -2130,7 +2136,7 @@ EndDialog(
         NtUserCallNoParam(NOPARAM_ROUTINE_ZAPACTIVEANDFOUS);
     }
 
-    /* unblock dialog loop */
+    /* Unblock dialog loop */
     PostMessageA(hwnd, WM_NULL, 0, 0);
     return TRUE;
 }
@@ -2186,7 +2192,7 @@ GetDlgItem(
     HWND *list;
     HWND ret = 0;
 
-    if (!hDlg) return 0; 
+    if (!hDlg) return 0;
 
     list = WIN_ListChildren(hDlg);
     if (!list) return 0;
@@ -2394,7 +2400,7 @@ GetNextDlgTabItem(
   BOOL bPrevious)
 {
     PWND pWindow;
-      
+
     pWindow = ValidateHwnd( hDlg );
     if (!pWindow) return NULL;
     if (hCtl)
@@ -2563,7 +2569,7 @@ IsDialogMessageW(
                 {
                     fIsDialog = (GETDLGINFO(hDlg) != NULL);
                 }
-  
+
                 SendMessageW(hDlg, WM_CHANGEUISTATE, MAKEWPARAM(UIS_CLEAR, UISF_HIDEFOCUS), 0);
 
                 /* I am not sure under which circumstances the TAB is handled
