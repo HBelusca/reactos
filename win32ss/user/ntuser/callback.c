@@ -341,6 +341,7 @@ co_IntCallWindowProc(WNDPROC Proc,
    if (!NT_SUCCESS(Status))
    {
       ERR("Error Callback to User space Status %lx Message %d\n",Status,Message);
+      __debugbreak();
       UserEnterCo();
       return 0;
    }
