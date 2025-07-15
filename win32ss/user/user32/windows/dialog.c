@@ -1263,6 +1263,8 @@ static LRESULT DEFDLG_Proc( HWND hwnd, UINT msg, WPARAM wParam,
 
         case WM_SHOWWINDOW:
             if (!wParam) DEFDLG_SaveFocus( hwnd );
+            if (LOWORD(lParam) != 0 && dlgInfo && (dlgInfo->flags & DF_END)) // ReactOS
+                break;
             return DefWindowProcA( hwnd, msg, wParam, lParam );
 
         case WM_ACTIVATE:
@@ -1278,6 +1280,7 @@ static LRESULT DEFDLG_Proc( HWND hwnd, UINT msg, WPARAM wParam,
             return 0;
 
         case WM_SETFOCUS:
+            if (dlgInfo && !(dlgInfo->flags & DF_END)) // ReactOS
             DEFDLG_RestoreFocus( hwnd, FALSE );
             return 0;
 
