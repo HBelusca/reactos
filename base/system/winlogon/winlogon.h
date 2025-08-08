@@ -238,6 +238,7 @@ typedef struct _WLSESSION
     HANDLE UserToken;
     HANDLE hProfileInfo;
     LOGON_STATE LogonState;
+    DWORD wlxLogoffShutdown;
     DWORD DialogTimeout; /* Timeout for dialog boxes, in seconds */
     LARGE_INTEGER LastLogon;
 

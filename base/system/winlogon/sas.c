@@ -1258,6 +1258,7 @@ DoGenericAction(
         case WLX_SAS_ACTION_FORCE_LOGOFF: /* 0x09 */
         case WLX_SAS_ACTION_SHUTDOWN_POWER_OFF: /* 0x0a */
         case WLX_SAS_ACTION_SHUTDOWN_REBOOT: /* 0x0b */
+            Session->wlxLogoffShutdown = wlxAction;
             if ((Session->LogonState != STATE_INIT) &&
                 (Session->LogonState != STATE_LOGGED_OFF) &&
                 (Session->LogonState != STATE_LOGGED_OFF_SAS) &&

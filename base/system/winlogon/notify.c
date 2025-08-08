@@ -34,12 +34,13 @@ typedef struct _NOTIFICATION_ITEM
 {
     LIST_ENTRY ListEntry;
     HMODULE hModule;
-    PWSTR pszKeyName;
+    PWSTR pszKeyName;   // FIXME: Unneeded
     PWSTR pszDllName;
-    BOOL bEnabled;
-    BOOL bAsynchronous;
-    BOOL bImpersonate;
-    BOOL bSmartCardLogon;
+    BOOL bEnabled : 1;
+    BOOL bAsynchronous : 1;
+    BOOL bImpersonate : 1;
+    BOOL bSmartCardLogon : 1;
+    BOOL Reserved : 3;
     DWORD dwMaxWait;
     BOOL bSfcNotification;
     PWLX_NOTIFY_HANDLER Handler[LastHandler];
@@ -565,16 +566,25 @@ CallNotificationDlls(
     /* Set up the notification info structure template */
     Info.Size = sizeof(Info);
 
-    switch (Type)
+    /* Get the notification flags (only for logoff and shutdown) */
+    Info.Flags = 0;
+    if ((Type == LogoffHandler) || (Type == ShutdownHandler))
     {
-        case LogoffHandler:
-        case ShutdownHandler:
-            Info.Flags = 3;
-            break;
+        switch (pSession->wlxLogoffShutdown)
+        {
+            case WLX_SAS_ACTION_LOGOFF:
+            case WLX_SAS_ACTION_FORCE_LOGOFF:
+                Info.Flags |= EWX_LOGOFF;
+                break;
 
-        default:
-            Info.Flags = 0;
-            break;
+            case WLX_SAS_ACTION_SHUTDOWN_REBOOT:
+                Info.Flags |= EWX_REBOOT;
+                __fallthrough;
+            case WLX_SAS_ACTION_SHUTDOWN:
+            case WLX_SAS_ACTION_SHUTDOWN_POWER_OFF:
+                Info.Flags |= EWX_SHUTDOWN;
+                break;
+        }
     }
 
     Info.UserName = pSession->UserName;
