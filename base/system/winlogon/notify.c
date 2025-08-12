@@ -496,9 +496,11 @@ CallNotificationDll(
     if (!pNotifyHandler)
         return;
 
-    /* Capture the notification info structure, since
-     * the notification handler might mess with it */
+    /* Capture the notification info structure, since the notification handler
+     * might mess with it, and adjust it for the current handler */
     Info = *pInfo;
+    if (NotificationDll->bAsynchronous)
+        Info.pStatusCallback = NULL;
 
     /* Impersonate the logged-on user if necessary */
     UserToken = (NotificationDll->bImpersonate ? Info.hToken : NULL);
@@ -523,6 +525,27 @@ CallNotificationDll(
     /* Revert impersonation */
     if (UserToken)
         RevertToSelf();
+}
+
+
+/**
+ * @brief
+ * Notification status message callback.
+ **/
+// PFNMSGECALLBACK
+DWORD
+CALLBACK
+MsgStatusCallback(
+    _In_ BOOL bVerbose,
+    _In_ LPWSTR lpMessage)
+{
+    return DisplayStatusMessageEx(WLSession,
+                                  // FIXME: Or notif desktop? Or "currently-active" desktop?
+                                  WLSession->WinlogonDesktop,
+                                  bVerbose,
+                                  0,
+                                  NULL,
+                                  lpMessage);
 }
 
 
@@ -568,7 +591,7 @@ CallNotificationDlls(
     else
         Info.hDesktop = pSession->WinlogonDesktop;
 
-    Info.pStatusCallback = NULL;
+    Info.pStatusCallback = MsgStatusCallback;
 
     for (ListEntry = NotificationDllListHead.Flink;
          ListEntry != &NotificationDllListHead;
