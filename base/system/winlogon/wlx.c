@@ -1060,7 +1060,7 @@ CreateWindowStationAndDesktops(
      * Create the screen saver desktop
      */
     Session->ScreenSaverDesktop = CreateDesktopW(
-        L"Screen-Saver",
+        L"Screen-saver",
         NULL,
         NULL,
         0,
@@ -1068,7 +1068,7 @@ CreateWindowStationAndDesktops(
         &ScreenSaverDesktopSecurity);
     if(!Session->ScreenSaverDesktop)
     {
-        ERR("WL: Failed to create Screen-Saver desktop (%lu)\n", GetLastError());
+        ERR("WL: Failed to create Screen-saver desktop (%lu)\n", GetLastError());
         goto cleanup;
     }
 

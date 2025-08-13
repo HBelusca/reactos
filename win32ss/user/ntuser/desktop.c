@@ -3020,7 +3020,7 @@ NtUserSwitchDesktop(HDESK hdesk)
     }
 
     /* FIXME: Fail if the process is associated with a secured
-              desktop such as Winlogon or Screen-Saver */
+              desktop such as Winlogon or Screen-saver */
     /* FIXME: Connect to input device */
 
     TRACE("Switching from desktop 0x%p to 0x%p\n", gpdeskInputDesktop, pdesk);

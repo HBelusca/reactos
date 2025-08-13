@@ -526,7 +526,7 @@ Quit:
  * @brief
  * Creates a security descriptor for the default
  * Winlogon desktop. This descriptor serves as a
- * security measure for the winlogon desktop so
+ * security measure for the Winlogon desktop so
  * that only Winlogon itself (and admins) can
  * interact with it.
  *
@@ -676,12 +676,11 @@ Quit:
 
 /**
  * @brief
- * Creates a security descriptor for the screen
- * saver desktop.
+ * Creates a security descriptor for the Screen-saver desktop.
  *
  * @param[out] ScreenSaverDesktopSd
  * A pointer to a created security descriptor for
- * the screen-saver desktop.
+ * the Screen-saver desktop.
  *
  * @return
  * Returns TRUE if the function has successfully
