@@ -559,21 +559,14 @@ CallNotificationDlls(
     Info.WindowStation = pSession->InteractiveWindowStationName;
     Info.hToken = pSession->UserToken;
 
-    switch (Type)
-    {
-        case LogonHandler:
-        case StartShellHandler:
-            Info.hDesktop = pSession->ApplicationDesktop;
-            break;
-
-        case StartScreenSaverHandler:
-            Info.hDesktop = pSession->ApplicationDesktop;
-            break;
-
-        default:
-            Info.hDesktop = pSession->WinlogonDesktop;
-            break;
-    }
+    /* Get the desktop handle "suitable" for the notification (it can be
+     * different from the current thread desktop and the input desktop) */
+    if ((Type == LogonHandler) || (Type == StartShellHandler))
+        Info.hDesktop = pSession->ApplicationDesktop;
+    else if (Type == StartScreenSaverHandler)
+        Info.hDesktop = pSession->ScreenSaverDesktop;
+    else
+        Info.hDesktop = pSession->WinlogonDesktop;
 
     Info.pStatusCallback = NULL;
 
