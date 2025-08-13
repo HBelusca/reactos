@@ -198,7 +198,14 @@ DWORD_PTR WINAPI SetSysColorsTemp(const COLORREF *, const HBRUSH *, DWORD_PTR);
 BOOL WINAPI SetDeskWallPaper(LPCSTR);
 VOID WINAPI ScrollChildren(HWND,UINT,WPARAM,LPARAM);
 void WINAPI CalcChildScroll(HWND, INT);
-BOOL WINAPI RegisterLogonProcess(DWORD,BOOL);
+
+BOOL
+WINAPI
+RegisterLogonProcess(
+    _In_ DWORD dwProcessId,
+     // FIXME: This is NOT used as a "register" or "deregister" flag! Win7+: LUID*
+    _In_ BOOL bRegister);
+
 DWORD WINAPI GetAppCompatFlags(HTASK hTask);
 DWORD WINAPI GetAppCompatFlags2(HTASK hTask);
 LONG WINAPI CsrBroadcastSystemMessageExW(DWORD dwflags,

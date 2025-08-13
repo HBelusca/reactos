@@ -19,26 +19,40 @@ co_IntRegisterLogonProcess(HANDLE ProcessId, BOOL Register)
 {
     NTSTATUS Status;
     PEPROCESS Process;
+    static PRIVILEGE_SET TcbPrivilege =
+    {
+        1, PRIVILEGE_SET_ALL_NECESSARY,
+        { {{SE_TCB_PRIVILEGE, 0}, 0} }
+    };
 
+    /* Validate the process ID */
     Status = PsLookupProcessByProcessId(ProcessId, &Process);
     if (!NT_SUCCESS(Status))
     {
         EngSetLastError(RtlNtStatusToDosError(Status));
         return FALSE;
     }
-
     ProcessId = Process->UniqueProcessId;
-
     ObDereferenceObject(Process);
 
-    if (Register)
+    /* We require the TCB privilege */
+    if (!HasPrivilege(&TcbPrivilege))
+    {
+        ERR("RegisterLogonProcess: Caller doesn't have the rights to register logon process\n");
+        EngSetLastError(ERROR_ACCESS_DENIED); // ERROR_PRIVILEGE_NOT_HELD
+        return FALSE;
+    }
+
+    // if (Register)
     {
         /* Register the logon process */
         if (gpidLogon != 0)
             return FALSE;
 
         gpidLogon = ProcessId;
+        // TODO: Also handle gpidLogonUI when this is necessary!
     }
+#if 0 // FIXME: This is NOT used as a "register" or "deregister" flag!
     else
     {
         /* Deregister the logon process */
@@ -47,6 +61,7 @@ co_IntRegisterLogonProcess(HANDLE ProcessId, BOOL Register)
 
         gpidLogon = 0;
     }
+#endif
 
     return TRUE;
 }

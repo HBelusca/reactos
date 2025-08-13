@@ -79,7 +79,7 @@ typedef struct _USER_REGISTER_SERVICES_PROCESS
 typedef struct _USER_REGISTER_LOGON_PROCESS
 {
     ULONG_PTR ProcessId;
-    BOOL Register;
+    // BOOL Register; // FIXME: This is NOT used as a "register" or "deregister" flag!
 } USER_REGISTER_LOGON_PROCESS, *PUSER_REGISTER_LOGON_PROCESS;
 
 typedef struct _USER_CREATE_SYSTEM_THREAD

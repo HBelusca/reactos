@@ -31,13 +31,14 @@ CSR_API(SrvRegisterLogonProcess)
 {
     PUSER_REGISTER_LOGON_PROCESS RegisterLogonProcessRequest = &((PUSER_API_MESSAGE)ApiMessage)->Data.RegisterLogonProcessRequest;
 
-    if (RegisterLogonProcessRequest->Register)
+    // if (RegisterLogonProcessRequest->Register)
     {
         if (LogonProcessId != 0)
             return STATUS_LOGON_SESSION_EXISTS;
 
         LogonProcessId = RegisterLogonProcessRequest->ProcessId;
     }
+#if 0 // FIXME: This is NOT used as a "register" or "deregister" flag!
     else
     {
         if (ApiMessage->Header.ClientId.UniqueProcess != UlongToHandle(LogonProcessId))
@@ -49,9 +50,9 @@ CSR_API(SrvRegisterLogonProcess)
 
         LogonProcessId = 0;
     }
+#endif
 
 #if 1 //HAAAACK. This should be done in UserClientConnect which is never called!
-
     /* Check if we don't have an API port yet */
     if (CsrApiPort == NULL)
     {
@@ -82,6 +83,7 @@ CSR_API(SrvRegisterServicesProcess)
 {
     PUSER_REGISTER_SERVICES_PROCESS RegisterServicesProcessRequest = &((PUSER_API_MESSAGE)ApiMessage)->Data.RegisterServicesProcessRequest;
 
+    // FIXME: TODO: Verify that the client has the TCB privilege.
     if (ServicesProcessIdValid)
     {
         /* Only accept a single call */

@@ -40,9 +40,13 @@ RegisterServicesProcess(DWORD ServicesProcessId)
  */
 BOOL
 WINAPI
-RegisterLogonProcess(DWORD dwProcessId,
-                     BOOL bRegister)
+RegisterLogonProcess(
+    _In_ DWORD dwProcessId,
+     // FIXME: This is NOT used as a "register" or "deregister" flag! Win7+: LUID*
+    _In_ BOOL bRegister)
 {
+    /* NOTE: win32k!NtUserxRegisterLogonProcess() verifies whether
+     * the caller has the rights to invoke RegisterLogonProcess() */
     gfLogonProcess = NtUserxRegisterLogonProcess(dwProcessId, bRegister);
 
     if (gfLogonProcess)
@@ -51,7 +55,8 @@ RegisterLogonProcess(DWORD dwProcessId,
         PUSER_REGISTER_LOGON_PROCESS RegisterLogonProcessRequest = &ApiMessage.Data.RegisterLogonProcessRequest;
 
         RegisterLogonProcessRequest->ProcessId = dwProcessId;
-        RegisterLogonProcessRequest->Register  = bRegister;
+        // FIXME: This is NOT used as a "register" or "deregister" flag!
+        // RegisterLogonProcessRequest->Register  = bRegister;
 
         CsrClientCallServer((PCSR_API_MESSAGE)&ApiMessage,
                             NULL,
