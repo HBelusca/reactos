@@ -88,35 +88,6 @@ IntClientShutdown(IN PWND pWindow,
     return lResult;
 }
 
-BOOLEAN
-HasPrivilege(IN PPRIVILEGE_SET Privilege)
-{
-    BOOLEAN Result;
-    SECURITY_SUBJECT_CONTEXT SubjectContext;
-
-    /* Capture and lock the security subject context */
-    SeCaptureSubjectContext(&SubjectContext);
-    SeLockSubjectContext(&SubjectContext);
-
-    /* Do privilege check */
-    Result = SePrivilegeCheck(Privilege, &SubjectContext, UserMode);
-
-    /* Audit the privilege */
-#if 0
-    SePrivilegeObjectAuditAlarm(NULL,
-                                &SubjectContext,
-                                0,
-                                Privilege,
-                                Result,
-                                UserMode);
-#endif
-
-    /* Unlock and release the security subject context and return */
-    SeUnlockSubjectContext(&SubjectContext);
-    SeReleaseSubjectContext(&SubjectContext);
-    return Result;
-}
-
 BOOL
 NotifyLogon(IN HWND hWndSta,
             IN PLUID CallerLuid,

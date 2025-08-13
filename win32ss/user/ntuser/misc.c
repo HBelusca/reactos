@@ -32,6 +32,48 @@ _scwprintf(
     return len;
 }
 
+/**
+ * @brief
+ * Verifies that the *user-mode* caller has the specified privilege.
+ *
+ * @param[in]   Privileges
+ * The privilege whose presence is to be checked.
+ *
+ * @return
+ * TRUE if the caller has the specified privilege; FALSE if not.
+ **/
+// TODO: Consider moving to ntuser/security.c
+BOOLEAN
+HasPrivilege(
+    _In_ PPRIVILEGE_SET Privileges)
+{
+    BOOLEAN Result;
+    SECURITY_SUBJECT_CONTEXT SubjectContext;
+
+    /* Capture and lock the security subject context */
+    SeCaptureSubjectContext(&SubjectContext);
+    SeLockSubjectContext(&SubjectContext);
+
+    /* Do privilege check */
+    Result = SePrivilegeCheck(Privileges, &SubjectContext, UserMode);
+
+    /* Audit the privilege */
+#if 0
+    SePrivilegeObjectAuditAlarm(NULL,
+                                &SubjectContext,
+                                0,
+                                Privileges,
+                                Result,
+                                UserMode);
+#endif
+
+    /* Unlock and release the security subject context and return */
+    SeUnlockSubjectContext(&SubjectContext);
+    SeReleaseSubjectContext(&SubjectContext);
+    if (!Result)
+        EngSetLastError(ERROR_PRIVILEGE_NOT_HELD);
+    return Result;
+}
 
 /*
  * Test the Thread to verify and validate it. Hard to the core tests are required.

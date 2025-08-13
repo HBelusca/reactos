@@ -102,6 +102,10 @@ _scwprintf(
     const wchar_t *format,
     ...);
 
+BOOLEAN
+HasPrivilege(
+    _In_ PPRIVILEGE_SET Privileges);
+
 BOOL FASTCALL
 UserSystemParametersInfo(
   UINT uiAction,
