@@ -666,6 +666,20 @@ CsrApiRequestThread(IN PVOID Parameter)
             if (MessageType == LPC_EXCEPTION)
             {
                 /* Kill the process */
+                PDBGKM_EXCEPTION DbgExp = &(((PDBGKM_MSG)&ReceiveMsg)->Exception);
+                PEXCEPTION_RECORD Record = &DbgExp->ExceptionRecord;
+                DbgPrint("CsrApiRequestThread() - Got LPC_EXCEPTION with:\n"
+                         "  ExceptionCode: 0x%lx, flags 0x%lx, ExceptionAddress: 0x%p ; IsFirstChance: %s\n",
+                         Record->ExceptionCode,
+                         Record->ExceptionFlags,
+                         Record->ExceptionAddress,
+                         DbgExp->FirstChance ? "TRUE" : "FALSE");
+                for (DWORD n = 0; n < min(EXCEPTION_MAXIMUM_PARAMETERS, Record->NumberParameters); ++n)
+                {
+                    DbgPrint("  Info[%u]: 0x%p\n", n, (PVOID)Record->ExceptionInformation[n]);
+                }
+                DbgPrint("CsrApiRequestThread() - LPC_EXCEPTION invoking NtTerminateProcess(ProcessHandle 0x%p, %lu)\n",
+                         CsrProcess->ProcessHandle, STATUS_ABANDONED);
                 NtTerminateProcess(CsrProcess->ProcessHandle, STATUS_ABANDONED);
 
                 /* Destroy it from CSR */

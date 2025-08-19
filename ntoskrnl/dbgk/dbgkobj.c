@@ -325,8 +325,10 @@ DbgkForwardException(IN PEXCEPTION_RECORD ExceptionRecord,
     PVOID Port;
     BOOLEAN UseLpc = FALSE;
     PAGED_CODE();
-    DBGKTRACE(DBGK_EXCEPTION_DEBUG,
-              "ExceptionRecord: %p Port: %u\n", ExceptionRecord, DebugPort);
+    //DBGKTRACE(DBGK_EXCEPTION_DEBUG,
+     DbgPrint("DbgkForwardException: ExceptionRecord: %p (ExceptionCode: 0x%x, ExceptionAddress: 0x%p), Port: %s, SecondChance: %s\n",
+              ExceptionRecord, ExceptionRecord->ExceptionCode, ExceptionRecord->ExceptionAddress,
+              DebugPort ? "TRUE" : "FALSE", SecondChance ? "TRUE" : "FALSE");
 
     /* Setup the API Message */
     ApiMessage.h.u1.Length = sizeof(DBGKM_MSG) << 16 |
