@@ -702,91 +702,102 @@ OutputDebugStringA(IN LPCSTR _OutputString)
         /* send the string to the user-mode debugger */
         RaiseException(DBG_PRINTEXCEPTION_C, 0, 2, a_nArgs);
     }
+    // Win7+: _SEH2_EXCEPT((_SEH2_GetExceptionCode() == DBG_PRINTEXCEPTION_C) ? EXCEPTION_EXECUTE_HANDLER : EXCEPTION_CONTINUE_SEARCH)
     _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
     {
-        /* no user-mode debugger: try the systemwide debug message monitor, or the
-           kernel debugger as a last resort */
+        /* No user-mode debugger: try the system-wide debug message monitor,
+         * or the kernel debugger as a last resort */
 
-        /* mutex used to synchronize invocations of OutputDebugString */
+        /* Mutex used to synchronize invocations of OutputDebugString */
         static HANDLE s_hDBMonMutex = NULL;
-        /* true if we already attempted to open/create the mutex */
+        /* True if we already attempted to open/create the mutex */
         static BOOL s_bDBMonMutexTriedOpen = FALSE;
 
-        /* local copy of the mutex handle */
+        /* Local copy of the mutex handle */
         volatile HANDLE hDBMonMutex = s_hDBMonMutex;
-        /* handle to the Section of the shared buffer */
+        /* Handle to the Section of the shared buffer */
         volatile HANDLE hDBMonBuffer = NULL;
 
-        /* pointer to the mapped view of the shared buffer. It consist of the current
-           process id followed by the message string */
+        /* Pointer to the mapped view of the shared buffer. It consists
+         * of the current process id followed by the message string. */
         struct { DWORD ProcessId; CHAR Buffer[1]; } * pDBMonBuffer = NULL;
 
-        /* event: signaled by the debug message monitor when OutputDebugString can write
-           to the shared buffer */
+        /* Event signaled by the debug message monitor when OutputDebugString
+         * can write to the shared buffer */
         volatile HANDLE hDBMonBufferReady = NULL;
 
-        /* event: to be signaled by OutputDebugString when it's done writing to the
-           shared buffer */
+        /* Event to be signaled by OutputDebugString when it's done
+         * writing to the shared buffer */
         volatile HANDLE hDBMonDataReady = NULL;
 
-        /* mutex not opened, and no previous attempts to open/create it */
+        /* Mutex not opened, and no previous attempts to open/create it */
         if (hDBMonMutex == NULL && !s_bDBMonMutexTriedOpen)
         {
-            /* open/create the mutex */
+            /* Open/create the mutex */
             hDBMonMutex = K32CreateDBMonMutex();
-            /* store the handle */
-            s_hDBMonMutex = hDBMonMutex;
+            if (hDBMonMutex)
+            {
+                /* Store the handle; if another thread already succeeded, close the handle */
+                if (InterlockedCompareExchangePointer((PVOID*)&s_hDBMonMutex, hDBMonMutex, NULL) != NULL)
+                    CloseHandle(hDBMonMutex);
+                hDBMonMutex = s_hDBMonMutex;
+            }
+            else
+            {
+                /* Opening the mutex failed, remember for next time */
+                s_bDBMonMutexTriedOpen = TRUE;
+            }
+        }
+
+        /* opening the mutex succeeded */
+        if (hDBMonMutex != NULL)
+        {
+            DWORD WaitStatus;
+            do
+            {
+                /* Synchronize with other OutputDebugString invocations */
+                // WaitForSingleObject(hDBMonMutex, INFINITE);
+                /* Wait a maximum of 10 seconds for the debug monitor to become ready */
+                WaitStatus = WaitForSingleObject(hDBMonMutex, 10000);
+                if (WaitStatus != WAIT_OBJECT_0 && WaitStatus != WAIT_ABANDONED)
+                    break; /* Timeout or failure: give up */
+
+                /* buffer of the system-wide debug message monitor */
+                hDBMonBuffer = OpenFileMappingW(FILE_MAP_WRITE, FALSE, L"DBWIN_BUFFER");
+
+                /* couldn't open the buffer: send the string to the kernel debugger */
+                if (hDBMonBuffer == NULL)
+                    break;
+
+                /* map the buffer */
+                pDBMonBuffer = MapViewOfFile(hDBMonBuffer,
+                                             FILE_MAP_READ | FILE_MAP_WRITE,
+                                             0, 0, 0);
+
+                /* couldn't map the buffer: send the string to the kernel debugger */
+                if (pDBMonBuffer == NULL)
+                    break;
+
+                /* open the event signaling that the buffer can be accessed */
+                hDBMonBufferReady = OpenEventW(SYNCHRONIZE, FALSE, L"DBWIN_BUFFER_READY");
+
+                /* couldn't open the event: send the string to the kernel debugger */
+                if (hDBMonBufferReady == NULL)
+                    break;
+
+                /* open the event to be signaled when the buffer has been filled */
+                hDBMonDataReady = OpenEventW(EVENT_MODIFY_STATE, FALSE, L"DBWIN_DATA_READY");
+            } while(0);
+
+            /* we couldn't connect to the system-wide debug message monitor:
+             * send the string to the kernel debugger */
+            if (hDBMonDataReady == NULL)
+                ReleaseMutex(hDBMonMutex);
         }
 
         _SEH2_TRY
         {
             volatile PCHAR a_cBuffer = NULL;
-
-            /* opening the mutex failed */
-            if (hDBMonMutex == NULL)
-            {
-                /* remember next time */
-                s_bDBMonMutexTriedOpen = TRUE;
-            }
-            /* opening the mutex succeeded */
-            else
-            {
-                do
-                {
-                    /* synchronize with other invocations of OutputDebugString */
-                    WaitForSingleObject(hDBMonMutex, INFINITE);
-
-                    /* buffer of the system-wide debug message monitor */
-                    hDBMonBuffer = OpenFileMappingW(SECTION_MAP_WRITE, FALSE, L"DBWIN_BUFFER");
-
-                    /* couldn't open the buffer: send the string to the kernel debugger */
-                    if (hDBMonBuffer == NULL) break;
-
-                    /* map the buffer */
-                    pDBMonBuffer = MapViewOfFile(hDBMonBuffer,
-                                                 SECTION_MAP_READ | SECTION_MAP_WRITE,
-                                                 0,
-                                                 0,
-                                                 0);
-
-                    /* couldn't map the buffer: send the string to the kernel debugger */
-                    if (pDBMonBuffer == NULL) break;
-
-                    /* open the event signaling that the buffer can be accessed */
-                    hDBMonBufferReady = OpenEventW(SYNCHRONIZE, FALSE, L"DBWIN_BUFFER_READY");
-
-                    /* couldn't open the event: send the string to the kernel debugger */
-                    if (hDBMonBufferReady == NULL) break;
-
-                    /* open the event to be signaled when the buffer has been filled */
-                    hDBMonDataReady = OpenEventW(EVENT_MODIFY_STATE, FALSE, L"DBWIN_DATA_READY");
-                }
-                while(0);
-
-                /* we couldn't connect to the system-wide debug message monitor: send the
-                   string to the kernel debugger */
-                if (hDBMonDataReady == NULL) ReleaseMutex(hDBMonMutex);
-            }
 
             _SEH2_TRY
             {
@@ -799,7 +810,8 @@ OutputDebugStringA(IN LPCSTR _OutputString)
                 /* output the whole string */
                 nOutputStringLen = strlen(_OutputString);
 
-                do
+                /* repeat until the string has been fully output */
+                while (nOutputStringLen > 0)
                 {
                     /* we're connected to the debug monitor:
                        write the current block to the shared buffer */
@@ -869,11 +881,11 @@ OutputDebugStringA(IN LPCSTR _OutputString)
                     _OutputString += nRoundLen;
                     nOutputStringLen -= nRoundLen;
                 }
-                /* repeat until the string has been fully output */
-                while (nOutputStringLen > 0);
             }
             /* ignore access violations and let other exceptions fall through */
+            // Win7+: _SEH2_EXCEPT((_SEH2_GetExceptionCode() != EXCEPTION_STACK_OVERFLOW) ? EXCEPTION_EXECUTE_HANDLER : EXCEPTION_CONTINUE_SEARCH)
             _SEH2_EXCEPT((_SEH2_GetExceptionCode() == STATUS_ACCESS_VIOLATION) ? EXCEPTION_EXECUTE_HANDLER : EXCEPTION_CONTINUE_SEARCH)
+            // _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
             {
                 if (a_cBuffer)
                     HeapFree(GetProcessHeap(), 0, a_cBuffer);
@@ -885,7 +897,7 @@ OutputDebugStringA(IN LPCSTR _OutputString)
         }
         _SEH2_FINALLY
         {
-            /* close all the still open resources */
+            /* Close all the still opened resources */
             if (hDBMonBufferReady) CloseHandle(hDBMonBufferReady);
             if (pDBMonBuffer) UnmapViewOfFile(pDBMonBuffer);
             if (hDBMonBuffer) CloseHandle(hDBMonBuffer);
@@ -911,7 +923,7 @@ OutputDebugStringW(IN LPCWSTR OutputString)
     ANSI_STRING AnsiString;
     NTSTATUS Status;
 
-    /* convert the string in ANSI */
+    /* Convert the string in ANSI */
     RtlInitUnicodeString(&UnicodeString, OutputString);
     Status = RtlUnicodeStringToAnsiString(&AnsiString, &UnicodeString, TRUE);
 
@@ -921,7 +933,7 @@ OutputDebugStringW(IN LPCWSTR OutputString)
     /* Output the converted string */
     OutputDebugStringA(AnsiString.Buffer);
 
-    /* free the converted string */
+    /* Free the converted string */
     if (NT_SUCCESS(Status)) RtlFreeAnsiString(&AnsiString);
 }
 
