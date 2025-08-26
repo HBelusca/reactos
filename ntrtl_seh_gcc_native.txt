@@ -1,0 +1,321 @@
+Win32 GUI process detected, registering with CSRSS
+Process 0x530 (1328) created successfully.
+Replaced Original unhandled exception filter: 0x00401CFC
+OutputDebugStringA with SEH test
+ODS(0x00404272) -> 'WL: WinMain(1)
+'
+
+
+Breakpoint 25 hit
+>   92:     while (RegistrationFrame != EXCEPTION_CHAIN_END)
+ntdll!RtlDispatchException+0x65:
+001b:7c967245 837dfcff        cmp     dword ptr [ebp-4],0FFFFFFFFh
+kd> ??ExceptionRecord
+struct _EXCEPTION_RECORD * 0x0022fd94
+   +0x000 ExceptionCode    : 0xdeadbeef
+   +0x004 ExceptionFlags   : 0
+   +0x008 ExceptionRecord  : (null) 
+   +0x00c ExceptionAddress : 0x7c64b629 Void
+   +0x010 NumberParameters : 0
+   +0x014 ExceptionInformation : [15] 0
+kd> .exr 0x0022fd94
+ExceptionAddress: 7c64b629 (kernel32!RaiseException+0x00000269)
+   ExceptionCode: deadbeef
+  ExceptionFlags: 00000000
+NumberParameters: 0
+
+kd> dd fs:[0] L1
+003b:00000000  0022fe54
+kd> !exchain
+0022fe54: ntrtl_seh_gcc+16a1 (004016a1)
+0022fed4: ntrtl_seh_gcc+16a1 (004016a1)
+kd> ??RegistrationFrame
+struct _EXCEPTION_REGISTRATION_RECORD * 0x0022fe54
+   +0x000 Next             : 0x0022fed4 _EXCEPTION_REGISTRATION_RECORD
+   +0x004 Handler          : 0x004016a1     _EXCEPTION_DISPOSITION  +0
+kd> ??RegistrationFrame->Next
+struct _EXCEPTION_REGISTRATION_RECORD * 0x0022fed4
+   +0x000 Next             : 0xffffffff _EXCEPTION_REGISTRATION_RECORD
+   +0x004 Handler          : 0x004016a1     _EXCEPTION_DISPOSITION  +0
+kd> ??RegistrationFrame->Next->Next
+struct _EXCEPTION_REGISTRATION_RECORD * 0xffffffff
+   +0x000 Next             : ???? 
+   +0x004 Handler          : ???? 
+kd> g
+
+(2 levels)
+
+
+Breakpoint 26 hit
+>  294:     while (RegistrationFrame != EXCEPTION_CHAIN_END)
+ntdll!RtlUnwind+0xeb:
+001b:7c96768b 837dfcff        cmp     dword ptr [ebp-4],0FFFFFFFFh
+kd> dd fs:[0] L1
+003b:00000000  0022f9a0
+kd> !exchain
+0022f9a0: ntdll!RtlpExecuteHandler2+3a (7c95ebc0)
+0022fe54: ntrtl_seh_gcc+16a1 (004016a1)
+0022fed4: ntrtl_seh_gcc+16a1 (004016a1)
+kd> ??RegistrationFrame
+struct _EXCEPTION_REGISTRATION_RECORD * 0x0022f9a0
+   +0x000 Next             : 0x0022fe54 _EXCEPTION_REGISTRATION_RECORD
+   +0x004 Handler          : 0x7c95ebc0     _EXCEPTION_DISPOSITION  ntdll!RtlpExecuteHandler2+0
+kd> ??RegistrationFrame->Next
+struct _EXCEPTION_REGISTRATION_RECORD * 0x0022fe54
+   +0x000 Next             : 0x0022fed4 _EXCEPTION_REGISTRATION_RECORD
+   +0x004 Handler          : 0x004016a1     _EXCEPTION_DISPOSITION  +0
+kd> ??RegistrationFrame->Next->Next
+struct _EXCEPTION_REGISTRATION_RECORD * 0x0022fed4
+   +0x000 Next             : 0xffffffff _EXCEPTION_REGISTRATION_RECORD
+   +0x004 Handler          : 0x004016a1     _EXCEPTION_DISPOSITION  +0
+kd> ??RegistrationFrame->Next->Next->Next
+struct _EXCEPTION_REGISTRATION_RECORD * 0xffffffff
+   +0x000 Next             : ???? 
+   +0x004 Handler          : ???? 
+kd> g
+
+(3 levels)
+
+
+Breakpoint 26 hit
+>  294:     while (RegistrationFrame != EXCEPTION_CHAIN_END)
+ntdll!RtlUnwind+0xeb:
+001b:7c96768b 837dfcff        cmp     dword ptr [ebp-4],0FFFFFFFFh
+kd> dd fs:[0] L1
+003b:00000000  0022fe54
+kd> !exchain
+0022fe54: ntrtl_seh_gcc+16a1 (004016a1)
+0022fed4: ntrtl_seh_gcc+16a1 (004016a1)
+kd> ??RegistrationFrame
+struct _EXCEPTION_REGISTRATION_RECORD * 0x0022fe54
+   +0x000 Next             : 0x0022fed4 _EXCEPTION_REGISTRATION_RECORD
+   +0x004 Handler          : 0x004016a1     _EXCEPTION_DISPOSITION  +0
+kd> ??RegistrationFrame->Next
+struct _EXCEPTION_REGISTRATION_RECORD * 0x0022fed4
+   +0x000 Next             : 0xffffffff _EXCEPTION_REGISTRATION_RECORD
+   +0x004 Handler          : 0x004016a1     _EXCEPTION_DISPOSITION  +0
+kd> ??RegistrationFrame->Next->Next
+struct _EXCEPTION_REGISTRATION_RECORD * 0xffffffff
+   +0x000 Next             : ???? 
+   +0x004 Handler          : ???? 
+kd> g
+
+(2 levels)
+
+
+MyOutputDebugStringA - Entering _SEH2_TRY(1)
+MyOutputDebugStringA - Inside _SEH2_TRY(1)
+MyOutputDebugStringA - Entering _SEH2_TRY(2)
+MyOutputDebugStringA - Inside _SEH2_TRY(2)
+WL: WinMain(1)
+MyOutputDebugStringA - Exited _SEH2_EXCEPT(2)
+_SEH3$_FinallyFunction - Inside and exiting _SEH2_FINALLY(1)
+MyOutputDebugStringA - Exited _SEH2_TRY(1)/_SEH2_FINALLY(1)
+ODS(0x004042B0) -> 'WL: WinMain(2)
+'
+
+
+Breakpoint 25 hit
+>   92:     while (RegistrationFrame != EXCEPTION_CHAIN_END)
+ntdll!RtlDispatchException+0x65:
+001b:7c967245 837dfcff        cmp     dword ptr [ebp-4],0FFFFFFFFh
+kd> ??ExceptionRecord
+struct _EXCEPTION_RECORD * 0x0022fd94
+   +0x000 ExceptionCode    : 0xdeadbeef
+   +0x004 ExceptionFlags   : 0
+   +0x008 ExceptionRecord  : (null) 
+   +0x00c ExceptionAddress : 0x7c64b629 Void
+   +0x010 NumberParameters : 0
+   +0x014 ExceptionInformation : [15] 0
+kd> .exr 0x0022fd94
+ExceptionAddress: 7c64b629 (kernel32!RaiseException+0x00000269)
+   ExceptionCode: deadbeef
+  ExceptionFlags: 00000000
+NumberParameters: 0
+
+kd> dd fs:[0] L1
+003b:00000000  0022fe54
+kd> !exchain
+0022fe54: ntrtl_seh_gcc+16a1 (004016a1)
+kd> ??RegistrationFrame
+struct _EXCEPTION_REGISTRATION_RECORD * 0x0022fe54
+   +0x000 Next             : 0xffffffff _EXCEPTION_REGISTRATION_RECORD
+   +0x004 Handler          : 0x004016a1     _EXCEPTION_DISPOSITION  +0
+kd> ??RegistrationFrame->Next
+struct _EXCEPTION_REGISTRATION_RECORD * 0xffffffff
+   +0x000 Next             : ???? 
+   +0x004 Handler          : ???? 
+kd> g
+
+(1 levels) <---- Weird: missing one level.
+
+
+Breakpoint 26 hit
+>  294:     while (RegistrationFrame != EXCEPTION_CHAIN_END)
+ntdll!RtlUnwind+0xeb:
+001b:7c96768b 837dfcff        cmp     dword ptr [ebp-4],0FFFFFFFFh
+kd> dd fs:[0] L1
+003b:00000000  0022f9a0
+kd> !exchain
+0022f9a0: ntdll!RtlpExecuteHandler2+3a (7c95ebc0)
+0022fe54: ntrtl_seh_gcc+16a1 (004016a1)
+kd> ??RegistrationFrame
+struct _EXCEPTION_REGISTRATION_RECORD * 0x0022f9a0
+   +0x000 Next             : 0x0022fe54 _EXCEPTION_REGISTRATION_RECORD
+   +0x004 Handler          : 0x7c95ebc0     _EXCEPTION_DISPOSITION  ntdll!RtlpExecuteHandler2+0
+kd> ??RegistrationFrame->Next
+struct _EXCEPTION_REGISTRATION_RECORD * 0x0022fe54
+   +0x000 Next             : 0xffffffff _EXCEPTION_REGISTRATION_RECORD
+   +0x004 Handler          : 0x004016a1     _EXCEPTION_DISPOSITION  +0
+kd> ??RegistrationFrame->Next->Next
+struct _EXCEPTION_REGISTRATION_RECORD * 0xffffffff
+   +0x000 Next             : ???? 
+   +0x004 Handler          : ???? 
+kd> g
+
+(2 levels)
+
+
+Breakpoint 26 hit
+>  294:     while (RegistrationFrame != EXCEPTION_CHAIN_END)
+ntdll!RtlUnwind+0xeb:
+001b:7c96768b 837dfcff        cmp     dword ptr [ebp-4],0FFFFFFFFh
+kd> dd fs:[0] L1
+003b:00000000  0022fe54
+kd> !exchain
+0022fe54: ntrtl_seh_gcc+16a1 (004016a1)
+kd> ??RegistrationFrame
+struct _EXCEPTION_REGISTRATION_RECORD * 0x0022fe54
+   +0x000 Next             : 0xffffffff _EXCEPTION_REGISTRATION_RECORD
+   +0x004 Handler          : 0x004016a1     _EXCEPTION_DISPOSITION  +0
+kd> ??RegistrationFrame->Next
+struct _EXCEPTION_REGISTRATION_RECORD * 0xffffffff
+   +0x000 Next             : ???? 
+   +0x004 Handler          : ???? 
+kd> g
+
+(1 levels)
+
+kd> kp
+ChildEBP RetAddr  
+0022f924 00401852 ntdll!RtlUnwind(void * TargetFrame = 0x0022fe54, void * TargetIp = 0x00000000, struct _EXCEPTION_RECORD * ExceptionRecord = 0x0022f864, void * ReturnValue = 0x00000000)+0xeb [X:\reactos\sdk\lib\rtl\i386\except.c @ 294]
+WARNING: Stack unwind information not available. Following frames may be wrong.
+0022f948 00401650 ntrtl_seh_gcc+0x1852
+0022f968 004016cf ntrtl_seh_gcc+0x1650
+0022f988 7c95ebac ntrtl_seh_gcc+0x16cf
+0022f9ac 7c95eb80 ntdll!RtlpExecuteHandler2+0x26
+0022f9d0 7c967333 ntdll!RtlpExecuteHandler+0x24
+0022fa88 7c95ec48 ntdll!RtlDispatchException(struct _EXCEPTION_RECORD * ExceptionRecord = 0x0022fd94, struct _CONTEXT * Context = 0x0022fa98)+0x153 [X:\reactos\sdk\lib\rtl\i386\except.c @ 135]
+0022fd64 7c64b629 ntdll!RtlRaiseException+0x3a
+0022fde8 004011d5 kernel32!RaiseException(unsigned long dwExceptionCode = 0xdeadbeef, unsigned long dwExceptionFlags = 0, unsigned long nNumberOfArguments = 0, unsigned long * lpArguments = 0x00000000)+0x269 [X:\reactos\dll\win32\kernel32\client\except.c @ 743]
+0022fe90 004013bc ntrtl_seh_gcc+0x11d5
+0022ff10 00402615 ntrtl_seh_gcc+0x13bc
+0022ff30 00401c82 ntrtl_seh_gcc+0x2615
+0022ffec 00401ce0 ntrtl_seh_gcc+0x1c82
+0022fff4 00000000 ntrtl_seh_gcc+0x1ce0
+
+kd> p
+>  297:         ASSERT(RegistrationFrame != NULL);
+ntdll!RtlUnwind+0xf5:
+001b:7c967695 837dfc00        cmp     dword ptr [ebp-4],0
+kd> p
+>  300:         if (RegistrationFrame == TargetFrame) ZwContinue(Context, FALSE);
+ntdll!RtlUnwind+0x146:
+001b:7c9676e6 8b55fc          mov     edx,dword ptr [ebp-4]
+kd> p
+MyOutputDebugStringA - Entering _SEH2_TRY(1)
+DbgkForwardException: ExceptionRecord: F5ACBC90 (ExceptionCode: 0xc0000005, ExceptionAddress: 0x004017D2), Port: TRUE, SecondChance: FALSE
+
+Breakpoint 25 hit
+>   92:     while (RegistrationFrame != EXCEPTION_CHAIN_END)
+ntdll!RtlDispatchException+0x65:
+001b:7c967245 837dfcff        cmp     dword ptr [ebp-4],0FFFFFFFFh
+kd> ??ExceptionRecord
+struct _EXCEPTION_RECORD * 0x0022fb04
+   +0x000 ExceptionCode    : 0xc0000005
+   +0x004 ExceptionFlags   : 0
+   +0x008 ExceptionRecord  : (null) 
+   +0x00c ExceptionAddress : 0x004017d2 Void
+   +0x010 NumberParameters : 2
+   +0x014 ExceptionInformation : [15] 0
+kd> .exr 0x0022fb04
+ExceptionAddress: 004017d2 (ntrtl_seh_gcc+0x000017d2)
+   ExceptionCode: c0000005 (Access violation)
+  ExceptionFlags: 00000000
+NumberParameters: 2
+   Parameter[0]: 00000000
+   Parameter[1]: 0000000f
+Attempt to read from address 0000000f
+
+kd> dd fs:[0] L1
+003b:00000000  ffffffff
+kd> !exchain
+kd> ??RegistrationFrame
+struct _EXCEPTION_REGISTRATION_RECORD * 0xffffffff
+   +0x000 Next             : ???? 
+   +0x004 Handler          : ???? 
+
+kd> kp
+ChildEBP RetAddr  
+0022faec 7c936015 ntdll!RtlDispatchException(struct _EXCEPTION_RECORD * ExceptionRecord = 0x0022fb04, struct _CONTEXT * Context = 0x0022fb20)+0x65 [X:\reactos\sdk\lib\rtl\i386\except.c @ 92]
+0022faec 004017d2 ntdll!KiUserExceptionDispatcher+0xf
+WARNING: Stack unwind information not available. Following frames may be wrong.
+0022fe90 004013bc ntrtl_seh_gcc+0x17d2
+0022ff10 00402615 ntrtl_seh_gcc+0x13bc
+0022ff30 00401c82 ntrtl_seh_gcc+0x2615
+0022ffec 00401ce0 ntrtl_seh_gcc+0x1c82
+0022fff4 00000000 ntrtl_seh_gcc+0x1ce0
+
+kd> .frame /r
+00 0022faec 7c936015 ntdll!RtlDispatchException+0x65 [X:\reactos\sdk\lib\rtl\i386\except.c @ 92]
+eax=ffffffff ebx=0022fb04 ecx=0022fa68 edx=00230000 esi=0022fe54 edi=0022faec
+eip=7c967245 esp=0022fa50 ebp=0022faec iopl=0         nv up ei pl zr na pe nc
+cs=001b  ss=0023  ds=0023  es=0023  fs=003b  gs=0000             efl=00000246
+>   92:     while (RegistrationFrame != EXCEPTION_CHAIN_END)
+ntdll!RtlDispatchException+0x65:
+001b:7c967245 837dfcff        cmp     dword ptr [ebp-4],0FFFFFFFFh
+
+kd> .frame /r 0
+00 0022faec 7c936015 ntdll!RtlDispatchException+0x65 [X:\reactos\sdk\lib\rtl\i386\except.c @ 92]
+eax=ffffffff ebx=0022fb04 ecx=0022fa68 edx=00230000 esi=0022fe54 edi=0022faec
+eip=7c967245 esp=0022fa50 ebp=0022faec iopl=0         nv up ei pl zr na pe nc
+cs=001b  ss=0023  ds=0023  es=0023  fs=003b  gs=0000             efl=00000246
+>   92:     while (RegistrationFrame != EXCEPTION_CHAIN_END)
+ntdll!RtlDispatchException+0x65:
+001b:7c967245 837dfcff        cmp     dword ptr [ebp-4],0FFFFFFFFh
+
+kd> .frame /r 1
+01 0022faec 004017d2 ntdll!KiUserExceptionDispatcher+0xf
+eax=ffffffff ebx=0022fb04 ecx=0022fa68 edx=00230000 esi=0022fe54 edi=0022fd94
+eip=7c936015 esp=0022faf4 ebp=0022fe90 iopl=0         nv up ei pl zr na pe nc
+cs=001b  ss=0023  ds=0023  es=0023  fs=003b  gs=0000             efl=00000246
+ntdll!KiUserExceptionDispatcher+0xf:
+001b:7c936015 0ac0            or      al,al
+
+kd> .frame /r 2
+02 0022fe90 004013bc ntrtl_seh_gcc+0x17d2
+eax=0022fe04 ebx=0022fe54 ecx=ffffffff edx=ffffffff esi=0022fe54 edi=0022fd94
+eip=004017d2 esp=0022fdec ebp=0022fe90 iopl=0         nv up ei pl zr na pe nc
+cs=001b  ss=0023  ds=0023  es=0023  fs=003b  gs=0000             efl=00010246
+ntrtl_seh_gcc+0x17d2:
+001b:004017d2 8b4a10          mov     ecx,dword ptr [edx+10h]
+
+kd> u 001b:004017c7
+ntrtl_seh_gcc+0x17c7:
+001b:004017c7 83600400        and     dword ptr [eax+4],0
+001b:004017cb 648b1500000000  mov     edx,dword ptr fs:[0]
+001b:004017d2 8b4a10          mov     ecx,dword ptr [edx+10h]   // <---- Ouchi mouchi^^
+001b:004017d5 8908            mov     dword ptr [eax],ecx
+001b:004017d7 894210          mov     dword ptr [edx+10h],eax
+001b:004017da 896018          mov     dword ptr [eax+18h],esp
+001b:004017dd 89681c          mov     dword ptr [eax+1Ch],ebp
+001b:004017e0 31c0            xor     eax,eax
+
+kd> g
+DbgkForwardException: ExceptionRecord: F5ACB97C (ExceptionCode: 0xc0000005, ExceptionAddress: 0x004017D2), Port: TRUE, SecondChance: TRUE
+DbgkForwardException: ExceptionRecord: F5ACB97C (ExceptionCode: 0xc0000005, ExceptionAddress: 0x004017D2), Port: FALSE, SecondChance: TRUE
+CsrApiRequestThread() - Got LPC_EXCEPTION with:
+  ExceptionCode: 0xc0000005, flags 0x0, ExceptionAddress: 0x004017D2 ; IsFirstChance: FALSE
+  Info[0]: 0x00000000
+  Info[1]: 0x0000000F
+CsrApiRequestThread() - LPC_EXCEPTION invoking NtTerminateProcess(ProcessHandle 0x00000014, 128)

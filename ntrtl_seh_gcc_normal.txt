@@ -1,0 +1,359 @@
+Replaced Original unhandled exception filter: 0x00401CFC
+OutputDebugStringA with SEH test
+ODS(0x00404272) -> 'WL: WinMain(1)
+'
+
+
+Breakpoint 25 hit
+>   92:     while (RegistrationFrame != EXCEPTION_CHAIN_END)
+ntdll!RtlDispatchException+0x65:
+001b:7c967245 837dfcff        cmp     dword ptr [ebp-4],0FFFFFFFFh
+kd> ??ExceptionRecord
+struct _EXCEPTION_RECORD * 0x0022fd64
+   +0x000 ExceptionCode    : 0xdeadbeef
+   +0x004 ExceptionFlags   : 0
+   +0x008 ExceptionRecord  : (null) 
+   +0x00c ExceptionAddress : 0x7c64b629 Void
+   +0x010 NumberParameters : 0
+   +0x014 ExceptionInformation : [15] 0
+kd> .exr 0x0022fd64
+ExceptionAddress: 7c64b629 (kernel32!RaiseException+0x00000269)
+   ExceptionCode: deadbeef
+  ExceptionFlags: 00000000
+NumberParameters: 0
+
+kd> dd fs:[0] L1
+003b:00000000  0022fe24
+kd> !exchain
+0022fe24: ntrtl_seh_gcc+16a1 (004016a1)
+0022fea4: ntrtl_seh_gcc+16a1 (004016a1)
+0022ffe0: kernel32!_except_handler3+0 (7c6b732e)
+  CRT scope  0, filter: kernel32!BaseProcessStartup+6a (7c656eba)
+                func:   kernel32!BaseProcessStartup+7e (7c656ece)
+kd> ??RegistrationFrame
+struct _EXCEPTION_REGISTRATION_RECORD * 0x0022fe24
+   +0x000 Next             : 0x0022fea4 _EXCEPTION_REGISTRATION_RECORD
+   +0x004 Handler          : 0x004016a1     _EXCEPTION_DISPOSITION  +0
+kd> ??RegistrationFrame->Next
+struct _EXCEPTION_REGISTRATION_RECORD * 0x0022fea4
+   +0x000 Next             : 0x0022ffe0 _EXCEPTION_REGISTRATION_RECORD
+   +0x004 Handler          : 0x004016a1     _EXCEPTION_DISPOSITION  +0
+kd> ??RegistrationFrame->Next->Next
+struct _EXCEPTION_REGISTRATION_RECORD * 0x0022ffe0
+   +0x000 Next             : 0xffffffff _EXCEPTION_REGISTRATION_RECORD
+   +0x004 Handler          : 0x7c6b732e     _EXCEPTION_DISPOSITION  kernel32!_except_handler3+0
+kd> g
+
+(3 levels)
+
+
+Breakpoint 26 hit
+>  294:     while (RegistrationFrame != EXCEPTION_CHAIN_END)
+ntdll!RtlUnwind+0xeb:
+001b:7c96768b 837dfcff        cmp     dword ptr [ebp-4],0FFFFFFFFh
+kd> dd fs:[0] L1
+003b:00000000  0022f970
+kd> !exchain
+0022f970: ntdll!RtlpExecuteHandler2+3a (7c95ebc0)
+0022fe24: ntrtl_seh_gcc+16a1 (004016a1)
+0022fea4: ntrtl_seh_gcc+16a1 (004016a1)
+0022ffe0: kernel32!_except_handler3+0 (7c6b732e)
+  CRT scope  0, filter: kernel32!BaseProcessStartup+6a (7c656eba)
+                func:   kernel32!BaseProcessStartup+7e (7c656ece)
+kd> ??RegistrationFrame
+struct _EXCEPTION_REGISTRATION_RECORD * 0x0022f970
+   +0x000 Next             : 0x0022fe24 _EXCEPTION_REGISTRATION_RECORD
+   +0x004 Handler          : 0x7c95ebc0     _EXCEPTION_DISPOSITION  ntdll!RtlpExecuteHandler2+0
+kd> ??RegistrationFrame->Next
+struct _EXCEPTION_REGISTRATION_RECORD * 0x0022fe24
+   +0x000 Next             : 0x0022fea4 _EXCEPTION_REGISTRATION_RECORD
+   +0x004 Handler          : 0x004016a1     _EXCEPTION_DISPOSITION  +0
+kd> ??RegistrationFrame->Next->Next
+struct _EXCEPTION_REGISTRATION_RECORD * 0x0022fea4
+   +0x000 Next             : 0x0022ffe0 _EXCEPTION_REGISTRATION_RECORD
+   +0x004 Handler          : 0x004016a1     _EXCEPTION_DISPOSITION  +0
+kd> ??RegistrationFrame->Next->Next->Next
+struct _EXCEPTION_REGISTRATION_RECORD * 0x0022ffe0
+   +0x000 Next             : 0xffffffff _EXCEPTION_REGISTRATION_RECORD
+   +0x004 Handler          : 0x7c6b732e     _EXCEPTION_DISPOSITION  kernel32!_except_handler3+0
+kd> g
+
+(4 levels)
+
+
+Breakpoint 26 hit
+>  294:     while (RegistrationFrame != EXCEPTION_CHAIN_END)
+ntdll!RtlUnwind+0xeb:
+001b:7c96768b 837dfcff        cmp     dword ptr [ebp-4],0FFFFFFFFh
+kd> dd fs:[0] L1
+003b:00000000  0022fe24
+kd> !exchain
+0022fe24: ntrtl_seh_gcc+16a1 (004016a1)
+0022fea4: ntrtl_seh_gcc+16a1 (004016a1)
+0022ffe0: kernel32!_except_handler3+0 (7c6b732e)
+  CRT scope  0, filter: kernel32!BaseProcessStartup+6a (7c656eba)
+                func:   kernel32!BaseProcessStartup+7e (7c656ece)
+kd> ??RegistrationFrame
+struct _EXCEPTION_REGISTRATION_RECORD * 0x0022fe24
+   +0x000 Next             : 0x0022fea4 _EXCEPTION_REGISTRATION_RECORD
+   +0x004 Handler          : 0x004016a1     _EXCEPTION_DISPOSITION  +0
+kd> ??RegistrationFrame->Next
+struct _EXCEPTION_REGISTRATION_RECORD * 0x0022fea4
+   +0x000 Next             : 0x0022ffe0 _EXCEPTION_REGISTRATION_RECORD
+   +0x004 Handler          : 0x004016a1     _EXCEPTION_DISPOSITION  +0
+kd> ??RegistrationFrame->Next->Next
+struct _EXCEPTION_REGISTRATION_RECORD * 0x0022ffe0
+   +0x000 Next             : 0xffffffff _EXCEPTION_REGISTRATION_RECORD
+   +0x004 Handler          : 0x7c6b732e     _EXCEPTION_DISPOSITION  kernel32!_except_handler3+0
+kd> g
+
+(3 levels)
+
+
+MyOutputDebugStringA - Entering _SEH2_TRY(1)
+MyOutputDebugStringA - Inside _SEH2_TRY(1)
+MyOutputDebugStringA - Entering _SEH2_TRY(2)
+MyOutputDebugStringA - Inside _SEH2_TRY(2)
+WL: WinMain(1)
+MyOutputDebugStringA - Exited _SEH2_EXCEPT(2)
+_SEH3$_FinallyFunction - Inside and exiting _SEH2_FINALLY(1)
+MyOutputDebugStringA - Exited _SEH2_TRY(1)/_SEH2_FINALLY(1)
+ODS(0x004042B0) -> 'WL: WinMain(2)
+'
+
+
+Breakpoint 25 hit
+>   92:     while (RegistrationFrame != EXCEPTION_CHAIN_END)
+ntdll!RtlDispatchException+0x65:
+001b:7c967245 837dfcff        cmp     dword ptr [ebp-4],0FFFFFFFFh
+kd> ??ExceptionRecord
+struct _EXCEPTION_RECORD * 0x0022fd64
+   +0x000 ExceptionCode    : 0xdeadbeef
+   +0x004 ExceptionFlags   : 0
+   +0x008 ExceptionRecord  : (null) 
+   +0x00c ExceptionAddress : 0x7c64b629 Void
+   +0x010 NumberParameters : 0
+   +0x014 ExceptionInformation : [15] 0
+kd> .exr 0x0022fd64
+ExceptionAddress: 7c64b629 (kernel32!RaiseException+0x00000269)
+   ExceptionCode: deadbeef
+  ExceptionFlags: 00000000
+NumberParameters: 0
+
+kd> dd fs:[0] L1
+003b:00000000  0022fe24
+kd> !exchain
+0022fe24: ntrtl_seh_gcc+16a1 (004016a1)
+0022ffe0: kernel32!_except_handler3+0 (7c6b732e)
+  CRT scope  0, filter: kernel32!BaseProcessStartup+6a (7c656eba)
+                func:   kernel32!BaseProcessStartup+7e (7c656ece)
+kd> ??RegistrationFrame
+struct _EXCEPTION_REGISTRATION_RECORD * 0x0022fe24
+   +0x000 Next             : 0x0022ffe0 _EXCEPTION_REGISTRATION_RECORD
+   +0x004 Handler          : 0x004016a1     _EXCEPTION_DISPOSITION  +0
+kd> ??RegistrationFrame->Next
+struct _EXCEPTION_REGISTRATION_RECORD * 0x0022ffe0
+   +0x000 Next             : 0xffffffff _EXCEPTION_REGISTRATION_RECORD
+   +0x004 Handler          : 0x7c6b732e     _EXCEPTION_DISPOSITION  kernel32!_except_handler3+0
+kd> ??RegistrationFrame->Next->Next
+struct _EXCEPTION_REGISTRATION_RECORD * 0xffffffff
+   +0x000 Next             : ???? 
+   +0x004 Handler          : ???? 
+kd> g
+
+(2 levels) <---- Weird: missing one level.
+
+
+Breakpoint 26 hit
+>  294:     while (RegistrationFrame != EXCEPTION_CHAIN_END)
+ntdll!RtlUnwind+0xeb:
+001b:7c96768b 837dfcff        cmp     dword ptr [ebp-4],0FFFFFFFFh
+kd> g
+Breakpoint 26 hit
+>  294:     while (RegistrationFrame != EXCEPTION_CHAIN_END)
+ntdll!RtlUnwind+0xeb:
+001b:7c96768b 837dfcff        cmp     dword ptr [ebp-4],0FFFFFFFFh
+kd> dd fs:[0] L1
+003b:00000000  0022f970
+kd> !exchain
+0022f970: ntdll!RtlpExecuteHandler2+3a (7c95ebc0)
+0022fe24: ntrtl_seh_gcc+16a1 (004016a1)
+0022ffe0: kernel32!_except_handler3+0 (7c6b732e)
+  CRT scope  0, filter: kernel32!BaseProcessStartup+6a (7c656eba)
+                func:   kernel32!BaseProcessStartup+7e (7c656ece)
+kd> ??RegistrationFrame
+struct _EXCEPTION_REGISTRATION_RECORD * 0x0022f970
+   +0x000 Next             : 0x0022fe24 _EXCEPTION_REGISTRATION_RECORD
+   +0x004 Handler          : 0x7c95ebc0     _EXCEPTION_DISPOSITION  ntdll!RtlpExecuteHandler2+0
+kd> ??RegistrationFrame->Next
+struct _EXCEPTION_REGISTRATION_RECORD * 0x0022fe24
+   +0x000 Next             : 0x0022ffe0 _EXCEPTION_REGISTRATION_RECORD
+   +0x004 Handler          : 0x004016a1     _EXCEPTION_DISPOSITION  +0
+kd> ??RegistrationFrame->Next->Next
+struct _EXCEPTION_REGISTRATION_RECORD * 0x0022ffe0
+   +0x000 Next             : 0xffffffff _EXCEPTION_REGISTRATION_RECORD
+   +0x004 Handler          : 0x7c6b732e     _EXCEPTION_DISPOSITION  kernel32!_except_handler3+0
+kd> ??RegistrationFrame->Next->Next->Next
+struct _EXCEPTION_REGISTRATION_RECORD * 0xffffffff
+   +0x000 Next             : ???? 
+   +0x004 Handler          : ???? 
+kd> g
+
+(3 levels)
+
+
+Breakpoint 26 hit
+>  294:     while (RegistrationFrame != EXCEPTION_CHAIN_END)
+ntdll!RtlUnwind+0xeb:
+001b:7c96768b 837dfcff        cmp     dword ptr [ebp-4],0FFFFFFFFh
+kd> dd fs:[0] L1
+003b:00000000  0022fe24
+kd> !exchain
+0022fe24: ntrtl_seh_gcc+16a1 (004016a1)
+0022ffe0: kernel32!_except_handler3+0 (7c6b732e)
+  CRT scope  0, filter: kernel32!BaseProcessStartup+6a (7c656eba)
+                func:   kernel32!BaseProcessStartup+7e (7c656ece)
+kd> ??RegistrationFrame
+struct _EXCEPTION_REGISTRATION_RECORD * 0x0022fe24
+   +0x000 Next             : 0x0022ffe0 _EXCEPTION_REGISTRATION_RECORD
+   +0x004 Handler          : 0x004016a1     _EXCEPTION_DISPOSITION  +0
+kd> ??RegistrationFrame->Next
+struct _EXCEPTION_REGISTRATION_RECORD * 0x0022ffe0
+   +0x000 Next             : 0xffffffff _EXCEPTION_REGISTRATION_RECORD
+   +0x004 Handler          : 0x7c6b732e     _EXCEPTION_DISPOSITION  kernel32!_except_handler3+0
+kd> ??RegistrationFrame->Next->Next
+struct _EXCEPTION_REGISTRATION_RECORD * 0xffffffff
+   +0x000 Next             : ???? 
+   +0x004 Handler          : ???? 
+kd> g
+
+(2 levels)
+
+
+MyOutputDebugStringA - Entering _SEH2_TRY(1)
+MyOutputDebugStringA - Inside _SEH2_TRY(1)
+MyOutputDebugStringA - Entering _SEH2_TRY(2)
+MyOutputDebugStringA - Inside _SEH2_TRY(2)
+WL: WinMain(2)
+MyOutputDebugStringA - Exited _SEH2_EXCEPT(2)
+_SEH3$_FinallyFunction - Inside and exiting _SEH2_FINALLY(1)
+MyOutputDebugStringA - Exited _SEH2_TRY(1)/_SEH2_FINALLY(1)
+ODS(0x004042C0) -> 'WL: WinMain(3)
+'
+
+
+Breakpoint 25 hit
+>   92:     while (RegistrationFrame != EXCEPTION_CHAIN_END)
+ntdll!RtlDispatchException+0x65:
+001b:7c967245 837dfcff        cmp     dword ptr [ebp-4],0FFFFFFFFh
+kd> ??ExceptionRecord
+struct _EXCEPTION_RECORD * 0x0022fd64
+   +0x000 ExceptionCode    : 0xdeadbeef
+   +0x004 ExceptionFlags   : 0
+   +0x008 ExceptionRecord  : (null) 
+   +0x00c ExceptionAddress : 0x7c64b629 Void
+   +0x010 NumberParameters : 0
+   +0x014 ExceptionInformation : [15] 0
+kd> .exr 0x0022fd64
+ExceptionAddress: 7c64b629 (kernel32!RaiseException+0x00000269)
+   ExceptionCode: deadbeef
+  ExceptionFlags: 00000000
+NumberParameters: 0
+
+kd> dd fs:[0] L1
+003b:00000000  0022fe24
+kd> !exchain
+0022fe24: ntrtl_seh_gcc+16a1 (004016a1)
+0022fe7c: ntrtl_seh_gcc+16a1 (004016a1)
+0022ffe0: kernel32!_except_handler3+0 (7c6b732e)
+  CRT scope  0, filter: kernel32!BaseProcessStartup+6a (7c656eba)
+                func:   kernel32!BaseProcessStartup+7e (7c656ece)
+kd> ??RegistrationFrame
+struct _EXCEPTION_REGISTRATION_RECORD * 0x0022fe24
+   +0x000 Next             : 0x0022fe7c _EXCEPTION_REGISTRATION_RECORD
+   +0x004 Handler          : 0x004016a1     _EXCEPTION_DISPOSITION  +0
+kd> ??RegistrationFrame->Next
+struct _EXCEPTION_REGISTRATION_RECORD * 0x0022fe7c
+   +0x000 Next             : 0x0022ffe0 _EXCEPTION_REGISTRATION_RECORD
+   +0x004 Handler          : 0x004016a1     _EXCEPTION_DISPOSITION  +0
+kd> ??RegistrationFrame->Next->Next
+struct _EXCEPTION_REGISTRATION_RECORD * 0x0022ffe0
+   +0x000 Next             : 0xffffffff _EXCEPTION_REGISTRATION_RECORD
+   +0x004 Handler          : 0x7c6b732e     _EXCEPTION_DISPOSITION  kernel32!_except_handler3+0
+kd> g
+
+(3 levels)
+
+
+Breakpoint 26 hit
+>  294:     while (RegistrationFrame != EXCEPTION_CHAIN_END)
+ntdll!RtlUnwind+0xeb:
+001b:7c96768b 837dfcff        cmp     dword ptr [ebp-4],0FFFFFFFFh
+kd> dd fs:[0] L1
+003b:00000000  0022f970
+kd> !exchain
+0022f970: ntdll!RtlpExecuteHandler2+3a (7c95ebc0)
+0022fe24: ntrtl_seh_gcc+16a1 (004016a1)
+0022fe7c: ntrtl_seh_gcc+16a1 (004016a1)
+0022ffe0: kernel32!_except_handler3+0 (7c6b732e)
+  CRT scope  0, filter: kernel32!BaseProcessStartup+6a (7c656eba)
+                func:   kernel32!BaseProcessStartup+7e (7c656ece)
+kd> ??RegistrationFrame
+struct _EXCEPTION_REGISTRATION_RECORD * 0x0022f970
+   +0x000 Next             : 0x0022fe24 _EXCEPTION_REGISTRATION_RECORD
+   +0x004 Handler          : 0x7c95ebc0     _EXCEPTION_DISPOSITION  ntdll!RtlpExecuteHandler2+0
+kd> ??RegistrationFrame->Next
+struct _EXCEPTION_REGISTRATION_RECORD * 0x0022fe24
+   +0x000 Next             : 0x0022fe7c _EXCEPTION_REGISTRATION_RECORD
+   +0x004 Handler          : 0x004016a1     _EXCEPTION_DISPOSITION  +0
+kd> ??RegistrationFrame->Next->Next
+struct _EXCEPTION_REGISTRATION_RECORD * 0x0022fe7c
+   +0x000 Next             : 0x0022ffe0 _EXCEPTION_REGISTRATION_RECORD
+   +0x004 Handler          : 0x004016a1     _EXCEPTION_DISPOSITION  +0
+kd> ??RegistrationFrame->Next->Next->Next
+struct _EXCEPTION_REGISTRATION_RECORD * 0x0022ffe0
+   +0x000 Next             : 0xffffffff _EXCEPTION_REGISTRATION_RECORD
+   +0x004 Handler          : 0x7c6b732e     _EXCEPTION_DISPOSITION  kernel32!_except_handler3+0
+kd> g
+
+(4 levels)
+
+
+Breakpoint 26 hit
+>  294:     while (RegistrationFrame != EXCEPTION_CHAIN_END)
+ntdll!RtlUnwind+0xeb:
+001b:7c96768b 837dfcff        cmp     dword ptr [ebp-4],0FFFFFFFFh
+kd> dd fs:[0] L1
+003b:00000000  0022fe24
+kd> !exchain
+0022fe24: ntrtl_seh_gcc+16a1 (004016a1)
+0022fe7c: ntrtl_seh_gcc+16a1 (004016a1)
+0022ffe0: kernel32!_except_handler3+0 (7c6b732e)
+  CRT scope  0, filter: kernel32!BaseProcessStartup+6a (7c656eba)
+                func:   kernel32!BaseProcessStartup+7e (7c656ece)
+kd> ??RegistrationFrame
+struct _EXCEPTION_REGISTRATION_RECORD * 0x0022fe24
+   +0x000 Next             : 0x0022fe7c _EXCEPTION_REGISTRATION_RECORD
+   +0x004 Handler          : 0x004016a1     _EXCEPTION_DISPOSITION  +0
+kd> ??RegistrationFrame->Next
+struct _EXCEPTION_REGISTRATION_RECORD * 0x0022fe7c
+   +0x000 Next             : 0x0022ffe0 _EXCEPTION_REGISTRATION_RECORD
+   +0x004 Handler          : 0x004016a1     _EXCEPTION_DISPOSITION  +0
+kd> ??RegistrationFrame->Next->Next
+struct _EXCEPTION_REGISTRATION_RECORD * 0x0022ffe0
+   +0x000 Next             : 0xffffffff _EXCEPTION_REGISTRATION_RECORD
+   +0x004 Handler          : 0x7c6b732e     _EXCEPTION_DISPOSITION  kernel32!_except_handler3+0
+kd> g
+
+(3 levels)
+
+
+MyOutputDebugStringA - Entering _SEH2_TRY(1)
+MyOutputDebugStringA - Inside _SEH2_TRY(1)
+MyOutputDebugStringA - Entering _SEH2_TRY(2)
+MyOutputDebugStringA - Inside _SEH2_TRY(2)
+WL: WinMain(3)
+MyOutputDebugStringA - Exited _SEH2_EXCEPT(2)
+_SEH3$_FinallyFunction - Inside and exiting _SEH2_FINALLY(1)
+MyOutputDebugStringA - Exited _SEH2_TRY(1)/_SEH2_FINALLY(1)
+Test succeeded!
