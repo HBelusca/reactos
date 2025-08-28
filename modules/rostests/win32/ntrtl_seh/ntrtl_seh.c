@@ -148,9 +148,10 @@ WLUnhandledExceptionFilter(
     {
         DbgPrint("       Info[%u]: 0x%p\n", n, (PVOID)Record->ExceptionInformation[n]);
     }
-    DbgBreakPoint();
 
-    return EXCEPTION_EXECUTE_HANDLER;
+    //return EXCEPTION_EXECUTE_HANDLER;
+    //return UnhandledExceptionFilter(ExceptionInfo);
+    return RtlUnhandledExceptionFilter(ExceptionInfo);
 }
 
 LONG
@@ -232,9 +233,15 @@ WinMain(
     UNREFERENCED_PARAMETER(lpCmdLine);
     UNREFERENCED_PARAMETER(nShowCmd);
 
+_SEH2_TRY {
     /* Install a custom global exception filter */
+    ///*pOrgTopLevelExceptionFilter =*/ RtlSetUnhandledExceptionFilter((PRTLP_UNHANDLED_EXCEPTION_FILTER)WLGlobalUnhandledExceptionFilter);
+    /*pOrgTopLevelExceptionFilter =*/ RtlSetUnhandledExceptionFilter((PRTLP_UNHANDLED_EXCEPTION_FILTER)UnhandledExceptionFilter);
     pOrgTopLevelExceptionFilter = SetUnhandledExceptionFilter(WLGlobalUnhandledExceptionFilter);
+    //pOrgTopLevelExceptionFilter = SetUnhandledExceptionFilter(UnhandledExceptionFilter);
     DbgPrint("Replaced Original unhandled exception filter: 0x%p\n", pOrgTopLevelExceptionFilter);
+
+__debugbreak();
 
 #ifdef CRITICAL_PROCESS_TEST
     /* Make us critical -- Allows also getting the stack trace to where
@@ -295,5 +302,6 @@ WinMain(
     RtlSetThreadIsCritical(OldCritThread, NULL, FALSE);
     RtlSetProcessIsCritical(OldCritProcess, NULL, FALSE);
 #endif
+} _SEH2_EXCEPT(WLGlobalUnhandledExceptionFilter(_SEH2_GetExceptionInformation())) {} _SEH2_END;
     return 0;
 }
