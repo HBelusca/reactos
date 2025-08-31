@@ -721,7 +721,7 @@ EXTERN_C DWORD WINAPI SHGetUserSessionId(_In_opt_ HANDLE hToken)
     TRACE("%p\n", hToken);
 
     if (!hToken)
-        bOpenToken = SHOpenEffectiveToken(&hToken);
+        bOpenToken = OpenEffectiveToken(TOKEN_QUERY, &hToken);
 
     if (!hToken ||
         !GetTokenInformation(hToken, TokenSessionId, &dwSessionId, sizeof(dwSessionId), &dwLength))
@@ -788,9 +788,9 @@ SHTestTokenPrivilegeW(
     _In_ LPCWSTR lpName)
 {
     LUID Luid;
-    DWORD dwLength;
-    PTOKEN_PRIVILEGES pTokenPriv;
     HANDLE hNewToken = NULL;
+    PTOKEN_PRIVILEGES pTokenPriv;
+    DWORD dwLength;
     BOOL ret = FALSE;
 
     TRACE("(%p, %s)\n", hToken, debugstr_w(lpName));
@@ -800,33 +800,32 @@ SHTestTokenPrivilegeW(
 
     if (!hToken)
     {
-        if (!SHOpenEffectiveToken(&hNewToken))
-            goto Quit;
-
-        if (!hNewToken)
+        if (!OpenEffectiveToken(TOKEN_QUERY, &hNewToken) || !hNewToken)
             return FALSE;
-
         hToken = hNewToken;
     }
 
     if (!LookupPrivilegeValueW(NULL, lpName, &Luid))
-        return FALSE;
-
-    dwLength = 0;
-    if (!GetTokenInformation(hToken, TokenPrivileges, NULL, 0, &dwLength))
         goto Quit;
 
+    dwLength = 0;
+    if (!GetTokenInformation(hToken, TokenPrivileges, NULL, 0, &dwLength) &&
+        (GetLastError() != ERROR_INSUFFICIENT_BUFFER))
+    {
+        goto Quit;
+    }
+
+    ret = FALSE;
     pTokenPriv = (PTOKEN_PRIVILEGES)LocalAlloc(LPTR, dwLength);
     if (!pTokenPriv)
         goto Quit;
 
     if (GetTokenInformation(hToken, TokenPrivileges, pTokenPriv, dwLength, &dwLength))
     {
-        UINT iPriv, cPrivs;
-        cPrivs = pTokenPriv->PrivilegeCount;
-        for (iPriv = 0; !ret && iPriv < cPrivs; ++iPriv)
+        DWORD i, cPrivs = pTokenPriv->PrivilegeCount;
+        for (i = 0; !ret && i < cPrivs; ++i)
         {
-            ret = RtlEqualLuid(&Luid, &pTokenPriv->Privileges[iPriv].Luid);
+            ret = RtlEqualLuid(&Luid, &pTokenPriv->Privileges[i].Luid);
         }
     }
 
@@ -835,7 +834,6 @@ SHTestTokenPrivilegeW(
 Quit:
     if (hToken == hNewToken)
         CloseHandle(hNewToken);
-
     return ret;
 }
 

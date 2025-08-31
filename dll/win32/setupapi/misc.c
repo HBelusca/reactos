@@ -366,59 +366,53 @@ LPSTR WINAPI pSetupUnicodeToMultiByte(LPCWSTR lpUnicodeStr, UINT uCodePage)
 BOOL WINAPI DoesUserHavePrivilege(LPCWSTR lpPrivilegeName)
 {
     HANDLE hToken;
-    DWORD dwSize;
-    PTOKEN_PRIVILEGES lpPrivileges;
     LUID PrivilegeLuid;
-    DWORD i;
+    PTOKEN_PRIVILEGES pTokenPriv;
+    DWORD dwSize;
     BOOL bResult = FALSE;
 
     TRACE("%s\n", debugstr_w(lpPrivilegeName));
 
-    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &hToken))
+    /* Open effective token */
+    bResult = OpenThreadToken(GetCurrentThread(), TOKEN_QUERY, FALSE, &hToken);
+    if (!bResult && (GetLastError() == ERROR_NO_TOKEN))
+        bResult = OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &hToken);
+    if (!bResult)
         return FALSE;
 
-    if (!GetTokenInformation(hToken, TokenPrivileges, NULL, 0, &dwSize))
-    {
-        if (GetLastError() != ERROR_INSUFFICIENT_BUFFER)
-        {
-            CloseHandle(hToken);
-            return FALSE;
-        }
-    }
-
-    lpPrivileges = MyMalloc(dwSize);
-    if (lpPrivileges == NULL)
-    {
-        CloseHandle(hToken);
-        return FALSE;
-    }
-
-    if (!GetTokenInformation(hToken, TokenPrivileges, lpPrivileges, dwSize, &dwSize))
-    {
-        MyFree(lpPrivileges);
-        CloseHandle(hToken);
-        return FALSE;
-    }
-
-    CloseHandle(hToken);
+    bResult = FALSE;
 
     if (!LookupPrivilegeValueW(NULL, lpPrivilegeName, &PrivilegeLuid))
+        goto Quit;
+
+    if (!GetTokenInformation(hToken, TokenPrivileges, NULL, 0, &dwSize) &&
+        (GetLastError() != ERROR_INSUFFICIENT_BUFFER))
     {
-        MyFree(lpPrivileges);
-        return FALSE;
+        goto Quit;
     }
 
-    for (i = 0; i < lpPrivileges->PrivilegeCount; i++)
+    pTokenPriv = MyMalloc(dwSize);
+    if (!pTokenPriv)
+        goto Quit;
+
+    if (GetTokenInformation(hToken, TokenPrivileges, pTokenPriv, dwSize, &dwSize))
     {
-        if (lpPrivileges->Privileges[i].Luid.HighPart == PrivilegeLuid.HighPart &&
-            lpPrivileges->Privileges[i].Luid.LowPart == PrivilegeLuid.LowPart)
+        DWORD i, cPrivs = pTokenPriv->PrivilegeCount;
+        for (i = 0; i < cPrivs; ++i)
         {
-            bResult = TRUE;
+            if (pTokenPriv->Privileges[i].Luid.HighPart == PrivilegeLuid.HighPart &&
+                pTokenPriv->Privileges[i].Luid.LowPart == PrivilegeLuid.LowPart)
+            {
+                bResult = TRUE;
+                break;
+            }
         }
     }
 
-    MyFree(lpPrivileges);
+    MyFree(pTokenPriv);
 
+Quit:
+    CloseHandle(hToken);
     return bResult;
 }
 
@@ -730,7 +724,8 @@ DWORD WINAPI TakeOwnershipOfFile(LPCWSTR lpFileName)
     if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &hToken))
         return GetLastError();
 
-    if (!GetTokenInformation(hToken, TokenOwner, NULL, 0, &dwSize))
+    if (!GetTokenInformation(hToken, TokenOwner, NULL, 0, &dwSize) &&
+        (GetLastError() != ERROR_INSUFFICIENT_BUFFER))
     {
         goto fail;
     }
@@ -743,37 +738,27 @@ DWORD WINAPI TakeOwnershipOfFile(LPCWSTR lpFileName)
     }
 
     if (!GetTokenInformation(hToken, TokenOwner, pOwner, dwSize, &dwSize))
-    {
         goto fail;
-    }
 
     if (!InitializeSecurityDescriptor(&SecDesc, SECURITY_DESCRIPTOR_REVISION))
-    {
         goto fail;
-    }
 
     if (!SetSecurityDescriptorOwner(&SecDesc, pOwner->Owner, FALSE))
-    {
         goto fail;
-    }
 
     if (!SetFileSecurityW(lpFileName, OWNER_SECURITY_INFORMATION, &SecDesc))
-    {
         goto fail;
-    }
 
     MyFree(pOwner);
     CloseHandle(hToken);
 
     return ERROR_SUCCESS;
 
-fail:;
+fail:
     dwError = GetLastError();
 
     MyFree(pOwner);
-
-    if (hToken != NULL)
-        CloseHandle(hToken);
+    CloseHandle(hToken);
 
     return dwError;
 }
