@@ -339,27 +339,25 @@ WlxScreenSaverNotify(
      *    HKCU\Control Panel\Desktop : ScreenSaverIsSecure
      */
 
-    if (!ImpersonateLoggedOnUser(pgContext->UserToken))
+    /* Open the per-user registry key */
+    rc = RegOpenLoggedOnHKCU(pgContext->UserToken,
+                             KEY_QUERY_VALUE,
+                             &hKeyCurrentUser);
+    if (rc != ERROR_SUCCESS)
     {
-        ERR("WL: ImpersonateLoggedOnUser() failed with error %lu\n", GetLastError());
+        ERR("RegOpenLoggedOnHKCU() failed with error %ld\n", rc);
         *pSecure = FALSE;
         return TRUE;
     }
 
-    /* Open the current user HKCU key */
-    rc = RegOpenCurrentUser(MAXIMUM_ALLOWED, &hKeyCurrentUser);
-    TRACE("RegOpenCurrentUser: %ld\n", rc);
-    if (rc == ERROR_SUCCESS)
-    {
-        /* Open the subkey */
-        rc = RegOpenKeyExW(hKeyCurrentUser,
-                           L"Control Panel\\Desktop",
-                           0,
-                           KEY_QUERY_VALUE,
-                           &hKey);
-        TRACE("RegOpenKeyExW: %ld\n", rc);
-        RegCloseKey(hKeyCurrentUser);
-    }
+    /* Open the subkey */
+    rc = RegOpenKeyExW(hKeyCurrentUser,
+                       L"Control Panel\\Desktop",
+                       0,
+                       KEY_QUERY_VALUE,
+                       &hKey);
+    TRACE("RegOpenKeyExW: %ld\n", rc);
+    RegCloseKey(hKeyCurrentUser);
 
     /* Read the value */
     if (rc == ERROR_SUCCESS)
@@ -382,10 +380,7 @@ WlxScreenSaverNotify(
         RegCloseKey(hKey);
     }
 
-    /* Revert the impersonation */
-    RevertToSelf();
-
-    TRACE("*pSecure: %ld\n", *pSecure);
+    TRACE("*pSecure: %lu\n", *pSecure);
 #endif
 
     *pSecure = FALSE;
