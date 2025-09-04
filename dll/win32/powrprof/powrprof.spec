@@ -31,7 +31,7 @@
 @ stdcall ReadPwrScheme (long ptr)
 @ stdcall SetActivePwrScheme (long ptr ptr)
 @ stdcall SetSuspendState (long long long)
+@ stdcall ValidatePowerPolicies (ptr ptr)
 @ stdcall WriteGlobalPwrPolicy (ptr)
 @ stdcall WriteProcessorPwrScheme (long ptr)
 @ stdcall WritePwrScheme (ptr str str ptr)
-@ stdcall ValidatePowerPolicies (ptr ptr)

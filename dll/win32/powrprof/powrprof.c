@@ -34,19 +34,9 @@
 
 WINE_DEFAULT_DEBUG_CHANNEL(powrprof);
 
-
 static const WCHAR szPowerCfgSubKey[] =
     L"Software\\Microsoft\\Windows\\CurrentVersion\\Controls Folder\\PowerCfg";
-static const WCHAR szUserPowerConfigSubKey[] =
-    L"Control Panel\\PowerCfg";
-static const WCHAR szCurrentPowerPolicies[] =
-    L"CurrentPowerPolicy";
 static const WCHAR szPolicies[] = L"Policies";
-static const WCHAR szName[] = L"Name";
-static const WCHAR szDescription[] = L"Description";
-static const WCHAR szDiskMax[] = L"DiskSpindownMax";
-static const WCHAR szDiskMin[] = L"DiskSpindownMin";
-static const WCHAR szLastID[] = L"LastID";
 
 static UINT g_LastID = (UINT)-1;
 static HANDLE PPRegSemaphore = NULL;
@@ -286,17 +276,23 @@ CallNtPowerInformation(POWER_INFORMATION_LEVEL InformationLevel,
                        PVOID lpOutputBuffer,
                        ULONG nOutputBufferSize)
 {
+    NTSTATUS Status;
     BOOLEAN old;
 
-	//Lohnegrim: In order to get the right results, we have to adjust our Privileges
+    //Lohnegrim: In order to get the right results, we have to adjust our Privileges
     RtlAdjustPrivilege(SE_SHUTDOWN_PRIVILEGE, TRUE, FALSE, &old);
     RtlAdjustPrivilege(SE_CREATE_PAGEFILE_PRIVILEGE, TRUE, FALSE, &old);
 
-    return NtPowerInformation(InformationLevel,
-                              lpInputBuffer,
-                              nInputBufferSize,
-                              lpOutputBuffer,
-                              nOutputBufferSize);
+    Status = NtPowerInformation(InformationLevel,
+                                lpInputBuffer,
+                                nInputBufferSize,
+                                lpOutputBuffer,
+                                nOutputBufferSize);
+
+    RtlAdjustPrivilege(SE_CREATE_PAGEFILE_PRIVILEGE, old, FALSE, &old);
+    RtlAdjustPrivilege(SE_SHUTDOWN_PRIVILEGE, old, FALSE, &old);
+
+    return Status;
 }
 
 BOOLEAN WINAPI
@@ -310,7 +306,7 @@ CanUserWritePwrScheme(VOID)
     Ret = RegOpenKeyExW(HKEY_LOCAL_MACHINE, szPowerCfgSubKey, 0, KEY_READ | KEY_WRITE, &hKey);
     if (Ret != ERROR_SUCCESS)
     {
-        TRACE("RegOpenKeyEx failed: %d\n", Ret);
+        TRACE("RegOpenKeyEx failed: %ld\n", Ret);
         SetLastError(Ret);
         return FALSE;
     }
@@ -340,7 +336,7 @@ DeletePwrScheme(UINT uiIndex)
     Err = RegDeleteKey(HKEY_CURRENT_USER, (LPCTSTR)Buf);
     if (Err != ERROR_SUCCESS)
     {
-        TRACE("RegDeleteKey failed: %d\n", Err);
+        TRACE("RegDeleteKey failed: %ld\n", Err);
         SetLastError(Err);
         return FALSE;
     }
@@ -365,7 +361,7 @@ POWRPROF_GetUserPowerPolicy(LPWSTR szNum,
     Err = RegOpenKeyExW(HKEY_CURRENT_USER, szPath, 0, KEY_READ, &hSubKey);
     if (Err != ERROR_SUCCESS)
     {
-        ERR("RegOpenKeyExW failed: %d\n", Err);
+        ERR("RegOpenKeyExW failed: %ld\n", Err);
         SetLastError(Err);
         return FALSE;
     }
@@ -374,7 +370,7 @@ POWRPROF_GetUserPowerPolicy(LPWSTR szNum,
     Err = RegQueryValueExW(hSubKey, L"Name", NULL, NULL, (LPBYTE)szName, &dwSize);
     if (Err != ERROR_SUCCESS)
     {
-        ERR("RegQueryValueExW failed: %d\n", Err);
+        ERR("RegQueryValueExW failed: %ld\n", Err);
         SetLastError(Err);
         goto cleanup;
     }
@@ -383,7 +379,7 @@ POWRPROF_GetUserPowerPolicy(LPWSTR szNum,
     Err = RegQueryValueExW(hSubKey, L"Description", NULL, NULL, (LPBYTE)szDesc, &dwSize);
     if (Err != ERROR_SUCCESS)
     {
-        ERR("RegQueryValueExW failed: %d\n", Err);
+        ERR("RegQueryValueExW failed: %ld\n", Err);
         SetLastError(Err);
         goto cleanup;
     }
@@ -392,7 +388,7 @@ POWRPROF_GetUserPowerPolicy(LPWSTR szNum,
     Err = RegQueryValueExW(hSubKey, L"Policies", NULL, NULL, (LPBYTE)puserPwrPolicy, &dwSize);
     if (Err != ERROR_SUCCESS)
     {
-        ERR("RegQueryValueExW failed: %d\n", Err);
+        ERR("RegQueryValueExW failed: %ld\n", Err);
         SetLastError(Err);
         goto cleanup;
     }
@@ -418,7 +414,7 @@ POWRPROF_GetMachinePowerPolicy(LPWSTR szNum, PMACHINE_POWER_POLICY pmachinePwrPo
     Err = RegOpenKeyExW(HKEY_LOCAL_MACHINE, szPath, 0, KEY_READ, &hKey);
     if (Err != ERROR_SUCCESS)
     {
-        ERR("RegOpenKeyExW failed: %d\n", Err);
+        ERR("RegOpenKeyExW failed: %ld\n", Err);
         SetLastError(Err);
         return FALSE;
     }
@@ -428,9 +424,9 @@ POWRPROF_GetMachinePowerPolicy(LPWSTR szNum, PMACHINE_POWER_POLICY pmachinePwrPo
 
     if (Err != ERROR_SUCCESS)
     {
-        ERR("RegQueryValueExW failed: %d\n", Err);
-        SetLastError(Err);
+        ERR("RegQueryValueExW failed: %ld\n", Err);
         RegCloseKey(hKey);
+        SetLastError(Err);
         return FALSE;
     }
 
@@ -458,15 +454,17 @@ EnumPwrSchemes(PWRSCHEMESENUMPROC lpfnPwrSchemesEnumProc,
         return FALSE;
     }
 
+    if (!AcquirePwrProfSemaphore())
+        return FALSE;
+
     Err = RegOpenKeyExW(HKEY_CURRENT_USER, L"Control Panel\\PowerCfg\\PowerPolicies", 0, KEY_READ, &hKey);
     if (Err != ERROR_SUCCESS)
     {
-        ERR("RegOpenKeyW failed: %d\n", Err);
+        ERR("RegOpenKeyW failed: %ld\n", Err);
+        ReleaseSemaphore(PPRegSemaphore, 1, NULL);
         SetLastError(Err);
         return FALSE;
     }
-
-    ReleaseSemaphore(PPRegSemaphore, 1, NULL);
 
     dwSize = sizeof(szNum) / sizeof(WCHAR);
 
@@ -486,8 +484,8 @@ EnumPwrSchemes(PWRSCHEMESENUMPROC lpfnPwrSchemesEnumProc,
             goto cleanup;
         }
 
-        memcpy(&PwrPolicy.user, &userPwrPolicy, sizeof(USER_POWER_POLICY));
-        memcpy(&PwrPolicy.mach, &machinePwrPolicy, sizeof(MACHINE_POWER_POLICY));
+        memcpy(&PwrPolicy.user, &userPwrPolicy, sizeof(userPwrPolicy));
+        memcpy(&PwrPolicy.mach, &machinePwrPolicy, sizeof(machinePwrPolicy));
 
         if (!lpfnPwrSchemesEnumProc(_wtoi(szNum), (wcslen(szName) + 1) * sizeof(WCHAR), szName, (wcslen(szDesc) + 1) * sizeof(WCHAR), szDesc, &PwrPolicy, lParam))
             goto cleanup;
@@ -515,10 +513,14 @@ GetActivePwrScheme(PUINT puiID)
 
     TRACE("GetActivePwrScheme(%u)", puiID);
 
+    if (!AcquirePwrProfSemaphore())
+        return FALSE;
+
     Err = RegOpenKeyExW(HKEY_CURRENT_USER, L"Control Panel\\PowerCfg", 0, KEY_READ, &hKey);
     if (Err != ERROR_SUCCESS)
     {
-        ERR("RegOpenKey failed: %d\n", Err);
+        ERR("RegOpenKey failed: %ld\n", Err);
+        ReleaseSemaphore(PPRegSemaphore, 1, NULL);
         SetLastError(Err);
         return FALSE;
     }
@@ -529,13 +531,16 @@ GetActivePwrScheme(PUINT puiID)
                            (LPBYTE)&szBuf, &dwSize);
     if (Err != ERROR_SUCCESS)
     {
-        ERR("RegQueryValueEx failed: %d\n", Err);
+        ERR("RegQueryValueEx failed: %ld\n", Err);
         RegCloseKey(hKey);
+        ReleaseSemaphore(PPRegSemaphore, 1, NULL);
         SetLastError(Err);
         return FALSE;
     }
 
     RegCloseKey(hKey);
+    ReleaseSemaphore(PPRegSemaphore, 1, NULL);
+
     *puiID = _wtoi(szBuf);
 
     return TRUE;
@@ -550,14 +555,14 @@ GetCurrentPowerPolicies(PGLOBAL_POWER_POLICY pGlobalPowerPolicy,
 
     FIXME("(%p, %p) stub!\n", pGlobalPowerPolicy, pPowerPolicy);
 
-    NtPowerInformation(SystemPowerPolicyAc, 0, 0, &ACPower, sizeof(SYSTEM_POWER_POLICY));
-    NtPowerInformation(SystemPowerPolicyDc, 0, 0, &DCPower, sizeof(SYSTEM_POWER_POLICY));
+    NtPowerInformation(SystemPowerPolicyAc, 0, 0, &ACPower, sizeof(ACPower));
+    NtPowerInformation(SystemPowerPolicyDc, 0, 0, &DCPower, sizeof(DCPower));
 
     return FALSE;
     */
 /*
    Lohnegrim: I don't know why this Function should call NtPowerInformation, because as far as I know,
-      it simply returns the GlobalPowerPolicy and the AktivPowerScheme!
+      it simply returns the GlobalPowerPolicy and the ActivePowerScheme!
  */
     UINT uiID;
 
@@ -591,8 +596,8 @@ GetPwrCapabilities(PSYSTEM_POWER_CAPABILITIES lpSystemPowerCapabilities)
         return FALSE;
     }
 
-    Status = NtPowerInformation(SystemPowerCapabilities, 0, 0, lpSystemPowerCapabilities, sizeof(SYSTEM_POWER_CAPABILITIES));
-    if(!NT_SUCCESS(Status))
+    Status = CallNtPowerInformation(SystemPowerCapabilities, NULL, 0, lpSystemPowerCapabilities, sizeof(*lpSystemPowerCapabilities));
+    if (!NT_SUCCESS(Status))
     {
         SetLastError(RtlNtStatusToDosError(Status));
         return FALSE;
@@ -623,7 +628,7 @@ GetPwrDiskSpindownRange(PUINT RangeMax, PUINT RangeMin)
     Ret = RegOpenKeyExW(HKEY_LOCAL_MACHINE, szPowerCfgSubKey, 0, KEY_READ, &hKey);
     if (Ret != ERROR_SUCCESS)
     {
-        TRACE("RegOpenKeyEx failed: %d\n", Ret);
+        TRACE("RegOpenKeyEx failed: %ld\n", Ret);
         TRACE("Using defaults: 3600, 3\n");
         *RangeMax = 3600;
         *RangeMin = 3;
@@ -631,10 +636,10 @@ GetPwrDiskSpindownRange(PUINT RangeMax, PUINT RangeMin)
         return TRUE;
     }
 
-    Ret = RegQueryValueExW(hKey, szDiskMax, 0, 0, lpValue, &cbValue);
+    Ret = RegQueryValueExW(hKey, L"DiskSpindownMax", 0, 0, lpValue, &cbValue);
     if (Ret != ERROR_SUCCESS)
     {
-        TRACE("Couldn't open DiskSpinDownMax: %d\n", Ret);
+        TRACE("Couldn't open DiskSpinDownMax: %ld\n", Ret);
         TRACE("Using default: 3600\n");
         *RangeMax = 3600;
     }
@@ -645,10 +650,10 @@ GetPwrDiskSpindownRange(PUINT RangeMax, PUINT RangeMin)
 
     cbValue = sizeof(lpValue);
 
-    Ret = RegQueryValueExW(hKey, szDiskMin, 0, 0, lpValue, &cbValue);
+    Ret = RegQueryValueExW(hKey, L"DiskSpindownMin", 0, 0, lpValue, &cbValue);
     if (Ret != ERROR_SUCCESS)
     {
-        TRACE("Couldn't open DiskSpinDownMin: %d\n", Ret);
+        TRACE("Couldn't open DiskSpinDownMin: %ld\n", Ret);
         TRACE("Using default: 3\n");
         *RangeMin = 3;
     }
@@ -658,7 +663,6 @@ GetPwrDiskSpindownRange(PUINT RangeMax, PUINT RangeMin)
     }
 
     RegCloseKey(hKey);
-
     ReleaseSemaphore(PPRegSemaphore, 1, NULL);
 
     return TRUE;
@@ -676,11 +680,8 @@ IsPwrHibernateAllowed(VOID)
 {
     SYSTEM_POWER_CAPABILITIES PowerCaps;
     NTSTATUS Status;
-    BOOLEAN old;
 
-    RtlAdjustPrivilege(SE_SHUTDOWN_PRIVILEGE, TRUE, FALSE, &old);
-
-    Status = NtPowerInformation(SystemPowerCapabilities, NULL, 0, &PowerCaps, sizeof(PowerCaps));
+    Status = CallNtPowerInformation(SystemPowerCapabilities, NULL, 0, &PowerCaps, sizeof(PowerCaps));
     if (!NT_SUCCESS(Status))
     {
         SetLastError(RtlNtStatusToDosError(Status));
@@ -695,11 +696,8 @@ IsPwrShutdownAllowed(VOID)
 {
     SYSTEM_POWER_CAPABILITIES PowerCaps;
     NTSTATUS Status;
-    BOOLEAN old;
 
-    RtlAdjustPrivilege(SE_SHUTDOWN_PRIVILEGE, TRUE, FALSE, &old);
-
-    Status = NtPowerInformation(SystemPowerCapabilities, NULL, 0, &PowerCaps, sizeof(PowerCaps));
+    Status = CallNtPowerInformation(SystemPowerCapabilities, NULL, 0, &PowerCaps, sizeof(PowerCaps));
     if (!NT_SUCCESS(Status))
     {
         SetLastError(RtlNtStatusToDosError(Status));
@@ -714,11 +712,8 @@ IsPwrSuspendAllowed(VOID)
 {
     SYSTEM_POWER_CAPABILITIES PowerCaps;
     NTSTATUS Status;
-    BOOLEAN old;
 
-    RtlAdjustPrivilege(SE_SHUTDOWN_PRIVILEGE, TRUE, FALSE, &old);
-
-    Status = NtPowerInformation(SystemPowerCapabilities, NULL, 0, &PowerCaps, sizeof(PowerCaps));
+    Status = CallNtPowerInformation(SystemPowerCapabilities, NULL, 0, &PowerCaps, sizeof(PowerCaps));
     if (!NT_SUCCESS(Status))
     {
         SetLastError(RtlNtStatusToDosError(Status));
@@ -751,8 +746,8 @@ PowerReadDCValue(HKEY RootPowerKey, const GUID *Scheme, const GUID *SubGroup, co
 }
 
 DWORD WINAPI PowerReadFriendlyName(HKEY RootPowerKey, const GUID *Scheme,
-	const GUID *SubGroup, const GUID *PowerSettings, UCHAR *Buffer,
-	DWORD *BufferSize)
+    const GUID *SubGroup, const GUID *PowerSettings, UCHAR *Buffer,
+    DWORD *BufferSize)
 {
    FIXME("(%p,%s,%s,%s,%p,%p) stub!\n", RootPowerKey, debugstr_guid(Scheme), debugstr_guid(SubGroup), debugstr_guid(PowerSettings), Buffer, BufferSize);
    return ERROR_CALL_NOT_IMPLEMENTED;
@@ -863,14 +858,14 @@ ReadGlobalPwrPolicy(PGLOBAL_POWER_POLICY pGlobalPowerPolicy)
     LONG Err;
     BOOL bRet = FALSE;
 
-    ReleaseSemaphore(PPRegSemaphore, 1, NULL);
+    if (!AcquirePwrProfSemaphore())
+        return FALSE;
 
     // Getting user global power policy
     Err = RegOpenKeyExW(HKEY_CURRENT_USER, L"Control Panel\\PowerCfg\\GlobalPowerPolicy", 0, KEY_READ, &hKey);
     if (Err != ERROR_SUCCESS)
     {
-        ERR("RegOpenKeyW failed: %d\n", Err);
-        SetLastError(Err);
+        ERR("RegOpenKeyExW failed: %ld\n", Err);
         goto cleanup;
     }
 
@@ -878,8 +873,7 @@ ReadGlobalPwrPolicy(PGLOBAL_POWER_POLICY pGlobalPowerPolicy)
     Err = RegQueryValueExW(hKey, L"Policies", NULL, NULL, (LPBYTE)&glUserPwrPolicy, &dwSize);
     if (Err != ERROR_SUCCESS)
     {
-        ERR("RegQueryValueExW failed: %d\n", Err);
-        SetLastError(Err);
+        ERR("RegQueryValueExW failed: %ld\n", Err);
         goto cleanup;
     }
 
@@ -889,8 +883,7 @@ ReadGlobalPwrPolicy(PGLOBAL_POWER_POLICY pGlobalPowerPolicy)
     Err = RegOpenKeyExW(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Controls Folder\\PowerCfg\\GlobalPowerPolicy", 0, KEY_READ, &hKey);
     if (Err != ERROR_SUCCESS)
     {
-        ERR("RegOpenKeyW failed: %d\n", Err);
-        SetLastError(Err);
+        ERR("RegOpenKeyExW failed: %ld\n", Err);
         goto cleanup;
     }
 
@@ -898,19 +891,21 @@ ReadGlobalPwrPolicy(PGLOBAL_POWER_POLICY pGlobalPowerPolicy)
     Err = RegQueryValueExW(hKey, L"Policies", NULL, NULL, (LPBYTE)&glMachPwrPolicy, &dwSize);
     if (Err != ERROR_SUCCESS)
     {
-        ERR("RegQueryValueExW failed: %d\n", Err);
-        SetLastError(Err);
+        ERR("RegQueryValueExW failed: %ld\n", Err);
         goto cleanup;
     }
 
-    memcpy(&pGlobalPowerPolicy->user, &glUserPwrPolicy, sizeof(GLOBAL_USER_POWER_POLICY));
-    memcpy(&pGlobalPowerPolicy->mach, &glMachPwrPolicy, sizeof(GLOBAL_MACHINE_POWER_POLICY));
+    memcpy(&pGlobalPowerPolicy->user, &glUserPwrPolicy, sizeof(glUserPwrPolicy));
+    memcpy(&pGlobalPowerPolicy->mach, &glMachPwrPolicy, sizeof(glMachPwrPolicy));
     bRet = TRUE;
 
 cleanup:
-    if(hKey)
+    if (hKey)
         RegCloseKey(hKey);
+
     ReleaseSemaphore(PPRegSemaphore, 1, NULL);
+    if (Err != ERROR_SUCCESS)
+        SetLastError(Err);
 
     return bRet;
 }
@@ -922,19 +917,28 @@ ReadProcessorPwrScheme(UINT uiID,
 {
     HKEY hKey;
     WCHAR szPath[MAX_PATH];
-    DWORD dwSize = sizeof(MACHINE_PROCESSOR_POWER_POLICY);
+    DWORD dwSize = sizeof(*pMachineProcessorPowerPolicy);
+
+    if (!AcquirePwrProfSemaphore())
+        return FALSE;
 
     swprintf(szPath, L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Controls Folder\\PowerCfg\\ProcessorPolicies\\%i", uiID);
     if (RegOpenKeyEx(HKEY_LOCAL_MACHINE, szPath, 0, KEY_READ, &hKey) != ERROR_SUCCESS)
+    {
+        ReleaseSemaphore(PPRegSemaphore, 1, NULL);
         return FALSE;
+    }
 
     if (RegQueryValueExW(hKey, szPolicies, NULL, 0, (LPBYTE)pMachineProcessorPowerPolicy, &dwSize) == ERROR_SUCCESS)
     {
         RegCloseKey(hKey);
+        ReleaseSemaphore(PPRegSemaphore, 1, NULL);
         return TRUE;
     }
 
     RegCloseKey(hKey);
+    ReleaseSemaphore(PPRegSemaphore, 1, NULL);
+
     if (uiID != 0)
         return ReadProcessorPwrScheme(0, pMachineProcessorPowerPolicy);
 
@@ -950,7 +954,8 @@ ReadPwrScheme(UINT uiID,
     MACHINE_POWER_POLICY machinePwrPolicy;
     WCHAR szNum[16]; // max number - 999
 
-    ReleaseSemaphore(PPRegSemaphore, 1, NULL);
+    if (!AcquirePwrProfSemaphore())
+        return FALSE;
 
     swprintf(szNum, L"%d", uiID);
 
@@ -986,12 +991,12 @@ SetActivePwrScheme(UINT uiID,
     if (!ReadPwrScheme(uiID, &tmp))
         return FALSE;
 
-    if (RegOpenKeyEx(HKEY_CURRENT_USER, szUserPowerConfigSubKey, 0, KEY_WRITE, &hKey) != ERROR_SUCCESS)
+    if (RegOpenKeyEx(HKEY_CURRENT_USER, L"Control Panel\\PowerCfg", 0, KEY_WRITE, &hKey) != ERROR_SUCCESS)
         return FALSE;
 
     swprintf(Buf, L"%i", uiID);
 
-    if (RegSetValueExW(hKey, szCurrentPowerPolicies, 0, REG_SZ, (PBYTE)Buf, strlenW(Buf)*sizeof(WCHAR)) != ERROR_SUCCESS)
+    if (RegSetValueExW(hKey, L"CurrentPowerPolicy", 0, REG_SZ, (PBYTE)Buf, strlenW(Buf)*sizeof(WCHAR)) != ERROR_SUCCESS)
     {
         RegCloseKey(hKey);
         return FALSE;
@@ -1054,7 +1059,7 @@ WriteGlobalPwrPolicy(PGLOBAL_POWER_POLICY pGlobalPowerPolicy)
                      &hKey))
         return FALSE;
 
-    if (RegSetValueExW(hKey,szPolicies, 0, REG_BINARY, (PBYTE)&gmpp, sizeof(gmpp)) != ERROR_SUCCESS)
+    if (RegSetValueExW(hKey, szPolicies, 0, REG_BINARY, (PBYTE)&gmpp, sizeof(gmpp)) != ERROR_SUCCESS)
     {
         RegCloseKey(hKey);
         return FALSE;
@@ -1076,7 +1081,7 @@ WriteProcessorPwrScheme(UINT ID,
     if (RegCreateKey(HKEY_LOCAL_MACHINE, Buf, &hKey) != ERROR_SUCCESS)
         return FALSE;
 
-    RegSetValueExW(hKey, szPolicies, 0, REG_BINARY, (PBYTE)pMachineProcessorPowerPolicy, sizeof(MACHINE_PROCESSOR_POWER_POLICY));
+    RegSetValueExW(hKey, szPolicies, 0, REG_BINARY, (PBYTE)pMachineProcessorPowerPolicy, sizeof(*pMachineProcessorPowerPolicy));
     RegCloseKey(hKey);
     return TRUE;
 }
@@ -1092,9 +1097,11 @@ SetLastID(VOID)
                     0,
                     KEY_WRITE,
                     &hKey) != ERROR_SUCCESS)
+    {
         return;
+    }
     swprintf(Buf, L"%i", g_LastID);
-    RegSetValueExW(hKey, szLastID, 0, REG_SZ, (PBYTE)Buf, strlenW(Buf)*sizeof(WCHAR));
+    RegSetValueExW(hKey, L"LastID", 0, REG_SZ, (PBYTE)Buf, strlenW(Buf)*sizeof(WCHAR));
     RegCloseKey(hKey);
 }
 
@@ -1119,8 +1126,8 @@ WritePwrScheme(PUINT puiID,
     if (RegCreateKey(HKEY_CURRENT_USER, Buf, &hKey) != ERROR_SUCCESS)
         return FALSE;
 
-    RegSetValueExW(hKey, szName, 0, REG_SZ, (PBYTE)lpszName, strlenW(lpszName)*sizeof(WCHAR));
-    RegSetValueExW(hKey, szDescription, 0, REG_SZ, (PBYTE)lpszDescription, strlenW(lpszDescription)*sizeof(WCHAR));
+    RegSetValueExW(hKey, L"Name", 0, REG_SZ, (PBYTE)lpszName, strlenW(lpszName)*sizeof(WCHAR));
+    RegSetValueExW(hKey, L"Description", 0, REG_SZ, (PBYTE)lpszDescription, strlenW(lpszDescription)*sizeof(WCHAR));
     RegCloseKey(hKey);
     return WritePwrPolicy(puiID, pPowerPolicy);
 }
@@ -1165,7 +1172,7 @@ CheckPowerActionPolicy(PPOWER_ACTION_POLICY pPAP, SYSTEM_POWER_CAPABILITIES Powe
 static VOID
 FixSystemPowerState(PSYSTEM_POWER_STATE Psps, SYSTEM_POWER_CAPABILITIES PowerCaps)
 {
-	//Lohnegrim: If the System doesn't support the Powerstates, then we have to change them
+    //Lohnegrim: If the System doesn't support the Powerstates, then we have to change them
     if (!PowerCaps.SystemS1 && *Psps == PowerSystemSleeping1)
         *Psps = PowerSystemSleeping2;
     if (!PowerCaps.SystemS2 && *Psps == PowerSystemSleeping2)
@@ -1180,7 +1187,6 @@ FixSystemPowerState(PSYSTEM_POWER_STATE Psps, SYSTEM_POWER_CAPABILITIES PowerCap
         *Psps = PowerSystemSleeping3;
     if (!PowerCaps.SystemS3 && *Psps == PowerSystemSleeping3)
         *Psps = PowerSystemShutdown;
-
 }
 
 BOOLEAN WINAPI
@@ -1192,6 +1198,7 @@ ValidatePowerPolicies(PGLOBAL_POWER_POLICY pGPP, PPOWER_POLICY pPP)
 
     RtlAdjustPrivilege(SE_SHUTDOWN_PRIVILEGE, TRUE, FALSE, &old);
     ret = NtPowerInformation(SystemPowerCapabilities, NULL, 0, &PowerCaps, sizeof(PowerCaps));
+    RtlAdjustPrivilege(SE_SHUTDOWN_PRIVILEGE, old, FALSE, &old);
     if (ret != STATUS_SUCCESS)
     {
         SetLastError(RtlNtStatusToDosError(ret));
@@ -1225,7 +1232,7 @@ ValidatePowerPolicies(PGLOBAL_POWER_POLICY pGPP, PPOWER_POLICY pPP)
             SetLastError(ERROR_GEN_FAILURE);
             return FALSE;
         }
-		//Lohnegrim: unneeded
+        //Lohnegrim: unneeded
         /*if ((pGPP->mach.LidOpenWakeDc < PowerSystemWorking) || (pGPP->mach.LidOpenWakeDc >= PowerSystemMaximum))
         {
             SetLastError(ERROR_GEN_FAILURE);
@@ -1259,7 +1266,7 @@ ValidatePowerPolicies(PGLOBAL_POWER_POLICY pGPP, PPOWER_POLICY pPP)
         if (pGPP->mach.BroadcastCapacityResolution > 100)
             pGPP->mach.BroadcastCapacityResolution = 100;
 
-		//Lohnegrim: I have no idea, if they are really needed, or if they are specific for my System, or what they mean, so I removed them
+        //Lohnegrim: I have no idea, if they are really needed, or if they are specific for my System, or what they mean, so I removed them
         //pGPP->user.DischargePolicy[1].PowerPolicy.EventCode = pGPP->user.DischargePolicy[1].PowerPolicy.EventCode | 0x010000;
         //pGPP->user.DischargePolicy[2].PowerPolicy.EventCode = pGPP->user.DischargePolicy[2].PowerPolicy.EventCode | 0x020000;
         //pGPP->user.DischargePolicy[3].PowerPolicy.EventCode = pGPP->user.DischargePolicy[3].PowerPolicy.EventCode | 0x030000;
@@ -1277,7 +1284,7 @@ ValidatePowerPolicies(PGLOBAL_POWER_POLICY pGPP, PPOWER_POLICY pPP)
             return FALSE;
         }
 
-		//Lohnegrim: unneeded
+        //Lohnegrim: unneeded
         //if (pPP->mach.MinSleepAc < PowerSystemWorking)
         //{
         //    SetLastError(ERROR_GEN_FAILURE);
@@ -1288,7 +1295,7 @@ ValidatePowerPolicies(PGLOBAL_POWER_POLICY pGPP, PPOWER_POLICY pPP)
             SetLastError(ERROR_GEN_FAILURE);
             return FALSE;
         }
-		//Lohnegrim: unneeded
+        //Lohnegrim: unneeded
         //if (pPP->mach.MinSleepDc < PowerSystemWorking)
         //{
         //    SetLastError(ERROR_GEN_FAILURE);
@@ -1341,7 +1348,7 @@ ValidatePowerPolicies(PGLOBAL_POWER_POLICY pGPP, PPOWER_POLICY pPP)
             SetLastError(ERROR_GEN_FAILURE);
             return FALSE;
         }
-		//Lohnegrim: unneeded
+        //Lohnegrim: unneeded
         /*if ((int)pPP->user.MaxSleepAc > PowerSystemShutdown)
         {
             SetLastError(ERROR_GEN_FAILURE);
@@ -1352,7 +1359,7 @@ ValidatePowerPolicies(PGLOBAL_POWER_POLICY pGPP, PPOWER_POLICY pPP)
             SetLastError(ERROR_GEN_FAILURE);
             return FALSE;
         }
-		//Lohnegrim: unneeded
+        //Lohnegrim: unneeded
         /*if ((int)pPP->user.MaxSleepDc >= PowerSystemShutdown)
         {
             SetLastError(ERROR_GEN_FAILURE);
@@ -1389,7 +1396,7 @@ ValidatePowerPolicies(PGLOBAL_POWER_POLICY pGPP, PPOWER_POLICY pPP)
             pPP->user.MaxSleepAc=PowerSystemSleeping1;
             pPP->user.MaxSleepDc=PowerSystemSleeping1;
         }
-		//Lohnegrim: I don't know where to get this info from, so I removed it
+        //Lohnegrim: I don't know where to get this info from, so I removed it
         //pPP->user.OptimizeForPowerAc=TRUE;
         //pPP->user.OptimizeForPowerDc=TRUE;
 
@@ -1403,24 +1410,35 @@ ValidatePowerPolicies(PGLOBAL_POWER_POLICY pGPP, PPOWER_POLICY pPP)
 
 BOOLEAN WINAPI WritePwrPolicy(PUINT puiID, PPOWER_POLICY pPowerPolicy)
 {
-    WCHAR Buf[MAX_PATH];
     HKEY hKey;
+    WCHAR Buf[MAX_PATH];
+
+    if (!AcquirePwrProfSemaphore())
+        return FALSE;
 
     swprintf(Buf, L"Control Panel\\PowerCfg\\PowerPolicies\\%i", *puiID);
 
     if (RegCreateKey(HKEY_CURRENT_USER, Buf, &hKey) != ERROR_SUCCESS)
+    {
+        ReleaseSemaphore(PPRegSemaphore, 1, NULL);
         return FALSE;
+    }
 
-    RegSetValueExW(hKey, szPolicies, 0, REG_BINARY, (const unsigned char *)&pPowerPolicy->user, sizeof(USER_POWER_POLICY));
+    RegSetValueExW(hKey, szPolicies, 0, REG_BINARY, (PBYTE)&pPowerPolicy->user, sizeof(USER_POWER_POLICY));
     RegCloseKey(hKey);
 
     swprintf(Buf, L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Controls Folder\\PowerCfg\\PowerPolicies\\%i", *puiID);
 
     if (RegCreateKey(HKEY_LOCAL_MACHINE, Buf, &hKey) != ERROR_SUCCESS)
+    {
+        ReleaseSemaphore(PPRegSemaphore, 1, NULL);
         return FALSE;
+    }
 
-    RegSetValueExW(hKey, szPolicies, 0, REG_BINARY, (const unsigned char *)&pPowerPolicy->mach, sizeof(MACHINE_POWER_POLICY));
+    RegSetValueExW(hKey, szPolicies, 0, REG_BINARY, (PBYTE)&pPowerPolicy->mach, sizeof(MACHINE_POWER_POLICY));
     RegCloseKey(hKey);
+
+    ReleaseSemaphore(PPRegSemaphore, 1, NULL);
 
     return TRUE;
 }
@@ -1438,17 +1456,16 @@ DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
             DisableThreadLibraryCalls(hinstDLL);
 
             Err = RegOpenKeyExW(HKEY_LOCAL_MACHINE, szPowerCfgSubKey, 0, KEY_READ, &hKey);
-
             if (Err != ERROR_SUCCESS)
             {
                 TRACE("Couldn't open registry key HKLM\\%s, using some sane(?) defaults\n", debugstr_w(szPowerCfgSubKey));
             }
             else
             {
-                WCHAR lpValue[MAX_PATH];
+                WCHAR lpValue[40];
                 DWORD cbValue = sizeof(lpValue);
 
-                Err = RegQueryValueExW(hKey, szLastID, 0, 0, (BYTE*)lpValue, &cbValue);
+                Err = RegQueryValueExW(hKey, L"LastID", 0, 0, (BYTE*)lpValue, &cbValue);
                 if (Err == ERROR_SUCCESS)
                 {
                     g_LastID = _wtoi(lpValue);
