@@ -1071,11 +1071,8 @@ Quit:
 
 int WINAPI RestartDialogEx(HWND hWndOwner, LPCWSTR lpwstrReason, DWORD uFlags, DWORD uReason)
 {
-    TRACE("(%p)\n", hWndOwner);
-
     CComPtr<IUnknown> fadeHandler;
     HWND parent;
-
     if (!CallShellDimScreen(&fadeHandler, &parent))
         parent = hWndOwner;
 
@@ -1297,7 +1294,7 @@ VOID CreateToolTipForButtons(int controlID, int detailID, HWND hDlg, int titleID
                               CW_USEDEFAULT, CW_USEDEFAULT,
                               hDlg, NULL, shell32_hInstance, NULL);
 
-    /* Associate the tooltip with the tool. */
+    /* Associate the tooltip with the tool */
     LoadStringW(shell32_hInstance, detailID, szBuffer, _countof(szBuffer));
     tool.lpszText = szBuffer;
     SendMessageW(hwndTip, TTM_ADDTOOLW, 0, (LPARAM)&tool);
@@ -1410,7 +1407,7 @@ static VOID FancyLogoffOnInit(HWND hwnd, PLOGOFF_DLG_CONTEXT pContext)
 
     pContext->hImageStrip = LoadBitmapW(shell32_hInstance, MAKEINTRESOURCEW(IDB_IMAGE_STRIP));
 
-    /* Gather old button func */
+    /* Gather old button function */
     pContext->OldButtonProc = (WNDPROC)GetWindowLongPtrW(GetDlgItem(hwnd, IDC_LOG_OFF_BUTTON), GWLP_WNDPROC);
 
     /* Set bIsButtonHot to false, create tooltips for each buttons and subclass the buttons */
@@ -1483,7 +1480,7 @@ INT_PTR CALLBACK LogOffDialogProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lP
             {
                 case IDC_LOG_OFF_BUTTON:
                 case IDOK:
-                    ExitWindowsEx(EWX_LOGOFF, 0);
+                    ExitWindowsEx(EWX_LOGOFF, SHTDN_REASON_MAJOR_OTHER);
                     break;
 
                 case IDCANCEL:
@@ -1540,11 +1537,11 @@ INT_PTR CALLBACK LogOffDialogProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lP
 
 EXTERN_C int WINAPI LogoffWindowsDialog(HWND hWndOwner)
 {
-    CComPtr<IUnknown> fadeHandler;
-    HWND parent = NULL;
     DWORD LogoffDialogID = IDD_LOG_OFF;
     LOGOFF_DLG_CONTEXT Context = {0};
 
+    CComPtr<IUnknown> fadeHandler;
+    HWND parent;
     if (!CallShellDimScreen(&fadeHandler, &parent))
         parent = hWndOwner;
 
@@ -1580,12 +1577,10 @@ int WINAPI RestartDialog(HWND hWndOwner, LPCWSTR lpstrReason, DWORD uFlags)
  */
 VOID ExitWindowsDialog_backup(HWND hWndOwner)
 {
-    TRACE("(%p)\n", hWndOwner);
-
     if (ConfirmDialog(hWndOwner, IDS_SHUTDOWN_PROMPT, IDS_SHUTDOWN_TITLE))
     {
         EnablePrivilege(L"SeShutdownPrivilege", TRUE);
-        ExitWindowsEx(EWX_SHUTDOWN, 0);
+        ExitWindowsEx(EWX_SHUTDOWN, SHTDN_REASON_MAJOR_OTHER);
         EnablePrivilege(L"SeShutdownPrivilege", FALSE);
     }
 }
@@ -1604,86 +1599,88 @@ VOID ExitWindowsDialog_backup(HWND hWndOwner)
 void WINAPI ExitWindowsDialog(HWND hWndOwner)
 {
     typedef DWORD (WINAPI *ShellShFunc)(HWND hWndParent, LPCWSTR pUserName, DWORD dwExcludeOptions);
-    HINSTANCE msginaDll = LoadLibraryW(L"msgina.dll");
-
-    TRACE("(%p)\n", hWndOwner);
 
     CComPtr<IUnknown> fadeHandler;
     HWND parent;
     if (!CallShellDimScreen(&fadeHandler, &parent))
         parent = hWndOwner;
 
-    /* If the DLL cannot be found for any reason, then it simply uses a
-       dialog box to ask if the user wants to shut down the computer. */
+    ShellShFunc pShellShutdownDialog = NULL;
+    HINSTANCE msginaDll = LoadLibraryW(L"msgina.dll");
     if (!msginaDll)
     {
-        TRACE("Unable to load msgina.dll.\n");
+        TRACE("Unable to load msgina.dll\n");
+    }
+    else
+    {
+        pShellShutdownDialog = (ShellShFunc)GetProcAddress(msginaDll, "ShellShutdownDialog");
+        if (!pShellShutdownDialog)
+        {
+            TRACE("Unable to find the 'ShellShutdownDialog' function");
+            FreeLibrary(msginaDll);
+        }
+    }
+
+    /* If the DLL or the function cannot be found for any reason, then simply
+     * use a dialog box to ask if the user wants to shut down the computer. */
+    if (!pShellShutdownDialog)
+    {
         ExitWindowsDialog_backup(parent);
         return;
     }
 
-    ShellShFunc pShellShutdownDialog = (ShellShFunc)GetProcAddress(msginaDll, "ShellShutdownDialog");
-    if (pShellShutdownDialog)
-    {
-        /* Actually call the function */
-        DWORD returnValue = pShellShutdownDialog(parent, NULL, 0);
-
-        switch (returnValue)
-        {
-        case 0x01: /* Log off user */
-        {
-            ExitWindowsEx(EWX_LOGOFF, 0);
-            break;
-        }
-        case 0x02: /* Shut down */
-        {
-            EnablePrivilege(L"SeShutdownPrivilege", TRUE);
-            ExitWindowsEx(EWX_SHUTDOWN, 0);
-            EnablePrivilege(L"SeShutdownPrivilege", FALSE);
-            break;
-        }
-        case 0x03: /* Install Updates/Shutdown (?) */
-        {
-            break;
-        }
-        case 0x04: /* Reboot */
-        {
-            EnablePrivilege(L"SeShutdownPrivilege", TRUE);
-            ExitWindowsEx(EWX_REBOOT, 0);
-            EnablePrivilege(L"SeShutdownPrivilege", FALSE);
-            break;
-        }
-        case 0x10: /* Sleep */
-        {
-            if (IsPwrSuspendAllowed())
-            {
-                EnablePrivilege(L"SeShutdownPrivilege", TRUE);
-                SetSuspendState(FALSE, FALSE, FALSE);
-                EnablePrivilege(L"SeShutdownPrivilege", FALSE);
-            }
-            break;
-        }
-        case 0x40: /* Hibernate */
-        {
-            if (IsPwrHibernateAllowed())
-            {
-                EnablePrivilege(L"SeShutdownPrivilege", TRUE);
-                SetSuspendState(TRUE, FALSE, TRUE);
-                EnablePrivilege(L"SeShutdownPrivilege", FALSE);
-            }
-            break;
-        }
-        /* If the option is any other value */
-        default:
-            break;
-        }
-    }
-    else
-    {
-        /* If the function cannot be found, then revert to using the backup solution */
-        TRACE("Unable to find the 'ShellShutdownDialog' function");
-        ExitWindowsDialog_backup(parent);
-    }
-
+    /* Actually call the function */
+    DWORD returnValue = pShellShutdownDialog(parent, NULL, 0);
     FreeLibrary(msginaDll);
+
+    switch (returnValue)
+    {
+    case 0x01: /* Log off user */
+    {
+        ExitWindowsEx(EWX_LOGOFF, SHTDN_REASON_MAJOR_OTHER);
+        break;
+    }
+    case 0x02: /* Shut down */
+    {
+        EnablePrivilege(L"SeShutdownPrivilege", TRUE);
+        ExitWindowsEx(EWX_SHUTDOWN, SHTDN_REASON_MAJOR_OTHER);
+        EnablePrivilege(L"SeShutdownPrivilege", FALSE);
+        break;
+    }
+    case 0x04: /* Restart */
+    {
+        EnablePrivilege(L"SeShutdownPrivilege", TRUE);
+        ExitWindowsEx(EWX_REBOOT, SHTDN_REASON_MAJOR_OTHER);
+        EnablePrivilege(L"SeShutdownPrivilege", FALSE);
+        break;
+    }
+    case 0x10: /* Stand-by/Sleep */
+    case 0x20: /* Stand-by with wakeup events disabled */
+    {
+        if (IsPwrSuspendAllowed())
+        {
+            EnablePrivilege(L"SeShutdownPrivilege", TRUE);
+            SetSuspendState(FALSE, FALSE, (returnValue == 0x20));
+            EnablePrivilege(L"SeShutdownPrivilege", FALSE);
+        }
+        break;
+    }
+    case 0x40: /* Hibernate */
+    {
+        if (IsPwrHibernateAllowed())
+        {
+            EnablePrivilege(L"SeShutdownPrivilege", TRUE);
+            SetSuspendState(TRUE, FALSE, TRUE);
+            EnablePrivilege(L"SeShutdownPrivilege", FALSE);
+        }
+        break;
+    }
+    case 0x80: // TODO: /* Disconnect (Terminal Services) */
+    {
+        break;
+    }
+    /* If the option is any other value */
+    default:
+        break;
+    }
 }

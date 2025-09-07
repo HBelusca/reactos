@@ -305,8 +305,6 @@ WlxInitialize(
     /* Locates the authentication package */
     //LsaRegisterLogonProcess(...);
 
-    pgContext->nShutdownAction = WLX_SAS_ACTION_SHUTDOWN_POWER_OFF;
-
     ChooseGinaUI();
     return pGinaUI->Initialize(pgContext);
 }

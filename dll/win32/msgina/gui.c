@@ -983,15 +983,15 @@ OnLogOff(
 
 
 static
-INT
+DWORD
 OnShutDown(
     _In_ HWND hwndDlg,
     _In_ PGINA_CONTEXT pgContext,
     _In_ DWORD dwExcludeOptions)
 {
     HKEY hKeyCurrentUser = NULL;
-    DWORD ShutdownOptions = 0;
-    INT ret;
+    DWORD ShutdownOptions = 0, DefaultOption = 0;
+    DWORD ret;
 
     /* Open the per-user registry key */
     if (RegOpenLoggedOnHKCU(pgContext->UserToken,
@@ -1000,23 +1000,52 @@ OnShutDown(
     {
         ERR("RegOpenLoggedOnHKCU() failed with error %ld\n", GetLastError());
     }
-    pgContext->nShutdownAction = 0;
     if (hKeyCurrentUser)
     {
         ShutdownOptions = GetAllowedShutdownOptions(hKeyCurrentUser, pgContext->UserToken);
-        pgContext->nShutdownAction = LoadShutdownSelState(hKeyCurrentUser);
+        DefaultOption = LoadShutdownSelState(hKeyCurrentUser);
     }
-    ShutdownOptions &= ~dwExcludeOptions;
+    ShutdownOptions &= ~(dwExcludeOptions & WLX_SHUTDOWN_STATE_VALID_FLAGS);
 
-    ret = ShutdownDialog(hwndDlg, ShutdownOptions, pgContext);
+    /* Display the shutdown dialog box */
+    ret = ShutdownDialog(hwndDlg, ShutdownOptions, DefaultOption, pgContext);
 
-    if ((ret == IDOK) && hKeyCurrentUser)
-        SaveShutdownSelState(hKeyCurrentUser, pgContext->nShutdownAction);
-
+    if (hKeyCurrentUser && (ret != WLX_SHUTDOWN_STATE_NONE))
+        SaveShutdownSelState(hKeyCurrentUser, ret);
     if (hKeyCurrentUser)
         RegCloseKey(hKeyCurrentUser);
 
-    return ret;
+    /* Map the shutdown flag to one of the WLX_SAS_ACTION_* actions */
+    switch (ret)
+    {
+        case WLX_SHUTDOWN_STATE_LOGOFF:
+            return WLX_SAS_ACTION_LOGOFF;
+
+        case WLX_SHUTDOWN_STATE_SHUTDOWN:
+            if (ShutdownOptions & WLX_SHUTDOWN_STATE_POWEROFF)
+                return WLX_SAS_ACTION_SHUTDOWN_POWER_OFF;
+            return WLX_SAS_ACTION_SHUTDOWN;
+
+        case WLX_SHUTDOWN_STATE_REBOOT:
+            return WLX_SAS_ACTION_SHUTDOWN_REBOOT;
+
+        //case 0x08: // "Restart in MS-DOS mode"
+        //    return WLX_SAS_ACTION_NONE;
+
+        case WLX_SHUTDOWN_STATE_SLEEP:
+            return WLX_SAS_ACTION_SHUTDOWN_SLEEP;
+
+        case WLX_SHUTDOWN_STATE_SLEEP2:
+            return WLX_SAS_ACTION_SHUTDOWN_SLEEP2;
+
+        case WLX_SHUTDOWN_STATE_HIBERNATE:
+            return WLX_SAS_ACTION_SHUTDOWN_HIBERNATE;
+
+        // case WLX_SHUTDOWN_STATE_DISCONNECT:
+        // case WLX_SHUTDOWN_AUTOUPDATE:
+        default:
+            return WLX_SAS_ACTION_NONE;
+    }
 }
 
 
@@ -1086,9 +1115,11 @@ SecurityDialogProc(
                             RtlAdjustPrivilege(SE_SHUTDOWN_PRIVILEGE, Old, FALSE, &Old);
                         }
                     }
-                    else if (OnShutDown(hwndDlg, pgContext, 0) == IDOK)
+                    else
                     {
-                        EndDialog(hwndDlg, pgContext->nShutdownAction);
+                        DWORD ShutdownAction = OnShutDown(hwndDlg, pgContext, 0);
+                        if (ShutdownAction != WLX_SAS_ACTION_NONE)
+                            EndDialog(hwndDlg, ShutdownAction);
                     }
                     return TRUE;
                 case IDC_SECURITY_CHANGEPWD:
@@ -1430,12 +1461,14 @@ LogonDialogProc(
                     return TRUE;
 
                 case IDC_LOGON_SHUTDOWN:
-                    if (OnShutDown(hwndDlg, pDlgData->pgContext,
-                                   WLX_SHUTDOWN_STATE_DISCONNECT | WLX_SHUTDOWN_STATE_LOGOFF) == IDOK)
-                    {
-                        EndDialog(hwndDlg, pDlgData->pgContext->nShutdownAction);
-                    }
+                {
+                    DWORD ShutdownAction =
+                        OnShutDown(hwndDlg, pDlgData->pgContext,
+                                   WLX_SHUTDOWN_STATE_DISCONNECT | WLX_SHUTDOWN_STATE_LOGOFF);
+                    if (ShutdownAction != WLX_SAS_ACTION_NONE)
+                        EndDialog(hwndDlg, ShutdownAction);
                     return TRUE;
+                }
             }
             break;
     }

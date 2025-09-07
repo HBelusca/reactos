@@ -45,8 +45,6 @@ typedef struct
     BOOL bShutdownWithoutLogon;
     BOOL bIgnoreShiftOverride;
 
-    ULONG nShutdownAction;
-
     /* Information to be filled during logon */
     WCHAR UserName[256];
     WCHAR DomainName[256];
@@ -130,15 +128,19 @@ CreateProfile(
  * https://learn.microsoft.com/en-us/previous-versions/windows/it-pro/windows-2000-server/cc962586(v=technet.10)
  * https://learn.microsoft.com/en-us/previous-versions/windows/it-pro/windows-server-2003/cc783367(v=ws.10)
  **/
+#define WLX_SHUTDOWN_STATE_NONE         0x00
 #define WLX_SHUTDOWN_STATE_LOGOFF       0x01    ///< "Log off <username>"
-#define WLX_SHUTDOWN_STATE_POWER_OFF    0x02    ///< "Shut down"
+#define WLX_SHUTDOWN_STATE_SHUTDOWN     0x02    ///< "Shut down"
 #define WLX_SHUTDOWN_STATE_REBOOT       0x04    ///< "Restart"
 // 0x08 ///< "Restart in MS-DOS mode" - Yes, WinNT/2k/XP/2k3 msgina.dll/shell32.dll has it!
 #define WLX_SHUTDOWN_STATE_SLEEP        0x10    ///< "Stand by"
 #define WLX_SHUTDOWN_STATE_SLEEP2       0x20    ///< "Stand by (with wakeup events disabled)"
 #define WLX_SHUTDOWN_STATE_HIBERNATE    0x40    ///< "Hibernate"
 #define WLX_SHUTDOWN_STATE_DISCONNECT   0x80    ///< "Disconnect" (only available in Terminal Services sessions)
+#define WLX_SHUTDOWN_STATE_VALID_FLAGS  0xFF
+// Internal flags:
 #define WLX_SHUTDOWN_AUTOUPDATE         0x100   ///< Set when updates are queued
+#define WLX_SHUTDOWN_STATE_POWEROFF     0x200   ///< ReactOS-specific: Can perform power-off after shutdown.
 
 DWORD
 LoadShutdownSelState(
@@ -154,11 +156,12 @@ GetAllowedShutdownOptions(
     _In_opt_ HKEY hKeyCurrentUser,
     _In_opt_ HANDLE hUserToken);
 
-INT_PTR
+DWORD // Any of the WLX_SHUTDOWN_* flags
 ShutdownDialog(
-    IN HWND hwndDlg,
-    IN DWORD ShutdownOptions,
-    IN PGINA_CONTEXT pgContext);
+    _In_ HWND hwndDlg,
+    _In_ DWORD ShutdownOptions,
+    _In_ DWORD DefaultOption,
+    _In_ PGINA_CONTEXT pgContext);
 
 /* utils.c */
 
