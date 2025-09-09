@@ -18,6 +18,7 @@
 #include <aclapi.h>
 #include <mmsystem.h>
 #include <userenv.h>
+#include <ndk/pofuncs.h>
 #include <ndk/setypes.h>
 #include <ndk/sefuncs.h>
 
@@ -1221,6 +1222,7 @@ DoGenericAction(
                 }
             }
             break;
+
         case WLX_SAS_ACTION_NONE: /* 0x02 */
             if (Session->LogonState == STATE_LOGGED_OFF_SAS)
             {
@@ -1237,6 +1239,7 @@ DoGenericAction(
                 Session->Gina.Functions.WlxDisplayLockedNotice(Session->Gina.Context);
             }
             break;
+
         case WLX_SAS_ACTION_LOCK_WKSTA: /* 0x03 */
             if ((Session->LogonState == STATE_LOGGED_ON) ||
                 (Session->LogonState == STATE_LOGGED_ON_SAS))
@@ -1253,11 +1256,12 @@ DoGenericAction(
                 }
             }
             break;
+
         case WLX_SAS_ACTION_LOGOFF: /* 0x04 */
         case WLX_SAS_ACTION_SHUTDOWN: /* 0x05 */
         case WLX_SAS_ACTION_FORCE_LOGOFF: /* 0x09 */
-        case WLX_SAS_ACTION_SHUTDOWN_POWER_OFF: /* 0x0a */
-        case WLX_SAS_ACTION_SHUTDOWN_REBOOT: /* 0x0b */
+        case WLX_SAS_ACTION_SHUTDOWN_POWER_OFF: /* 0x0A */
+        case WLX_SAS_ACTION_SHUTDOWN_REBOOT: /* 0x0B */
             if ((Session->LogonState != STATE_INIT) &&
                 (Session->LogonState != STATE_LOGGED_OFF) &&
                 (Session->LogonState != STATE_LOGGED_OFF_SAS) &&
@@ -1293,6 +1297,95 @@ DoGenericAction(
                 Session->Gina.Functions.WlxDisplaySASNotice(Session->Gina.Context);
             }
             break;
+
+// case WLX_SAS_ACTION_PWD_CHANGED: /* 0x06 */
+
+        case WLX_SAS_ACTION_SHUTDOWN_SLEEP: /* 0x0C */
+        case WLX_SAS_ACTION_SHUTDOWN_SLEEP2: /* 0x0D */
+        case WLX_SAS_ACTION_SHUTDOWN_HIBERNATE: /* 0x0E */
+        {
+            // wlxAction = WLX_SAS_ACTION_NONE;
+/**
+sleep: via button
+locked -> sleep -> locked
+locked_sas -> sleep -> locked_sas
+
+logged_off -> sleep -> logged_off (stays on winlogon desktop)
+logged_off_sas -> sleep -> logged_off_sas (stays on winlogon desktop)
+NOTE: logged_off_sas -> "Shutdown" dialog/"Sleep" (closes the sas) -> logged_off -> sleep -> logged_off
+	(similar to WLX_SAS_ACTION_NONE)
+
+logged_on -> sleep -> logged_on
+logged_on_sas -> no sleep (but I suppose, if computer forces sleep, we would wake up in logged_on_sas)
+NOTE: logged_on_sas -> "Shutdown" dialog/"Sleep" (closes the sas) -> logged_on -> sleep -> logged_on
+	(similar to WLX_SAS_ACTION_NONE)
+**/
+
+            NTSTATUS Status;
+            POWER_ACTION PowerAction;
+            ULONG Flags;
+            BOOLEAN Old;
+
+            // NOTE: What's below is similar to the implementation
+            // of powrprof!SetSuspendState().
+
+            if (wlxAction == WLX_SAS_ACTION_SHUTDOWN_HIBERNATE)
+                PowerAction = PowerActionHibernate;
+            else
+                PowerAction = PowerActionSleep;
+
+            Flags = POWER_ACTION_QUERY_ALLOWED | POWER_ACTION_UI_ALLOWED;
+            // If forcing requested, add POWER_ACTION_CRITICAL. (GetKeyState(VK_CONTROL) < 0)
+            if (wlxAction == WLX_SAS_ACTION_SHUTDOWN_SLEEP2) /* || (wlxAction == WLX_SAS_ACTION_SHUTDOWN_HIBERNATE) */
+                Flags |= POWER_ACTION_DISABLE_WAKES;
+
+            RtlAdjustPrivilege(SE_SHUTDOWN_PRIVILEGE, TRUE, FALSE, &Old);
+
+            // NOTE: According to Geoff Chappell,
+            // NtSetSystemPowerState: NT3.51+, partly implemented in NT4, implemented in NT5+
+            // NtInitiatePowerAction: NT5+. Same parameters as NtSetSystemPowerState, except
+            // it also has a boolean Asynchronous parameter too.
+            //
+            // IMPORTANT IMPLEMENTATION NOTE (when stuff works):
+            // Users should invoke NtInitiatePowerAction(). This function triggers
+            // a power action in the background. The Power Manager will then notify
+            // subsystems (and the Win32k in particular) to do the action proper.
+            // Win32k should notify Winlogon back with WM_LOGONNOTIFY, for a
+            // power notification. There only, Winlogon should invoke NtSetSystemPowerState().
+#ifdef NT_INITIATE_POWERACTION_IMPLEMENTED
+            Status = NtInitiatePowerAction(
+#else
+            Status = NtSetSystemPowerState(
+#endif
+                        PowerAction,
+                        (PowerAction == PowerActionHibernate)
+                            ? PowerSystemHibernate : PowerSystemSleeping1,
+                        POWER_ACTION_QUERY_ALLOWED | POWER_ACTION_UI_ALLOWED
+#ifdef NT_INITIATE_POWERACTION_IMPLEMENTED
+                        , FALSE);
+#else
+                        );
+#endif
+            RtlAdjustPrivilege(SE_SHUTDOWN_PRIVILEGE, Old, FALSE, &Old);
+
+            if (!NT_SUCCESS(Status))
+            {
+                ERR("WL: Failed to %s computer, Status 0x%08lx\n",
+                    (PowerAction == PowerActionHibernate) ? "hibernate" : "sleep",
+                    Status);
+            }
+
+/** TEMP HACK! **/
+            if ((Session->LogonState == STATE_LOGGED_ON) ||
+                (Session->LogonState == STATE_LOGGED_ON_SAS))
+            {
+                SwitchDesktop(Session->ApplicationDesktop);
+                Session->LogonState = STATE_LOGGED_ON;
+            }
+/****************/
+            break;
+        }
+
         case WLX_SAS_ACTION_TASKLIST: /* 0x07 */
             if ((Session->LogonState == STATE_LOGGED_ON) ||
                 (Session->LogonState == STATE_LOGGED_ON_SAS))
@@ -1303,6 +1396,7 @@ DoGenericAction(
                 StartTaskManager(Session);
             }
             break;
+
         case WLX_SAS_ACTION_UNLOCK_WKSTA: /* 0x08 */
             if ((Session->LogonState == STATE_LOCKED) ||
                 (Session->LogonState == STATE_LOCKED_SAS))
@@ -1312,6 +1406,7 @@ DoGenericAction(
                 Session->LogonState = STATE_LOGGED_ON;
             }
             break;
+
         default:
             WARN("Unknown SAS action 0x%lx\n", wlxAction);
     }
@@ -1339,20 +1434,17 @@ DispatchSAS(
 
                 case STATE_LOGGED_OFF:
                     Session->LogonState = STATE_LOGGED_OFF_SAS;
-
                     CloseAllDialogWindows();
-
                     Session->Options = 0;
-
                     wlxAction = (DWORD)Session->Gina.Functions.WlxLoggedOutSAS(
-                        Session->Gina.Context,
-                        Session->SASAction,
-                        &Session->LogonId,
-                        LogonSid,
-                        &Session->Options,
-                        &Session->UserToken,
-                        &Session->MprNotifyInfo,
-                        (PVOID*)&Session->Profile);
+                                            Session->Gina.Context,
+                                            Session->SASAction,
+                                            &Session->LogonId,
+                                            LogonSid,
+                                            &Session->Options,
+                                            &Session->UserToken,
+                                            &Session->MprNotifyInfo,
+                                            (PVOID*)&Session->Profile);
                     break;
 
                 case STATE_LOGGED_OFF_SAS:
@@ -1364,19 +1456,25 @@ DispatchSAS(
                     SwitchDesktop(Session->WinlogonDesktop);
                     wlxAction = (DWORD)Session->Gina.Functions.WlxLoggedOnSAS(Session->Gina.Context, dwSasType, NULL);
                     if ((wlxAction == WLX_SAS_ACTION_NONE) ||
-                        (wlxAction == WLX_SAS_ACTION_TASKLIST))
+                        (wlxAction == WLX_SAS_ACTION_TASKLIST) ||
+                        WLX_SUSPENDING(wlxAction))
                     {
                         /*
                          * If the user canceled (WLX_SAS_ACTION_NONE) the
-                         * Logged-On SAS dialog, or clicked on the Task-Manager
-                         * button (WLX_SAS_ACTION_TASKLIST), switch back to
-                         * the application desktop and return to log-on state.
+                         * Logged-On SAS dialog, clicked on the Task-Manager
+                         * button (WLX_SAS_ACTION_TASKLIST), or suspends the
+                         * computer, switch back to the application desktop
+                         * and return to log-on state.
+                         *
                          * In the latter case, the Task-Manager is launched
                          * by DoGenericAction(WLX_SAS_ACTION_TASKLIST), which
                          * doesn't automatically do the switch back, because
                          * the user may have also pressed on Ctrl-Shift-Esc
                          * to start it while being on the Logged-On SAS dialog
                          * and wanting to stay there.
+                         *
+                         * In the suspend case, the actual power action takes
+                         * place once the state is returned to log-on.
                          */
                         SwitchDesktop(Session->ApplicationDesktop);
                         Session->LogonState = STATE_LOGGED_ON;
@@ -1389,9 +1487,7 @@ DispatchSAS(
 
                 case STATE_LOCKED:
                     Session->LogonState = STATE_LOCKED_SAS;
-
                     CloseAllDialogWindows();
-
                     wlxAction = (DWORD)Session->Gina.Functions.WlxWkstaLockedSAS(Session->Gina.Context, dwSasType);
                     break;
 
