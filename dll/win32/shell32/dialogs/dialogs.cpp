@@ -1016,18 +1016,48 @@ static BOOL ConfirmDialog(HWND hWndOwner, UINT PromptId, UINT TitleId)
     return MessageBoxW(hWndOwner, Prompt, Title, MB_YESNO | MB_ICONQUESTION) == IDYES;
 }
 
-typedef HRESULT (WINAPI *tShellDimScreen)(IUnknown** Unknown, HWND* hWindow);
+HMODULE
+LoadMSGinaDll(VOID)
+{
+    static BOOL Initialized = FALSE;
+    static HMODULE hMsgina = NULL;
+
+    if (Initialized)
+        return hMsgina;
+
+    HMODULE hModule = LoadLibraryW(L"msgina.dll");
+    if (!hModule)
+        return NULL;
+
+    /* Store the module; if another thread already succeeded, free it */
+    if (InterlockedCompareExchangePointer((PVOID*)&hMsgina, hModule, NULL) != NULL)
+        FreeLibrary(hModule);
+    else
+        Initialized = TRUE;
+
+    return hMsgina;
+}
 
 BOOL
 CallShellDimScreen(IUnknown** pUnknown, HWND* hWindow)
 {
-    static tShellDimScreen ShellDimScreen;
+    typedef HRESULT (WINAPI *tShellDimScreen)(IUnknown** Unknown, HWND* hWindow);
+
+    static tShellDimScreen ShellDimScreen = NULL;
     static BOOL Initialized = FALSE;
     if (!Initialized)
     {
-        HMODULE mod = LoadLibraryW(L"msgina.dll");
-        ShellDimScreen = (tShellDimScreen)GetProcAddress(mod, (LPCSTR)16);
-        Initialized = TRUE;
+        HMODULE hModMsgina = LoadMSGinaDll();
+        if (hModMsgina)
+        {
+            tShellDimScreen proc = (tShellDimScreen)GetProcAddress(hModMsgina, (LPCSTR)16);
+            if (!proc)
+                return FALSE;
+
+            /* Store the function pointer */
+            InterlockedCompareExchangePointer((PVOID*)&ShellDimScreen, proc, NULL);
+            Initialized = TRUE;
+        }
     }
 
     HRESULT hr = E_FAIL;
@@ -1606,7 +1636,7 @@ void WINAPI ExitWindowsDialog(HWND hWndOwner)
         parent = hWndOwner;
 
     ShellShFunc pShellShutdownDialog = NULL;
-    HINSTANCE msginaDll = LoadLibraryW(L"msgina.dll");
+    HINSTANCE msginaDll = LoadMSGinaDll();
     if (!msginaDll)
     {
         TRACE("Unable to load msgina.dll\n");
@@ -1615,10 +1645,8 @@ void WINAPI ExitWindowsDialog(HWND hWndOwner)
     {
         pShellShutdownDialog = (ShellShFunc)GetProcAddress(msginaDll, "ShellShutdownDialog");
         if (!pShellShutdownDialog)
-        {
             TRACE("Unable to find the 'ShellShutdownDialog' function");
-            FreeLibrary(msginaDll);
-        }
+        // FreeLibrary(msginaDll);
     }
 
     /* If the DLL or the function cannot be found for any reason, then simply
@@ -1631,7 +1659,7 @@ void WINAPI ExitWindowsDialog(HWND hWndOwner)
 
     /* Actually call the function */
     DWORD returnValue = pShellShutdownDialog(parent, NULL, 0);
-    FreeLibrary(msginaDll);
+    // FreeLibrary(msginaDll);
 
     switch (returnValue)
     {
