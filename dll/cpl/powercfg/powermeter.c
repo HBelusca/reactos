@@ -3,7 +3,7 @@
  * LICENSE:     GPL-2.0-or-later (https://spdx.org/licenses/GPL-2.0-or-later)
  * PURPOSE:     Power Meter & Battery tab
  * COPYRIGHT:   Copyright 2025 Johannes Anderwald <johannes.anderwald@reactos.org>
- *              Copyright 2025 HermÃ¨s BÃ©lusca-MaÃ¯to <hermes.belusca-maito@reactos.org>
+ *              Copyright 2025 Hermès Bélusca-Maïto <hermes.belusca-maito@reactos.org>
  */
 
 #include "powercfg.h"
@@ -442,7 +442,7 @@ PowerMeter_InitDialog(HWND hwndDlg)
     for (BatteryId = 0; BatteryId < 8; ++BatteryId)
     {
         if (!PowerMeterInfo_UpdateBatteryStats(&pmi, BatteryId))
-            break;
+            /*break*/;
 
         ShowWindow(GetDlgItem(hwndDlg, IDC_BATTERY0 + BatteryId), SW_SHOW);
         ShowWindow(GetDlgItem(hwndDlg, IDI_BATTERYDETAIL0 + BatteryId), SW_SHOW);
