@@ -40,7 +40,7 @@ static UCHAR DbgChannels[DBG_CHANNELS_COUNT];
 
 #define BOCHS_OUTPUT_PORT   0xE9
 
-ULONG DebugPort = RS232;
+ULONG DebugPort = RS232 | SCREEN;
 
 /* Serial debug connection */
 #if defined(SARCH_PC98)
@@ -197,6 +197,9 @@ Done:
     }
 }
 
+static ULONG ScreenPosX = 0;
+static ULONG ScreenPosY = 0;
+
 VOID DebugPrintChar(UCHAR Character)
 {
     if (Character == '\n')
@@ -215,6 +218,30 @@ VOID DebugPrintChar(UCHAR Character)
     }
     if (DebugPort & SCREEN)
     {
+        if (Character == '\n')
+        {
+            ScreenPosX = 0;
+            ++ScreenPosY;
+        }
+        else if (Character == '\t')
+        {
+            ScreenPosX += 8; // 8-space TAB
+        }
+        else
+        {
+            ++ScreenPosX;
+        }
+        if (ScreenPosX >= 80)
+        {
+            ScreenPosX %= 80;
+            ++ScreenPosY;
+        }
+        if (ScreenPosY >= 25)
+        {
+            MachConsGetCh();
+            ScreenPosX = 0;
+            ScreenPosY = 0;
+        }
         MachConsPutChar(Character);
     }
 }
