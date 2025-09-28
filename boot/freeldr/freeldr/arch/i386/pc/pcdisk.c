@@ -568,6 +568,113 @@ ERR("F [%llu -- %llu -- %llu]\n", Start, Mid, End);
     return TRUE;
 }
 
+/**
+ * See: commits ff5f825f59 (r73621), 11cbbbb746 (r74460), and CORE-12692
+ **/
+static VOID
+PrintCdRomPacket(_In_ PI386_CDROM_SPEC_PACKET Packet)
+{
+    ERR("\n"
+        "Packet->PacketSize  = 0x%x\n"
+        "Packet->MediaType   = 0x%x\n"
+        "Packet->DriveNumber = 0x%x\n"
+        "Packet->Controller  = 0x%x\n"
+        "Packet->LBAImage    = 0x%x\n"
+        "Packet->DeviceSpec  = 0x%x\n"
+        "Packet->Buffer      = 0x%x\n"
+        "Packet->LoadSeg     = 0x%x\n"
+        "Packet->SectorCount = 0x%x\n",
+        Packet->PacketSize,
+        Packet->MediaType,
+        Packet->DriveNumber,
+        Packet->Controller,
+        Packet->LBAImage,
+        Packet->DeviceSpec,
+        Packet->Buffer,
+        Packet->LoadSeg,
+        Packet->SectorCount);
+}
+
+BOOLEAN
+DiskIsCdRomDrive(
+    _In_ UCHAR DriveNumber)
+{
+    PI386_CDROM_SPEC_PACKET Packet = (PI386_CDROM_SPEC_PACKET)BIOSCALLBUFFER;
+    REGS RegsIn, RegsOut;
+
+    TRACE("DiskIsCdRomDrive(0x%x)\n", DriveNumber);
+
+#if 0 // Disabled just for tests.
+    /* CD-ROM drive numbers are always > 0x80 */
+    if (DriveNumber <= 0x80)
+        return FALSE;
+#endif
+
+    /* Setup disk address packet */
+    RtlZeroMemory(Packet, sizeof(*Packet));
+    // Packet->PacketSize = sizeof(*Packet); // Isn't necessary. Spec says "empty" packet...
+
+    /*
+     * BIOS Int 13h, function 4B01h - Bootable CD-ROM - Get Disk Emulation Status
+     * AX = 4B01h
+     * DL = drive number
+     * DS:SI -> empty specification packet
+     * Return:
+     * CF clear if successful
+     * CF set on error
+     * AX = return codes
+     * DS:SI specification packet filled
+     */
+    RegsIn.w.ax = 0x4B01;
+    RegsIn.b.dl = DriveNumber;
+    RegsIn.x.ds = BIOSCALLBUFSEGMENT;
+    RegsIn.w.si = BIOSCALLBUFOFFSET;
+/***/PrintCdRomPacket(Packet);/***/
+    Int386(0x13, &RegsIn, &RegsOut);
+
+    /*
+     * NOTE: Don't rely on INT386_SUCCESS() (i.e. CF clear or set) for
+     * detecting whether Disk Emulation is indeed enabled, because:
+     *
+     * - On VBOX / Bochs / ..., the function would *ALWAYS* succeed,
+     *   the logic of src/VBox/Devices/PC/BIOS orgs.asm/rombios.c only checks
+     *   whether AX < 0x4A or AX > 0x4D, and if not, unconditionally runs
+     *   int13_eltorito(), which doesn't verify whether El-Torito is
+     *   actually running for the specified DriveNumber, and always
+     *   returns success. (And in the case an El-Torito boot is done,
+     *   the returned specification packet would always be initialized
+     *   independently of the given DriveNumber.)
+     *
+     * - On Dell Latitude D531 with El-Torito boot, the function fails if
+     *   DriveNumber is not the correct one (as expected); however, the
+     *   function _could_ also fail under obscure conditions with error
+     *   AH=0x07 ("drive parameter activity failed (hard disk)"), even though
+     *   the specification packet would be correctly filled with valid data.
+     *
+     * - Worse, the implementation on Phoenix TrustedCore (PhoenixBIOS 4.0
+     *   Release 6.1), year 2006, on Acer TravelMate 6292 laptops, would
+     *   return success (CL clear) even if no El-Torito boot is done, while
+     *   keeping AX == 0x4B01 unchanged, but filling the specification packet
+     *   with 0xFF.
+     */
+    // return (INT386_SUCCESS(RegsOut) && (Packet->DriveNumber == DriveNumber));
+    {
+    BOOLEAN Success = INT386_SUCCESS(RegsOut);
+    // if (!Success) // if (!INT386_SUCCESS(RegsOut) || (Packet->DriveNumber != DriveNumber))
+    ERR("INT 13h AX=0x4B01 %s%s, status: AX = 0x%04x\n",
+        Success ? "succeeded" : "failed",
+        !( ( Success && (Packet->PacketSize == 0x13 && Packet->DriveNumber == DriveNumber)) ||
+           (!Success && (Packet->PacketSize != 0x13 && Packet->DriveNumber != DriveNumber)) )
+        ? " unexpectedly!" : "",
+        RegsOut.w.ax);
+/***/PrintCdRomPacket(Packet);/***/
+    // We don't use "Success && ...", because sometimes the INT 13h may "fail"
+    // (with CF set, e.g. Dell Latitude D531 with AH=07h), yet the packet is
+    // correctly initialized with the sought drive.
+    return (Packet->PacketSize == 0x13 && Packet->DriveNumber == DriveNumber);
+    }
+}
+
 
 static BOOLEAN
 InitDriveGeometry(
@@ -579,6 +686,8 @@ InitDriveGeometry(
     ULONG Cylinders;
 
 ERR("InitDriveGeometry(0x%x)\n", DriveNumber);
+
+    DiskIsCdRomDrive(DriveNumber);
 
     /* Get the extended geometry first */
     RtlZeroMemory(&DiskDrive->ExtGeometry, sizeof(DiskDrive->ExtGeometry));

@@ -439,11 +439,16 @@ EnumerateHarddisks(OUT PBOOLEAN BootDriveReported)
     return DiskCount;
 }
 
+extern BOOLEAN
+DiskIsCdRomDrive(_In_ UCHAR DriveNumber);
+
 static BOOLEAN
 DiskGetBootPath(BOOLEAN IsPxe)
 {
     if (*FrLdrBootPath)
         return TRUE;
+
+ERR("--> DiskGetBootPath()\n");
 
     // FIXME! FIXME! Do this in some drive recognition procedure!!!!
     if (IsPxe)
@@ -464,7 +469,7 @@ DiskGetBootPath(BOOLEAN IsPxe)
         RtlStringCbPrintfA(FrLdrBootPath, sizeof(FrLdrBootPath),
                            "multi(0)disk(0)fdisk(%u)", FrldrBootDrive);
     }
-    else if (FrldrBootPartition == 0xFF)
+    else if (DiskIsCdRomDrive(FrldrBootDrive) || (FrldrBootPartition == 0xFF)) // else if (FrldrBootPartition == 0xFF)
     {
         /* Boot Partition 0xFF is the magic value that indicates booting from CD-ROM (see isoboot.S) */
         RtlStringCbPrintfA(FrLdrBootPath, sizeof(FrLdrBootPath),
@@ -489,6 +494,7 @@ DiskGetBootPath(BOOLEAN IsPxe)
                            FrldrBootDrive - FIRST_BIOS_DISK, FrldrBootPartition);
     }
 
+ERR("<-- DiskGetBootPath()\n");
     return TRUE;
 }
 
