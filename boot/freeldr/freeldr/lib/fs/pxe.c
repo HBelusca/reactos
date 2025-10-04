@@ -241,7 +241,7 @@ static ARC_STATUS PxeRead(ULONG FileId, VOID* Buffer, ULONG N, ULONG* Count)
     readData.Buffer.segment = ((ULONG_PTR)_Packet & 0xf0000) / 16;
     readData.Buffer.offset = (ULONG_PTR)_Packet & 0xffff;
 
-    // Get new packets as required
+    /* Get new packets as required */
     while (N > 0)
     {
         if (N < _CachedLength - _FilePosition)
@@ -277,7 +277,7 @@ static ARC_STATUS PxeSeek(ULONG FileId, LARGE_INTEGER* Position, SEEKMODE SeekMo
 
     if (Position->LowPart < _FilePosition)
     {
-        // Close and reopen the file to go to position 0
+        /* Close and reopen the file to go to position 0 */
         if (PxeClose(FileId) != ESUCCESS)
             return EIO;
         if (PxeOpen(_OpenFileName, OpenReadOnly, &FileId) != ESUCCESS)
@@ -288,7 +288,7 @@ static ARC_STATUS PxeSeek(ULONG FileId, LARGE_INTEGER* Position, SEEKMODE SeekMo
     readData.Buffer.segment = ((ULONG_PTR)_Packet & 0xf0000) / 16;
     readData.Buffer.offset = (ULONG_PTR)_Packet & 0xffff;
 
-    // Get new packets as required
+    /* Get new packets as required */
     while (Position->LowPart > _CachedLength)
     {
         if (!CallPxe(PXENV_TFTP_READ, &readData))
@@ -318,31 +318,31 @@ const DEVVTBL* PxeMount(ULONG DeviceId)
 
 static ARC_STATUS PxeDiskClose(ULONG FileId)
 {
-    // Nothing to do
+    /* Nothing to do */
     return ESUCCESS;
 }
 
 static ARC_STATUS PxeDiskGetFileInformation(ULONG FileId, FILEINFORMATION* Information)
 {
-    // No disk access in PXE mode
+    /* No disk access in PXE mode */
     return EINVAL;
 }
 
 static ARC_STATUS PxeDiskOpen(CHAR* Path, OPENMODE OpenMode, ULONG* FileId)
 {
-    // Nothing to do
+    /* Nothing to do */
     return ESUCCESS;
 }
 
 static ARC_STATUS PxeDiskRead(ULONG FileId, VOID* Buffer, ULONG N, ULONG* Count)
 {
-    // No disk access in PXE mode
+    /* No disk access in PXE mode */
     return EINVAL;
 }
 
 static ARC_STATUS PxeDiskSeek(ULONG FileId, LARGE_INTEGER* Position, SEEKMODE SeekMode)
 {
-    // No disk access in PXE mode
+    /* No disk access in PXE mode */
     return EINVAL;
 }
 
@@ -378,12 +378,12 @@ BOOLEAN PxeInit(VOID)
     static BOOLEAN Initialized = FALSE;
     static BOOLEAN Success = FALSE;
 
-    // Do initialization only once
+    /* Do initialization only once */
     if (Initialized)
         return Success;
     Initialized = TRUE;
 
-    // Check if PXE is available
+    /* Check whether PXE is available */
     if (GetPxeStructure() && GetCachedInfo())
     {
         FsRegisterDevice("net(0)", &PxeDiskVtbl);
@@ -392,4 +392,3 @@ BOOLEAN PxeInit(VOID)
 
     return Success;
 }
-

@@ -42,12 +42,10 @@ typedef struct _FAT_BOOTSECTOR
     ULONG        VolumeSerialNumber;            // Volume serial number
     CHAR        VolumeLabel[11];            // Volume label. This field matches the 11-byte volume label recorded in the root directory
     CHAR        FileSystemType[8];            // One of the strings "FAT12   ", "FAT16   ", or "FAT     "
-
     UCHAR        BootCodeAndData[448];        // The remainder of the boot sector
-
     USHORT        BootSectorMagic;            // 0xAA55
-
 } FAT_BOOTSECTOR, *PFAT_BOOTSECTOR;
+C_ASSERT(sizeof(FAT_BOOTSECTOR) == 512);
 
 typedef struct _FAT32_BOOTSECTOR
 {
@@ -78,12 +76,10 @@ typedef struct _FAT32_BOOTSECTOR
     ULONG        VolumeSerialNumber;            // Volume serial number
     CHAR        VolumeLabel[11];            // Volume label. This field matches the 11-byte volume label recorded in the root directory
     CHAR        FileSystemType[8];            // Always set to the string "FAT32   "
-
     UCHAR        BootCodeAndData[420];        // The remainder of the boot sector
-
     USHORT        BootSectorMagic;            // 0xAA55
-
 } FAT32_BOOTSECTOR, *PFAT32_BOOTSECTOR;
+C_ASSERT(sizeof(FAT32_BOOTSECTOR) == 512);
 
 typedef struct _FATX_BOOTSECTOR
 {
@@ -93,8 +89,8 @@ typedef struct _FATX_BOOTSECTOR
     USHORT        NumberOfFats;                /* Number of FAT tables */
     ULONG        Unknown;                /* Always 0? */
     UCHAR        Unused[494];                /* Actually size should be 4078 (boot block is 4096 bytes) */
-
 } FATX_BOOTSECTOR, *PFATX_BOOTSECTOR;
+C_ASSERT(sizeof(FATX_BOOTSECTOR) == 512);
 
 /*
  * Structure of MSDOS directory entry
@@ -113,7 +109,7 @@ typedef struct //_DIRENTRY
     USHORT    Date;        /* Date last modified */
     USHORT    ClusterLow;    /* First cluster number low word */
     ULONG    Size;        /* File size */
-} DIRENTRY, * PDIRENTRY;
+} DIRENTRY, *PDIRENTRY;
 
 typedef struct
 {
@@ -125,7 +121,7 @@ typedef struct
     WCHAR    Name5_10[6];        /* 6 more characters in name */
     USHORT    StartCluster;        /* Starting cluster number */
     WCHAR    Name11_12[2];        /* Last 2 characters in name */
-} LFN_DIRENTRY, * PLFN_DIRENTRY;
+} LFN_DIRENTRY, *PLFN_DIRENTRY;
 
 typedef struct
 {
@@ -140,7 +136,7 @@ typedef struct
     USHORT    CreateDate;    /* Date file was created */
     USHORT    LastAccessTime;    /* Time file was last accessed */
     USHORT    LastAccessDate;    /* Date file was last accessed */
-} FATX_DIRENTRY, * PFATX_DIRENTRY;
+} FATX_DIRENTRY, *PFATX_DIRENTRY;
 #include <poppack.h>
 
 #define FAT_ATTR_NORMAL     0x00

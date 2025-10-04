@@ -710,58 +710,52 @@ BOOLEAN ExtReadSuperBlock(PEXT_VOLUME_INFO Volume)
     TRACE("RBlocksCountHi: %d\n", SuperBlock->RBlocksCountHi);
     TRACE("FreeBlocksCountHi: %d\n", SuperBlock->FreeBlocksCountHi);
 
-    //
-    // Check the super block magic
-    //
+    /* Check the super block magic */
     if (SuperBlock->Magic != EXT_SUPERBLOCK_MAGIC)
     {
         FileSystemError("Invalid super block magic (0xef53)");
         return FALSE;
     }
 
-    // Calculate the group count
+    /* Calculate the group count */
     Volume->GroupCount = (SuperBlock->BlocksCountLo - SuperBlock->FirstDataBlock + SuperBlock->BlocksPerGroup - 1) / SuperBlock->BlocksPerGroup;
     TRACE("ExtGroupCount: %d\n", Volume->GroupCount);
 
-    // Calculate the block size
+    /* Calculate the block size */
     Volume->BlockSizeInBytes = 1024 << SuperBlock->LogBlockSize;
     Volume->BlockSizeInSectors = Volume->BlockSizeInBytes / Volume->BytesPerSector;
     TRACE("ExtBlockSizeInBytes: %d\n", Volume->BlockSizeInBytes);
     TRACE("ExtBlockSizeInSectors: %d\n", Volume->BlockSizeInSectors);
 
-    // Calculate the fragment size
+    /* Calculate the fragment size */
     if (SuperBlock->LogFragSize >= 0)
-    {
         Volume->FragmentSizeInBytes = 1024 << SuperBlock->LogFragSize;
-    }
     else
-    {
         Volume->FragmentSizeInBytes = 1024 >> -(SuperBlock->LogFragSize);
-    }
     Volume->FragmentSizeInSectors = Volume->FragmentSizeInBytes / Volume->BytesPerSector;
     TRACE("ExtFragmentSizeInBytes: %d\n", Volume->FragmentSizeInBytes);
     TRACE("ExtFragmentSizeInSectors: %d\n", Volume->FragmentSizeInSectors);
 
-    // Verify that the fragment size and the block size are equal
+    /* Verify that the fragment size and the block size are equal */
     if (Volume->BlockSizeInBytes != Volume->FragmentSizeInBytes)
     {
         FileSystemError("The fragment size must be equal to the block size.");
         return FALSE;
     }
 
-    // Set the volume inode size in bytes
+    /* Set the volume inode size in bytes */
     Volume->InodeSizeInBytes = EXT_INODE_SIZE(SuperBlock);
     TRACE("InodeSizeInBytes: %d\n", Volume->InodeSizeInBytes);
 
-    // Set the volume group descriptor size in bytes
+    /* Set the volume group descriptor size in bytes */
     Volume->GroupDescSizeInBytes = EXT_GROUP_DESC_SIZE(SuperBlock);
     TRACE("GroupDescSizeInBytes: %d\n", Volume->GroupDescSizeInBytes);
 
-    // Calculate the number of inodes in one block
+    /* Calculate the number of inodes in one block */
     Volume->InodesPerBlock = Volume->BlockSizeInBytes / Volume->InodeSizeInBytes;
     TRACE("ExtInodesPerBlock: %d\n", Volume->InodesPerBlock);
 
-    // Calculate the number of group descriptors in one block
+    /* Calculate the number of group descriptors in one block */
     Volume->GroupDescPerBlock = Volume->BlockSizeInBytes / Volume->GroupDescSizeInBytes;
     TRACE("ExtGroupDescPerBlock: %d\n", Volume->GroupDescPerBlock);
 
@@ -876,7 +870,7 @@ BOOLEAN ExtReadBlock(PEXT_VOLUME_INFO Volume, ULONG BlockNumber, PVOID Buffer)
 
     TRACE("ExtReadBlock() BlockNumber = %d Buffer = 0x%x\n", BlockNumber, Buffer);
 
-    // Make sure its a valid block
+    // Make sure it's a valid block
     if (BlockNumber > Volume->SuperBlock->BlocksCountLo)
     {
         sprintf(ErrorString, "Error reading block %d - block out of range.", (int) BlockNumber);
@@ -888,9 +882,7 @@ BOOLEAN ExtReadBlock(PEXT_VOLUME_INFO Volume, ULONG BlockNumber, PVOID Buffer)
     if (BlockNumber == 0)
     {
         TRACE("Block is part of a sparse file. Zeroing input buffer.\n");
-
         RtlZeroMemory(Buffer, Volume->BlockSizeInBytes);
-
         return TRUE;
     }
 
@@ -947,7 +939,7 @@ BOOLEAN ExtReadInode(PEXT_VOLUME_INFO Volume, ULONG Inode, PEXT_INODE InodeBuffe
 
     TRACE("ExtReadInode() Inode = %d\n", Inode);
 
-    // Make sure its a valid inode
+    // Make sure it's a valid inode
     if ((Inode < 1) || (Inode > Volume->SuperBlock->InodesCount))
     {
         sprintf(ErrorString, "Error reading inode %ld - inode out of range.", Inode);

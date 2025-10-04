@@ -43,7 +43,6 @@ typedef struct _DIR_RECORD
     UCHAR  FileId[1];               // 34
 } DIR_RECORD, *PDIR_RECORD;
 
-
 /* Volume Descriptor header */
 typedef struct _VD_HEADER
 {
@@ -51,7 +50,6 @@ typedef struct _VD_HEADER
     UCHAR  StandardId[5];   // 2-6
     UCHAR  VdVersion;       // 7
 } VD_HEADER, *PVD_HEADER;
-
 
 /*
  * Primary Volume Descriptor

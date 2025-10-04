@@ -159,25 +159,23 @@ FatNumberOfClusters(
 
 BOOLEAN FatOpenVolume(PFAT_VOLUME_INFO Volume, PFAT_BOOTSECTOR BootSector, ULONGLONG PartitionSectorCount)
 {
-    char ErrMsg[80];
-    ULONG FatSize, i;
-    PFAT_BOOTSECTOR    FatVolumeBootSector;
+    PFAT_BOOTSECTOR FatVolumeBootSector;
     PFAT32_BOOTSECTOR Fat32VolumeBootSector;
     PFATX_BOOTSECTOR FatXVolumeBootSector;
+    ULONG FatSize, i;
+    CHAR ErrMsg[80];
 
     TRACE("FatOpenVolume() DeviceId = %d\n", Volume->DeviceId);
 
-    //
-    // Allocate the memory to hold the boot sector
-    //
+    /* Get the boot sector in the possible formats */
     FatVolumeBootSector = (PFAT_BOOTSECTOR)BootSector;
     Fat32VolumeBootSector = (PFAT32_BOOTSECTOR)BootSector;
     FatXVolumeBootSector = (PFATX_BOOTSECTOR)BootSector;
 
-    // Get the FAT type
+    /* Get the FAT type */
     Volume->FatType = FatDetermineFatType(FatVolumeBootSector, PartitionSectorCount);
 
-    // Dump boot sector (and swap it for big endian systems)
+    /* Dump boot sector (and swap it for big endian systems) */
     TRACE("Dumping boot sector:\n");
     if (ISFATX(Volume->FatType))
     {
@@ -191,7 +189,6 @@ BOOLEAN FatOpenVolume(PFAT_VOLUME_INFO Volume, PFAT_BOOTSECTOR BootSector, ULONG
         TRACE("Unknown: 0x%x\n", FatXVolumeBootSector->Unknown);
 
         TRACE("FatType %s\n", Volume->FatType == FATX16 ? "FATX16" : "FATX32");
-
     }
     else if (Volume->FatType == FAT32)
     {
@@ -255,10 +252,8 @@ BOOLEAN FatOpenVolume(PFAT_VOLUME_INFO Volume, PFAT_BOOTSECTOR BootSector, ULONG
         TRACE("BootSectorMagic: 0x%x\n", FatVolumeBootSector->BootSectorMagic);
     }
 
-    //
-    // Check the boot sector magic
-    //
-    if (! ISFATX(Volume->FatType) && FatVolumeBootSector->BootSectorMagic != 0xaa55)
+    /* Check the boot sector magic */
+    if (!ISFATX(Volume->FatType) && FatVolumeBootSector->BootSectorMagic != 0xaa55)
     {
         sprintf(ErrMsg, "Invalid boot sector magic (expected 0xaa55 found 0x%x)",
                 FatVolumeBootSector->BootSectorMagic);
@@ -266,12 +261,9 @@ BOOLEAN FatOpenVolume(PFAT_VOLUME_INFO Volume, PFAT_BOOTSECTOR BootSector, ULONG
         return FALSE;
     }
 
-    //
-    // Check the FAT cluster size
-    // We do not support clusters bigger than 64k
-    //
+    /* Check the FAT cluster size. We do not support clusters bigger than 64k. */
     if ((ISFATX(Volume->FatType) && 64 * 1024 < FatXVolumeBootSector->SectorsPerCluster * 512) ||
-       (! ISFATX(Volume->FatType) && 64 * 1024 < FatVolumeBootSector->SectorsPerCluster * FatVolumeBootSector->BytesPerSector))
+       (!ISFATX(Volume->FatType) && 64 * 1024 < FatVolumeBootSector->SectorsPerCluster * FatVolumeBootSector->BytesPerSector))
     {
         FileSystemError("This file system has cluster sizes bigger than 64k.\nFreeLoader does not support this.");
         return FALSE;
@@ -345,10 +337,7 @@ BOOLEAN FatOpenVolume(PFAT_VOLUME_INFO Volume, PFAT_BOOTSECTOR BootSector, ULONG
         Volume->RootDirStartCluster = Fat32VolumeBootSector->RootDirStartCluster;
         Volume->DataSectorStart = Volume->FatSectorStart + Volume->NumberOfFats * Volume->SectorsPerFat;
 
-        //
-        // Check version
-        // we only work with version 0
-        //
+        /* Check version; we only support version 0 */
         if (Fat32VolumeBootSector->FileSystemVersion != 0)
         {
             FileSystemError("FreeLoader is too old to work with this FAT32 filesystem.\nPlease update FreeLoader.");
@@ -375,7 +364,7 @@ BOOLEAN FatOpenVolume(PFAT_VOLUME_INFO Volume, PFAT_BOOTSECTOR BootSector, ULONG
         return FALSE;
     }
 
-    // read the beginning of the FAT (or the whole one) to cache
+    /* Read the beginning of the FAT (or the whole one) to cache */
     if (!FatReadVolumeSectors(Volume, Volume->ActiveFatSectorStart, Volume->FatCacheSize, Volume->FatCache))
     {
         FileSystemError("Error when reading FAT cache");
@@ -384,7 +373,7 @@ BOOLEAN FatOpenVolume(PFAT_VOLUME_INFO Volume, PFAT_BOOTSECTOR BootSector, ULONG
         return FALSE;
     }
 
-    // fill the index with sector numbers
+    /* Fill the index with sector numbers */
     for (i = 0; i < Volume->FatCacheSize; i++)
     {
         Volume->FatCacheIndex[i] = Volume->ActiveFatSectorStart + i;
@@ -424,7 +413,6 @@ ULONG FatDetermineFatType(PFAT_BOOTSECTOR FatBootSector, ULONGLONG PartitionSect
         TotalSectors = SWAPW(FatBootSector->TotalSectors) ? SWAPW(FatBootSector->TotalSectors) : SWAPD(FatBootSector->TotalSectorsBig);
         DataSectorCount = TotalSectors - (SWAPW(FatBootSector->ReservedSectors) + (FatBootSector->NumberOfFats * SectorsPerFat) + RootDirSectors);
 
-//mjl
         if (FatBootSector->SectorsPerCluster == 0)
             CountOfClusters = 0;
         else

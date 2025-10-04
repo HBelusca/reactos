@@ -635,7 +635,7 @@ ScsiPortGetPhysicalAddress(
     ULONG Offset;
 
     TRACE("ScsiPortGetPhysicalAddress(%p %p %p %p)\n",
-        HwDeviceExtension, Srb, VirtualAddress, Length);
+          HwDeviceExtension, Srb, VirtualAddress, Length);
 
     DeviceExtension = ((PSCSI_PORT_DEVICE_EXTENSION)HwDeviceExtension) - 1;
 
@@ -748,7 +748,7 @@ ScsiPortGetUncachedExtension(
     NTSTATUS Status;
 
     TRACE("ScsiPortGetUncachedExtension(%p %p %lu)\n",
-        HwDeviceExtension, ConfigInfo, NumberOfBytes);
+          HwDeviceExtension, ConfigInfo, NumberOfBytes);
 
     DeviceExtension = ((PSCSI_PORT_DEVICE_EXTENSION)HwDeviceExtension) - 1;
 
@@ -994,7 +994,7 @@ SpiResourceToConfig(
             if (RangeNumber < HwInitializationData->NumberOfAccessRanges)
             {
                 TRACE("Got port at 0x%I64x, len 0x%x\n",
-                    PartialData->u.Port.Start.QuadPart, PartialData->u.Port.Length);
+                      PartialData->u.Port.Start.QuadPart, PartialData->u.Port.Length);
                 AccessRange = &((*(PortConfig->AccessRanges))[RangeNumber]);
 
                 AccessRange->RangeStart = PartialData->u.Port.Start;
@@ -1010,7 +1010,7 @@ SpiResourceToConfig(
             if (RangeNumber < HwInitializationData->NumberOfAccessRanges)
             {
                 TRACE("Got memory at 0x%I64x, len 0x%x\n",
-                    PartialData->u.Memory.Start.QuadPart, PartialData->u.Memory.Length);
+                      PartialData->u.Memory.Start.QuadPart, PartialData->u.Memory.Length);
                 AccessRange = &((*(PortConfig->AccessRanges))[RangeNumber]);
 
                 AccessRange->RangeStart = PartialData->u.Memory.Start;
@@ -1024,7 +1024,7 @@ SpiResourceToConfig(
         case CmResourceTypeInterrupt:
             /* Copy interrupt data */
             TRACE("Got interrupt level %d, vector %d\n",
-                PartialData->u.Interrupt.Level, PartialData->u.Interrupt.Vector);
+                  PartialData->u.Interrupt.Level, PartialData->u.Interrupt.Vector);
             PortConfig->BusInterruptLevel = PartialData->u.Interrupt.Level;
             PortConfig->BusInterruptVector = PartialData->u.Interrupt.Vector;
 
@@ -1041,7 +1041,7 @@ SpiResourceToConfig(
 
         case CmResourceTypeDma:
             TRACE("Got DMA channel %d, port %d\n",
-                PartialData->u.Dma.Channel, PartialData->u.Dma.Port);
+                  PartialData->u.Dma.Channel, PartialData->u.Dma.Port);
             PortConfig->DmaChannel = PartialData->u.Dma.Channel;
             PortConfig->DmaPort = PartialData->u.Dma.Port;
             break;
@@ -1233,10 +1233,10 @@ ScsiPortInitialize(
 
             /* Get PCI device data */
             TRACE("VendorId '%.*s'  DeviceId '%.*s'\n",
-                HwInitializationData->VendorIdLength,
-                HwInitializationData->VendorId,
-                HwInitializationData->DeviceIdLength,
-                HwInitializationData->DeviceId);
+                  HwInitializationData->VendorIdLength,
+                  HwInitializationData->VendorId,
+                  HwInitializationData->DeviceIdLength,
+                  HwInitializationData->DeviceId);
 
             if (!SpiGetPciConfigData(HwInitializationData,
                                      &PortConfig,
@@ -1277,7 +1277,7 @@ ScsiPortInitialize(
         DeviceExtension->BusNum = PortConfig.SystemIoBusNumber;
 
         TRACE("Adapter found: buses = %u, targets = %u\n",
-                 PortConfig.NumberOfBuses, DeviceExtension->MaxTargetIds);
+              PortConfig.NumberOfBuses, DeviceExtension->MaxTargetIds);
 
         /* Initialize adapter */
         if (!DeviceExtension->HwInitialize(DeviceExtension->MiniPortDeviceExtension))

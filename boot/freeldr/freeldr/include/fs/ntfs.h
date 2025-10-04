@@ -87,7 +87,8 @@ typedef struct
     UCHAR        Unused2[2];
     USHORT        SectorsPerTrack;        // Number of sectors in a track
     USHORT        NumberOfHeads;            // Number of heads on the disk
-    UCHAR        Unused3[8];
+    ULONG        HiddenSectors;                // Hidden sectors (sectors before the partition start like the partition table)
+    UCHAR        Unused3[4];
     UCHAR        DriveNumber;            // Int 0x13 drive number (e.g. 0x80)
     UCHAR        CurrentHead;
     UCHAR        BootSignature;            // Extended boot signature (0x80)
@@ -100,7 +101,8 @@ typedef struct
     CHAR        ClustersPerIndexRecord;        // Clusters per Index Record
     UCHAR        Unused6[3];
     ULONGLONG        VolumeSerialNumber;        // Volume serial number
-    UCHAR        BootCodeAndData[430];        // The remainder of the boot sector
+    UCHAR       Checksum[4];
+    UCHAR        BootCodeAndData[426];        // The remainder of the boot sector
     USHORT        BootSectorMagic;        // 0xAA55
 } NTFS_BOOTSECTOR, *PNTFS_BOOTSECTOR;
 
