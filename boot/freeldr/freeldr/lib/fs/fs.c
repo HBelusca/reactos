@@ -386,6 +386,15 @@ Done:
             pDevice->DeviceId = INVALID_FILE_ID;
     }
 
+////////////////
+    if (Status == ESUCCESS)
+    {
+        FILEINFORMATION Information;
+        ARC_STATUS Status2 = ArcGetFileInformation(*FileId, &Information);
+        UNREFERENCED_PARAMETER(Status2);
+    }
+////////////////
+
     return Status;
 }
 
@@ -461,9 +470,19 @@ ARC_STATUS ArcSeek(ULONG FileId, LARGE_INTEGER* Position, SEEKMODE SeekMode)
 
 ARC_STATUS ArcGetFileInformation(ULONG FileId, FILEINFORMATION* Information)
 {
+    ARC_STATUS Status;
     if (!IS_VALID_FILEID(FileId))
         return EBADF;
-    return FileData[FileId].FuncTable->GetFileInformation(FileId, Information);
+    /*return*/ Status = FileData[FileId].FuncTable->GetFileInformation(FileId, Information);
+    if (Status == ESUCCESS)
+    {
+        const DEVVTBL* FuncTable = FileData[FileId].FuncTable;
+        PCWSTR ServiceName = (FuncTable && FuncTable->ServiceName)
+                                        ? FuncTable->ServiceName : L"n/a";
+        ERR("ArcGFI(%lu): SvcName: %S ; Type: %lu , FileName: '%.*s' , Attributes: %lu\n",
+            FileId, ServiceName, Information->Type, Information->FileNameLength, Information->FileName, Information->Attributes);
+    }
+    return Status;
 }
 
 /* FUNCTIONS ******************************************************************/
