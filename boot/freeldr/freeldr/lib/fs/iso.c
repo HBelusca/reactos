@@ -150,8 +150,7 @@ static ARC_STATUS IsoBufferDirectory(ULONG DeviceId, ULONG DirectoryStartSector,
     //
     // Now read directory contents into DirectoryBuffer
     //
-    Position.HighPart = 0;
-    Position.LowPart = DirectoryStartSector * SECTORSIZE;
+    Position.QuadPart = DirectoryStartSector * SECTORSIZE;
     Status = ArcSeek(DeviceId, &Position, SeekAbsolute);
     if (Status != ESUCCESS)
     {
@@ -458,8 +457,7 @@ ARC_STATUS IsoRead(ULONG FileId, VOID* Buffer, ULONG N, ULONG* Count)
         //
         // Now do the read and update Count, N, FilePointer, & Buffer
         //
-        Position.HighPart = 0;
-        Position.LowPart = SectorNumber * SECTORSIZE;
+        Position.QuadPart = SectorNumber * SECTORSIZE;
         Status = ArcSeek(DeviceId, &Position, SeekAbsolute);
         if (Status != ESUCCESS)
         {
@@ -492,8 +490,7 @@ ARC_STATUS IsoRead(ULONG FileId, VOID* Buffer, ULONG N, ULONG* Count)
         //
         // Now do the read and update Count, N, FilePointer, & Buffer
         //
-        Position.HighPart = 0;
-        Position.LowPart = SectorNumber * SECTORSIZE;
+        Position.QuadPart = SectorNumber * SECTORSIZE;
         Status = ArcSeek(DeviceId, &Position, SeekAbsolute);
         if (Status != ESUCCESS)
         {
@@ -521,8 +518,7 @@ ARC_STATUS IsoRead(ULONG FileId, VOID* Buffer, ULONG N, ULONG* Count)
         //
         // Now do the read and update Count, N, FilePointer, & Buffer
         //
-        Position.HighPart = 0;
-        Position.LowPart = SectorNumber * SECTORSIZE;
+        Position.QuadPart = SectorNumber * SECTORSIZE;
         Status = ArcSeek(DeviceId, &Position, SeekAbsolute);
         if (Status != ESUCCESS)
         {
