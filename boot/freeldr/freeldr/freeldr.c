@@ -98,7 +98,7 @@ VOID __cdecl BootMain(IN PCCH CmdLine)
 
     MachInit(CmdLine);
 
-    TRACE("BootMain() called.\n");
+    ERR("BootMain() called.\n");
 
 #ifndef UEFIBOOT
     /* Check if the CPU is new enough */

@@ -1791,7 +1791,9 @@ MachInit(const char *CmdLine)
     MachVtbl.HwDetect = PcHwDetect;
     MachVtbl.HwIdle = PcHwIdle;
 
+ERR("--> HalpCalibrateStallExecution()\n");
     HalpCalibrateStallExecution();
+ERR("<-- HalpCalibrateStallExecution()\n");
 }
 
 VOID
