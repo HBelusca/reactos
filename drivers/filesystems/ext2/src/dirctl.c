@@ -552,7 +552,11 @@ Ext2QueryDirectory (IN PEXT2_IRP_CONTEXT IrpContext)
     UNICODE_STRING          Unicode = { 0 };
     PEXT2_DIR_ENTRY2        pDir = NULL;
 
+#if 0 && defined(__REACTOS__) // First fix proposal, see https://github.com/bobranten/Ext4Fsd/issues/83
+    ULONG                   ByteOffset = 0;
+#else
     ULONG                   ByteOffset;
+#endif
     ULONG                   RecLen = 0;
     ULONG                   EntrySize = 0;
 
@@ -968,7 +972,10 @@ ProcessNextEntry:
 errorout:
 
         ((PULONG)((PUCHAR)Buffer + fc.efc_prev))[0] = 0;
+#if 1 && defined(__REACTOS__) // Second fix proposal, see https://github.com/bobranten/Ext4Fsd/issues/83
+#else
         FileIndex = ByteOffset;
+#endif
 
         if (Status == STATUS_BUFFER_OVERFLOW) {
             /* just return fc.efc_start/EntrySize bytes that we filled */
