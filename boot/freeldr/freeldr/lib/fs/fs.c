@@ -312,6 +312,151 @@ ARC_STATUS ArcOpen(CHAR* Path, OPENMODE OpenMode, ULONG* FileId)
 
 
     /*
+     * Check whether an explicit file system is specified, using the
+     * ARCLoad-compatible syntax:
+     *   <file path> := <arc path> | <file path> '[' <fs name> ']' <fs path>
+     * e.g.:
+     *   multi(0)disk(0)rdisk(1)partition(1)[ext2]/boot/vmlinux
+     * or with nested paths, e.g.:
+     *   multi(0)disk(0)rdisk(1)partition(1)[ext2]/image.ram[fat]/file.txt
+     *
+     * If no explicit file system is mentioned, try to find a suitable one.
+     * If none is found, fall back to ARC firmware space.
+     */
+    if (*FileName == '[')
+    {
+        PCCH FsName = FileName + 1;
+        PCCH FsNameEnd = strchr(FsName, ']');
+        if (FsNameEnd == NULL || FsNameEnd <= FsName)
+        {
+            /*
+             * The path does not mention any actual FS name, the bracket
+             * is part of the full path name (1st case), or the FS name
+             * has not been specified (2nd case).
+             * In either case we should fall back to automatic FS detection.
+             */
+        }
+        else
+        {
+            const DEVVTBL* FuncTable; // FileFuncTable;
+            PCWSTR ServiceName, FsNameUnicode;
+
+            // FIXME: These values must not be hardcoded!
+            /* Map the user-friendly filesystem names to our internal ones */
+#ifndef _M_ARM
+            if ( ((FsNameEnd - FsName == 4) && _strnicmp(FsName, "cdfs"   , 4) == 0) ||
+                 ((FsNameEnd - FsName == 4) && _strnicmp(FsName, "etfs"   , 4) == 0) ||
+                 ((FsNameEnd - FsName == 7) && _strnicmp(FsName, "iso9660", 7) == 0) )
+            {
+                FsNameUnicode = L"cdfs";
+            }
+            else
+#endif
+            if ( ((FsNameEnd - FsName == 7) && _strnicmp(FsName, "fastfat", 7) == 0) ||
+                 ((FsNameEnd - FsName == 6) && _strnicmp(FsName, "vfatfs" , 6) == 0) ||
+                 ((FsNameEnd - FsName == 3) && _strnicmp(FsName, "fat"    , 3) == 0) )
+            {
+                FsNameUnicode = L"fastfat";
+            }
+            else
+            if ((FsNameEnd - FsName == 5) && _strnicmp(FsName, "btrfs", 5) == 0)
+            {
+                FsNameUnicode = L"btrfs";
+            }
+            else
+#ifndef _M_ARM
+            if ((FsNameEnd - FsName == 4) && _strnicmp(FsName, "ntfs", 4) == 0)
+            {
+                FsNameUnicode = L"ntfs";
+            }
+            else
+            if ( ((FsNameEnd - FsName == 6) && _strnicmp(FsName, "ext2fs", 6) == 0) ||
+                 ((FsNameEnd - FsName == 4) && _strnicmp(FsName, "ext2"  , 4) == 0) )
+            {
+                FsNameUnicode = L"ext2fs";
+            }
+            else
+#endif
+            {
+                /* Error, unable to recognize the file system */
+                ERR("Unknown file system '%.*s'\n", (FsNameEnd - FsName), FsName);
+                Status = ENOENT; // ENXIO; // ENODEV
+                goto Done;
+            }
+
+
+            // FileData[DeviceId].FileFuncTable;
+
+
+            /* Check whether the device is mounted (non-NULL FileFuncTable)
+             * and if so, with which file-system ("service" name associated) */
+            FuncTable = pDevice->FileFuncTable;
+            ServiceName = (FuncTable && FuncTable->ServiceName)
+                            ? FuncTable->ServiceName : NULL;
+            if (!ServiceName)
+            {
+                ERR("Non-mounted device %lu\n", DeviceId); // Not an error!
+            }
+
+
+            if (FuncTable)
+            {
+                /* If ServiceName matches the requested FsName,
+                 * then the device is already correctly mounted */
+                if (ServiceName && !_wcsicmp(ServiceName, FsNameUnicode))
+                    ; // TODO: We are good! don't continue further
+                else // Else, error out because of mismatch.
+                {
+                    ERR("Cannot mount with file system '%.*s': Storage device %lu is already mounted with file system '%S'\n",
+                        (FsNameEnd - FsName), FsName, DeviceId, ServiceName);
+                    Status = ENOENT; // ENXIO; // ENODEV
+                    goto Done;
+                }
+            }
+
+            /*
+             * The device isn't mounted, try mounting it
+             * with the specified file system
+             */
+
+            // FileData[DeviceId].FileFuncTable // pDevice->FileFuncTable
+
+            /* HACK: Since we don't currently use a virtual table function member,
+             * we instead do a manual lookup over the file-system name.
+             * The ordering follows that of the FileSystems[] table. */
+#ifndef _M_ARM
+            if (!_wcsicmp(FsNameUnicode, L"cdfs"))
+                pDevice->FileFuncTable = IsoMount(DeviceId);
+            else
+#endif
+            if (!_wcsicmp(FsNameUnicode, L"fastfat") /*|| !_wcsicmp(FsNameUnicode, L"vfatfs")*/)
+                pDevice->FileFuncTable = FatMount(DeviceId);
+            else
+            if (!_wcsicmp(FsNameUnicode, L"btrfs"))
+                pDevice->FileFuncTable = BtrFsMount(DeviceId);
+            else
+#ifndef _M_ARM
+            if (!_wcsicmp(FsNameUnicode, L"ntfs"))
+                pDevice->FileFuncTable = NtfsMount(DeviceId);
+            else
+            if (!_wcsicmp(FsNameUnicode, L"ext2fs"))
+                pDevice->FileFuncTable = Ext2Mount(DeviceId);
+            else
+#endif
+            ERR("Unsupported file system '%S' on storage device %lu\n", FsNameUnicode, DeviceId);
+
+            if (!pDevice->FileFuncTable)
+            {
+                /* Error, unable to recognize the file system */
+                Status = ENOENT; // ENXIO; // ENODEV
+                goto Done;
+            }
+        }
+    }
+
+
+
+    /*
      * We are opening a file.
      */
 

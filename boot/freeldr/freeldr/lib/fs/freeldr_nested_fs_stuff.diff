@@ -1,0 +1,645 @@
+diff --git a/boot/freeldr/freeldr/include/fs.h b/boot/freeldr/freeldr/include/fs.h
+index 68489c9d087..d75a9d0b2fa 100644
+--- a/boot/freeldr/freeldr/include/fs.h
++++ b/boot/freeldr/freeldr/include/fs.h
+@@ -51,7 +51,7 @@ FsOpenFile(
+ ULONG FsGetNumPathParts(PCSTR Path);
+ VOID  FsGetFirstNameFromPath(PCHAR Buffer, PCSTR Path);
+ 
+-VOID FsRegisterDevice(CHAR* Prefix, const DEVVTBL* FuncTable);
++VOID FsRegisterDevice(IN PCSTR DeviceName, IN const DEVVTBL* FuncTable);
+ PCWSTR FsGetServiceName(ULONG FileId);
+ VOID  FsSetDeviceSpecific(ULONG FileId, VOID* Specific);
+ VOID* FsGetDeviceSpecific(ULONG FileId);
+diff --git a/boot/freeldr/freeldr/lib/fs/fs.c b/boot/freeldr/freeldr/lib/fs/fs.c
+index 9aa7ca1da65..d09e1ed0bc3 100644
+--- a/boot/freeldr/freeldr/lib/fs/fs.c
++++ b/boot/freeldr/freeldr/lib/fs/fs.c
+@@ -27,24 +27,56 @@ DBG_DEFAULT_CHANNEL(FILESYSTEM);
+ 
+ /* GLOBALS ********************************************************************/
+ 
++// #define NESTED_FILESYSTEMS
++
+ #define TAG_DEVICE_NAME 'NDsF'
+-#define TAG_DEVICE 'vDsF'
++#define TAG_DEVICE      'vDsF'
++
++#define OPENMODE_TO_FLAGS(OpenMode) \
++    ( 1 | (((OpenMode) == OpenReadOnly    || (OpenMode) == OpenReadWrite || \
++            (OpenMode) == CreateReadWrite || (OpenMode) == SupersedeReadWrite) << 1) \
++        | (((OpenMode) == OpenWriteOnly      || (OpenMode) == OpenReadWrite   || \
++            (OpenMode) == CreateWriteOnly    || (OpenMode) == CreateReadWrite || \
++            (OpenMode) == SupersedeWriteOnly || (OpenMode) == SupersedeReadWrite) << 2) )
+ 
+ typedef struct tagFILEDATA
+ {
+-    ULONG DeviceId;
++    ULONG DeviceId; // The parent device.
++    // DEVICE* Device;
+     ULONG ReferenceCount;
++    PCSTR FilePath; // File path relative to the parent device.
++
++    union
++    {
++        struct
++        {
++            UCHAR Open  : 1; // Always set?
++            UCHAR Read  : 1;
++            UCHAR Write : 1;
++        };
++        UCHAR Flags;
++    } Mode;
++
++    /* Object-specific function table and context */
+     const DEVVTBL* FuncTable;
++    PVOID Specific; // FS-specific data (for this file descriptor).
++
++    /*
++     * If this FILEDATA is not a file but instead points to a DEVICE, these are
++     * the cached function table and specific context to be used when the DEVICE
++     * is accessed with filesystem (volume) semantics (they are NULL for a file).
++     */
+     const DEVVTBL* FileFuncTable;
+-    VOID* Specific;
++    PVOID FileSpecific;
++
+ } FILEDATA;
+ 
+ typedef struct tagDEVICE
+ {
+     LIST_ENTRY ListEntry;
+     const DEVVTBL* FuncTable;
+-    CHAR* Prefix;
+-    ULONG DeviceId;
++    PCSTR DeviceName;
++    ULONG DeviceId; // Entry ID in FileData when the device gets referenced.
+     ULONG ReferenceCount;
+ } DEVICE;
+ 
+@@ -53,32 +85,47 @@ static LIST_ENTRY DeviceListHead;
+ 
+ /* ARC FUNCTIONS **************************************************************/
+ 
+-ARC_STATUS ArcOpen(CHAR* Path, OPENMODE OpenMode, ULONG* FileId)
++static ARC_STATUS
++ArcDeviceOpen(
++    IN PCSTR Path,
++    IN OPENMODE OpenMode,
++    OUT PULONG FileId)
+ {
+     ARC_STATUS Status;
+     ULONG Count, i;
+     PLIST_ENTRY pEntry;
+     DEVICE* pDevice;
+-    CHAR* DeviceName;
+-    CHAR* FileName;
+-    CHAR* p;
+-    CHAR* q;
++    PCSTR DeviceName;
++    PCSTR FileName;
++    PCCH p, q;
+     SIZE_T Length;
+-    OPENMODE DeviceOpenMode;
+     ULONG DeviceId;
+ 
+-    /* Print status message */
+-    TRACE("Opening file '%s'...\n", Path);
++    /* Validate parameters */
++    if (!Path || !*Path)
++        return ENODEV;
++    if (!FileId)
++        return EINVAL;
++    /* A device can only be opened, but not created or superseded (and it's also not a directory) */
++    if (OpenMode >= CreateWriteOnly)
++        return EINVAL;
+ 
+     *FileId = MAX_FDS;
+ 
++//
++// BUGBUG: The following "logic" will fail in case the filename part
++// of the path contains legitimate '(' or ')' characters.
++//
+     /* Search last ')', which delimits device and path */
+     FileName = strrchr(Path, ')');
+     if (!FileName)
+-        return EINVAL;
+-    FileName++;
++        return ENODEV;
++    ++FileName;
+ 
+-    /* Count number of "()", which needs to be replaced by "(0)" */
++    /* Print status message */
++    /**/ERR("Opening device '%*s'...\n", FileName - Path, Path);/**/
++
++    /* Count the number of "()" that need to be replaced by "(0)" */
+     Count = 0;
+     for (p = Path; p != FileName; p++)
+     {
+@@ -105,149 +152,438 @@ ARC_STATUS ArcOpen(CHAR* Path, OPENMODE OpenMode, ULONG* FileId)
+         DeviceName = Path;
+     }
+ 
+-    /* Search for the device */
+-    if (OpenMode == OpenReadOnly || OpenMode == OpenWriteOnly)
+-        DeviceOpenMode = OpenMode;
+-    else
+-        DeviceOpenMode = OpenReadWrite;
++    /**/ERR("--> DeviceName: '%*s'...\n", FileName - Path + Count, DeviceName);/**/
+ 
+-    pEntry = DeviceListHead.Flink;
+-    while (pEntry != &DeviceListHead)
++    /* Search for the registered device */
++    pDevice = NULL;
++    for (pEntry = DeviceListHead.Flink; pEntry != &DeviceListHead; pEntry = pEntry->Flink)
+     {
+         pDevice = CONTAINING_RECORD(pEntry, DEVICE, ListEntry);
+-        if (strncmp(pDevice->Prefix, DeviceName, Length) == 0)
++        if (strncmp(pDevice->DeviceName, DeviceName, Length) != 0)
++            continue;
++    }
++    if (pEntry == &DeviceListHead)
++    {
++        //
++        // TODO: If no device found there, try to open it directly using the
++        // firmware; if it succeeds, create a (mirror) handle entry in the
++        // table, saving the fact that it comes from the firmware, and return
++        // a corrected FileId.
++        //
++        Status = ENODEV;
++        goto Done;
++    }
++
++    // /* OK, device found. Is it already opened? With the same mode? */
++    // if ((pDevice->ReferenceCount == 0) ||
++        // (pDevice->Mode.Flags != OPENMODE_TO_FLAGS(OpenMode)))
++
++    /* OK, device found. Is it already opened? */
++    if (pDevice->ReferenceCount == 0)
++    {
++        /* Find some room for the device */
++        for (DeviceId = 0; DeviceId < MAX_FDS; DeviceId++)
+         {
+-            /* OK, device found. It is already opened? */
+-            if (pDevice->ReferenceCount == 0)
+-            {
+-                /* Search some room for the device */
+-                for (DeviceId = 0; DeviceId < MAX_FDS; DeviceId++)
+-                {
+-                    if (!FileData[DeviceId].FuncTable)
+-                        break;
+-                }
+-                if (DeviceId == MAX_FDS)
+-                    return EMFILE;
+-
+-                /* Try to open the device */
+-                FileData[DeviceId].FuncTable = pDevice->FuncTable;
+-                Status = pDevice->FuncTable->Open(pDevice->Prefix, DeviceOpenMode, &DeviceId);
+-                if (Status != ESUCCESS)
+-                {
+-                    FileData[DeviceId].FuncTable = NULL;
+-                    return Status;
+-                }
+-                else if (!*FileName)
+-                {
+-                    /* Done, caller wanted to open the raw device */
+-                    *FileId = DeviceId;
+-                    pDevice->ReferenceCount++;
+-                    return ESUCCESS;
+-                }
+-
+-                /* Try to detect the file system */
++            if (!FileData[DeviceId].FuncTable)
++                break;
++        }
++        if (DeviceId == MAX_FDS)
++        {
++            Status = EMFILE;
++            goto Done;
++        }
++    }
++    else
++    {
++        /* Reuse the existing entry */
++        DeviceId = pDevice->DeviceId;
++        ASSERT(FileData[DeviceId].FuncTable == pDevice->FuncTable);
++    }
++
++    /*
++     * Try to (re)open the device, allowing performing open-access
++     * and instantiation checks for the device.
++     */
++    Status = pDevice->FuncTable->Open(pDevice->DeviceName, OpenMode, &DeviceId);
++    if (Status != ESUCCESS)
++    {
++        if (pDevice->ReferenceCount == 0)
++        {
++            /*
++             * If it's the first time we tried to open the device,
++             * invalidate its entry. Otherwise ignore since the failure
++             * happened just for this new instantiation.
++             */
++            FileData[DeviceId].FuncTable = NULL;
++            FileData[DeviceId].DeviceId  = -1;
++        }
++        goto Done;
++    }
++
++    if (pDevice->ReferenceCount == 0)
++    {
++        /*
++         * It's the first time we tried to open the device,
++         * cache its function table and device ID.
++         */
++        FileData[DeviceId].FuncTable = pDevice->FuncTable;
++        FileData[DeviceId].DeviceId  = pDevice->DeviceId = DeviceId;
++    }
++
++    /* Done, increase its reference count and return its ID */
++    pDevice->ReferenceCount++;
++    FileData[DeviceId].ReferenceCount++;
++    *FileId = DeviceId;
++    Status = ESUCCESS;
++    goto Done;
++
++    /*
++     * At this point, the device is found and opened. Its file ID is stored
++     * in DeviceId, and FileData[DeviceId].FileFuncTable contains what needs
++     * to be called to manipulate the file.
++     */
++
++Done:
++    /* Cleanup */
++    if (DeviceName != Path)
++        FrLdrTempFree(DeviceName, TAG_DEVICE_NAME);
++
++    return Status;
++}
++
++ARC_STATUS
++ArcOpen2(
++    IN ULONG DeviceId,
++    IN PCSTR FileName,
++    IN OPENMODE OpenMode,
++    OUT PULONG FileId)
++{
++    ARC_STATUS Status;
++    ULONG i;
++    UCHAR Flags;
++
++    /* Validate parameters */
++    if (!FileId)
++        return EINVAL;
++
++    /* Verify that the parent device actually exists */
++    if (DeviceId >= MAX_FDS || !FileData[DeviceId].FuncTable)
++        return EBADF;
++
++    /* Check whether the parent device grants us access */
++    Flags = OPENMODE_TO_FLAGS(OpenMode);
++    if ( !((Flags & 1) &&  FileData[DeviceId].Mode.Open ) ||
++          ((Flags & 2) && !FileData[DeviceId].Mode.Read ) ||
++          ((Flags & 4) && !FileData[DeviceId].Mode.Write) )
++    {
++        return EACCES;
++    }
++
++    if (!FileName || !*FileName)
++    {
++        /*
++         * We are just re-opening the parent device.
++         * Reference it and return its descriptor.
++         */
++        ++FileData[DeviceId].ReferenceCount;
++        *FileId = DeviceId;
++        return ESUCCESS;
++    }
++
++    /*
++     * Check whether this file has already been opened with the same rights.
++     * If so, just increment its reference count and return the same descriptor.
++     * If not, create a new file descriptor.
++     */
++    for (i = 0; i < MAX_FDS; ++i)
++    {
++        if ((FileData[i].FuncTable) &&
++            (DeviceId == FileData[i].DeviceId) &&
++            (_stricmp(FileName, FileData[i].FilePath) == 0) &&
++            (Flags == FileData[i].Mode.Flags))
++        {
++            /* Found it: reference the device and the file and return its descriptor */
++            ++FileData[DeviceId].ReferenceCount;
++            ++FileData[i].ReferenceCount;
++            *FileId = i;
++            return ESUCCESS;
++        }
++    }
++
++    /* Find some room for the file */
++    for (i = 0; ; ++i)
++    {
++        if (i >= MAX_FDS)
++            return EMFILE;
++        if (!FileData[i].FuncTable)
++            break;
++    }
++
++    /* Reference the device */
++    ++FileData[DeviceId].ReferenceCount;
++
++#ifdef NESTED_FILESYSTEMS
++    /*
++     * Check whether an explicit file system is specified, using the
++     * ARCLoad-compatible syntax:
++     *   <file path> := <arc path> | <file path> '[' <fs name> ']' <fs path>
++     * e.g.:
++     *   multi(0)disk(0)rdisk(1)partition(1)[ext2]/boot/vmlinux
++     * or with nested paths, e.g.:
++     *   multi(0)disk(0)rdisk(1)partition(1)[ext2]/image.ram[fat]/file.txt
++     *
++     * If no explicit file system is mentioned, try to find a suitable one.
++     * If none is found, fall back to ARC firmware space.
++     */
++    if (*FileName == '[')
++    {
++        PCHAR FsName = FileName + 1;
++        PCHAR FsNameEnd = strchr(FsName, ']');
++        if (FsNameEnd == NULL || FsNameEnd <= FsName)
++        {
++            /*
++             * The path does not mention any actual FS name, the bracket
++             * is part of the full path name (1st case), or the FS name
++             * has not been specified (2nd case).
++             * In either case we should fall back to automatic FS detection.
++             */
++        }
++        else
++        {
++            // FIXME: These values must not be hardcoded!
+ #ifndef _M_ARM
+-                FileData[DeviceId].FileFuncTable = IsoMount(DeviceId);
+-                if (!FileData[DeviceId].FileFuncTable)
++            if ( ((FsNameEnd - FsName == 4) && _strnicmp(FsName, "cdfs"   , 4) == 0) ||
++                 ((FsNameEnd - FsName == 4) && _strnicmp(FsName, "etfs"   , 4) == 0) ||
++                 ((FsNameEnd - FsName == 7) && _strnicmp(FsName, "iso9660", 7) == 0) )
++            {
++                FileData[DeviceId].FileFuncTable = IsoMount(DeviceId, &FileData[DeviceId].FileSpecific);
++            }
++            else
+ #endif
+-                    FileData[DeviceId].FileFuncTable = FatMount(DeviceId);
+-                if (!FileData[DeviceId].FileFuncTable)
+-                    FileData[DeviceId].FileFuncTable = BtrFsMount(DeviceId);
++            if ( ((FsNameEnd - FsName == 7) && _strnicmp(FsName, "fastfat", 7) == 0) ||
++                 ((FsNameEnd - FsName == 3) && _strnicmp(FsName, "fat"    , 3) == 0) )
++            {
++                FileData[DeviceId].FileFuncTable = FatMount(DeviceId, &FileData[DeviceId].FileSpecific);
++            }
++            else if ((FsNameEnd - FsName == 5) && _strnicmp(FsName, "btrfs", 5) == 0)
++            {
++                FileData[DeviceId].FileFuncTable = BtrFsMount(DeviceId, &FileData[DeviceId].FileSpecific);
++            }
+ #ifndef _M_ARM
+-                if (!FileData[DeviceId].FileFuncTable)
+-                    FileData[DeviceId].FileFuncTable = NtfsMount(DeviceId);
+-                if (!FileData[DeviceId].FileFuncTable)
+-                    FileData[DeviceId].FileFuncTable = Ext2Mount(DeviceId);
+-#endif
+-#if defined(_M_IX86) || defined(_M_AMD64)
+-                if (!FileData[DeviceId].FileFuncTable)
+-                    FileData[DeviceId].FileFuncTable = PxeMount(DeviceId);
+-#endif
+-                if (!FileData[DeviceId].FileFuncTable)
+-                {
+-                    /* Error, unable to detect file system */
+-                    pDevice->FuncTable->Close(DeviceId);
+-                    FileData[DeviceId].FuncTable = NULL;
+-                    return ENODEV;
+-                }
+-
+-                pDevice->DeviceId = DeviceId;
++            else if ((FsNameEnd - FsName == 4) && _strnicmp(FsName, "ntfs", 4) == 0)
++            {
++                FileData[DeviceId].FileFuncTable = NtfsMount(DeviceId, &FileData[DeviceId].FileSpecific);
+             }
+-            else
++            else if ( ((FsNameEnd - FsName == 6) && _strnicmp(FsName, "ext2fs", 6) == 0) ||
++                      ((FsNameEnd - FsName == 4) && _strnicmp(FsName, "ext2"  , 4) == 0) )
+             {
+-                DeviceId = pDevice->DeviceId;
++                FileData[DeviceId].FileFuncTable = Ext2Mount(DeviceId, &FileData[DeviceId].FileSpecific);
++            }
++#endif
++
++            if (!FileData[DeviceId].FileFuncTable)
++            {
++                /* Error, unable to recognize the file system */
++                // pDevice->FuncTable->Close(DeviceId);
++                // FileData[DeviceId].FuncTable = NULL;
++
++                /* Dereference the device */
++                --FileData[DeviceId].ReferenceCount;
++
++                return ENODEV; // ENOENT;
+             }
+-            pDevice->ReferenceCount++;
+-            break;
+         }
+-        pEntry = pEntry->Flink;
+     }
+-    if (pEntry == &DeviceListHead)
+-        return ENODEV;
+-
+-    /* At this point, device is found and opened. Its file id is stored
+-     * in DeviceId, and FileData[DeviceId].FileFuncTable contains what
+-     * needs to be called to open the file */
++#endif
+ 
+-    /* Search some room for the device */
+-    for (i = 0; i < MAX_FDS; i++)
++    /*
++     * We try to access the device using filesystem semantics.
++     * Try to detect the file system on it if it has not already been done.
++     */
++    if (!FileData[DeviceId].FileFuncTable /* && not-already-done */)
+     {
+-        if (!FileData[i].FuncTable)
+-            break;
++#ifndef _M_ARM
++        FileData[DeviceId].FileFuncTable = IsoMount(DeviceId, &FileData[DeviceId].FileSpecific);
++        if (!FileData[DeviceId].FileFuncTable)
++#endif
++            FileData[DeviceId].FileFuncTable = FatMount(DeviceId, &FileData[DeviceId].FileSpecific);
++        if (!FileData[DeviceId].FileFuncTable)
++            FileData[DeviceId].FileFuncTable = BtrFsMount(DeviceId, &FileData[DeviceId].FileSpecific);
++#ifndef _M_ARM
++        if (!FileData[DeviceId].FileFuncTable)
++            FileData[DeviceId].FileFuncTable = NtfsMount(DeviceId, &FileData[DeviceId].FileSpecific);
++        if (!FileData[DeviceId].FileFuncTable)
++            FileData[DeviceId].FileFuncTable = Ext2Mount(DeviceId, &FileData[DeviceId].FileSpecific);
++#endif
++#if defined(_M_IX86) || defined(_M_AMD64)
++        if (!FileData[DeviceId].FileFuncTable)
++            FileData[DeviceId].FileFuncTable = PxeMount(DeviceId, &FileData[DeviceId].FileSpecific);
++#endif
++        if (!FileData[DeviceId].FileFuncTable)
++        {
++            /* Error, unable to detect file system */
++            // pDevice->FuncTable->Close(DeviceId);
++            // FileData[DeviceId].FuncTable = NULL;
++
++            /* Dereference the device */
++            --FileData[DeviceId].ReferenceCount;
++
++            return ENODEV; // ENOENT;
++        }
+     }
+-    if (i == MAX_FDS)
+-        return EMFILE;
+ 
++    /*
++     * At this point, the device is found and opened. Its file ID is stored
++     * in DeviceId, and FileData[DeviceId].FileFuncTable contains what needs
++     * to be called to manipulate the file.
++     */
++
+ 
+     /* Open the file */
+     FileData[i].FuncTable = FileData[DeviceId].FileFuncTable;
++    FileData[i].FileFuncTable = NULL;
+     FileData[i].DeviceId = DeviceId;
+     *FileId = i;
+     Status = FileData[i].FuncTable->Open(FileName, OpenMode, FileId);
+     if (Status != ESUCCESS)
+     {
++        FileData[i].DeviceId  = -1;
+         FileData[i].FuncTable = NULL;
+         *FileId = MAX_FDS;
++
++        /* Dereference the device */
++        --FileData[DeviceId].ReferenceCount;
++    }
++    else
++    {
++        /* Reference the file */
++        ++FileData[i].ReferenceCount;
+     }
+     return Status;
+ }
+ 
+-ARC_STATUS ArcClose(ULONG FileId)
++ARC_STATUS
++ArcOpen(
++    IN PCSTR Path,
++    IN OPENMODE OpenMode,
++    OUT PULONG FileId)
++{
++    ARC_STATUS Status;
++    DEVICE* pDevice;
++    PCSTR FileName;
++    OPENMODE DeviceOpenMode;
++    ULONG DeviceId;
++
++    /* Validate parameters */
++    if (!FileId)
++        return EINVAL;
++
++    *FileId = MAX_FDS;
++
++    if (!Path || !*Path)
++        return ENODEV; // ENOENT;
++
++    /* Print status message */
++    TRACE("Opening file '%s'...\n", Path);
++
++//
++// BUGBUG: The following "logic" will fail in case the filename part
++// of the path contains legitimate '(' or ')' characters.
++//
++    /* Search last ')', which delimits device and path */
++    FileName = strrchr(Path, ')');
++    if (!FileName)
++        return ENODEV;
++    ++FileName;
++
++    /* Open the underlying device */
++    if (OpenMode == OpenReadOnly || OpenMode == OpenWriteOnly)
++        DeviceOpenMode = OpenMode;
++    else
++        DeviceOpenMode = OpenReadWrite;
++
++    Status = ArcDeviceOpen(Path, DeviceOpenMode, &DeviceId);
++    if (Status != ESUCCESS)
++        return Status;
++
++    if (!*FileName)
++    {
++        /* Done, the caller wanted to open the raw device */
++        *FileId = DeviceId;
++        return ESUCCESS;
++    }
++
++    /* Open the file, given the already-opened device */
++    return ArcOpen2(DeviceId, FileName, OpenMode, FileId);
++}
++
+@@ -323,7 +659,7 @@ FsOpenFile(
+ /*
+  * FsGetNumPathParts()
+  * This function parses a path in the form of dir1\dir2\file1.ext
+- * and returns the number of parts it has (i.e. 3 - dir1,dir2,file1.ext)
++ * and returns the number of parts it has (i.e. 3 - dir1,dir2,file1.ext).
+  */
+ ULONG FsGetNumPathParts(PCSTR Path)
+ {
+@@ -351,7 +687,7 @@ ULONG FsGetNumPathParts(PCSTR Path)
+  * FsGetFirstNameFromPath()
+  * This function parses a path in the form of dir1\dir2\file1.ext
+  * and puts the first name of the path (e.g. "dir1") in buffer
+- * compatible with the MSDOS directory structure
++ * compatible with the MSDOS directory structure.
+  */
+ VOID FsGetFirstNameFromPath(PCHAR Buffer, PCSTR Path)
+ {
+@@ -380,21 +716,22 @@ VOID FsGetFirstNameFromPath(PCHAR Buffer, PCSTR Path)
+     TRACE("FsGetFirstNameFromPath() Path = %s FirstName = %s\n", Path, Buffer);
+ }
+ 
+-VOID FsRegisterDevice(CHAR* Prefix, const DEVVTBL* FuncTable)
++VOID FsRegisterDevice(IN PCSTR DeviceName, IN const DEVVTBL* FuncTable)
+ {
+     DEVICE* pNewEntry;
+     SIZE_T Length;
+ 
+-    TRACE("FsRegisterDevice() Prefix = %s\n", Prefix);
++    TRACE("FsRegisterDevice(DeviceName = %s)\n", DeviceName);
+ 
+-    Length = strlen(Prefix) + 1;
++    Length = strlen(DeviceName) + 1;
+     pNewEntry = FrLdrTempAlloc(sizeof(DEVICE) + Length, TAG_DEVICE);
+     if (!pNewEntry)
+         return;
+     pNewEntry->FuncTable = FuncTable;
+     pNewEntry->ReferenceCount = 0;
+-    pNewEntry->Prefix = (CHAR*)(pNewEntry + 1);
+-    memcpy(pNewEntry->Prefix, Prefix, Length);
++    pNewEntry->DeviceId = MAX_FDS;
++    pNewEntry->DeviceName = (PCSTR)(pNewEntry + 1);
++    memcpy(pNewEntry->DeviceName, DeviceName, Length);
+ 
+     InsertHeadList(&DeviceListHead, &pNewEntry->ListEntry);
+ }
+@@ -420,6 +757,13 @@ VOID* FsGetDeviceSpecific(ULONG FileId)
+     return FileData[FileId].Specific;
+ }
+ 
++VOID* FsGetFileSpecific(ULONG FileId) // FIXME naming...
++{
++    if (FileId >= MAX_FDS || !FileData[FileId].FuncTable)
++        return NULL;
++    return FileData[FileId].FileSpecific;
++}
++
+ ULONG FsGetDeviceId(ULONG FileId)
+ {
+     if (FileId >= MAX_FDS)
