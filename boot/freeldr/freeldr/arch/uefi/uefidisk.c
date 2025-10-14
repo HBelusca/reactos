@@ -15,7 +15,7 @@ DBG_DEFAULT_CHANNEL(WARNING);
 #define TAG_HW_RESOURCE_LIST    'lRwH'
 #define TAG_HW_DISK_CONTEXT     'cDwH'
 #define FIRST_BIOS_DISK 0x80
-#define FIRST_PARTITION 1
+#define FIRST_PARTITION 1 // TODO: Remove
 
 typedef struct tagDISKCONTEXT
 {
@@ -29,9 +29,9 @@ typedef struct tagDISKCONTEXT
 typedef struct _INTERNAL_UEFI_DISK
 {
     UCHAR ArcDriveNumber;
-    UCHAR NumOfPartitions;
     UCHAR UefiRootNumber;
     BOOLEAN IsThisTheBootDrive;
+    ULONG NumOfPartitions; // FIXME: Unused
 } INTERNAL_UEFI_DISK, *PINTERNAL_UEFI_DISK;
 
 /* GLOBALS *******************************************************************/
@@ -63,13 +63,6 @@ static EFI_HANDLE* handles = NULL;
 
 /* FUNCTIONS *****************************************************************/
 
-PCHAR
-GetHarddiskIdentifier(UCHAR DriveNumber)
-{
-    TRACE("GetHarddiskIdentifier: DriveNumber: %d\n", DriveNumber);
-    return PcDiskIdentifier[DriveNumber - FIRST_BIOS_DISK];
-}
-
 static LONG lReportError = 0; // >= 0: display errors; < 0: hide errors.
 
 LONG
@@ -84,15 +77,17 @@ DiskReportError(BOOLEAN bShowError)
 static
 BOOLEAN
 UefiGetBootPartitionEntry(
-    IN UCHAR DriveNumber,
-    OUT PPARTITION_TABLE_ENTRY PartitionTableEntry,
-    OUT PULONG BootPartition)
+    _In_ UCHAR DriveNumber,
+    _Out_opt_ PPARTITION_INFORMATION PartitionEntry,
+    _Out_ PULONG BootPartition)
 {
     ULONG PartitionNum;
 
+    UNREFERENCED_PARAMETER(PartitionEntry);
+
     TRACE("UefiGetBootPartitionEntry: DriveNumber: %d\n", DriveNumber - FIRST_BIOS_DISK);
     /* UefiBootRoot is the offset into the array of handles where the raw disk of the boot drive is.
-     * Partitions start with 1 in ARC, but UEFI root drive identitfier is also first partition. */
+     * Partitions start with 1 in ARC, but UEFI root drive identifier is also first partition. */
     PartitionNum = (OffsetToBoot - UefiBootRootIdentifier);
     if (PartitionNum == 0)
     {
@@ -144,10 +139,9 @@ UefiDiskOpen(CHAR *Path, OPENMODE OpenMode, ULONG *FileId)
     DISKCONTEXT* Context;
     UCHAR DriveNumber;
     ULONG DrivePartition, SectorSize;
+    GEOMETRY Geometry;
     ULONGLONG SectorOffset = 0;
     ULONGLONG SectorCount = 0;
-    ULONG UefiDriveNumber = 0;
-    PARTITION_TABLE_ENTRY PartitionTableEntry;
 
     TRACE("UefiDiskOpen: File ID: %d, Path: %s\n", FileId, Path);
 
@@ -162,30 +156,45 @@ UefiDiskOpen(CHAR *Path, OPENMODE OpenMode, ULONG *FileId)
         return EINVAL;
 
     TRACE("Opening disk: DriveNumber: %d, DrivePartition: %d\n", DriveNumber, DrivePartition);
-    UefiDriveNumber = DriveNumber - FIRST_BIOS_DISK;
-    GlobalSystemTable->BootServices->HandleProtocol(handles[UefiDriveNumber], &bioGuid, (void**)&bio);
-    SectorSize = bio->Media->BlockSize;
+
+    if (!MachDiskGetDriveGeometry(DriveNumber, &Geometry))
+        return EIO;
+    SectorSize = Geometry.BytesPerSector;
 
     if (DrivePartition != 0xff && DrivePartition != 0)
     {
-        if (!DiskGetPartitionEntry(DriveNumber, DrivePartition, &PartitionTableEntry))
-            return EINVAL;
+        /*
+         * NOTE: *FileId is the candidate for the multi()disk()rdisk()partition()
+         * being opened, and already has a FuncTable set. We could open the
+         * underlying disk by building its path name, without partition(),
+         * opening it and doing the job; or, we can temporarily reopen the
+         * disk by using a temporary DISKCONTEXT and using the *FileId slot
+         * just for this purpose. Afterwards, we release it so that it can be
+         * used for its initial intended purpose.
+         *
+         * Ideally we would like to find the parent disk...
+         */
+        DISKCONTEXT TempContext;
 
-        SectorOffset = PartitionTableEntry.SectorCountBeforePartition;
-        SectorCount = PartitionTableEntry.PartitionSectorCount;
+        TempContext.DriveNumber = DriveNumber;
+        TempContext.SectorSize = SectorSize;
+        TempContext.SectorOffset = 0; // RAW disk, i.e. partition 0
+        TempContext.SectorCount = Geometry.Sectors;
+        TempContext.SectorNumber = 0;
+
+        FsSetDeviceSpecific(*FileId, &TempContext);
+        BOOLEAN Success = DiskGetPartitionSize(NULL, *FileId, SectorSize,
+                                               DrivePartition, &SectorOffset, &SectorCount);
+        FsSetDeviceSpecific(*FileId, NULL);
+
+        if (!Success)
+            return EIO;
+
+        SectorOffset /= SectorSize;
+        SectorCount /= SectorSize;
     }
     else
     {
-        GEOMETRY Geometry;
-        if (!MachDiskGetDriveGeometry(DriveNumber, &Geometry))
-            return EINVAL;
-
-        if (SectorSize != Geometry.BytesPerSector)
-        {
-            ERR("SectorSize (%lu) != Geometry.BytesPerSector (%lu), expect problems!\n",
-                SectorSize, Geometry.BytesPerSector);
-        }
-
         SectorOffset = 0;
         SectorCount = Geometry.Sectors;
     }
@@ -295,22 +304,40 @@ static const DEVVTBL UefiDiskVtbl =
     UefiDiskSeek,
 };
 
+
+PCHAR
+GetHarddiskIdentifier(UCHAR DriveNumber)
+{
+    TRACE("GetHarddiskIdentifier: DriveNumber: %d\n", DriveNumber);
+    return PcDiskIdentifier[DriveNumber - FIRST_BIOS_DISK];
+}
+
+static ULONG
+GenSectorChecksum(
+    _In_ const VOID* Sector,
+    _In_ ULONG SectorSize)
+{
+    const ULONG* Buffer = (const ULONG*)Sector;
+    ULONG Checksum, i;
+
+    Checksum = 0;
+    for (i = 0; i < SectorSize / sizeof(ULONG); ++i)
+    {
+        Checksum += Buffer[i];
+    }
+    Checksum = ~Checksum + 1;
+    return Checksum;
+}
+
 static
 VOID
 GetHarddiskInformation(UCHAR DriveNumber)
 {
     PMASTER_BOOT_RECORD Mbr;
-    PULONG Buffer;
-    ULONG i;
-    ULONG Checksum;
-    ULONG Signature;
+    ULONG Signature, Checksum;
     BOOLEAN ValidPartitionTable;
-    CHAR ArcName[MAX_PATH];
-    PARTITION_TABLE_ENTRY PartitionTableEntry;
     PCHAR Identifier = PcDiskIdentifier[DriveNumber - FIRST_BIOS_DISK];
-
-    /* Detect disk partition type */
-    DiskDetectPartitionType(DriveNumber);
+    CHAR ArcName[MAX_PATH];
 
     /* Read the MBR */
     if (!MachDiskReadLogicalSectors(DriveNumber, 0ULL, 1, DiskReadBuffer))
@@ -320,46 +347,23 @@ GetHarddiskInformation(UCHAR DriveNumber)
         sprintf(Identifier, "BIOSDISK%d", DriveNumber - FIRST_BIOS_DISK);
         return;
     }
-
-    Buffer = (ULONG*)DiskReadBuffer;
     Mbr = (PMASTER_BOOT_RECORD)DiskReadBuffer;
-
     Signature = Mbr->Signature;
     TRACE("Signature: %x\n", Signature);
 
     /* Calculate the MBR checksum */
-    Checksum = 0;
-    for (i = 0; i < 512 / sizeof(ULONG); i++)
-    {
-        Checksum += Buffer[i];
-    }
-    Checksum = ~Checksum + 1;
+    Checksum = GenSectorChecksum(DiskReadBuffer, 512);
     TRACE("Checksum: %x\n", Checksum);
 
     ValidPartitionTable = (Mbr->MasterBootRecordMagic == 0xAA55);
 
     /* Fill out the ARC disk block */
-    sprintf(ArcName, "multi(0)disk(0)rdisk(%u)", DriveNumber - FIRST_BIOS_DISK);
+    RtlStringCbPrintfA(ArcName, sizeof(ArcName),
+                       "multi(0)disk(0)rdisk(%u)",
+                       DriveNumber - FIRST_BIOS_DISK);
     AddReactOSArcDiskInfo(ArcName, Signature, Checksum, ValidPartitionTable);
+    // FsRegisterDevice(ArcName, &DiskVtbl);
 
-    sprintf(ArcName, "multi(0)disk(0)rdisk(%u)partition(0)", DriveNumber - FIRST_BIOS_DISK);
-    FsRegisterDevice(ArcName, &UefiDiskVtbl);
-
-    /* Add partitions */
-    i = FIRST_PARTITION;
-    DiskReportError(FALSE);
-    while (DiskGetPartitionEntry(DriveNumber, i, &PartitionTableEntry))
-    {
-        if (PartitionTableEntry.SystemIndicator != PARTITION_ENTRY_UNUSED)
-        {
-            sprintf(ArcName, "multi(0)disk(0)rdisk(%u)partition(%lu)", DriveNumber - FIRST_BIOS_DISK, i);
-            FsRegisterDevice(ArcName, &UefiDiskVtbl);
-        }
-        i++;
-    }
-    DiskReportError(TRUE);
-
-    InternalUefiDisk[DriveNumber].NumOfPartitions = i;
     /* Convert checksum and signature to identifier string */
     Identifier[0] = Hex[(Checksum >> 28) & 0x0F];
     Identifier[1] = Hex[(Checksum >> 24) & 0x0F];
@@ -382,6 +386,11 @@ GetHarddiskInformation(UCHAR DriveNumber)
     Identifier[18] = (ValidPartitionTable ? 'A' : 'X');
     Identifier[19] = 0;
     TRACE("Identifier: %s\n", Identifier);
+
+    /* Enumerate and add the ARC device partitions */
+    DiskReportError(FALSE);
+    (void)PartRegisterDevicePartitions(ArcName, &UefiDiskVtbl, 512 /*FIXME*/, &InternalUefiDisk[DriveNumber].NumOfPartitions);
+    DiskReportError(TRUE);
 }
 
 static
@@ -460,23 +469,22 @@ static
 BOOLEAN
 UefiSetBootpath(VOID)
 {
-   TRACE("UefiSetBootpath: Setting up boot path\n");
-   GlobalSystemTable->BootServices->HandleProtocol(handles[UefiBootRootIdentifier], &bioGuid, (void**)&bio);
-   FrldrBootDrive = (FIRST_BIOS_DISK + PublicBootArcDisk);
-   if (bio->Media->RemovableMedia == TRUE && bio->Media->BlockSize == 2048)
-   {
+    TRACE("UefiSetBootpath: Setting up boot path\n");
+    GlobalSystemTable->BootServices->HandleProtocol(handles[UefiBootRootIdentifier], &bioGuid, (void**)&bio);
+    FrldrBootDrive = (FIRST_BIOS_DISK + PublicBootArcDisk);
+    if (bio->Media->RemovableMedia == TRUE && bio->Media->BlockSize == 2048)
+    {
         /* Boot Partition 0xFF is the magic value that indicates booting from CD-ROM (see isoboot.S) */
         FrldrBootPartition = 0xFF;
         RtlStringCbPrintfA(FrLdrBootPath, sizeof(FrLdrBootPath),
                            "multi(0)disk(0)cdrom(%u)", PublicBootArcDisk);
-   }
-   else
-   {
+    }
+    else
+    {
         ULONG BootPartition;
-        PARTITION_TABLE_ENTRY PartitionEntry;
 
-        /* This is a hard disk */
-        if (!UefiGetBootPartitionEntry(FrldrBootDrive, &PartitionEntry, &BootPartition))
+        /* This is a hard disk. Find the boot partition. */
+        if (!UefiGetBootPartitionEntry(FrldrBootDrive, NULL, &BootPartition))
         {
             ERR("Failed to get boot partition entry\n");
             return FALSE;
@@ -503,10 +511,7 @@ UefiInitializeBootDevices(VOID)
     if (bio->Media->RemovableMedia == TRUE && bio->Media->BlockSize == 2048)
     {
         PMASTER_BOOT_RECORD Mbr;
-        PULONG Buffer;
-        ULONG Checksum = 0;
-        ULONG Signature;
-        ULONG i;
+        ULONG Signature, Checksum;
 
         /* Read the MBR */
         if (!MachDiskReadLogicalSectors(FrldrBootDrive, 16ULL, 1, DiskReadBuffer))
@@ -514,19 +519,12 @@ UefiInitializeBootDevices(VOID)
             ERR("Reading MBR failed\n");
             return FALSE;
         }
-
-        Buffer = (ULONG*)DiskReadBuffer;
         Mbr = (PMASTER_BOOT_RECORD)DiskReadBuffer;
-
         Signature = Mbr->Signature;
         TRACE("Signature: %x\n", Signature);
 
         /* Calculate the MBR checksum */
-        for (i = 0; i < 2048 / sizeof(ULONG); i++)
-        {
-            Checksum += Buffer[i];
-        }
-        Checksum = ~Checksum + 1;
+        Checksum = GenSectorChecksum(DiskReadBuffer, 2048);
         TRACE("Checksum: %x\n", Checksum);
 
         /* Fill out the ARC disk block */
@@ -545,6 +543,14 @@ UefiGetFloppyCount(VOID)
     /* No floppy for you for now... */
     return 0;
 }
+
+
+//
+// FIXME: These are old-style functions that should be replaced in the future.
+// They are used only in this file and in cache/blocklist.c and cache.c
+// (that latter module should be rewritten).
+// Their implementation could be used within this file (instead of the Mach* ones).
+//
 
 BOOLEAN
 UefiDiskReadLogicalSectors(

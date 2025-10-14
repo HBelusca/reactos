@@ -121,6 +121,9 @@
 @ cdecl StallExecutionProcessor()
 @ cdecl MachGetBootSectorLoadAddress()
 
+@ cdecl DiskGetPartitionSize(str long long long ptr ptr)
+@ cdecl PartRegisterDevicePartitions(str ptr long ptr)
+
 # Additional stuff for scsiport
 @ stdcall CpDoesPortExist(ptr)
 @ stdcall CpEnableFifo(ptr long)

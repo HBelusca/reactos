@@ -251,9 +251,38 @@ static ARC_STATUS DiskOpen(CHAR* Path, OPENMODE OpenMode, ULONG* FileId)
 
     if (Partition != 0)
     {
-        /* Need to offset start of disk and length */
-        UNIMPLEMENTED;
-        return EIO;
+        /*
+         * NOTE: *FileId is the candidate for the multi()disk()rdisk()partition()
+         * being opened, and already has a FuncTable set. We could open the
+         * underlying disk by building its path name, without partition(),
+         * opening it and doing the job; or, we can temporarily reopen the
+         * disk by using a temporary DISKCONTEXT and using the *FileId slot
+         * just for this purpose. Afterwards, we release it so that it can be
+         * used for its initial intended purpose.
+         *
+         * Ideally we would like to find the parent disk...
+         */
+        DISKCONTEXT TempContext;
+
+        TempContext.DeviceExtension = DeviceExtension;
+        TempContext.PathId = (UCHAR)PathId;
+        TempContext.TargetId = (UCHAR)TargetId;
+        TempContext.Lun = (UCHAR)Lun;
+        TempContext.SectorSize = SectorSize;
+        TempContext.SectorOffset = 0; // RAW disk, i.e. partition 0
+        TempContext.SectorCount = SectorCount;
+        TempContext.SectorNumber = 0;
+
+        FsSetDeviceSpecific(*FileId, &TempContext);
+        BOOLEAN Success = DiskGetPartitionSize(NULL, *FileId, SectorSize,
+                                               Partition, &SectorOffset, &SectorCount);
+        FsSetDeviceSpecific(*FileId, NULL);
+
+        if (!Success)
+            return EIO;
+
+        SectorOffset /= SectorSize;
+        SectorCount /= SectorSize;
     }
 
     Context = ExAllocatePool(PagedPool, sizeof(DISKCONTEXT));
@@ -834,46 +863,16 @@ ScsiPortGetVirtualAddress(
 static
 VOID
 SpiScanDevice(
-    IN PSCSI_PORT_DEVICE_EXTENSION DeviceExtension,
-    IN PCHAR ArcName,
-    IN ULONG ScsiBus,
-    IN ULONG TargetId,
-    IN ULONG Lun)
+    _In_ PSCSI_PORT_DEVICE_EXTENSION DeviceExtension,
+    _In_ PCSTR ArcName,
+    _In_ ULONG ScsiBus,
+    _In_ ULONG TargetId,
+    _In_ ULONG Lun)
 {
-    ULONG FileId, i;
-    ARC_STATUS Status;
-    NTSTATUS ret;
-    struct _DRIVE_LAYOUT_INFORMATION *PartitionBuffer;
-    CHAR PartitionName[64];
-
-    /* Register device with partition(0) suffix */
-    RtlStringCbPrintfA(PartitionName, sizeof(PartitionName), "%spartition(0)", ArcName);
-    FsRegisterDevice(PartitionName, &DiskVtbl);
-
-    /* Read device partition table */
-    Status = ArcOpen(PartitionName, OpenReadOnly, &FileId);
-    if (Status == ESUCCESS)
-    {
-        ret = HALDISPATCH->HalIoReadPartitionTable((PDEVICE_OBJECT)(ULONG_PTR)FileId,
-                                                   512, FALSE, &PartitionBuffer);
-        if (NT_SUCCESS(ret))
-        {
-            for (i = 0; i < PartitionBuffer->PartitionCount; i++)
-            {
-                if (PartitionBuffer->PartitionEntry[i].PartitionType != PARTITION_ENTRY_UNUSED)
-                {
-                    RtlStringCbPrintfA(PartitionName,
-                                       sizeof(PartitionName),
-                                       "%spartition(%lu)",
-                                       ArcName,
-                                       PartitionBuffer->PartitionEntry[i].PartitionNumber);
-                    FsRegisterDevice(PartitionName, &DiskVtbl);
-                }
-            }
-            ExFreePool(PartitionBuffer);
-        }
-        ArcClose(FileId);
-    }
+    // TODO: Do any extra initialization
+    UNREFERENCED_PARAMETER(ScsiBus);
+    UNREFERENCED_PARAMETER(TargetId);
+    UNREFERENCED_PARAMETER(Lun);
 }
 
 static
@@ -934,6 +933,7 @@ SpiScanAdapter(
              * - SEQUENTIAL_ACCESS_DEVICE i.e. Tape,
              * - WRITE_ONCE_READ_MULTIPLE_DEVICE i.e. Worm.
              */
+            *ArcName = ANSI_NULL;
             if ((InquiryBuffer.DeviceType == DIRECT_ACCESS_DEVICE) ||
                 (InquiryBuffer.DeviceType == OPTICAL_DEVICE))
             {
@@ -952,8 +952,9 @@ SpiScanAdapter(
                     RtlStringCbPrintfA(ArcName, sizeof(ArcName),
                                        "scsi(%lu)disk(%u)rdisk(%u)",
                                        ScsiBus, TargetId, Lun);
-                    /* Now, check if it has partitions */
-                    SpiScanDevice(DeviceExtension, ArcName, PathId, TargetId, Lun);
+                    // FsRegisterDevice(ArcName, &DiskVtbl);
+                    /* Enumerate and add the ARC device partitions */
+                    (void)PartRegisterDevicePartitions(ArcName, &DiskVtbl, 512 /*FIXME*/, NULL);
                 }
             }
             else if (InquiryBuffer.DeviceType == READ_ONLY_DIRECT_ACCESS_DEVICE)
@@ -964,6 +965,10 @@ SpiScanAdapter(
                                    ScsiBus, TargetId, Lun);
                 FsRegisterDevice(ArcName, &DiskVtbl);
             }
+
+            /* Perform any extra initialization on this device */
+            if (*ArcName)
+                SpiScanDevice(DeviceExtension, ArcName, PathId, TargetId, Lun);
         }
     }
 }

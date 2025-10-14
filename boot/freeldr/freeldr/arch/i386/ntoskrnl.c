@@ -57,8 +57,7 @@ IoSetPartitionInformation(
 }
 
 #ifndef _M_AMD64
-NTSTATUS
-NTAPI
+static NTSTATUS
 IopReadBootRecord(
     IN PDEVICE_OBJECT DeviceObject,
     IN ULONGLONG LogicalSectorNumber,
@@ -82,8 +81,7 @@ IopReadBootRecord(
     return STATUS_SUCCESS;
 }
 
-BOOLEAN
-NTAPI
+static BOOLEAN
 IopCopyPartitionRecord(
     IN BOOLEAN ReturnRecognizedPartitions,
     IN ULONG SectorSize,

@@ -68,30 +68,23 @@ typedef struct _MASTER_BOOT_RECORD
 /*
  * Partition type defines (of PSDK)
  */
-#define PARTITION_ENTRY_UNUSED          0x00      // Entry unused
-#define PARTITION_FAT_12                0x01      // 12-bit FAT entries
-#define PARTITION_XENIX_1               0x02      // Xenix
-#define PARTITION_XENIX_2               0x03      // Xenix
-#define PARTITION_FAT_16                0x04      // 16-bit FAT entries
-#define PARTITION_EXTENDED              0x05      // Extended partition entry
-#define PARTITION_HUGE                  0x06      // Huge partition MS-DOS V4
-#define PARTITION_IFS                   0x07      // IFS Partition
-#define PARTITION_OS2BOOTMGR            0x0A      // OS/2 Boot Manager/OPUS/Coherent swap
-#define PARTITION_FAT32                 0x0B      // FAT32
-#define PARTITION_FAT32_XINT13          0x0C      // FAT32 using extended int13 services
-#define PARTITION_XINT13                0x0E      // Win95 partition using extended int13 services
-#define PARTITION_XINT13_EXTENDED       0x0F      // Same as type 5 but uses extended int13 services
-#define PARTITION_NTFS                  0x17      // NTFS
-#define PARTITION_PREP                  0x41      // PowerPC Reference Platform (PReP) Boot Partition
-#define PARTITION_LDM                   0x42      // Logical Disk Manager partition
-#define PARTITION_UNIX                  0x63      // Unix
-#define VALID_NTFT                      0xC0      // NTFT uses high order bits
-#define PARTITION_NTFT                  0x80      // NTFT partition
-#define PARTITION_GPT                   0xEE      // GPT protective partition
-#ifdef __REACTOS__
-#define PARTITION_OLD_LINUX             0x43
-#define PARTITION_LINUX                 0x83
-#endif
+#define PARTITION_ENTRY_UNUSED      0x00    // Entry unused
+#define PARTITION_EXTENDED          0x05    // Extended partition entry
+#define PARTITION_XINT13            0x0E    // Win95 partition using extended int13 services
+#define PARTITION_XINT13_EXTENDED   0x0F    // Same as type 5 but uses extended int13 services
+
+#define PARTITION_PREP              0x41    // PowerPC Reference Platform (PReP) Boot Partition
+#define PARTITION_LDM               0x42    // Logical Disk Manager partition
+#define VALID_NTFT                  0xC0    // NTFT uses high order bits
+#define PARTITION_NTFT              0x80    // NTFT partition
+#define PARTITION_GPT               0xEE    // GPT protective partition
+// 0xEF // GPT system partition
+
+#define PARTITION_FAT_12        0x01    // 12-bit FAT entries
+#define PARTITION_FAT_16        0x04    // 16-bit FAT entries
+#define PARTITION_HUGE          0x06    // Huge partition MS-DOS V4
+#define PARTITION_FAT32         0x0B    // FAT32
+#define PARTITION_FAT32_XINT13  0x0C    // FAT32 using extended int13 services
 
 ///////////////////////////////////////////////////////////////////////////////////////
 //
@@ -117,21 +110,39 @@ extern CCHAR FrLdrBootPath[MAX_PATH];
 //
 ///////////////////////////////////////////////////////////////////////////////////////
 
-VOID
-DiskDetectPartitionType(
-    IN UCHAR DriveNumber);
-
 BOOLEAN
 DiskGetBootPartitionEntry(
-    IN UCHAR DriveNumber,
-    OUT PPARTITION_TABLE_ENTRY PartitionTableEntry,
-    OUT PULONG BootPartition);
+    _In_opt_ PCSTR DiskDeviceName,
+    _In_opt_ ULONG DeviceId,
+    _In_ ULONG SectorSize,
+    _Out_opt_ PPARTITION_INFORMATION PartitionEntry,
+    _Out_ PULONG BootPartition);
 
 BOOLEAN
 DiskGetPartitionEntry(
-    IN UCHAR DriveNumber,
-    IN ULONG PartitionNumber,
-    OUT PPARTITION_TABLE_ENTRY PartitionTableEntry);
+    _In_opt_ PCSTR DiskDeviceName,
+    _In_opt_ ULONG DeviceId,
+    _In_ ULONG SectorSize,
+    _In_ ULONG PartitionNumber,
+    _Out_ PPARTITION_INFORMATION PartitionEntry);
+
+BOOLEAN
+DiskGetPartitionSize(
+    _In_opt_ PCSTR DiskDeviceName,
+    _In_opt_ ULONG DeviceId,
+    _In_ ULONG SectorSize,
+    _In_ ULONG PartitionNumber,
+    _Out_ PULONGLONG StartingOffset,
+    _Out_ PULONGLONG Length);
+
+typedef struct tagDEVVTBL DEVVTBL;
+
+ARC_STATUS
+PartRegisterDevicePartitions(
+    _In_ PCSTR DeviceName,
+    _In_ const DEVVTBL* FuncTable,
+    _In_ ULONG SectorSize,
+    _Out_opt_ PULONG NumPartitions);
 
 /*
  * SCSI support (disk/scsiport.c)
