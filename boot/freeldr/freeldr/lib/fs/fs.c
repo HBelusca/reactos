@@ -24,6 +24,10 @@
 
 #include <debug.h>
 DBG_DEFAULT_CHANNEL(FILESYSTEM);
+#undef TRACE
+#undef WARN
+#define TRACE ERR
+#define WARN  ERR
 
 /* GLOBALS ********************************************************************/
 

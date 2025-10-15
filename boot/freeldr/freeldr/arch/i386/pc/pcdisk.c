@@ -319,7 +319,7 @@ DiskGetExtendedDriveParameters(
     PEXTENDED_GEOMETRY Ptr = (PEXTENDED_GEOMETRY)BIOSCALLBUFFER;
     REGS RegsIn, RegsOut;
 
-    TRACE("DiskGetExtendedDriveParameters(0x%x)\n", DriveNumber);
+    ERR("DiskGetExtendedDriveParameters(0x%x)\n", DriveNumber);
 
     if (!DiskDrive->Int13ExtensionsSupported || (BufferSize < sizeof(*Ptr)))
         return FALSE;
@@ -426,7 +426,7 @@ InitDriveGeometry(
                                              sizeof(DiskDrive->ExtGeometry));
     if (Success)
     {
-        TRACE("DiskGetExtendedDriveParameters(0x%x) returned:\n"
+        ERR("DiskGetExtendedDriveParameters(0x%x) returned:\n"
               "Cylinders  : 0x%x\n"
               "Heads      : 0x%x\n"
               "Sects/Track: 0x%x\n"
@@ -489,7 +489,7 @@ InitDriveGeometry(
                                              DiskDrive->Geometry.Heads *
                                              DiskDrive->Geometry.SectorsPerTrack;
 
-    TRACE("Regular Int13h(0x%x) returned:\n"
+    ERR("Regular Int13h(0x%x) returned:\n"
           "Cylinders  : 0x%x\n"
           "Heads      : 0x%x\n"
           "Sects/Track: 0x%x\n"
@@ -522,7 +522,7 @@ PcDiskDriveInit(
     if (!InitDriveGeometry(DriveNumber, DiskDrive))
         return FALSE;
 
-    TRACE("\n"
+    ERR("\n"
           "DriveNumber: 0x%x\n"
           "IsRemovable              = %s\n"
           "Int13ExtensionsSupported = %s\n",
@@ -827,7 +827,7 @@ PcDiskGetDriveGeometry(UCHAR DriveNumber, PGEOMETRY Geometry)
 {
     PPC_DISK_DRIVE DiskDrive;
 
-    TRACE("PcDiskGetDriveGeometry(0x%x)\n", DriveNumber);
+    ERR("PcDiskGetDriveGeometry(0x%x)\n", DriveNumber);
 
     DiskDrive = PcDiskDriveNumberToDrive(DriveNumber);
     if (!DiskDrive)

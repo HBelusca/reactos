@@ -23,6 +23,10 @@
 
 #include <debug.h>
 DBG_DEFAULT_CHANNEL(HWDETECT);
+#undef TRACE
+#undef WARN
+#define TRACE ERR
+#define WARN  ERR
 
 /*
  * This is the common code for harddisk for both the PC and the XBOX.
@@ -166,6 +170,8 @@ DiskRead(ULONG FileId, VOID* Buffer, ULONG N, ULONG* Count)
     BOOLEAN ret;
 
     ASSERT(DiskReadBufferSize > 0);
+
+ERR("DiskRead(%lu, BIOS drive 0x%x)\n", FileId, Context->DriveNumber);
 
     TotalSectors = (N + Context->SectorSize - 1) / Context->SectorSize;
     MaxSectors   = DiskReadBufferSize / Context->SectorSize;
