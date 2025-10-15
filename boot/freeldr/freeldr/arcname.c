@@ -134,9 +134,15 @@ DissectArcPath2(
         *PathSyntax = 2;
         return TRUE;
     }
-    /* Detect scsi()disk()rdisk()partition() */
+    /* Detect scsi()disk()rdisk()[partition()] - The partition is optional */
     else if (sscanf(ArcPath, "scsi(%lu)disk(%lu)rdisk(%lu)partition(%lu)", x, y, z, Partition) == 4)
     {
+        *PathSyntax = 0;
+        return TRUE;
+    }
+    else if (sscanf(ArcPath, "scsi(%lu)disk(%lu)rdisk(%lu)", x, y, z) == 3)
+    {
+        *Partition = 0;
         *PathSyntax = 0;
         return TRUE;
     }
@@ -147,23 +153,29 @@ DissectArcPath2(
         *PathSyntax = 0;
         return TRUE;
     }
-    /* Detect multi()disk()rdisk()partition() */
+    /* Detect multi()disk()rdisk()[partition()] - The partition is optional */
     else if (sscanf(ArcPath, "multi(%lu)disk(%lu)rdisk(%lu)partition(%lu)", x, y, z, Partition) == 4)
     {
+        *PathSyntax = 1;
+        return TRUE;
+    }
+    else if (sscanf(ArcPath, "multi(%lu)disk(%lu)rdisk(%lu)", x, y, z) == 3)
+    {
+        *Partition = 0;
         *PathSyntax = 1;
         return TRUE;
     }
     /* Detect multi()disk()cdrom() */
     else if (sscanf(ArcPath, "multi(%lu)disk(%lu)cdrom(%lu)", x, y, z) == 3)
     {
-        *Partition = 1;
+        *Partition = 0xFF; // Magic value that indicates booting from CD-ROM (see isoboot.S)
         *PathSyntax = 1;
         return TRUE;
     }
     /* Detect multi()disk()fdisk() */
     else if (sscanf(ArcPath, "multi(%lu)disk(%lu)fdisk(%lu)", x, y, z) == 3)
     {
-        *Partition = 1;
+        *Partition = 0;
         *PathSyntax = 1;
         return TRUE;
     }

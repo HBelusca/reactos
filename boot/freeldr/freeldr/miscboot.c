@@ -145,8 +145,13 @@ LoadAndBootSector(
         BiosDriveNumber = 0;
     if (!BiosDriveNumber)
     {
-        BiosDriveNumber = FrldrGetBootDrive();
-        PartitionNumber = FrldrGetBootPartition();
+        /* Retrieve the BIOS drive and partition numbers from the FreeLoader boot path */
+        PCSTR FrLdrBootPath = FrLdrGetBootPath();
+        if (!FrLdrBootPath || !DissectArcPath(FrLdrBootPath, NULL, &BiosDriveNumber, &PartitionNumber))
+        {
+            UiMessageBox("Currently unsupported FrLdrBootPath value:\n%s", FrLdrBootPath);
+            return EINVAL;
+        }
     }
 
 

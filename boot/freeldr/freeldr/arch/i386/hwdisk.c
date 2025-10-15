@@ -91,8 +91,9 @@ DiskOpen(CHAR* Path, OPENMODE OpenMode, ULONG* FileId)
 {
     DISKCONTEXT* Context;
     CONFIGURATION_TYPE DriveType;
-    UCHAR DriveNumber;
-    ULONG DrivePartition, SectorSize;
+    ULONG AdapterNumber, ControllerNumber, DriveNumber, DrivePartition;
+    ULONG PathSyntax;
+    ULONG SectorSize;
     GEOMETRY Geometry;
     ULONGLONG SectorOffset = 0;
     ULONGLONG SectorCount = 0;
@@ -104,8 +105,29 @@ DiskOpen(CHAR* Path, OPENMODE OpenMode, ULONG* FileId)
         return ENOMEM;
     }
 
-    if (!DissectArcPath(Path, NULL, &DriveNumber, &DrivePartition))
-        return EINVAL;
+    /* Parse ARC path */
+    if (!DissectArcPath2(Path, &AdapterNumber, &ControllerNumber,
+                         &DriveNumber, &DrivePartition, &PathSyntax))
+    {
+        return ENODEV;
+    }
+ERR("DissectArcPath2(%s):\n"
+    "    PathSyntax  %lu\n"
+    "    Adapter     %lu\n"
+    "    Controller  %lu\n"
+    "    DriveNumber %lu\n"
+    "    Partition   %lu\n\n",
+    Path, PathSyntax, AdapterNumber, ControllerNumber, DriveNumber, DrivePartition);
+    if (PathSyntax != 1) /* multi() format */
+        return ENODEV;
+    /* We only support drives on adapter/controller 0/0 */
+    if (AdapterNumber != 0 || ControllerNumber != 0)
+        return ENODEV;
+
+    /* Convert the DriveNumber to a BIOS number */
+    if (strstr(Path, ")rdisk(") || strstr(Path, ")cdrom("))
+        DriveNumber += FIRST_BIOS_DISK;
+ERR("  --> BIOS drive number %lu\n", DriveNumber);
 
     DriveType = DiskGetConfigType(DriveNumber);
 
@@ -313,7 +335,7 @@ GetHarddiskInformation(UCHAR DriveNumber)
     {
         ERR("Reading MBR failed\n");
         /* We failed, use a default identifier */
-        sprintf(Identifier, "BIOSDISK%d", DriveNumber - FIRST_BIOS_DISK + 1);
+        sprintf(Identifier, "BIOSDISK%u", DriveNumber - FIRST_BIOS_DISK + 1);
         return;
     }
     Mbr = (PMASTER_BOOT_RECORD)DiskReadBuffer;
@@ -371,12 +393,12 @@ EnumerateHarddisks(OUT PBOOLEAN BootDriveReported)
 
     *BootDriveReported = FALSE;
 
+    ASSERT(DiskReadBufferSize > 0);
+
     /* Count the number of visible harddisk drives */
     DiskCount = 0;
     DriveNumber = FIRST_BIOS_DISK;
-
-    ASSERT(DiskReadBufferSize > 0);
-
+    DiskReportError(FALSE);
     /*
      * There are some really broken BIOSes out there. There are even BIOSes
      * that happily report success when you ask them to read from non-existent
@@ -384,7 +406,6 @@ EnumerateHarddisks(OUT PBOOLEAN BootDriveReported)
      * read. If the BIOS reports success but the buffer contents haven't
      * changed then we fail anyway.
      */
-    DiskReportError(FALSE);
     memset(DiskReadBuffer, 0xcd, DiskReadBufferSize);
     while (MachDiskReadLogicalSectors(DriveNumber, 0ULL, 1, DiskReadBuffer))
     {
@@ -395,8 +416,8 @@ EnumerateHarddisks(OUT PBOOLEAN BootDriveReported)
         }
         if (!Changed)
         {
-            TRACE("BIOS reports success for disk %d (0x%02X) but data didn't change\n",
-                  (int)DiskCount, DriveNumber);
+            TRACE("BIOS reports success for disk %u (0x%02X) but data didn't change\n",
+                  DiskCount, DriveNumber);
             break;
         }
 
@@ -408,14 +429,16 @@ EnumerateHarddisks(OUT PBOOLEAN BootDriveReported)
             *BootDriveReported = TRUE;
 
         DiskCount++;
+        if (DriveNumber >= 0xFF)
+            break;
         DriveNumber++;
         memset(DiskReadBuffer, 0xcd, DiskReadBufferSize);
     }
     DiskReportError(TRUE);
 
     PcBiosDiskCount = DiskCount;
-    TRACE("BIOS reports %d harddisk%s\n",
-          (int)DiskCount, (DiskCount == 1) ? "" : "s");
+    TRACE("BIOS reports %u harddisk%s\n",
+          DiskCount, (DiskCount == 1) ? "" : "s");
 
     return DiskCount;
 }
@@ -516,7 +539,7 @@ PcInitializeBootDevices(VOID)
 
         FsRegisterDevice(FrLdrBootPath, &DiskVtbl);
         DiskCount++; // This is not accounted for in the number of pre-enumerated BIOS drives!
-        TRACE("Additional boot drive detected: 0x%02X\n", (int)FrldrBootDrive);
+        TRACE("Additional boot drive detected: 0x%02X\n", FrldrBootDrive);
     }
 
     return (DiskCount != 0);

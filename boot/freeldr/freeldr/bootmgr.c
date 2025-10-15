@@ -183,7 +183,7 @@ BuildArgvForOsLoader(
     PCHAR* Argv;
     PCHAR* Args;
     PCHAR SettingName, SettingValue;
-    PCCHAR BootPath = FrLdrGetBootPath();
+    PCSTR BootPath = FrLdrGetBootPath();
 
     *pArgc = 0;
 

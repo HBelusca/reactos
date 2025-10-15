@@ -149,6 +149,4 @@ PartRegisterDevicePartitions(
  */
 ULONG LoadBootDeviceDriver(VOID);
 
-PCCHAR FrLdrGetBootPath(VOID);
-UCHAR FrldrGetBootDrive(VOID);
-ULONG FrldrGetBootPartition(VOID);
+PCSTR FrLdrGetBootPath(VOID);

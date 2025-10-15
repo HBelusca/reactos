@@ -193,17 +193,7 @@ double log10(double x)
     return 0.0;
 }
 
-PCCHAR FrLdrGetBootPath(VOID)
+PCSTR FrLdrGetBootPath(VOID)
 {
     return FrLdrBootPath;
-}
-
-UCHAR FrldrGetBootDrive(VOID)
-{
-    return FrldrBootDrive;
-}
-
-ULONG FrldrGetBootPartition(VOID)
-{
-    return FrldrBootPartition;
 }

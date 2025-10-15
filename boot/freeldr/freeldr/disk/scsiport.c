@@ -217,9 +217,9 @@ static ARC_STATUS DiskOpen(CHAR* Path, OPENMODE OpenMode, ULONG* FileId)
 
     /* Parse ARC path */
     if (!DissectArcPath2(Path, &ScsiBus, &TargetId, &Lun, &Partition, &PathSyntax))
-        return EINVAL;
+        return ENODEV;
     if (PathSyntax != 0) /* scsi() format */
-        return EINVAL;
+        return ENODEV;
     DeviceExtension = ScsiDeviceExtensions[ScsiBus];
     PathId = ScsiBus - DeviceExtension->BusNum;
 

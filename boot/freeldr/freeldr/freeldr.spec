@@ -100,8 +100,6 @@
 @ cdecl DissectArcPath()
 @ cdecl DiskStopFloppyMotor()
 @ cdecl DriveMapGetBiosDriveNumber()
-@ cdecl FrldrGetBootDrive()
-@ cdecl FrldrGetBootPartition()
 @ cdecl FrLdrGetBootPath()
 @ cdecl FsGetServiceName()
 @ cdecl FsOpenFile() # Why not ArcOpen?
