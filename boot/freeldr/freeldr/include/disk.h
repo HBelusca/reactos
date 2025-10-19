@@ -49,7 +49,7 @@ typedef struct _PARTITION_TABLE_ENTRY
     UCHAR   EndCylinder;                // Ending cylinder# (low order bits of cylinder #)
     ULONG   SectorCountBeforePartition; // Number of sectors preceding the partition
     ULONG   PartitionSectorCount;       // Number of sectors in the partition
-} PARTITION_TABLE_ENTRY, *PPARTITION_TABLE_ENTRY;
+} PARTITION_TABLE_ENTRY, *PPARTITION_TABLE_ENTRY; // i.e. PPARTITION_DESCRIPTOR
 
 /*
  * Define the structure of the master boot record
@@ -85,6 +85,13 @@ typedef struct _MASTER_BOOT_RECORD
 #define PARTITION_HUGE          0x06    // Huge partition MS-DOS V4
 #define PARTITION_FAT32         0x0B    // FAT32
 #define PARTITION_FAT32_XINT13  0x0C    // FAT32 using extended int13 services
+
+/* ReactOS custom partition handlers */
+#if defined(__REACTOS__) && !defined(PARTITION_STYLE_BRFR)
+#define PARTITION_STYLE_IPL1    127 /* NEC PC-98 IPL1 partitioning scheme */
+#define PARTITION_STYLE_BRFR    128 /* Xbox-BRFR partitioning scheme */
+#endif
+
 
 ///////////////////////////////////////////////////////////////////////////////////////
 //

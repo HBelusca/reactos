@@ -5,7 +5,6 @@
  *              protocol for MBR, GPT, and XBOX partitioned block devices.
  * COPYRIGHT:   Copyright 1998-2003 Brian Palmer <brianp@sginet.com>
  *              Copyright 2010 Hervé Poussineau <hpoussin@reactos.org>
- *              Copyright 2016 Wim Hueskes
  *              Copyright 2019 Stanislav Motylkov <x86corez@gmail.com>
  *              Copyright 2019-2025 Hermès Bélusca-Maïto <hermes.belusca-maito@reactos.org>
  */
@@ -21,8 +20,8 @@ DBG_DEFAULT_CHANNEL(DISK);
 #define WARN  ERR
 
 /* BRFR signature at disk offset 0x600 (== 3 * 0x200) */
-#define XBOX_SIGNATURE_SECTOR 3
-#define XBOX_SIGNATURE        ('B' | ('R' << 8) | ('F' << 16) | ('R' << 24))
+#define XBOX_SIGNATURE_SECTOR   3
+#define XBOX_SIGNATURE          ('B' | ('R' << 8) | ('F' << 16) | ('R' << 24))
 
 /* Default hardcoded partition number to boot from Xbox disk */
 #define FATX_DATA_PARTITION 1
@@ -42,8 +41,147 @@ static struct
     { 0x002EE400, 0x00177000, PARTITION_FAT_16 }  /* Cache3, Z: */
 };
 
+#if 0 // TODO: Investigate
+
+/* NEC PC-98 IPL1 signature at disk offset 4 */
+#define IPL1_SIGNATURE_OFFSET   4
+#define IPL1_SIGNATURE          ('I' | ('P' << 8) | ('L' << 16) | ('1' << 24))
+#define IPL1_NUM_PARTITION_TABLE_ENTRIES    8
+
+#include <pshpack1.h>
+
+typedef struct _IPL1_BOOT_RECORD
+{
+    UCHAR JumpBoot[4];          /* 0x000 */
+    ULONG IPL1Signature;        /* 0x004 - "IPL1" */
+    UCHAR CodeAndData[0xF6];    /* 0x008 */
+    USHORT BootRecordMagic;     /* 0x0FE */
+    // ULONG Signature;         /* 0x100 ??? */
+    PARTITION_TABLE_ENTRY PartitionTable[16];  /* 0x1BE */
+    USHORT BootRecordMagic;              /* 0x1FE */
+} IPL1_BOOT_RECORD, *PIPL1_BOOT_RECORD;
+
+/* PC-98 IPL1 partition table entry.
+ * Taken from GNU Parted source code.
+ * Maximum 16 entries. */
+typedef struct _PC98RawPartition
+{
+    uint8_t     mid;        /* 0x00: unused, 0x20: MS-DOS(not bootable), 0xa1-0xaf: MS-DOS(bootable) */
+    uint8_t     sid;        /* 0x00: unused, 0x81,0x91,0xa1,0xe1: MS-DOS(active), 0x01,0x11,0x21,0x61: MS-DOS(sleep) */
+    uint8_t     dum1;       /* dummy for padding */
+    uint8_t     dum2;       /* dummy for padding */
+    uint8_t     ipl_sect;   /* IPL sector */
+    uint8_t     ipl_head;   /* IPL head */
+    uint16_t    ipl_cyl;    /* IPL cylinder */
+    uint8_t     sector;     /* starting sector */
+    uint8_t     head;       /* starting head */
+    uint16_t    cyl;        /* starting cylinder */
+    uint8_t     end_sector; /* end sector */
+    uint8_t     end_head;   /* end head */
+    uint16_t    end_cyl;    /* end cylinder */
+    char        name[16];
+} PC98RawPartition, *PPC98RawPartition;
+
+#include <poppack.h>
+
+#endif // IPL1
+
 
 /* FUNCTIONS *****************************************************************/
+
+static PCSTR
+PartTypeToName(
+    _In_ PARTITION_STYLE PartitionStyle)
+{
+    static CHAR Unknown[] = "Unknown (0x??)";
+    switch (PartitionStyle)
+    {
+    case PARTITION_STYLE_MBR:
+        return "MBR";
+    case PARTITION_STYLE_GPT:
+        return "GPT";
+    case PARTITION_STYLE_RAW:
+        return "RAW";
+#ifdef __REACTOS__
+    /* ReactOS custom partition handlers */
+    case PARTITION_STYLE_IPL1:
+        return "NEC PC-98 IPL1";
+    case PARTITION_STYLE_BRFR:
+        return "Xbox-BRFR";
+#endif
+    default:
+        sprintf(Unknown, "Unknown (0x%02x)", (UCHAR)PartitionStyle);
+        return Unknown;
+    }
+}
+
+#if DBG
+static VOID
+DumpMbrPartitionTable(
+    _In_ ULONG DeviceId,
+    _In_ ULONGLONG LogicalSectorNumber,
+    _Out_ PMASTER_BOOT_RECORD BootRecord)
+{
+    ULONG Index;
+
+    TRACE("Dumping MBR partition table for drive 0x%x:\n", DeviceId);
+    TRACE("Boot record logical start sector = %llu\n", LogicalSectorNumber);
+    TRACE("sizeof(MASTER_BOOT_RECORD) = 0x%x\n", sizeof(MASTER_BOOT_RECORD));
+
+    for (Index = 0; Index < MBR_NUM_PARTITION_TABLE_ENTRIES; ++Index)
+    {
+        PPARTITION_TABLE_ENTRY PartitionTableEntry = &BootRecord->PartitionTable[Index];
+
+        TRACE("-------------------------------------------\n");
+        TRACE("Partition %u\n", (Index + 1));
+        TRACE("BootIndicator: 0x%x\n", PartitionTableEntry->BootIndicator);
+        TRACE("StartHead: 0x%x\n", PartitionTableEntry->StartHead);
+        TRACE("StartSector (Plus 2 cylinder bits): 0x%x\n", PartitionTableEntry->StartSector);
+        TRACE("StartCylinder: 0x%x\n", PartitionTableEntry->StartCylinder);
+        TRACE("SystemIndicator: 0x%x\n", PartitionTableEntry->SystemIndicator);
+        TRACE("EndHead: 0x%x\n", PartitionTableEntry->EndHead);
+        TRACE("EndSector (Plus 2 cylinder bits): 0x%x\n", PartitionTableEntry->EndSector);
+        TRACE("EndCylinder: 0x%x\n", PartitionTableEntry->EndCylinder);
+        TRACE("SectorCountBeforePartition: 0x%x\n", PartitionTableEntry->SectorCountBeforePartition);
+        TRACE("PartitionSectorCount: 0x%x\n", PartitionTableEntry->PartitionSectorCount);
+    }
+}
+
+#if 0 // TODO: Investigate
+static VOID
+DumpIPL1PartitionTable(
+    _In_ ULONG DeviceId,
+    _In_ ULONGLONG LogicalSectorNumber,
+    _Out_ PMASTER_BOOT_RECORD BootRecord)
+{
+    ULONG Index;
+
+    TRACE("Dumping IPL1 partition table for drive 0x%x:\n", DeviceId);
+    TRACE("Boot record logical start sector = %llu\n", LogicalSectorNumber);
+    TRACE("sizeof(MASTER_BOOT_RECORD) = 0x%x\n", sizeof(MASTER_BOOT_RECORD));
+
+    for (Index = 0; Index < IPL1_NUM_PARTITION_TABLE_ENTRIES; ++Index)
+    {
+        PPARTITION_TABLE_ENTRY PartitionTableEntry = &BootRecord->PartitionTable[IPL1_NUM_PARTITION_TABLE_ENTRIES - Index];
+
+        TRACE("-------------------------------------------\n");
+        TRACE("Partition %u\n", (Index + 1));
+        TRACE("BootIndicator: 0x%x\n", PartitionTableEntry->BootIndicator);
+        TRACE("StartHead: 0x%x\n", PartitionTableEntry->StartHead);
+        TRACE("StartSector (Plus 2 cylinder bits): 0x%x\n", PartitionTableEntry->StartSector);
+        TRACE("StartCylinder: 0x%x\n", PartitionTableEntry->StartCylinder);
+        TRACE("SystemIndicator: 0x%x\n", PartitionTableEntry->SystemIndicator);
+        TRACE("EndHead: 0x%x\n", PartitionTableEntry->EndHead);
+        TRACE("EndSector (Plus 2 cylinder bits): 0x%x\n", PartitionTableEntry->EndSector);
+        TRACE("EndCylinder: 0x%x\n", PartitionTableEntry->EndCylinder);
+        TRACE("SectorCountBeforePartition: 0x%x\n", PartitionTableEntry->SectorCountBeforePartition);
+        TRACE("PartitionSectorCount: 0x%x\n", PartitionTableEntry->PartitionSectorCount);
+
+        // TODO: Dump the PC-98-specific info found in the second sector.
+    }
+}
+#endif
+#endif
 
 // TODO: Move ntoskrnl.c!IopReadBootRecord() here and use it?
 /**
@@ -77,16 +215,26 @@ ERR("ArcRead(%lu) failed or read not completed (wanted %lu, got %lu), Status %lu
     return ESUCCESS;
 }
 
+#define MBR_NUM_PARTITION_TABLE_ENTRIES 4
+
+#ifndef IsContainerPartition
+#define IsContainerPartition(PartitionType) \
+  ( ((PartitionType) == PARTITION_EXTENDED) || \
+    ((PartitionType) == PARTITION_XINT13_EXTENDED) )
+#endif
+
+#define GET_STARTING_SECTOR(p) \
+    ((p)->SectorCountBeforePartition)
+
+#define GET_PARTITION_LENGTH(p) \
+    ((p)->PartitionSectorCount)
+
 static BOOLEAN
 DiskReadBootRecord(
     _In_ ULONG DeviceId,
     _In_ ULONGLONG LogicalSectorNumber,
     _Out_ PMASTER_BOOT_RECORD BootRecord)
 {
-#if DBG
-    ULONG Index;
-#endif
-
     /* Read one sector (master boot record) from a given position */
     if (DiskReadSector(DeviceId, LogicalSectorNumber,
                        sizeof(MASTER_BOOT_RECORD), BootRecord) != ESUCCESS)
@@ -95,74 +243,11 @@ DiskReadBootRecord(
     }
 
 #if DBG
-    TRACE("Dumping partition table for drive 0x%x:\n", DeviceId);
-    TRACE("Boot record logical start sector = %llu\n", LogicalSectorNumber);
-    TRACE("sizeof(MASTER_BOOT_RECORD) = 0x%x\n", sizeof(MASTER_BOOT_RECORD));
-
-    for (Index = 0; Index < 4; Index++)
-    {
-        PPARTITION_TABLE_ENTRY PartitionTableEntry = &BootRecord->PartitionTable[Index];
-
-        TRACE("-------------------------------------------\n");
-        TRACE("Partition %u\n", (Index + 1));
-        TRACE("BootIndicator: 0x%x\n", PartitionTableEntry->BootIndicator);
-        TRACE("StartHead: 0x%x\n", PartitionTableEntry->StartHead);
-        TRACE("StartSector (Plus 2 cylinder bits): 0x%x\n", PartitionTableEntry->StartSector);
-        TRACE("StartCylinder: 0x%x\n", PartitionTableEntry->StartCylinder);
-        TRACE("SystemIndicator: 0x%x\n", PartitionTableEntry->SystemIndicator);
-        TRACE("EndHead: 0x%x\n", PartitionTableEntry->EndHead);
-        TRACE("EndSector (Plus 2 cylinder bits): 0x%x\n", PartitionTableEntry->EndSector);
-        TRACE("EndCylinder: 0x%x\n", PartitionTableEntry->EndCylinder);
-        TRACE("SectorCountBeforePartition: 0x%x\n", PartitionTableEntry->SectorCountBeforePartition);
-        TRACE("PartitionSectorCount: 0x%x\n", PartitionTableEntry->PartitionSectorCount);
-    }
+    DumpMbrPartitionTable();
 #endif
 
     /* Check the partition table magic value */
     return (BootRecord->MasterBootRecordMagic == 0xaa55);
-}
-
-static BOOLEAN
-DiskGetFirstPartitionEntry(
-    _In_ PMASTER_BOOT_RECORD MasterBootRecord,
-    _Out_ PPARTITION_TABLE_ENTRY* pPartitionTableEntry)
-{
-    ULONG Index;
-
-    for (Index = 0; Index < 4; Index++)
-    {
-        /* Check the system indicator. If it's not an extended or unused partition then we're done. */
-        if ((MasterBootRecord->PartitionTable[Index].SystemIndicator != PARTITION_ENTRY_UNUSED) &&
-            (MasterBootRecord->PartitionTable[Index].SystemIndicator != PARTITION_EXTENDED) &&
-            (MasterBootRecord->PartitionTable[Index].SystemIndicator != PARTITION_XINT13_EXTENDED))
-        {
-            *pPartitionTableEntry = &MasterBootRecord->PartitionTable[Index];
-            return TRUE;
-        }
-    }
-
-    return FALSE;
-}
-
-static BOOLEAN
-DiskGetFirstExtendedPartitionEntry(
-    _In_ PMASTER_BOOT_RECORD MasterBootRecord,
-    _Out_ PPARTITION_TABLE_ENTRY* pPartitionTableEntry)
-{
-    ULONG Index;
-
-    for (Index = 0; Index < 4; Index++)
-    {
-        /* Check the system indicator. If it an extended partition then we're done. */
-        if ((MasterBootRecord->PartitionTable[Index].SystemIndicator == PARTITION_EXTENDED) ||
-            (MasterBootRecord->PartitionTable[Index].SystemIndicator == PARTITION_XINT13_EXTENDED))
-        {
-            *pPartitionTableEntry = &MasterBootRecord->PartitionTable[Index];
-            return TRUE;
-        }
-    }
-
-    return FALSE;
 }
 
 static VOID
@@ -172,8 +257,8 @@ DiskMbrPartitionTableEntryToInformation(
     _In_ ULONG PartitionNumber,
     _In_ ULONG SectorSize)
 {
-    PartitionEntry->StartingOffset.QuadPart  = (ULONGLONG)PartitionTableEntry->SectorCountBeforePartition * SectorSize;
-    PartitionEntry->PartitionLength.QuadPart = (ULONGLONG)PartitionTableEntry->PartitionSectorCount * SectorSize;
+    PartitionEntry->StartingOffset.QuadPart  = (ULONGLONG)GET_STARTING_SECTOR(PartitionTableEntry) * SectorSize;
+    PartitionEntry->PartitionLength.QuadPart = (ULONGLONG)GET_PARTITION_LENGTH(PartitionTableEntry) * SectorSize;
     PartitionEntry->HiddenSectors = 0;
     PartitionEntry->PartitionNumber = PartitionNumber;
     PartitionEntry->PartitionType = PartitionTableEntry->SystemIndicator;
@@ -182,8 +267,9 @@ DiskMbrPartitionTableEntryToInformation(
     PartitionEntry->RewritePartition = FALSE;
 }
 
+// On MBR the "active" partition can only be a primary one.
 static BOOLEAN
-DiskGetActivePartitionEntry(
+DiskGetMbrActivePartitionEntry(
     _In_ ULONG DeviceId,
     _In_ ULONG SectorSize,
     _Out_opt_ PPARTITION_INFORMATION PartitionEntry,
@@ -203,7 +289,7 @@ DiskGetActivePartitionEntry(
         return FALSE;
 
     CurrentPartitionNumber = 0;
-    for (Index = 0; Index < 4; Index++)
+    for (Index = 0; Index < MBR_NUM_PARTITION_TABLE_ENTRIES; Index++)
     {
         PPARTITION_TABLE_ENTRY PartitionTableEntry = &MasterBootRecord.PartitionTable[Index];
 
@@ -242,94 +328,275 @@ DiskGetActivePartitionEntry(
 }
 
 static BOOLEAN
+IsValidPartitionEntry(
+    _In_ PPARTITION_DESCRIPTOR Entry,
+    _In_ ULONGLONG MaxOffset,
+    _In_ ULONGLONG MaxSector)
+{
+    ULONGLONG EndingSector;
+
+    /* Unused partitions are considered valid */
+    if (Entry->PartitionType == PARTITION_ENTRY_UNUSED)
+        return TRUE;
+
+    /* Get the last sector of the partition */
+    EndingSector = GET_STARTING_SECTOR(Entry) + GET_PARTITION_LENGTH(Entry);
+
+    /* Check if it's more then the maximum sector */
+    if (EndingSector > MaxSector)
+    {
+        /* Invalid partition */
+        ERR("Entry is invalid\n");
+        ERR("\toffset %#08lx\n", GET_STARTING_SECTOR(Entry));
+        ERR("\tlength %#08lx\n", GET_PARTITION_LENGTH(Entry));
+        ERR("\tend %#I64x\n", EndingSector);
+        ERR("\tmax %#I64x\n", MaxSector);
+        return FALSE;
+    }
+    else if (GET_STARTING_SECTOR(Entry) > MaxOffset)
+    {
+        /* Invalid partition */
+        ERR("Entry is invalid\n");
+        ERR("\toffset %#08lx\n", GET_STARTING_SECTOR(Entry));
+        ERR("\tlength %#08lx\n", GET_PARTITION_LENGTH(Entry));
+        ERR("\tend %#I64x\n", EndingSector);
+        ERR("\tmaxOffset %#I64x\n", MaxOffset);
+        return FALSE;
+    }
+
+    /* It's fine, return success */
+    return TRUE;
+}
+
+static BOOLEAN
 DiskGetMbrPartitionEntry(
     _In_ ULONG DeviceId,
     _In_ ULONG SectorSize,
     _In_ ULONG PartitionNumber,
     _Out_ PPARTITION_INFORMATION PartitionEntry)
 {
-    MASTER_BOOT_RECORD MasterBootRecord;
-    PPARTITION_TABLE_ENTRY PartitionTableEntry;
-    PARTITION_TABLE_ENTRY ExtendedPartitionTableEntry;
-    ULONG ExtendedPartitionNumber;
-    ULONG ExtendedPartitionOffset;
+    MASTER_BOOT_RECORD BootRecord;
+    PPARTITION_TABLE_ENTRY PartitionDescriptor;
     ULONG Index;
-    ULONG CurrentPartitionNumber;
+    BOOLEAN IsValid /*, IsEmpty = TRUE*/;
 
     ASSERT(SectorSize >= 512);
-
-    if (PartitionNumber == 0)
-        return FALSE;
-
-    /* Read master boot record */
-    if (!DiskReadBootRecord(DeviceId, 0, &MasterBootRecord))
-        return FALSE;
-
-    CurrentPartitionNumber = 0;
-    for (Index = 0; Index < 4; Index++)
-    {
-        PartitionTableEntry = &MasterBootRecord.PartitionTable[Index];
-
-        if (PartitionTableEntry->SystemIndicator != PARTITION_ENTRY_UNUSED &&
-            PartitionTableEntry->SystemIndicator != PARTITION_EXTENDED &&
-            PartitionTableEntry->SystemIndicator != PARTITION_XINT13_EXTENDED)
-        {
-            CurrentPartitionNumber++;
-        }
-
-        if (PartitionNumber == CurrentPartitionNumber)
-        {
-            DiskMbrPartitionTableEntryToInformation(PartitionEntry, PartitionTableEntry, PartitionNumber, SectorSize);
-            return TRUE;
-        }
-    }
+    ASSERT(PartitionNumber >= 1);
 
     /*
-     * They want an extended partition entry so we will need
-     * to loop through all the extended partitions on the disk
-     * and return the one they want.
+     * REMARKS about MBR partitions:
+     *
+     * - The MBR is the primary partition table. It contains 4 entries for
+     *   primary partitions, where at most 1 is for an extended partition.
+     *   The entry for an extended partition links to an extended partition
+     *   record (EBR).
+     *
+     * - About EBRs and extended partitions:
+     *   Extended partition records (EBRs) are link-listed with each other.
+     *   It is commonly documented that in EBRs, the first partition entry
+     *   points to the logical volume data, the second partition entry points
+     *   to the next EBR (and has type 0x05 or 0x0F), while both third and
+     *   fourth entries are unused.
+     *   However, it can be observed by experiments that e.g. Windows NT
+     *   supports the two valid entries to be in any of the four available
+     *   EBR partition slots. For example, the entry pointing to the next EBR
+     *   may be in the third slot, while the entry pointing to the logical
+     *   volume data is on the fourth slot (or the second slot, or...).
      */
-    ExtendedPartitionNumber = PartitionNumber - CurrentPartitionNumber - 1;
+    ULONG CurrentPartitionNumber = 0;
 
+    ULONGLONG StartSector = 0ULL;
+    PPARTITION_TABLE_ENTRY ExtendedPartitionDescriptor = NULL; // The single extended partition we may encounter next.
     /*
      * Set the initial relative starting sector to 0.
      * This is because extended partition starting
      * sectors a numbered relative to their parent.
      */
-    ExtendedPartitionOffset = 0;
+    ULONG ExtendedPartitionOffset = 0; // TODO: Rename (VolumeOffset). Offset of where the extended "volume" starts (from which each subsequent EPBR is relative).
 
-    for (Index = 0; Index <= ExtendedPartitionNumber; Index++)
+    // TODO: GetFullGeometry of the drive.
+
+#if DBG
+    ULONG BootRecordIndex = 0; // Partition table index
+#endif
+    do
     {
-        /* Get the extended partition table entry */
-        if (!DiskGetFirstExtendedPartitionEntry(&MasterBootRecord, &ExtendedPartitionTableEntry))
+        /* Read the Master Boot Record (StartSector == 0) or the
+         * next Extended Partition Boot Record (StartSector != 0) */
+        if (!DiskReadBootRecord(DeviceId, StartSector, &BootRecord))
             return FALSE;
 
-        /* Adjust the relative starting sector of the partition */
-        ExtendedPartitionTableEntry.SectorCountBeforePartition += ExtendedPartitionOffset;
-        if (ExtendedPartitionOffset == 0)
+        /* Assume the partition table is valid */
+        IsValid = TRUE;
+
+        ExtendedPartitionDescriptor = NULL;
+        ULONG CountExtendedPartitions = 0; // Must be <= 1
+
+        TRACE("Partition Table %lu:\n", BootRecordIndex);
+        for (Index = 0; Index < MBR_NUM_PARTITION_TABLE_ENTRIES; Index++)
         {
-            /* Set the start of the parent extended partition */
-            ExtendedPartitionOffset = ExtendedPartitionTableEntry.SectorCountBeforePartition;
+            PartitionDescriptor = &BootRecord.PartitionTable[Index];
+            UCHAR PartitionType = PartitionDescriptor->SystemIndicator;
+
+            TRACE("Partition Entry %lu,%lu: type %#x %s\n",
+                  BootRecordIndex, (Index + 1),
+                  PartitionType,
+                  (PartitionDescriptor->BootIndicator/*ActiveFlag*/) ? "Active" : "");
+            TRACE("\tOffset %#08lx for %#08lx Sectors\n",
+                  GET_STARTING_SECTOR(PartitionDescriptor),
+                  GET_PARTITION_LENGTH(PartitionDescriptor));
+
+#if DBG // && ....
+// Do extended diagnostics: If we are in an extended partition boot record,
+// verify that 1st partition is "data", 2nd partition is extended or unused,
+// and 3rd and 4th slots are unused. Otherwise warn that we have a disk that
+// may not be supported by all OSes.
+
+/* The extended partition table entry is anywhere in the 4 slots
+ * in the initial MBR, otherwise it's the 2nd entry in an existing EBR;
+ * if the EBR chain stops, the 2nd entry is zeroed out. */
+#endif
+
+#if 0
+            /* Make sure that the partition entry is valid; fail only
+             * if it resides on the primary partition table */
+            if (!IsValidPartitionEntry(PartitionDescriptor,
+                                       DiskGeometryEx.DiskSize.QuadPart,
+                                       MaxSector) && (BootRecordIndex == 0))
+            {
+                /* It's invalid, so fail */
+                IsValid = FALSE;
+                break;
+            }
+#endif
+
+            /* Verify the count of extended partitions listed in this boot record */
+            if (IsContainerPartition(PartitionType))
+            {
+                CountExtendedPartitions++;
+                if (CountExtendedPartitions > 1)
+                {
+                    /* More than one table is invalid */
+                    ERR("Multiple container partitions found in "
+                        "partition table %lu\n - table is invalid\n",
+                        BootRecordIndex);
+                    IsValid = FALSE;
+                    break;
+                }
+                /* This is the next extended partition we will have to enumerate! */
+                ExtendedPartitionDescriptor = PartitionDescriptor;
+            }
+
+
+            /* We only care about "recognized" partitions */
+            if ((PartitionType == PARTITION_ENTRY_UNUSED) || IsContainerPartition(PartitionType))
+                continue;
+
+            ++CurrentPartitionNumber;
+
+#if 0
+            // For DATA partitions: actual starting sector is ==
+            // start-sector from the beginning of disk + their relative start sector.
+            StartSector + GET_STARTING_SECTOR(PartitionDescriptor);
+
+            // For sub-EXTENDED partitions: actual starting sector is ==
+            // offset of the first extended partition + their relative start sector.
+            ExtendedPartitionOffset + GET_STARTING_SECTOR(PartitionDescriptor);
+#endif
+
+            if (PartitionNumber == CurrentPartitionNumber)
+            {
+                /* Correct the start sector of the partition */
+                PartitionDescriptor->SectorCountBeforePartition += StartSector;
+                DiskMbrPartitionTableEntryToInformation(PartitionEntry, PartitionDescriptor,
+                                                        PartitionNumber, SectorSize);
+                return TRUE;
+            }
         }
-        /* Read the partition boot record */
-        if (!DiskReadBootRecord(DeviceId, ExtendedPartitionTableEntry.SectorCountBeforePartition, &MasterBootRecord))
-            return FALSE;
 
-        /* Get the first real partition table entry */
-        if (!DiskGetFirstPartitionEntry(&MasterBootRecord, &PartitionTableEntry))
-            return FALSE;
+        /* Finish debug log, and check for failure */
+        TRACE("\n");
+        // if (!NT_SUCCESS(Status)) break;
 
-        /* Now correct the start sector of the partition */
-        PartitionTableEntry->SectorCountBeforePartition += ExtendedPartitionTableEntry.SectorCountBeforePartition;
-    }
+        /* Also check if we hit an invalid entry here */
+        if (!IsValid)
+        {
+            // /* We did, so break out of the loop minus one entry */
+            // BootRecordIndex--;
+            break;
+        }
+
+        StartSector = 0ULL;
+
+        /* Do we have an extended partition to look for next? If so, get where
+         * we should restart reading the next boot sector, and loop again */
+        if (ExtendedPartitionDescriptor)
+        {
+            /* Adjust the relative partition starting sector */
+            StartSector = GET_STARTING_SECTOR(ExtendedPartitionDescriptor);
+            StartSector += ExtendedPartitionOffset;
+
+            /* If this is the very first extended partition,
+             * parent of all the others, this is its start */
+            if (ExtendedPartitionOffset == 0)
+                ExtendedPartitionOffset = StartSector;
+
+            //////// /* Also update the maximum sector */
+            //////// MaxSector = GET_PARTITION_LENGTH(PartitionDescriptor);
+            //////// TRACE("FSTUB: MaxSector now = %I64d\n", MaxSector);
+        }
+
+    } while (ExtendedPartitionDescriptor != NULL); // i.e. (StartSector != 0ULL)
+
+    /* We haven't found the sought partition, bail out */
+    return FALSE;
+}
+
+#if 0 // TODO: Investigate
+static BOOLEAN
+DiskGetIPL1PartitionEntry(
+    _In_ ULONG DeviceId,
+    _In_ ULONG SectorSize,
+    _In_ ULONG PartitionNumber,
+    _Out_opt_ PPARTITION_INFORMATION PartitionEntry)
+{
+    UCHAR Buffer[512];
+    ULONG Index;
+
+    ASSERT(SectorSize >= 512);
+    ASSERT(PartitionNumber >= 1);
 
     /*
-     * When we get here we should have the correct entry already
-     * stored in PartitionTableEntry, so just return TRUE.
+     * Get partition entry of a NEC PC-98 IPL1 partitioned disk.
      */
-    DiskMbrPartitionTableEntryToInformation(PartitionEntry, PartitionTableEntry, PartitionNumber, SectorSize);
+    if (DiskReadSector(DeviceId, 0, sizeof(Buffer), Buffer) != ESUCCESS)
+        return FALSE;
+    if (*(PULONG)(Buffer + IPL1_SIGNATURE_OFFSET) != IPL1_SIGNATURE)
+        return FALSE; /* Not an IPL1 disk */
+    // if (!((*(PUSHORT)(Buffer + 0xEE) == 0xaa55 || *(PUSHORT)(Buffer + 0xFE) == 0xaa55) && *(PUSHORT)(Buffer + 0x1FE) == 0xaa55))
+    //     return FALSE; /* Missing end-of-sector signatures */
+
+    /* Contrary to MBR disks, IPL1 disks enumerate their partitions from bottom up */
+    for (Index = 0; Index < IPL1_NUM_PARTITION_TABLE_ENTRIES; ++Index)
+    {
+        IPL1_NUM_PARTITION_TABLE_ENTRIES
+    }
+
+    if (PartitionEntry)
+    {
+        // RtlZeroMemory(PartitionEntry, sizeof(*PartitionEntry));
+        PartitionEntry->StartingOffset.QuadPart  = (ULONGLONG)XboxPartitions[PartitionNumber - 1].SectorStart * SectorSize;
+        PartitionEntry->PartitionLength.QuadPart = (ULONGLONG)XboxPartitions[PartitionNumber - 1].SectorCount * SectorSize;
+        PartitionEntry->HiddenSectors = 0;
+        PartitionEntry->PartitionNumber = PartitionNumber;
+        PartitionEntry->PartitionType = XboxPartitions[PartitionNumber - 1].PartitionType;
+        PartitionEntry->BootIndicator = (PartitionNumber == FATX_DATA_PARTITION);
+        PartitionEntry->RecognizedPartition = TRUE;
+        PartitionEntry->RewritePartition = FALSE;
+    }
     return TRUE;
 }
+#endif // IPL1
 
 static BOOLEAN
 DiskGetBrfrPartitionEntry(
@@ -341,6 +608,7 @@ DiskGetBrfrPartitionEntry(
     UCHAR Buffer[512];
 
     ASSERT(SectorSize >= 512);
+    ASSERT(PartitionNumber >= 1);
 
     /*
      * Get partition entry of an Xbox-standard BRFR partitioned disk.
@@ -353,10 +621,7 @@ DiskGetBrfrPartitionEntry(
     }
 
     if (*((PULONG)Buffer) != XBOX_SIGNATURE)
-    {
-        /* No magic Xbox partitions */
-        return FALSE;
-    }
+        return FALSE; /* No magic Xbox partitions */
 
     if (PartitionEntry)
     {
@@ -384,17 +649,29 @@ DiskDetectPartitionStyle(
     _In_ ULONG SectorSize)
 {
     MASTER_BOOT_RECORD MasterBootRecord;
+    PARTITION_STYLE PartitionStyle;
+
+    ASSERT(SectorSize >= 512);
 
     /* Probe for Master Boot Record */
     if (DiskReadBootRecord(DeviceId, 0, &MasterBootRecord))
     {
-        PARTITION_STYLE PartitionStyle = PARTITION_STYLE_MBR;
         ULONG Index;
         ULONG PartitionCount = 0;
         BOOLEAN GPTProtect = FALSE;
 
+        /* Determine whether the disk uses standard MBR, NEC PC-98 IPL1, or GPT scheme */
+
+        if (*(PULONG)((PUCHAR)&MasterBootRecord + IPL1_SIGNATURE_OFFSET) == IPL1_SIGNATURE)
+        {
+            PartitionStyle = PARTITION_STYLE_IPL1;
+            goto Quit;
+        }
+
+        PartitionStyle = PARTITION_STYLE_MBR;
+
         /* Check for GUID Partition Table */
-        for (Index = 0; Index < 4; Index++)
+        for (Index = 0; Index < MBR_NUM_PARTITION_TABLE_ENTRIES; Index++)
         {
             PPARTITION_TABLE_ENTRY PartitionTableEntry = &MasterBootRecord.PartitionTable[Index];
             if (PartitionTableEntry->SystemIndicator != PARTITION_ENTRY_UNUSED)
@@ -408,21 +685,21 @@ DiskDetectPartitionStyle(
 
         if (PartitionCount == 1 && GPTProtect)
             PartitionStyle = PARTITION_STYLE_GPT;
-
-        TRACE("Device 0x%lx partition style %s\n", DeviceId, PartitionStyle == PARTITION_STYLE_MBR ? "MBR" : "GPT");
-        return PartitionStyle;
     }
-
-    /* Probe for Xbox-BRFR partitioning */
+    else /* Probe for Xbox-BRFR partitioning */
     if (DiskGetBrfrPartitionEntry(DeviceId, SectorSize, FATX_DATA_PARTITION, NULL))
     {
-        TRACE("Device 0x%lx partition style Xbox-BRFR\n", DeviceId);
-        return PARTITION_STYLE_BRFR;
+        PartitionStyle = PARTITION_STYLE_BRFR;
+    }
+    else
+    {
+        /* Failed to detect partitions, assume unpartitioned disk */
+        PartitionStyle = PARTITION_STYLE_RAW;
     }
 
-    /* Failed to detect partitions, assume unpartitioned disk */
-    TRACE("Device 0x%lx partition style unknown\n", DeviceId);
-    return PARTITION_STYLE_RAW;
+Quit:
+    TRACE("Device 0x%lx partition style %s\n", DeviceId, PartTypeToName(PartitionStyle));
+    return PartitionStyle;
 }
 
 // TODO: Move this function into hwdisk.c
@@ -449,15 +726,15 @@ DiskGetBootPartitionEntry(
     BOOLEAN Success = FALSE;
     PARTITION_STYLE PartitionStyle;
 
-    if (SectorSize < 512)
-        return FALSE;
-
     if ((DiskDeviceName && DeviceId != INVALID_FILE_ID) ||
         (!DiskDeviceName && DeviceId == INVALID_FILE_ID))
     {
         ERR("Invalid parameters\n");
         return FALSE;
     }
+
+    if (SectorSize < 512)
+        return FALSE;
 
     if (DiskDeviceName)
     {
@@ -477,7 +754,7 @@ DiskGetBootPartitionEntry(
     {
         case PARTITION_STYLE_MBR:
         {
-            Success = DiskGetActivePartitionEntry(DeviceId, SectorSize, PartitionEntry, BootPartition);
+            Success = DiskGetMbrActivePartitionEntry(DeviceId, SectorSize, PartitionEntry, BootPartition);
             break;
         }
         case PARTITION_STYLE_GPT:
@@ -490,6 +767,13 @@ DiskGetBootPartitionEntry(
             FIXME("DiskGetBootPartitionEntry() unimplemented for RAW\n");
             break; // Success = FALSE;
         }
+#if 0 // TODO: Investigate
+        case PARTITION_STYLE_IPL1:
+        {
+            Success = DiskGetIPL1ActivePartitionEntry(DeviceId, SectorSize, PartitionEntry, BootPartition);
+            break;
+        }
+#endif
         case PARTITION_STYLE_BRFR:
         {
             Success = DiskGetBrfrPartitionEntry(DeviceId, SectorSize, FATX_DATA_PARTITION, PartitionEntry);
@@ -523,15 +807,18 @@ DiskGetPartitionEntry(
     BOOLEAN Success = FALSE;
     PARTITION_STYLE PartitionStyle;
 
-    if (SectorSize < 512)
-        return FALSE;
-
     if ((DiskDeviceName && DeviceId != INVALID_FILE_ID) ||
         (!DiskDeviceName && DeviceId == INVALID_FILE_ID))
     {
         ERR("Invalid parameters\n");
         return FALSE;
     }
+
+    if (SectorSize < 512)
+        return FALSE;
+
+    if (PartitionNumber == 0)
+        return FALSE;
 
     if (DiskDeviceName)
     {
@@ -564,6 +851,13 @@ DiskGetPartitionEntry(
             FIXME("DiskGetPartitionEntry() unimplemented for RAW\n");
             break; // Success = FALSE;
         }
+#if 0 // TODO: Investigate
+        case PARTITION_STYLE_IPL1:
+        {
+            Success = DiskGetIPL1PartitionEntry(DeviceId, SectorSize, PartitionEntry, BootPartition);
+            break;
+        }
+#endif
         case PARTITION_STYLE_BRFR:
         {
             Success = DiskGetBrfrPartitionEntry(DeviceId, SectorSize, PartitionNumber, PartitionEntry);
