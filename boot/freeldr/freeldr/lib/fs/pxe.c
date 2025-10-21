@@ -386,7 +386,7 @@ BOOLEAN PxeInit(VOID)
     // Check if PXE is available
     if (GetPxeStructure() && GetCachedInfo())
     {
-        FsRegisterDevice("net(0)", &PxeDiskVtbl);
+        FsRegisterDevice("net(0)", &PxeDiskVtbl, NULL);
         Success = TRUE;
     }
 

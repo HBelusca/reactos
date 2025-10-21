@@ -113,25 +113,91 @@ extern CCHAR FrLdrBootPath[MAX_PATH];
 
 ///////////////////////////////////////////////////////////////////////////////////////
 //
-// Fixed Disk Partition Management Functions
+// Disk Management Functions
 //
 ///////////////////////////////////////////////////////////////////////////////////////
 
-VOID
-DiskDetectPartitionType(
-    IN UCHAR DriveNumber);
+/*
+ * Generic Disk/Block-IO "Class" driver (disk.c)
+ */
+
+// TODO? "BLOCK" -> "BLOCKDEV" or "BLOCK_IO"
+
+typedef ARC_STATUS
+(*PBLOCK_INIT)(
+    _In_ PVOID This, // The "DeviceData" given to BlockIoCreate()
+    _In_ PCSTR Path,
+    _Out_ PGEOMETRY Geometry);
+
+typedef ARC_STATUS
+(*PBLOCK_UNINIT)(
+    _In_ PVOID This); // The "DeviceData" given to BlockIoCreate()
+
+typedef ARC_STATUS
+(*PBLOCK_READ)(
+    _In_ PVOID This, // The "DeviceData" given to BlockIoCreate()
+    _In_ ULONGLONG SectorNumber,
+    _In_ ULONG SectorCount,
+    _Out_ PVOID Buffer);
+
+typedef ARC_STATUS
+(*PBLOCK_WRITE)(
+    _In_ PVOID This, // The "DeviceData" given to BlockIoCreate()
+    _In_ ULONGLONG SectorNumber,
+    _In_ ULONG SectorCount,
+    _In_ PVOID Buffer);
+
+#if 0 // INVESTIGATE: Possible form for an "interface"
+/* Interface */
+typedef struct _BLOCK_IO_INTERFACE
+{
+    PVOID DeviceData;
+    PBLOCK_INIT DevInit;
+    PBLOCK_UNINIT DevUninit;
+    PBLOCK_READ ReadBlocks;
+    _Maybenull_ PBLOCK_WRITE WriteBlocks;
+} BLOCK_IO_INTERFACE, *PBLOCK_IO_INTERFACE;
+#endif
+
+ARC_STATUS
+BlockIoCreate(
+    _In_ PCSTR DeviceName,
+/** Interface */
+    _In_ CONFIGURATION_TYPE DeviceType, // FIXME: Necessary or not?
+    _In_ PVOID DeviceData,
+    _In_ PBLOCK_INIT DevInit,
+    _In_ PBLOCK_UNINIT DevUninit,
+    _In_ PBLOCK_READ ReadBlocks,
+    _In_opt_ PBLOCK_WRITE WriteBlocks,
+/** !Interface */
+    _Out_opt_ PULONG NumPartitions);
+
+
+/*
+ * Fixed Disk Partition Management Functions (partition.c)
+ */
+
+PARTITION_STYLE
+DiskDetectPartitionStyle(
+    _In_ PVOID DeviceData, // The "DeviceData" given to BlockIoCreate()
+    _In_ PBLOCK_READ ReadBlocks);
 
 BOOLEAN
 DiskGetBootPartitionEntry(
-    IN UCHAR DriveNumber,
-    OUT PPARTITION_TABLE_ENTRY PartitionTableEntry,
-    OUT PULONG BootPartition);
+    _In_ PVOID DeviceData, // The "DeviceData" given to BlockIoCreate()
+    _In_ PBLOCK_READ ReadBlocks,
+    _In_opt_ PARTITION_STYLE PartitionStyle,
+    _Out_ PPARTITION_TABLE_ENTRY PartitionTableEntry,
+    _Out_ PULONG BootPartition);
 
 BOOLEAN
 DiskGetPartitionEntry(
-    IN UCHAR DriveNumber,
-    IN ULONG PartitionNumber,
-    OUT PPARTITION_TABLE_ENTRY PartitionTableEntry);
+    _In_ PVOID DeviceData, // The "DeviceData" given to BlockIoCreate()
+    _In_ PBLOCK_READ ReadBlocks,
+    _In_ PARTITION_STYLE PartitionStyle,
+    _In_ ULONG PartitionNumber,
+    _Out_ PPARTITION_TABLE_ENTRY PartitionTableEntry);
+
 
 /*
  * SCSI support (disk/scsiport.c)

@@ -35,8 +35,9 @@ typedef struct tagDEVICE
     LIST_ENTRY ListEntry;
     const DEVVTBL* FuncTable;     ///< Driver function table.
     const DEVVTBL* FileFuncTable; ///< Used only by mounted storage devices.
-    PSTR DeviceName;
-    ULONG DeviceId; ///< Entry ID in FileData when the device gets referenced.
+    PSTR DeviceName;    ///< Device name.
+    PVOID DeviceData;   ///< Driver-dependent device-specific data.
+    ULONG DeviceId;     ///< Entry ID in FileData[] when the device gets referenced.
     ULONG ReferenceCount;
 } DEVICE;
 
@@ -45,7 +46,7 @@ typedef struct tagFILEDATA
     ULONG DeviceId; ///< Parent device's ID.
     ULONG ReferenceCount;
     const DEVVTBL* FuncTable;
-    PVOID Specific;
+    PVOID Specific; ///< File-specific data for this descriptor.
 } FILEDATA;
 
 static FILEDATA FileData[MAX_FDS];
@@ -98,6 +99,8 @@ DumpDeviceList(VOID)
                  "  RefCount: %lu\n"
                  "  DeviceName  : '%s'\n",
                  DeviceId, pDevice->ReferenceCount, pDevice->DeviceName);
+
+        DbgPrint("  DeviceData  : 0x%p\n", pDevice->DeviceData);
 
         FuncTable = pDevice->FuncTable;
         DbgPrint("  DevFuncTable: 0x%p (In array: 0x%p) ; Name: '%S'\n",
@@ -284,13 +287,16 @@ ARC_STATUS ArcOpen(CHAR* Path, OPENMODE OpenMode, ULONG* FileId)
         /* Try to open the device */
         FileData[DeviceId].ReferenceCount = 0;
         FileData[DeviceId].FuncTable = pDevice->FuncTable;
+        /**/pDevice->DeviceId = DeviceId;/**/
         Status = pDevice->FuncTable->Open(pDevice->DeviceName, DeviceOpenMode, &DeviceId);
         if (Status != ESUCCESS)
         {
+            /**/pDevice->DeviceId = INVALID_FILE_ID;/**/
             FileData[DeviceId].FuncTable = NULL;
             return Status;
         }
-        pDevice->DeviceId = DeviceId;
+        //// pDevice->DeviceId = DeviceId;
+        // Disabled to investigate the possibility of accessing Device from Open() call above.
     }
     else
     {
@@ -669,10 +675,11 @@ VOID FsGetFirstNameFromPath(PCHAR Buffer, PCSTR Path)
     TRACE("FsGetFirstNameFromPath() Path = %s FirstName = %s\n", Path, Buffer);
 }
 
-VOID
+BOOLEAN
 FsRegisterDevice(
     _In_ PCSTR DeviceName,
-    _In_ const DEVVTBL* FuncTable)
+    _In_ const DEVVTBL* FuncTable,
+    _In_opt_ PVOID DeviceData)
 {
     DEVICE* pNewEntry;
     SIZE_T Length;
@@ -682,14 +689,34 @@ FsRegisterDevice(
     Length = strlen(DeviceName) + 1;
     pNewEntry = FrLdrTempAlloc(sizeof(DEVICE) + Length, TAG_DEVICE);
     if (!pNewEntry)
-        return;
+        return FALSE;
+    RtlZeroMemory(pNewEntry, sizeof(DEVICE));
     pNewEntry->FuncTable = FuncTable;
+    pNewEntry->DeviceData = DeviceData;
     pNewEntry->DeviceId = INVALID_FILE_ID;
     pNewEntry->ReferenceCount = 0;
     pNewEntry->DeviceName = (PSTR)(pNewEntry + 1);
     RtlCopyMemory(pNewEntry->DeviceName, DeviceName, Length);
 
     InsertHeadList(&DeviceListHead, &pNewEntry->ListEntry);
+    return TRUE;
+}
+
+PVOID
+FsGetDeviceData(
+    _In_ ULONG DeviceId)
+{
+    DEVICE* pDevice;
+
+    if (!IS_VALID_FILEID(DeviceId))
+        return NULL;
+
+    /* Check whether this file actually references a device */
+    pDevice = FsGetDeviceById(DeviceId);
+    if (!pDevice)
+        return NULL;
+
+    return pDevice->DeviceData;
 }
 
 PCWSTR FsGetServiceName(ULONG FileId)
@@ -699,21 +726,21 @@ PCWSTR FsGetServiceName(ULONG FileId)
     return FileData[FileId].FuncTable->ServiceName;
 }
 
-VOID FsSetDeviceSpecific(ULONG FileId, PVOID Specific)
+VOID FsSetDeviceSpecific(ULONG FileId, PVOID Specific) // FileSpecific / FileContext
 {
     if (!IS_VALID_FILEID(FileId))
         return;
     FileData[FileId].Specific = Specific;
 }
 
-PVOID FsGetDeviceSpecific(ULONG FileId)
+PVOID FsGetDeviceSpecific(ULONG FileId) // FileSpecific / FileContext
 {
     if (!IS_VALID_FILEID(FileId))
         return NULL;
     return FileData[FileId].Specific;
 }
 
-ULONG FsGetDeviceId(ULONG FileId)
+ULONG FsGetDeviceId(ULONG FileId) // ParentDeviceId
 {
     if (FileId >= _countof(FileData)) // !IS_VALID_FILEID(FileId)
         return INVALID_FILE_ID;

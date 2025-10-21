@@ -23,9 +23,6 @@
 #include <debug.h>
 DBG_DEFAULT_CHANNEL(DISK);
 
-#define MaxDriveNumber 0xFF
-static PARTITION_STYLE DiskPartitionType[MaxDriveNumber + 1];
-
 /* BRFR signature at disk offset 0x600 */
 #define XBOX_SIGNATURE_SECTOR 3
 #define XBOX_SIGNATURE        ('B' | ('R' << 8) | ('F' << 16) | ('R' << 24))
@@ -50,20 +47,21 @@ static struct
 
 static BOOLEAN
 DiskReadBootRecord(
-    IN UCHAR DriveNumber,
-    IN ULONGLONG LogicalSectorNumber,
-    OUT PMASTER_BOOT_RECORD BootRecord)
+    _In_ PVOID DeviceData, // The "DeviceData" given to BlockIoCreate()
+    _In_ PBLOCK_READ ReadBlocks,
+    _In_ ULONGLONG LogicalSectorNumber,
+    _Out_ PMASTER_BOOT_RECORD BootRecord)
 {
     ULONG Index;
 
     /* Read master boot record */
-    if (!MachDiskReadLogicalSectors(DriveNumber, LogicalSectorNumber, 1, DiskReadBuffer))
+    if (ReadBlocks(DeviceData, LogicalSectorNumber, 1, DiskReadBuffer) != ESUCCESS)
     {
         return FALSE;
     }
     RtlCopyMemory(BootRecord, DiskReadBuffer, sizeof(MASTER_BOOT_RECORD));
 
-    TRACE("Dumping partition table for drive 0x%x:\n", DriveNumber);
+    TRACE("Dumping partition table for device 0x%p:\n", DeviceData);
     TRACE("Boot record logical start sector = %d\n", LogicalSectorNumber);
     TRACE("sizeof(MASTER_BOOT_RECORD) = 0x%x.\n", sizeof(MASTER_BOOT_RECORD));
 
@@ -132,9 +130,10 @@ DiskGetFirstExtendedPartitionEntry(
 
 static BOOLEAN
 DiskGetActivePartitionEntry(
-    IN UCHAR DriveNumber,
-    OUT PPARTITION_TABLE_ENTRY PartitionTableEntry,
-    OUT PULONG ActivePartition)
+    _In_ PVOID DeviceData, // The "DeviceData" given to BlockIoCreate()
+    _In_ PBLOCK_READ ReadBlocks,
+    _Out_ PPARTITION_TABLE_ENTRY PartitionTableEntry,
+    _Out_ PULONG ActivePartition)
 {
     ULONG BootablePartitionCount = 0;
     ULONG CurrentPartitionNumber;
@@ -145,7 +144,7 @@ DiskGetActivePartitionEntry(
     *ActivePartition = 0;
 
     /* Read master boot record */
-    if (!DiskReadBootRecord(DriveNumber, 0, &MasterBootRecord))
+    if (!DiskReadBootRecord(DeviceData, ReadBlocks, 0, &MasterBootRecord))
     {
         return FALSE;
     }
@@ -192,9 +191,10 @@ DiskGetActivePartitionEntry(
 
 static BOOLEAN
 DiskGetMbrPartitionEntry(
-    IN UCHAR DriveNumber,
-    IN ULONG PartitionNumber,
-    OUT PPARTITION_TABLE_ENTRY PartitionTableEntry)
+    _In_ PVOID DeviceData, // The "DeviceData" given to BlockIoCreate()
+    _In_ PBLOCK_READ ReadBlocks,
+    _In_ ULONG PartitionNumber,
+    _Out_ PPARTITION_TABLE_ENTRY PartitionTableEntry)
 {
     MASTER_BOOT_RECORD MasterBootRecord;
     PARTITION_TABLE_ENTRY ExtendedPartitionTableEntry;
@@ -205,7 +205,7 @@ DiskGetMbrPartitionEntry(
     PPARTITION_TABLE_ENTRY ThisPartitionTableEntry;
 
     /* Read master boot record */
-    if (!DiskReadBootRecord(DriveNumber, 0, &MasterBootRecord))
+    if (!DiskReadBootRecord(DeviceData, ReadBlocks, 0, &MasterBootRecord))
     {
         return FALSE;
     }
@@ -259,7 +259,7 @@ DiskGetMbrPartitionEntry(
             ExtendedPartitionOffset = ExtendedPartitionTableEntry.SectorCountBeforePartition;
         }
         /* Read the partition boot record */
-        if (!DiskReadBootRecord(DriveNumber, ExtendedPartitionTableEntry.SectorCountBeforePartition, &MasterBootRecord))
+        if (!DiskReadBootRecord(DeviceData, ReadBlocks, ExtendedPartitionTableEntry.SectorCountBeforePartition, &MasterBootRecord))
         {
             return FALSE;
         }
@@ -283,48 +283,50 @@ DiskGetMbrPartitionEntry(
 
 static BOOLEAN
 DiskGetBrfrPartitionEntry(
-    IN UCHAR DriveNumber,
-    IN ULONG PartitionNumber,
-    OUT PPARTITION_TABLE_ENTRY PartitionTableEntry)
+    _In_ PVOID DeviceData, // The "DeviceData" given to BlockIoCreate()
+    _In_ PBLOCK_READ ReadBlocks,
+    _In_ ULONG PartitionNumber,
+    _Out_ PPARTITION_TABLE_ENTRY PartitionTableEntry)
 {
     /*
      * Get partition entry of an Xbox-standard BRFR partitioned disk.
      */
-    if (PartitionNumber >= 1 && PartitionNumber <= sizeof(XboxPartitions) / sizeof(XboxPartitions[0]) &&
-        MachDiskReadLogicalSectors(DriveNumber, XBOX_SIGNATURE_SECTOR, 1, DiskReadBuffer))
+    if (!(1 <= PartitionNumber && PartitionNumber <= RTL_NUMBER_OF(XboxPartitions)) ||
+        ReadBlocks(DeviceData, XBOX_SIGNATURE_SECTOR, 1, DiskReadBuffer) != ESUCCESS)
     {
-        if (*((PULONG)DiskReadBuffer) != XBOX_SIGNATURE)
-        {
-            /* No magic Xbox partitions */
-            return FALSE;
-        }
-
-        RtlZeroMemory(PartitionTableEntry, sizeof(PARTITION_TABLE_ENTRY));
-        PartitionTableEntry->SystemIndicator = XboxPartitions[PartitionNumber - 1].SystemIndicator;
-        PartitionTableEntry->SectorCountBeforePartition = XboxPartitions[PartitionNumber - 1].SectorCountBeforePartition;
-        PartitionTableEntry->PartitionSectorCount = XboxPartitions[PartitionNumber - 1].PartitionSectorCount;
-        return TRUE;
+        /* Partition does not exist */
+        return FALSE;
     }
 
-    /* Partition does not exist */
-    return FALSE;
+    if (*((PULONG)DiskReadBuffer) != XBOX_SIGNATURE)
+    {
+        /* No magic Xbox partitions */
+        return FALSE;
+    }
+
+    RtlZeroMemory(PartitionTableEntry, sizeof(PARTITION_TABLE_ENTRY));
+    PartitionTableEntry->SystemIndicator = XboxPartitions[PartitionNumber - 1].SystemIndicator;
+    PartitionTableEntry->SectorCountBeforePartition = XboxPartitions[PartitionNumber - 1].SectorCountBeforePartition;
+    PartitionTableEntry->PartitionSectorCount = XboxPartitions[PartitionNumber - 1].PartitionSectorCount;
+    return TRUE;
 }
 
-VOID
-DiskDetectPartitionType(
-    IN UCHAR DriveNumber)
+PARTITION_STYLE
+DiskDetectPartitionStyle(
+    _In_ PVOID DeviceData, // The "DeviceData" given to BlockIoCreate()
+    _In_ PBLOCK_READ ReadBlocks)
 {
     MASTER_BOOT_RECORD MasterBootRecord;
-    ULONG Index;
-    ULONG PartitionCount = 0;
     PPARTITION_TABLE_ENTRY ThisPartitionTableEntry;
-    BOOLEAN GPTProtect = FALSE;
     PARTITION_TABLE_ENTRY PartitionTableEntry;
 
     /* Probe for Master Boot Record */
-    if (DiskReadBootRecord(DriveNumber, 0, &MasterBootRecord))
+    if (DiskReadBootRecord(DeviceData, ReadBlocks, 0, &MasterBootRecord))
     {
-        DiskPartitionType[DriveNumber] = PARTITION_STYLE_MBR;
+        PARTITION_STYLE PartitionStyle = PARTITION_STYLE_MBR;
+        ULONG Index;
+        ULONG PartitionCount = 0;
+        BOOLEAN GPTProtect = FALSE;
 
         /* Check for GUID Partition Table */
         for (Index = 0; Index < 4; Index++)
@@ -336,44 +338,45 @@ DiskDetectPartitionType(
                 PartitionCount++;
 
                 if (Index == 0 && ThisPartitionTableEntry->SystemIndicator == PARTITION_GPT)
-                {
                     GPTProtect = TRUE;
-                }
             }
         }
 
         if (PartitionCount == 1 && GPTProtect)
-        {
-            DiskPartitionType[DriveNumber] = PARTITION_STYLE_GPT;
-        }
-        TRACE("Drive 0x%X partition type %s\n", DriveNumber, DiskPartitionType[DriveNumber] == PARTITION_STYLE_MBR ? "MBR" : "GPT");
-        return;
+            PartitionStyle = PARTITION_STYLE_GPT;
+
+        TRACE("Device 0x%p partition style %s\n", DeviceData, PartitionStyle == PARTITION_STYLE_MBR ? "MBR" : "GPT");
+        return PartitionStyle;
     }
 
     /* Probe for Xbox-BRFR partitioning */
-    if (DiskGetBrfrPartitionEntry(DriveNumber, FATX_DATA_PARTITION, &PartitionTableEntry))
+    if (DiskGetBrfrPartitionEntry(DeviceData, ReadBlocks, FATX_DATA_PARTITION, &PartitionTableEntry))
     {
-        DiskPartitionType[DriveNumber] = PARTITION_STYLE_BRFR;
-        TRACE("Drive 0x%X partition type Xbox-BRFR\n", DriveNumber);
-        return;
+        TRACE("Device 0x%p partition style Xbox-BRFR\n", DeviceData);
+        return PARTITION_STYLE_BRFR;
     }
 
-    /* Failed to detect partitions, assume partitionless disk */
-    DiskPartitionType[DriveNumber] = PARTITION_STYLE_RAW;
-    TRACE("Drive 0x%X partition type unknown\n", DriveNumber);
+    /* Failed to detect partitions, assume unpartitioned disk */
+    TRACE("Device 0x%p partition style unknown\n", DeviceData);
+    return PARTITION_STYLE_RAW;
 }
 
 BOOLEAN
 DiskGetBootPartitionEntry(
-    IN UCHAR DriveNumber,
-    OUT PPARTITION_TABLE_ENTRY PartitionTableEntry,
-    OUT PULONG BootPartition)
+    _In_ PVOID DeviceData, // The "DeviceData" given to BlockIoCreate()
+    _In_ PBLOCK_READ ReadBlocks,
+    _In_opt_ PARTITION_STYLE PartitionStyle,
+    _Out_ PPARTITION_TABLE_ENTRY PartitionTableEntry,
+    _Out_ PULONG BootPartition)
 {
-    switch (DiskPartitionType[DriveNumber])
+    if (PartitionStyle == 0xFF)
+        PartitionStyle = DiskDetectPartitionStyle(DeviceData, ReadBlocks);
+
+    switch (PartitionStyle)
     {
         case PARTITION_STYLE_MBR:
         {
-            return DiskGetActivePartitionEntry(DriveNumber, PartitionTableEntry, BootPartition);
+            return DiskGetActivePartitionEntry(DeviceData, ReadBlocks, PartitionTableEntry, BootPartition);
         }
         case PARTITION_STYLE_GPT:
         {
@@ -387,7 +390,7 @@ DiskGetBootPartitionEntry(
         }
         case PARTITION_STYLE_BRFR:
         {
-            if (DiskGetBrfrPartitionEntry(DriveNumber, FATX_DATA_PARTITION, PartitionTableEntry))
+            if (DiskGetBrfrPartitionEntry(DeviceData, ReadBlocks, FATX_DATA_PARTITION, PartitionTableEntry))
             {
                 *BootPartition = FATX_DATA_PARTITION;
                 return TRUE;
@@ -396,7 +399,7 @@ DiskGetBootPartitionEntry(
         }
         default:
         {
-            ERR("Drive 0x%X partition type = %d, should not happen!\n", DriveNumber, DiskPartitionType[DriveNumber]);
+            ERR("Device 0x%p partition style = %u, should not happen!\n", DeviceData, PartitionStyle);
             ASSERT(FALSE);
         }
     }
@@ -405,15 +408,17 @@ DiskGetBootPartitionEntry(
 
 BOOLEAN
 DiskGetPartitionEntry(
-    IN UCHAR DriveNumber,
-    IN ULONG PartitionNumber,
-    OUT PPARTITION_TABLE_ENTRY PartitionTableEntry)
+    _In_ PVOID DeviceData, // The "DeviceData" given to BlockIoCreate()
+    _In_ PBLOCK_READ ReadBlocks,
+    _In_ PARTITION_STYLE PartitionStyle,
+    _In_ ULONG PartitionNumber,
+    _Out_ PPARTITION_TABLE_ENTRY PartitionTableEntry)
 {
-    switch (DiskPartitionType[DriveNumber])
+    switch (PartitionStyle)
     {
         case PARTITION_STYLE_MBR:
         {
-            return DiskGetMbrPartitionEntry(DriveNumber, PartitionNumber, PartitionTableEntry);
+            return DiskGetMbrPartitionEntry(DeviceData, ReadBlocks, PartitionNumber, PartitionTableEntry);
         }
         case PARTITION_STYLE_GPT:
         {
@@ -427,11 +432,11 @@ DiskGetPartitionEntry(
         }
         case PARTITION_STYLE_BRFR:
         {
-            return DiskGetBrfrPartitionEntry(DriveNumber, PartitionNumber, PartitionTableEntry);
+            return DiskGetBrfrPartitionEntry(DeviceData, ReadBlocks, PartitionNumber, PartitionTableEntry);
         }
         default:
         {
-            ERR("Drive 0x%X partition type = %d, should not happen!\n", DriveNumber, DiskPartitionType[DriveNumber]);
+            ERR("Device 0x%p partition style = %u, should not happen!\n", DeviceData, PartitionStyle);
             ASSERT(FALSE);
         }
     }

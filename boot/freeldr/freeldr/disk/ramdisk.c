@@ -314,7 +314,7 @@ RamDiskInitialize(
     /* Register the RAMDISK device */
     if (!RamDiskDeviceRegistered)
     {
-        FsRegisterDevice("ramdisk(0)", &RamDiskVtbl);
+        FsRegisterDevice("ramdisk(0)", &RamDiskVtbl, NULL);
         RamDiskDeviceRegistered = TRUE;
     }
 

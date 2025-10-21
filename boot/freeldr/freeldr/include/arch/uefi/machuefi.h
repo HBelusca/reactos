@@ -75,16 +75,6 @@ UefiGetExtendedBIOSData(PULONG ExtendedBIOSDataArea,
 UCHAR
 UefiGetFloppyCount(VOID);
 
-BOOLEAN
-UefiDiskReadLogicalSectors(IN UCHAR DriveNumber,
-                           IN ULONGLONG SectorNumber,
-                           IN ULONG SectorCount,
-                           OUT PVOID Buffer);
-
-BOOLEAN
-UefiDiskGetDriveGeometry(UCHAR DriveNumber,
-                         PGEOMETRY Geometry);
-
 ULONG
 UefiDiskGetCacheableBlockCount(UCHAR DriveNumber);
 

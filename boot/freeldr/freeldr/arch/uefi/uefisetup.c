@@ -43,8 +43,8 @@ MachInit(const char *CmdLine)
     MachVtbl.GetMemoryMap = UefiMemGetMemoryMap;
     MachVtbl.GetExtendedBIOSData = UefiGetExtendedBIOSData;
     MachVtbl.GetFloppyCount = UefiGetFloppyCount;
-    MachVtbl.DiskReadLogicalSectors = UefiDiskReadLogicalSectors;
-    MachVtbl.DiskGetDriveGeometry = UefiDiskGetDriveGeometry;
+    MachVtbl.DiskReadLogicalSectors = NULL; // TODO: Remove
+    MachVtbl.DiskGetDriveGeometry = NULL; // TODO: Remove
     MachVtbl.DiskGetCacheableBlockCount = UefiDiskGetCacheableBlockCount;
     MachVtbl.GetTime = UefiGetTime;
     MachVtbl.InitializeBootDevices = UefiInitializeBootDevices;

@@ -61,10 +61,15 @@ FsGetVolumeSize(
 ULONG FsGetNumPathParts(PCSTR Path);
 VOID  FsGetFirstNameFromPath(PCHAR Buffer, PCSTR Path);
 
-VOID
+BOOLEAN
 FsRegisterDevice(
     _In_ PCSTR DeviceName,
-    _In_ const DEVVTBL* FuncTable);
+    _In_ const DEVVTBL* FuncTable,
+    _In_opt_ PVOID DeviceData);
+
+PVOID
+FsGetDeviceData(
+    _In_ ULONG DeviceId);
 
 PCWSTR FsGetServiceName(ULONG FileId);
 VOID  FsSetDeviceSpecific(ULONG FileId, PVOID Specific);

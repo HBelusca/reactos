@@ -62,7 +62,7 @@ VOID NTAPI HalpInitializePciStubs(VOID);
 VOID NTAPI HalpInitBusHandler(VOID);
 #endif
 
-typedef struct
+typedef struct _SCSI_PORT_DEVICE_EXTENSION
 {
     PVOID NonCachedExtension;
 
@@ -90,21 +90,15 @@ typedef struct
     PVOID MiniPortDeviceExtension;
 } SCSI_PORT_DEVICE_EXTENSION, *PSCSI_PORT_DEVICE_EXTENSION;
 
-typedef struct tagDISKCONTEXT
+typedef struct _SCSI_DISK
 {
     /* Device ID */
     PSCSI_PORT_DEVICE_EXTENSION DeviceExtension;
     UCHAR PathId;
     UCHAR TargetId;
     UCHAR Lun;
-
-    /* Device characteristics */
-    BOOLEAN IsFloppy;
     ULONG SectorSize;
-    ULONGLONG SectorOffset;
-    ULONGLONG SectorCount;
-    ULONGLONG SectorNumber;
-} DISKCONTEXT;
+} SCSI_DISK;
 
 PSCSI_PORT_DEVICE_EXTENSION ScsiDeviceExtensions[SCSI_MAXIMUM_BUSES];
 
@@ -174,252 +168,143 @@ SpiSendSynchronousSrb(
     return ret;
 }
 
-static ARC_STATUS DiskClose(ULONG FileId)
+// ~ StartDevice
+static
+ARC_STATUS
+ScsiDiskInit(
+    _In_ PVOID This, // The "DeviceData" given to BlockIoCreate()
+    _In_ PCSTR Path,
+    _Out_ PGEOMETRY Geometry)
 {
-    DISKCONTEXT* Context = FsGetDeviceSpecific(FileId);
-    ExFreePool(Context);
-    return ESUCCESS;
-}
+    SCSI_DISK* Disk = This;
+    PSCSI_PORT_DEVICE_EXTENSION DeviceExtension;
+    ULONG ScsiBus, PathId, TargetId, Lun, Partition, PathSyntax;
+    ULONG SectorSize;
+    ULONGLONG SectorCount;
 
-static ARC_STATUS DiskGetFileInformation(ULONG FileId, FILEINFORMATION* Information)
-{
-    DISKCONTEXT* Context = FsGetDeviceSpecific(FileId);
-
-    RtlZeroMemory(Information, sizeof(*Information));
-
-    /*
-     * The ARC specification mentions that for partitions, StartingAddress and
-     * EndingAddress are the start and end positions of the partition in terms
-     * of byte offsets from the start of the disk.
-     * CurrentAddress is the current offset into (i.e. relative to) the partition.
-     */
-    Information->StartingAddress.QuadPart = Context->SectorOffset * Context->SectorSize;
-    Information->EndingAddress.QuadPart   = (Context->SectorOffset + Context->SectorCount) * Context->SectorSize;
-    Information->CurrentAddress.QuadPart  = Context->SectorNumber * Context->SectorSize;
-
-    Information->Type = (Context->IsFloppy ? FloppyDiskPeripheral : DiskPeripheral);
-
-    return ESUCCESS;
-}
-
-static ARC_STATUS DiskOpen(CHAR* Path, OPENMODE OpenMode, ULONG* FileId)
-{
     PSCSI_REQUEST_BLOCK Srb;
     PCDB Cdb;
     READ_CAPACITY_DATA ReadCapacityBuffer;
 
-    DISKCONTEXT* Context;
-    PSCSI_PORT_DEVICE_EXTENSION DeviceExtension;
-    ULONG ScsiBus, PathId, TargetId, Lun, Partition, PathSyntax;
-    ULONG SectorSize;
-    ULONGLONG SectorOffset = 0;
-    ULONGLONG SectorCount;
+    if (!Disk)
+        return ENODEV;
 
     /* Parse ARC path */
     if (!DissectArcPath2(Path, &ScsiBus, &TargetId, &Lun, &Partition, &PathSyntax))
-        return EINVAL;
+        return ENODEV;
     if (PathSyntax != 0) /* scsi() format */
-        return EINVAL;
+        return ENODEV;
     DeviceExtension = ScsiDeviceExtensions[ScsiBus];
     PathId = ScsiBus - DeviceExtension->BusNum;
 
+    /* Verify that the data matches what the disk describes */
+    if (Disk->DeviceExtension != DeviceExtension ||
+        Disk->PathId != (UCHAR)PathId ||
+        Disk->TargetId != (UCHAR)TargetId ||
+        Disk->Lun != (UCHAR)Lun)
+    {
+        return ENODEV;
+    }
+
+    UNREFERENCED_PARAMETER(Partition);
+
     /* Get disk capacity and sector size */
-    Srb = ExAllocatePool(PagedPool, sizeof(SCSI_REQUEST_BLOCK));
+    Srb = ExAllocatePool(PagedPool, sizeof(*Srb));
     if (!Srb)
         return ENOMEM;
-    RtlZeroMemory(Srb, sizeof(SCSI_REQUEST_BLOCK));
-    Srb->Length = sizeof(SCSI_REQUEST_BLOCK);
+    RtlZeroMemory(Srb, sizeof(*Srb));
+    Srb->Length = sizeof(*Srb);
     Srb->Function = SRB_FUNCTION_EXECUTE_SCSI;
     Srb->PathId = (UCHAR)PathId;
     Srb->TargetId = (UCHAR)TargetId;
     Srb->Lun = (UCHAR)Lun;
     Srb->CdbLength = 10;
     Srb->SrbFlags = SRB_FLAGS_DATA_IN;
-    Srb->DataTransferLength = sizeof(READ_CAPACITY_DATA);
+    Srb->DataTransferLength = sizeof(ReadCapacityBuffer);
     Srb->TimeOutValue = 5; /* in seconds */
     Srb->DataBuffer = &ReadCapacityBuffer;
     Cdb = (PCDB)Srb->Cdb;
     Cdb->CDB10.OperationCode = SCSIOP_READ_CAPACITY;
     if (!SpiSendSynchronousSrb(DeviceExtension, Srb))
-    {
         return EIO;
-    }
 
     /* Transform result to host endianness */
     SectorCount = ntohl(ReadCapacityBuffer.LogicalBlockAddress);
     SectorSize = ntohl(ReadCapacityBuffer.BytesPerBlock);
 
-    if (Partition != 0)
-    {
-        /* Need to offset start of disk and length */
-        UNIMPLEMENTED;
-        return EIO;
-    }
+    ++SectorCount; // LogicalBlockAddress is the last LBA. Total count is + 1.
 
-    Context = ExAllocatePool(PagedPool, sizeof(DISKCONTEXT));
-    if (!Context)
-        return ENOMEM;
-    Context->DeviceExtension = DeviceExtension;
-    Context->PathId = (UCHAR)PathId;
-    Context->TargetId = (UCHAR)TargetId;
-    Context->Lun = (UCHAR)Lun;
-    Context->IsFloppy = (!strstr(Path, ")cdrom(") && strstr(Path, ")fdisk("));
-    Context->SectorSize = SectorSize;
-    Context->SectorOffset = SectorOffset;
-    Context->SectorCount = SectorCount;
-    Context->SectorNumber = 0;
-    FsSetDeviceSpecific(*FileId, Context);
+    /* Initialize the geometry */
+    // TODO: Investigate MODE_RIGID_GEOMETRY_PAGE or MODE_FLEXIBLE_DISK_PAGE
+    Geometry->Cylinders = 1;
+    Geometry->Heads = 1;
+    Geometry->SectorsPerTrack = SectorCount;
+    Geometry->BytesPerSector = SectorSize;
+    Geometry->Sectors = SectorCount;
+
+    Disk->SectorSize = SectorSize;
+    /// Context->IsFloppy = (!strstr(Path, ")cdrom(") && strstr(Path, ")fdisk("));
 
     return ESUCCESS;
 }
 
-static ARC_STATUS DiskRead(ULONG FileId, VOID* Buffer, ULONG N, ULONG* Count)
+// ~ Stop/RemoveDevice
+static
+ARC_STATUS
+ScsiDiskUninit(
+    _In_ PVOID This) // The "DeviceData" given to BlockIoCreate()
 {
-    DISKCONTEXT* Context = FsGetDeviceSpecific(FileId);
+    return ESUCCESS;
+}
+
+static
+ARC_STATUS
+ScsiDiskReadBlocks(
+    _In_ PVOID This, // The "DeviceData" given to BlockIoCreate()
+    _In_ ULONGLONG SectorNumber,
+    _In_ ULONG SectorCount,
+    _Out_ PVOID Buffer)
+{
+    SCSI_DISK* Disk = This;
     PSCSI_REQUEST_BLOCK Srb;
     PCDB Cdb;
-    ULONG FullSectors, NbSectors;
     ULONG Lba;
 
-    *Count = 0;
-
-    if (N == 0)
-        return ESUCCESS;
-
-    FullSectors = N / Context->SectorSize;
-    NbSectors = (N + Context->SectorSize - 1) / Context->SectorSize;
-    if (Context->SectorNumber + NbSectors >= Context->SectorCount)
+    /* SCSI block numbers are limited to 32 bits,
+     * that is, until the SBC-2 specification */
+    if (SectorNumber > MAXULONG)
         return EINVAL;
-    if (FullSectors > 0xffff)
-        return EINVAL;
+    Lba = (ULONG)SectorNumber;
 
-    /* Read full sectors */
-    ASSERT(Context->SectorNumber < 0xFFFFFFFF);
-    Lba = (ULONG)(Context->SectorOffset + Context->SectorNumber);
-    if (FullSectors > 0)
-    {
-        Srb = ExAllocatePool(PagedPool, sizeof(SCSI_REQUEST_BLOCK));
-        if (!Srb)
-            return ENOMEM;
+    Srb = ExAllocatePool(PagedPool, sizeof(*Srb));
+    if (!Srb)
+        return ENOMEM;
 
-        RtlZeroMemory(Srb, sizeof(SCSI_REQUEST_BLOCK));
-        Srb->Length = sizeof(SCSI_REQUEST_BLOCK);
-        Srb->Function = SRB_FUNCTION_EXECUTE_SCSI;
-        Srb->PathId = Context->PathId;
-        Srb->TargetId = Context->TargetId;
-        Srb->Lun = Context->Lun;
-        Srb->CdbLength = 10;
-        Srb->SrbFlags = SRB_FLAGS_DATA_IN;
-        Srb->DataTransferLength = FullSectors * Context->SectorSize;
-        Srb->TimeOutValue = 5; /* in seconds */
-        Srb->DataBuffer = Buffer;
-        Cdb = (PCDB)Srb->Cdb;
-        Cdb->CDB10.OperationCode = SCSIOP_READ;
-        Cdb->CDB10.LogicalUnitNumber = Srb->Lun;
-        Cdb->CDB10.LogicalBlockByte0 = (Lba >> 24) & 0xff;
-        Cdb->CDB10.LogicalBlockByte1 = (Lba >> 16) & 0xff;
-        Cdb->CDB10.LogicalBlockByte2 = (Lba >> 8) & 0xff;
-        Cdb->CDB10.LogicalBlockByte3 = Lba & 0xff;
-        Cdb->CDB10.TransferBlocksMsb = (FullSectors >> 8) & 0xff;
-        Cdb->CDB10.TransferBlocksLsb = FullSectors & 0xff;
-        if (!SpiSendSynchronousSrb(Context->DeviceExtension, Srb))
-        {
-            return EIO;
-        }
-        Buffer = (PUCHAR)Buffer + FullSectors * Context->SectorSize;
-        N -= FullSectors * Context->SectorSize;
-        *Count += FullSectors * Context->SectorSize;
-        Context->SectorNumber += FullSectors;
-        Lba += FullSectors;
-    }
-
-    /* Read incomplete last sector */
-    if (N > 0)
-    {
-        PUCHAR Sector;
-
-        Sector = ExAllocatePool(PagedPool, Context->SectorSize);
-        if (!Sector)
-            return ENOMEM;
-
-        Srb = ExAllocatePool(PagedPool, sizeof(SCSI_REQUEST_BLOCK));
-        if (!Srb)
-        {
-            ExFreePool(Sector);
-            return ENOMEM;
-        }
-
-        RtlZeroMemory(Srb, sizeof(SCSI_REQUEST_BLOCK));
-        Srb->Length = sizeof(SCSI_REQUEST_BLOCK);
-        Srb->Function = SRB_FUNCTION_EXECUTE_SCSI;
-        Srb->PathId = Context->PathId;
-        Srb->TargetId = Context->TargetId;
-        Srb->Lun = Context->Lun;
-        Srb->CdbLength = 10;
-        Srb->SrbFlags = SRB_FLAGS_DATA_IN;
-        Srb->DataTransferLength = Context->SectorSize;
-        Srb->TimeOutValue = 5; /* in seconds */
-        Srb->DataBuffer = Sector;
-        Cdb = (PCDB)Srb->Cdb;
-        Cdb->CDB10.OperationCode = SCSIOP_READ;
-        Cdb->CDB10.LogicalUnitNumber = Srb->Lun;
-        Cdb->CDB10.LogicalBlockByte0 = (Lba >> 24) & 0xff;
-        Cdb->CDB10.LogicalBlockByte1 = (Lba >> 16) & 0xff;
-        Cdb->CDB10.LogicalBlockByte2 = (Lba >> 8) & 0xff;
-        Cdb->CDB10.LogicalBlockByte3 = Lba & 0xff;
-        Cdb->CDB10.TransferBlocksMsb = 0;
-        Cdb->CDB10.TransferBlocksLsb = 1;
-        if (!SpiSendSynchronousSrb(Context->DeviceExtension, Srb))
-        {
-            ExFreePool(Sector);
-            return EIO;
-        }
-        RtlCopyMemory(Buffer, Sector, N);
-        *Count += N;
-        /* Context->SectorNumber remains untouched (incomplete sector read) */
-        ExFreePool(Sector);
-    }
+    RtlZeroMemory(Srb, sizeof(*Srb));
+    Srb->Length = sizeof(*Srb);
+    Srb->Function = SRB_FUNCTION_EXECUTE_SCSI;
+    Srb->PathId = Disk->PathId;
+    Srb->TargetId = Disk->TargetId;
+    Srb->Lun = Disk->Lun;
+    Srb->CdbLength = 10;
+    Srb->SrbFlags = SRB_FLAGS_DATA_IN;
+    Srb->DataTransferLength = SectorCount * Disk->SectorSize; // FIXME?
+    Srb->TimeOutValue = 5; /* in seconds */
+    Srb->DataBuffer = Buffer;
+    Cdb = (PCDB)Srb->Cdb;
+    Cdb->CDB10.OperationCode = SCSIOP_READ;
+    Cdb->CDB10.LogicalUnitNumber = Srb->Lun;
+    Cdb->CDB10.LogicalBlockByte0 = (Lba >> 24) & 0xff;
+    Cdb->CDB10.LogicalBlockByte1 = (Lba >> 16) & 0xff;
+    Cdb->CDB10.LogicalBlockByte2 = (Lba >> 8) & 0xff;
+    Cdb->CDB10.LogicalBlockByte3 = Lba & 0xff;
+    Cdb->CDB10.TransferBlocksMsb = (SectorCount >> 8) & 0xff;
+    Cdb->CDB10.TransferBlocksLsb = SectorCount & 0xff;
+    if (!SpiSendSynchronousSrb(Disk->DeviceExtension, Srb))
+        return EIO;
 
     return ESUCCESS;
 }
-
-static ARC_STATUS DiskSeek(ULONG FileId, LARGE_INTEGER* Position, SEEKMODE SeekMode)
-{
-    DISKCONTEXT* Context = FsGetDeviceSpecific(FileId);
-    LARGE_INTEGER NewPosition = *Position;
-
-    switch (SeekMode)
-    {
-        case SeekAbsolute:
-            break;
-        case SeekRelative:
-            NewPosition.QuadPart += (Context->SectorNumber * Context->SectorSize);
-            break;
-        default:
-            ASSERT(FALSE);
-            return EINVAL;
-    }
-
-    if (NewPosition.QuadPart & (Context->SectorSize - 1))
-        return EINVAL;
-
-    /* Convert in number of sectors */
-    NewPosition.QuadPart /= Context->SectorSize;
-    if (NewPosition.QuadPart >= Context->SectorCount)
-        return EINVAL;
-
-    Context->SectorNumber = NewPosition.QuadPart;
-    return ESUCCESS;
-}
-
-static const DEVVTBL DiskVtbl =
-{
-    DiskClose,
-    DiskGetFileInformation,
-    DiskOpen,
-    DiskRead,
-    DiskSeek,
-};
 
 static
 NTSTATUS
@@ -834,46 +719,16 @@ ScsiPortGetVirtualAddress(
 static
 VOID
 SpiScanDevice(
-    IN PSCSI_PORT_DEVICE_EXTENSION DeviceExtension,
-    IN PCHAR ArcName,
-    IN ULONG ScsiBus,
-    IN ULONG TargetId,
-    IN ULONG Lun)
+    _In_ PSCSI_PORT_DEVICE_EXTENSION DeviceExtension,
+    _In_ PCSTR ArcName,
+    _In_ ULONG ScsiBus,
+    _In_ ULONG TargetId,
+    _In_ ULONG Lun)
 {
-    ULONG FileId, i;
-    ARC_STATUS Status;
-    NTSTATUS ret;
-    struct _DRIVE_LAYOUT_INFORMATION *PartitionBuffer;
-    CHAR PartitionName[64];
-
-    /* Register device with partition(0) suffix */
-    RtlStringCbPrintfA(PartitionName, sizeof(PartitionName), "%spartition(0)", ArcName);
-    FsRegisterDevice(PartitionName, &DiskVtbl);
-
-    /* Read device partition table */
-    Status = ArcOpen(PartitionName, OpenReadOnly, &FileId);
-    if (Status == ESUCCESS)
-    {
-        ret = HALDISPATCH->HalIoReadPartitionTable((PDEVICE_OBJECT)(ULONG_PTR)FileId,
-                                                   512, FALSE, &PartitionBuffer);
-        if (NT_SUCCESS(ret))
-        {
-            for (i = 0; i < PartitionBuffer->PartitionCount; i++)
-            {
-                if (PartitionBuffer->PartitionEntry[i].PartitionType != PARTITION_ENTRY_UNUSED)
-                {
-                    RtlStringCbPrintfA(PartitionName,
-                                       sizeof(PartitionName),
-                                       "%spartition(%lu)",
-                                       ArcName,
-                                       PartitionBuffer->PartitionEntry[i].PartitionNumber);
-                    FsRegisterDevice(PartitionName, &DiskVtbl);
-                }
-            }
-            ExFreePool(PartitionBuffer);
-        }
-        ArcClose(FileId);
-    }
+    // TODO: Do any extra initialization
+    UNREFERENCED_PARAMETER(ScsiBus);
+    UNREFERENCED_PARAMETER(TargetId);
+    UNREFERENCED_PARAMETER(Lun);
 }
 
 static
@@ -883,17 +738,15 @@ SpiScanAdapter(
     IN ULONG ScsiBus,
     IN UCHAR PathId)
 {
-    CHAR ArcName[64];
     PSCSI_REQUEST_BLOCK Srb;
     PCDB Cdb;
     INQUIRYDATA InquiryBuffer;
     UCHAR TargetId;
     UCHAR Lun;
+    CHAR ArcName[64];
 
     if (!DeviceExtension->HwResetBus(DeviceExtension->MiniPortDeviceExtension, PathId))
-    {
         return;
-    }
 
     /* Remember the extension */
     ScsiDeviceExtensions[ScsiBus] = DeviceExtension;
@@ -902,13 +755,15 @@ SpiScanAdapter(
     {
         for (Lun = 0; Lun < SCSI_MAXIMUM_LOGICAL_UNITS; Lun++)
         {
+            CONFIGURATION_TYPE DeviceType;
+
             TRACE("Scanning SCSI device %lu.%u.%u\n", ScsiBus, TargetId, Lun);
 
-            Srb = ExAllocatePool(PagedPool, sizeof(SCSI_REQUEST_BLOCK));
+            Srb = ExAllocatePool(PagedPool, sizeof(*Srb));
             if (!Srb)
                 break;
-            RtlZeroMemory(Srb, sizeof(SCSI_REQUEST_BLOCK));
-            Srb->Length = sizeof(SCSI_REQUEST_BLOCK);
+            RtlZeroMemory(Srb, sizeof(*Srb));
+            Srb->Length = sizeof(*Srb);
             Srb->Function = SRB_FUNCTION_EXECUTE_SCSI;
             Srb->PathId = PathId;
             Srb->TargetId = TargetId;
@@ -934,6 +789,7 @@ SpiScanAdapter(
              * - SEQUENTIAL_ACCESS_DEVICE i.e. Tape,
              * - WRITE_ONCE_READ_MULTIPLE_DEVICE i.e. Worm.
              */
+            *ArcName = ANSI_NULL;
             if ((InquiryBuffer.DeviceType == DIRECT_ACCESS_DEVICE) ||
                 (InquiryBuffer.DeviceType == OPTICAL_DEVICE))
             {
@@ -944,7 +800,7 @@ SpiScanAdapter(
                     RtlStringCbPrintfA(ArcName, sizeof(ArcName),
                                        "scsi(%lu)disk(%u)fdisk(%u)",
                                        ScsiBus, TargetId, Lun);
-                    FsRegisterDevice(ArcName, &DiskVtbl);
+                    DeviceType = FloppyDiskPeripheral;
                 }
                 else
                 {
@@ -952,8 +808,7 @@ SpiScanAdapter(
                     RtlStringCbPrintfA(ArcName, sizeof(ArcName),
                                        "scsi(%lu)disk(%u)rdisk(%u)",
                                        ScsiBus, TargetId, Lun);
-                    /* Now, check if it has partitions */
-                    SpiScanDevice(DeviceExtension, ArcName, PathId, TargetId, Lun);
+                    DeviceType = DiskPeripheral;
                 }
             }
             else if (InquiryBuffer.DeviceType == READ_ONLY_DIRECT_ACCESS_DEVICE)
@@ -962,7 +817,37 @@ SpiScanAdapter(
                 RtlStringCbPrintfA(ArcName, sizeof(ArcName),
                                    "scsi(%lu)cdrom(%u)fdisk(%u)",
                                    ScsiBus, TargetId, Lun);
-                FsRegisterDevice(ArcName, &DiskVtbl);
+                /* Use a Controller type to distinguish with respect to an actual floppy */
+                DeviceType = CdromController; // FloppyDiskPeripheral;
+            }
+
+            /* Initialize this device */
+            if (*ArcName)
+            {
+                ARC_STATUS Status;
+                SCSI_DISK* Disk = ExAllocatePool(PagedPool, sizeof(*Disk));
+                if (!Disk)
+                    continue; // Skip
+                Disk->DeviceExtension = DeviceExtension;
+                Disk->PathId = PathId;
+                Disk->TargetId = TargetId;
+                Disk->Lun = Lun;
+                Disk->SectorSize = 0;
+                Status = BlockIoCreate(ArcName,
+                                       DeviceType,
+                                       Disk,
+                                       ScsiDiskInit,
+                                       ScsiDiskUninit,
+                                       ScsiDiskReadBlocks,
+                                       NULL,
+                                       NULL);
+                if (Status != ESUCCESS)
+                {
+                    ExFreePool(Disk);
+                    continue; // Skip
+                }
+
+                SpiScanDevice(DeviceExtension, ArcName, PathId, TargetId, Lun);
             }
         }
     }
@@ -1171,7 +1056,7 @@ ScsiPortInitialize(
         return STATUS_INVALID_PARAMETER;
     }
 
-    /* Check params for validity */
+    /* Check parameters for validity */
     if ((HwInitializationData->HwInitialize == NULL) ||
         (HwInitializationData->HwStartIo == NULL) ||
         (HwInitializationData->HwInterrupt == NULL) ||

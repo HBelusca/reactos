@@ -123,6 +123,8 @@
 @ stdcall RtlAssert(ptr ptr long ptr)
 @ cdecl StallExecutionProcessor()
 
+@ cdecl BlockIoCreate(str long ptr ptr ptr ptr ptr ptr)
+
 # Additional stuff for scsiport
 @ stdcall CpDoesPortExist(ptr)
 @ stdcall CpEnableFifo(ptr long)
@@ -130,9 +132,9 @@
 @ stdcall CpInitialize(ptr ptr long)
 @ stdcall CpPutByte(ptr long)
 @ cdecl DissectArcPath2()
-@ cdecl FsRegisterDevice()
-@ cdecl FsGetDeviceSpecific()
-@ cdecl FsSetDeviceSpecific()
+@ cdecl FsRegisterDevice(str ptr ptr)
+@ cdecl FsGetDeviceSpecific(long)
+@ cdecl FsSetDeviceSpecific(long ptr)
 @ stdcall ExAllocatePool(long long)
 @ stdcall ExAllocatePoolWithTag(long long long)
 @ stdcall ExFreePool(ptr)
