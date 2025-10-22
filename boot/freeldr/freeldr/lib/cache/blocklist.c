@@ -1,20 +1,8 @@
 /*
- *  FreeLoader
- *  Copyright (C) 1998-2003  Brian Palmer  <brianp@sginet.com>
- *
- *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version.
- *
- *  This program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License along
- *  with this program; if not, write to the Free Software Foundation, Inc.,
- *  51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * PROJECT:     FreeLoader
+ * LICENSE:     GPL-2.0-or-later (https://spdx.org/licenses/GPL-2.0-or-later)
+ * PURPOSE:     Cache blocks list
+ * COPYRIGHT:   Copyright 2002 Brian Palmer <brianp@sginet.com>
  */
 
 #include <freeldr.h>
@@ -22,104 +10,162 @@
 #include <debug.h>
 DBG_DEFAULT_CHANNEL(CACHE);
 
-// Returns a pointer to a CACHE_BLOCK structure
-// Adds the block to the cache manager block list
-// in cache memory if it isn't already there
-PCACHE_BLOCK CacheInternalGetBlockPointer(PCACHE_DRIVE CacheDrive, ULONG BlockNumber)
+/* INTERNAL DATA *************************************************************/
+
+extern ULONG  CacheBlockCount;
+extern SIZE_T CacheSizeLimit;
+extern SIZE_T CacheSizeCurrent;
+
+/* FUNCTIONS *****************************************************************/
+
+/**
+ * @brief   Dumps the list of cached blocks to the debug output port.
+ **/
+static VOID
+CacheInternalDumpBlockList(
+    _In_ PCACHE_DRIVE CacheDrive)
 {
-    PCACHE_BLOCK    CacheBlock = NULL;
+    PLIST_ENTRY Entry;
 
-    TRACE("CacheInternalGetBlockPointer() BlockNumber = %d\n", BlockNumber);
+    TRACE("Dumping block list for BIOS drive 0x%x:\n", CacheDrive->DriveNumber);
+    TRACE("BytesPerSector: %lu\n", CacheDrive->BytesPerSector);
+    TRACE("BlockSize: %lu\n", CacheDrive->BlockSize);
+    TRACE("CacheBlockCount:  %lu\n", CacheBlockCount);
+    TRACE("CacheSizeLimit:   %Iu\n", CacheSizeLimit);
+    TRACE("CacheSizeCurrent: %Iu\n", CacheSizeCurrent);
 
-    CacheBlock = CacheInternalFindBlock(CacheDrive, BlockNumber);
-
-    if (CacheBlock != NULL)
+    for (Entry = CacheDrive->CacheBlockHead.Flink;
+         Entry != &CacheDrive->CacheBlockHead;
+         Entry = Entry->Flink)
     {
-        TRACE("Cache hit! BlockNumber: %d CacheBlock->BlockNumber: %d\n", BlockNumber, CacheBlock->BlockNumber);
+        PCACHE_BLOCK CacheBlock = CONTAINING_RECORD(Entry, CACHE_BLOCK, ListEntry);
 
-        return CacheBlock;
+        TRACE("Cache Block: CacheBlock: 0x%p\n", CacheBlock);
+        TRACE("Cache Block: Block Number: %lu\n", CacheBlock->BlockNumber);
+        TRACE("Cache Block: Access Count: %lu\n", CacheBlock->AccessCount);
+        TRACE("Cache Block: Block Data: 0x%p\n", CacheBlock->BlockData);
+        TRACE("Cache Block: Locked in cache: %s\n", CacheBlock->LockedInCache ? "TRUE" : "FALSE");
+
+        if (CacheBlock->BlockData == NULL)
+            BugCheck("CacheBlock->BlockData == NULL\n");
     }
-
-    TRACE("Cache miss! BlockNumber: %d\n", BlockNumber);
-
-    CacheBlock = CacheInternalAddBlockToCache(CacheDrive, BlockNumber);
-
-    // Optimize the block list so it has a LRU structure
-    CacheInternalOptimizeBlockList(CacheDrive, CacheBlock);
-
-    return CacheBlock;
 }
 
-PCACHE_BLOCK CacheInternalFindBlock(PCACHE_DRIVE CacheDrive, ULONG BlockNumber)
+/**
+ * @brief   Moves the specified block to the head of the list.
+ **/
+static VOID
+CacheInternalOptimizeBlockList(
+    _In_ PCACHE_DRIVE CacheDrive,
+    _In_ PCACHE_BLOCK CacheBlock)
 {
-    PCACHE_BLOCK    CacheBlock = NULL;
+    TRACE("CacheInternalOptimizeBlockList()\n");
 
-    TRACE("CacheInternalFindBlock() BlockNumber = %d\n", BlockNumber);
-
-    //
-    // Make sure the block list has entries before I start searching it.
-    //
-    if (!IsListEmpty(&CacheDrive->CacheBlockHead))
+    /* Don't do this if this block is already at the head of the list */
+    if (&CacheBlock->ListEntry != CacheDrive->CacheBlockHead.Flink)
     {
-        //
-        // Search the list and find the BIOS drive number
-        //
-        CacheBlock = CONTAINING_RECORD(CacheDrive->CacheBlockHead.Flink, CACHE_BLOCK, ListEntry);
+        /* Remove this item from the block list */
+        RemoveEntryList(&CacheBlock->ListEntry);
 
-        while (&CacheBlock->ListEntry != &CacheDrive->CacheBlockHead)
+        /* Re-insert it at the head of the list */
+        InsertHeadList(&CacheDrive->CacheBlockHead, &CacheBlock->ListEntry);
+    }
+}
+
+/**
+ * @brief   Searches the block list for a particular block.
+ **/
+static PCACHE_BLOCK
+CacheInternalFindBlock(
+    _In_ PCACHE_DRIVE CacheDrive,
+    _In_ ULONG BlockNumber)
+{
+    PLIST_ENTRY Entry;
+
+    TRACE("CacheInternalFindBlock(BlockNumber: %lu)\n", BlockNumber);
+
+    /* Search the block list and find the BIOS drive number */
+    for (Entry = CacheDrive->CacheBlockHead.Flink;
+         Entry != &CacheDrive->CacheBlockHead;
+         Entry = Entry->Flink)
+    {
+        PCACHE_BLOCK CacheBlock = CONTAINING_RECORD(Entry, CACHE_BLOCK, ListEntry);
+
+        if (CacheBlock->BlockNumber == BlockNumber)
         {
-            //
-            // We found the block, so return it
-            //
-            if (CacheBlock->BlockNumber == BlockNumber)
-            {
-                //
-                // Increment the blocks access count
-                //
-                CacheBlock->AccessCount++;
-
-                return CacheBlock;
-            }
-
-            CacheBlock = CONTAINING_RECORD(CacheBlock->ListEntry.Flink, CACHE_BLOCK, ListEntry);
+            /* We found the block, so return it. Increment its access count. */
+            CacheBlock->AccessCount++;
+            return CacheBlock;
         }
     }
 
     return NULL;
 }
 
-PCACHE_BLOCK CacheInternalAddBlockToCache(PCACHE_DRIVE CacheDrive, ULONG BlockNumber)
+BOOLEAN
+CacheInternalFreeBlock(
+    _In_ PCACHE_DRIVE CacheDrive);
+
+/**
+ * @brief
+ * Checks the cache size limits to see if we can add a new block;
+ * if not, calls CacheInternalFreeBlock().
+ **/
+static VOID
+CacheInternalCheckCacheSizeLimits(
+    _In_ PCACHE_DRIVE CacheDrive)
 {
-    PCACHE_BLOCK    CacheBlock = NULL;
+    SIZE_T NewCacheSize;
 
-    TRACE("CacheInternalAddBlockToCache() BlockNumber = %d\n", BlockNumber);
+    TRACE("CacheInternalCheckCacheSizeLimits()\n");
 
-    // Check the size of the cache so we don't exceed our limits
+    /* Calculate the size of the cache if we added a block */
+    NewCacheSize = (CacheBlockCount + 1) * (CacheDrive->BlockSize * CacheDrive->BytesPerSector);
+
+    /* Check the new size against the cache size limit */
+    if (NewCacheSize > CacheSizeLimit)
+    {
+        CacheInternalFreeBlock(CacheDrive);
+        CacheInternalDumpBlockList(CacheDrive);
+    }
+}
+
+/**
+ * @brief   Adds a block to the cache's block list.
+ **/
+static PCACHE_BLOCK
+CacheInternalAddBlockToCache(
+    _In_ PCACHE_DRIVE CacheDrive,
+    _In_ ULONG BlockNumber)
+{
+    PCACHE_BLOCK CacheBlock;
+
+    TRACE("CacheInternalAddBlockToCache(BlockNumber: %lu)\n", BlockNumber);
+
+    /* Check the size of the cache so we don't exceed our limits */
     CacheInternalCheckCacheSizeLimits(CacheDrive);
 
-    // We will need to add the block to the
-    // drive's list of cached blocks. So allocate
-    // the block memory.
-    CacheBlock = FrLdrTempAlloc(sizeof(CACHE_BLOCK), TAG_CACHE_BLOCK);
+    /* We will need to add the block to the drive's list of cached blocks.
+     * So allocate the block memory. */
+    CacheBlock = FrLdrTempAlloc(sizeof(*CacheBlock), TAG_CACHE_BLOCK);
     if (CacheBlock == NULL)
-    {
         return NULL;
-    }
 
-    // Now initialize the structure and
-    // allocate room for the block data
-    RtlZeroMemory(CacheBlock, sizeof(CACHE_BLOCK));
+    /* Now initialize the structure and allocate room for the block data */
+    RtlZeroMemory(CacheBlock, sizeof(*CacheBlock));
     CacheBlock->BlockNumber = BlockNumber;
     CacheBlock->BlockData = FrLdrTempAlloc(CacheDrive->BlockSize * CacheDrive->BytesPerSector,
                                            TAG_CACHE_DATA);
-    if (CacheBlock->BlockData ==NULL)
+    if (CacheBlock->BlockData == NULL)
     {
         FrLdrTempFree(CacheBlock, TAG_CACHE_BLOCK);
         return NULL;
     }
 
-    // Now try to read in the block
-    if (!MachDiskReadLogicalSectors(CacheDrive->DriveNumber, (BlockNumber * CacheDrive->BlockSize), CacheDrive->BlockSize, DiskReadBuffer))
+    /* Now try to read in the block */
+    if (!MachDiskReadLogicalSectors(CacheDrive->DriveNumber,
+                                    (BlockNumber * CacheDrive->BlockSize),
+                                    CacheDrive->BlockSize, DiskReadBuffer))
     {
         FrLdrTempFree(CacheBlock->BlockData, TAG_CACHE_DATA);
         FrLdrTempFree(CacheBlock, TAG_CACHE_BLOCK);
@@ -127,10 +173,10 @@ PCACHE_BLOCK CacheInternalAddBlockToCache(PCACHE_DRIVE CacheDrive, ULONG BlockNu
     }
     RtlCopyMemory(CacheBlock->BlockData, DiskReadBuffer, CacheDrive->BlockSize * CacheDrive->BytesPerSector);
 
-    // Add it to our list of blocks managed by the cache
+    /* Add it to our list of blocks managed by the cache */
     InsertTailList(&CacheDrive->CacheBlockHead, &CacheBlock->ListEntry);
 
-    // Update the cache data
+    /* Update the cache data */
     CacheBlockCount++;
     CacheSizeCurrent = CacheBlockCount * (CacheDrive->BlockSize * CacheDrive->BytesPerSector);
 
@@ -139,99 +185,76 @@ PCACHE_BLOCK CacheInternalAddBlockToCache(PCACHE_DRIVE CacheDrive, ULONG BlockNu
     return CacheBlock;
 }
 
-BOOLEAN CacheInternalFreeBlock(PCACHE_DRIVE CacheDrive)
+/**
+ * @brief
+ * Returns a pointer to a CACHE_BLOCK structure, given a block number.
+ * Adds the block to the cache manager block list in cache memory
+ * if it isn't already there.
+ **/
+PCACHE_BLOCK
+CacheInternalGetBlockPointer(
+    _In_ PCACHE_DRIVE CacheDrive,
+    _In_ ULONG BlockNumber)
 {
-    PCACHE_BLOCK    CacheBlockToFree;
+    PCACHE_BLOCK CacheBlock = NULL;
+
+    TRACE("CacheInternalGetBlockPointer(BlockNumber: %lu)\n", BlockNumber);
+
+    CacheBlock = CacheInternalFindBlock(CacheDrive, BlockNumber);
+    if (CacheBlock != NULL)
+    {
+        TRACE("Cache hit! BlockNumber: %lu CacheBlock->BlockNumber: %lu\n",
+              BlockNumber, CacheBlock->BlockNumber);
+        return CacheBlock;
+    }
+
+    TRACE("Cache miss! BlockNumber: %lu\n", BlockNumber);
+    CacheBlock = CacheInternalAddBlockToCache(CacheDrive, BlockNumber);
+
+    /* Optimize the block list so it has a LRU structure */
+    CacheInternalOptimizeBlockList(CacheDrive, CacheBlock);
+
+    return CacheBlock;
+}
+
+/**
+ * @brief   Removes a block from the cache's block list & frees the memory.
+ **/
+BOOLEAN
+CacheInternalFreeBlock(
+    _In_ PCACHE_DRIVE CacheDrive)
+{
+    PLIST_ENTRY Entry;
+    PCACHE_BLOCK CacheBlockToFree = NULL;
 
     TRACE("CacheInternalFreeBlock()\n");
 
-    // Get a pointer to the last item in the block list
-    // that isn't forced to be in the cache and remove
-    // it from the list
-    CacheBlockToFree = CONTAINING_RECORD(CacheDrive->CacheBlockHead.Blink, CACHE_BLOCK, ListEntry);
-    while (&CacheBlockToFree->ListEntry != &CacheDrive->CacheBlockHead && CacheBlockToFree->LockedInCache)
+    /* Get a pointer to the last item in the block list that isn't locked
+     * (i.e. forced to be) in the cache and remove it from the list */
+    for (Entry = CacheDrive->CacheBlockHead.Blink;
+         Entry != &CacheDrive->CacheBlockHead;
+         Entry = Entry->Blink)
     {
-        CacheBlockToFree = CONTAINING_RECORD(CacheBlockToFree->ListEntry.Blink, CACHE_BLOCK, ListEntry);
+        // CacheBlock
+        CacheBlockToFree = CONTAINING_RECORD(Entry, CACHE_BLOCK, ListEntry);
+        if (!CacheBlockToFree->LockedInCache)
+            break; /* Non-locked candidate block found */
     }
 
-    // No blocks left in cache that can be freed
-    // so just return
-    if (IsListEmpty(&CacheDrive->CacheBlockHead))
-    {
+    /* No blocks left in cache that can be freed so just return */
+    // if (IsListEmpty(&CacheDrive->CacheBlockHead))
+    if (Entry == &CacheDrive->CacheBlockHead) // || (CacheBlockToFree == NULL)
         return FALSE;
-    }
 
     RemoveEntryList(&CacheBlockToFree->ListEntry);
 
-    // Free the block memory and the block structure
+    /* Free the block memory and the block structure */
     FrLdrTempFree(CacheBlockToFree->BlockData, TAG_CACHE_DATA);
     FrLdrTempFree(CacheBlockToFree, TAG_CACHE_BLOCK);
 
-    // Update the cache data
+    /* Update the cache data */
     CacheBlockCount--;
     CacheSizeCurrent = CacheBlockCount * (CacheDrive->BlockSize * CacheDrive->BytesPerSector);
 
     return TRUE;
-}
-
-VOID CacheInternalCheckCacheSizeLimits(PCACHE_DRIVE CacheDrive)
-{
-    SIZE_T        NewCacheSize;
-
-    TRACE("CacheInternalCheckCacheSizeLimits()\n");
-
-    // Calculate the size of the cache if we added a block
-    NewCacheSize = (CacheBlockCount + 1) * (CacheDrive->BlockSize * CacheDrive->BytesPerSector);
-
-    // Check the new size against the cache size limit
-    if (NewCacheSize > CacheSizeLimit)
-    {
-        CacheInternalFreeBlock(CacheDrive);
-        CacheInternalDumpBlockList(CacheDrive);
-    }
-}
-
-VOID CacheInternalDumpBlockList(PCACHE_DRIVE CacheDrive)
-{
-    PCACHE_BLOCK    CacheBlock;
-
-    TRACE("Dumping block list for BIOS drive 0x%x.\n", CacheDrive->DriveNumber);
-    TRACE("BytesPerSector: %d.\n", CacheDrive->BytesPerSector);
-    TRACE("BlockSize: %d.\n", CacheDrive->BlockSize);
-    TRACE("CacheSizeLimit: %d.\n", CacheSizeLimit);
-    TRACE("CacheSizeCurrent: %d.\n", CacheSizeCurrent);
-    TRACE("CacheBlockCount: %d.\n", CacheBlockCount);
-
-    CacheBlock = CONTAINING_RECORD(CacheDrive->CacheBlockHead.Flink, CACHE_BLOCK, ListEntry);
-    while (&CacheBlock->ListEntry != &CacheDrive->CacheBlockHead)
-    {
-        TRACE("Cache Block: CacheBlock: 0x%x\n", CacheBlock);
-        TRACE("Cache Block: Block Number: %d\n", CacheBlock->BlockNumber);
-        TRACE("Cache Block: Access Count: %d\n", CacheBlock->AccessCount);
-        TRACE("Cache Block: Block Data: 0x%x\n", CacheBlock->BlockData);
-        TRACE("Cache Block: Locked In Cache: %d\n", CacheBlock->LockedInCache);
-
-        if (CacheBlock->BlockData == NULL)
-        {
-            BugCheck("CacheBlock->BlockData == NULL\n");
-        }
-
-        CacheBlock = CONTAINING_RECORD(CacheBlock->ListEntry.Flink, CACHE_BLOCK, ListEntry);
-    }
-}
-
-VOID CacheInternalOptimizeBlockList(PCACHE_DRIVE CacheDrive, PCACHE_BLOCK CacheBlock)
-{
-
-    TRACE("CacheInternalOptimizeBlockList()\n");
-
-    // Don't do this if this block is already at the head of the list
-    if (&CacheBlock->ListEntry != CacheDrive->CacheBlockHead.Flink)
-    {
-        // Remove this item from the block list
-        RemoveEntryList(&CacheBlock->ListEntry);
-
-        // Re-insert it at the head of the list
-        InsertHeadList(&CacheDrive->CacheBlockHead, &CacheBlock->ListEntry);
-    }
 }
