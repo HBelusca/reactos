@@ -598,3 +598,127 @@ BlockIoCreate(
 
     return ESUCCESS;
 }
+
+
+//
+// Disk registration for NT loader
+//
+
+// TODO: Move ntoskrnl.c!IopReadBootRecord() here and use it?
+/**
+ * @brief
+ * Reads a single sector of size @SectorSize into @Buffer.
+ **/
+static ARC_STATUS
+DiskReadSector(
+    _In_ ULONG DeviceId,
+    _In_ ULONGLONG StartingSector,
+    _In_ ULONG SectorSize,
+    _Out_ PVOID Buffer)
+{
+    LARGE_INTEGER Position;
+    ULONG BytesRead;
+    ARC_STATUS Status;
+
+    Position.QuadPart = StartingSector * SectorSize;
+    Status = ArcSeek(DeviceId, &Position, SeekAbsolute);
+    if (Status != ESUCCESS)
+        return Status;
+
+    Status = ArcRead(DeviceId, Buffer, SectorSize, &BytesRead);
+    if (Status != ESUCCESS || BytesRead != SectorSize)
+    {
+ERR("ArcRead(%lu) failed or read not completed (wanted %lu, got %lu), Status %lu\n",
+    DeviceId, SectorSize, BytesRead, Status);
+        return Status;
+    }
+
+    return ESUCCESS;
+}
+
+// ARC_STATUS GetDiskSignatureAndChecksum(ULONG FileId, ULONG SectorSize, PULONG Signature, PULONG Checksum) { ... }
+
+static const CHAR Hex[] = "0123456789abcdef";
+
+VOID
+GetHarddiskInformation(
+    _In_ PCSTR DeviceName,
+    _In_ UCHAR DriveNumber,
+    _Out_writes_z_(20) PSTR Identifier)
+{
+    ARC_STATUS Status;
+    ULONG DeviceId;
+    // FILEINFORMATION Information;
+    ULONG Signature, Checksum;
+    ULONGLONG SectorStart;
+    ULONG SectorSize;
+    PMASTER_BOOT_RECORD Mbr;
+    BOOLEAN ValidPartitionTable;
+    BOOLEAN IsCdRom;
+
+    Status = ArcOpen((PSTR)DeviceName, OpenReadOnly, &DeviceId);
+    if (Status != ESUCCESS)
+    {
+        ERR("Couldn't open %s, Status %lu\n", DeviceName, Status);
+        return;
+    }
+#if 0
+    Status = ArcGetFileInformation(DeviceId, &Information);
+    IsCdRom = (Information.Type == CdromController);
+    {
+        SectorStart = 16ULL;
+        SectorSize = 2048;
+    }
+    else // (Information.Type == FloppyDiskPeripheral || DiskPeripheral)
+#endif
+    IsCdRom = FALSE; // FIXME
+    {
+        SectorStart = 0ULL;
+        SectorSize = 512;
+    }
+
+    /* Read the MBR */
+    if (DiskReadSector(DeviceId, SectorStart, 1, DiskReadBuffer) != ESUCCESS)
+    {
+        ERR("Reading MBR failed\n");
+        /* We failed, use a default identifier (NOTE: DriveNumber is 0-based) */
+        RtlStringCbPrintfA(Identifier, 20, "BIOSDISK%u", DriveNumber + 1);
+        return;
+    }
+
+    ArcClose(DeviceId);
+
+    Mbr = (PMASTER_BOOT_RECORD)DiskReadBuffer;
+    Signature = Mbr->Signature;
+    TRACE("Signature: %x\n", Signature);
+
+    /* Calculate the MBR checksum */
+    Checksum = GenSectorChecksum(DiskReadBuffer, SectorSize);
+    TRACE("Checksum: %x\n", Checksum);
+
+    ValidPartitionTable = (IsCdRom || (Mbr->MasterBootRecordMagic == 0xAA55));
+    TRACE("IsPartitionValid: %s\n", ValidPartitionTable ? "TRUE" : "FALSE");
+
+    /* Convert checksum and signature to identifier string */
+    Identifier[0] = Hex[(Checksum >> 28) & 0x0F];
+    Identifier[1] = Hex[(Checksum >> 24) & 0x0F];
+    Identifier[2] = Hex[(Checksum >> 20) & 0x0F];
+    Identifier[3] = Hex[(Checksum >> 16) & 0x0F];
+    Identifier[4] = Hex[(Checksum >> 12) & 0x0F];
+    Identifier[5] = Hex[(Checksum >> 8) & 0x0F];
+    Identifier[6] = Hex[(Checksum >> 4) & 0x0F];
+    Identifier[7] = Hex[Checksum & 0x0F];
+    Identifier[8] = '-';
+    Identifier[9] = Hex[(Signature >> 28) & 0x0F];
+    Identifier[10] = Hex[(Signature >> 24) & 0x0F];
+    Identifier[11] = Hex[(Signature >> 20) & 0x0F];
+    Identifier[12] = Hex[(Signature >> 16) & 0x0F];
+    Identifier[13] = Hex[(Signature >> 12) & 0x0F];
+    Identifier[14] = Hex[(Signature >> 8) & 0x0F];
+    Identifier[15] = Hex[(Signature >> 4) & 0x0F];
+    Identifier[16] = Hex[Signature & 0x0F];
+    Identifier[17] = '-';
+    Identifier[18] = (ValidPartitionTable ? 'A' : 'X');
+    Identifier[19] = ANSI_NULL;
+    TRACE("Identifier: %s\n", Identifier);
+}

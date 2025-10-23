@@ -30,8 +30,6 @@ DBG_DEFAULT_CHANNEL(DISK); // HWDETECT
 
 #define FIRST_BIOS_DISK 0x80
 
-static const CHAR Hex[] = "0123456789abcdef";
-
 /* Data cache for BIOS disks pre-enumeration */
 UCHAR PcBiosDiskCount = 0;
 static CHAR PcDiskIdentifier[32][20];
@@ -174,72 +172,17 @@ GetHarddiskIdentifier(UCHAR DriveNumber)
     return PcDiskIdentifier[DriveNumber - FIRST_BIOS_DISK];
 }
 
-static VOID
-GetHarddiskInformation(UCHAR DriveNumber)
-{
-    PCHAR Identifier = PcDiskIdentifier[DriveNumber - FIRST_BIOS_DISK];
-    ARC_STATUS Status;
-    CHAR ArcName[64];
-
-    RtlStringCbPrintfA(ArcName, sizeof(ArcName),
-                       "multi(0)disk(0)rdisk(%u)",
-                       DriveNumber - FIRST_BIOS_DISK);
-
-    DiskReportError(FALSE);
-    Status = BlockIoCreate(ArcName,
-                           DiskPeripheral, // DiskGetConfigType(DriveNumber),
-                           UlongToPtr((ULONG)DriveNumber),
-                           BiosDiskInit,
-                           BiosDiskUninit,
-                           BiosDiskReadBlocks,
-                           NULL,
-                           NULL);
-    DiskReportError(TRUE);
-
-    if (Status != ESUCCESS)
-    {
-        /* The disk failed to be initialized, use a default identifier */
-        sprintf(Identifier, "BIOSDISK%u", DriveNumber - FIRST_BIOS_DISK + 1);
-        return;
-    }
-
-//
-// TODO: Since we are a "miniport" of the lib/disk.c driver,
-// we should be able to have access to some of its data.
-//
-    /****/sprintf(Identifier, "BIOSDISK%u", DriveNumber - FIRST_BIOS_DISK + 1);/****/
-#if 0
-    /* Convert checksum and signature to identifier string */
-    Identifier[0] = Hex[(Checksum >> 28) & 0x0F];
-    Identifier[1] = Hex[(Checksum >> 24) & 0x0F];
-    Identifier[2] = Hex[(Checksum >> 20) & 0x0F];
-    Identifier[3] = Hex[(Checksum >> 16) & 0x0F];
-    Identifier[4] = Hex[(Checksum >> 12) & 0x0F];
-    Identifier[5] = Hex[(Checksum >> 8) & 0x0F];
-    Identifier[6] = Hex[(Checksum >> 4) & 0x0F];
-    Identifier[7] = Hex[Checksum & 0x0F];
-    Identifier[8] = '-';
-    Identifier[9] = Hex[(Signature >> 28) & 0x0F];
-    Identifier[10] = Hex[(Signature >> 24) & 0x0F];
-    Identifier[11] = Hex[(Signature >> 20) & 0x0F];
-    Identifier[12] = Hex[(Signature >> 16) & 0x0F];
-    Identifier[13] = Hex[(Signature >> 12) & 0x0F];
-    Identifier[14] = Hex[(Signature >> 8) & 0x0F];
-    Identifier[15] = Hex[(Signature >> 4) & 0x0F];
-    Identifier[16] = Hex[Signature & 0x0F];
-    Identifier[17] = '-';
-    Identifier[18] = (ValidPartitionTable ? 'A' : 'X');
-    Identifier[19] = 0;
-    TRACE("Identifier: %s\n", Identifier);
-#endif
-}
+extern VOID
+GetHarddiskInformation(
+    _In_ PCSTR DeviceName,
+    _In_ UCHAR DriveNumber,
+    _Out_writes_z_(20) PSTR Identifier);
 
 static UCHAR
 EnumerateHarddisks(OUT PBOOLEAN BootDriveReported)
 {
     UCHAR DiskCount, DriveNumber;
-    ULONG i;
-    BOOLEAN Changed;
+    CHAR ArcName[64];
 
     *BootDriveReported = FALSE;
 
@@ -260,7 +203,9 @@ EnumerateHarddisks(OUT PBOOLEAN BootDriveReported)
     memset(DiskReadBuffer, 0xcd, DiskReadBufferSize);
     while (MachDiskReadLogicalSectors(DriveNumber, 0ULL, 1, DiskReadBuffer))
     {
-        Changed = FALSE;
+        ARC_STATUS ArcStatus;
+        BOOLEAN Changed = FALSE;
+        ULONG i;
         for (i = 0; !Changed && i < DiskReadBufferSize; i++)
         {
             Changed = ((PUCHAR)DiskReadBuffer)[i] != 0xcd;
@@ -272,8 +217,32 @@ EnumerateHarddisks(OUT PBOOLEAN BootDriveReported)
             break;
         }
 
-        /* Cache the BIOS hard disk information for later use */
-        GetHarddiskInformation(DriveNumber);
+        /* Register the disk */
+        RtlStringCbPrintfA(ArcName, sizeof(ArcName),
+                           "multi(0)disk(0)rdisk(%u)",
+                           DriveNumber - FIRST_BIOS_DISK);
+        DiskReportError(FALSE);
+        ArcStatus = BlockIoCreate(ArcName,
+                                  DiskPeripheral, // DiskGetConfigType(DriveNumber),
+                                  UlongToPtr((ULONG)DriveNumber),
+                                  BiosDiskInit,
+                                  BiosDiskUninit,
+                                  BiosDiskReadBlocks,
+                                  NULL,
+                                  NULL);
+        DiskReportError(TRUE);
+
+        /* Cache the hard disk information for later use */
+        if (ArcStatus == ESUCCESS)
+        {
+            GetHarddiskInformation(ArcName, DriveNumber - FIRST_BIOS_DISK,
+                                   PcDiskIdentifier[DriveNumber - FIRST_BIOS_DISK]);
+        }
+        else
+        {
+            /* The disk failed to be initialized, use a default identifier */
+            sprintf(PcDiskIdentifier[DriveNumber - FIRST_BIOS_DISK], "BIOSDISK%u", DriveNumber - FIRST_BIOS_DISK + 1);
+        }
 
         /* Check if we have seen the boot drive */
         if (FrldrBootDrive == DriveNumber)
@@ -329,6 +298,7 @@ DiskGetBootPath(
     else if (FrldrBootPartition == 0xFF) // (DiskGetConfigType(FrldrBootDrive) == CdromController)
     {
         /* Boot Partition 0xFF is the magic value that indicates booting from CD-ROM (see isoboot.S) */
+        /* TODO: Check if it's really a CD-ROM drive */
         RtlStringCbPrintfA(FrLdrBootPath, sizeof(FrLdrBootPath),
                            "multi(0)disk(0)cdrom(%u)", FrldrBootDrive - FIRST_BIOS_DISK);
         *DeviceType = CdromController;
@@ -372,19 +342,25 @@ PcInitializeBootDevices(VOID)
     if ((FrldrBootDrive >= FIRST_BIOS_DISK && !BootDriveReported) ||
         (DriveType == FloppyDiskPeripheral || DriveType == CdromController))
     {
+        ARC_STATUS Status;
         DiskReportError(FALSE);
-        (void)BlockIoCreate(FrLdrBootPath,
-                            DriveType,
-                            UlongToPtr((ULONG)FrldrBootDrive),
-                            BiosDiskInit,
-                            BiosDiskUninit,
-                            BiosDiskReadBlocks,
-                            NULL,
-                            NULL);
+        Status = BlockIoCreate(FrLdrBootPath,
+                               DriveType,
+                               UlongToPtr((ULONG)FrldrBootDrive),
+                               BiosDiskInit,
+                               BiosDiskUninit,
+                               BiosDiskReadBlocks,
+                               NULL,
+                               NULL);
         DiskReportError(TRUE);
 
-        DiskCount++; // This is not accounted for in the number of pre-enumerated BIOS drives!
-        TRACE("Additional boot drive detected: 0x%02X\n", FrldrBootDrive);
+        if (Status == ESUCCESS)
+        {
+            DiskCount++; // This is not accounted for in the number of pre-enumerated BIOS drives!
+            TRACE("Additional boot drive detected: 0x%02X\n", FrldrBootDrive);
+        }
+        else
+            ERR("Additional boot drive 0x%02X failed\n", FrldrBootDrive);
     }
 
     return (DiskCount != 0);

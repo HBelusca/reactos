@@ -37,7 +37,6 @@ UCHAR PcBiosDiskCount; // Maximum 255 disks supported.
 UCHAR FrldrBootDrive;
 ULONG FrldrBootPartition;
 
-static const CHAR Hex[] = "0123456789abcdef";
 static CHAR PcDiskIdentifier[32][20];
 
 /* UEFI-specific */
@@ -198,66 +197,11 @@ GetHarddiskIdentifier(UCHAR DriveNumber)
     return PcDiskIdentifier[DriveNumber];
 }
 
-static
-VOID
-GetHarddiskInformation(UCHAR DriveNumber)
-{
-    PCHAR Identifier = PcDiskIdentifier[DriveNumber];
-    ARC_STATUS Status;
-    CHAR ArcName[64];
-
-    RtlStringCbPrintfA(ArcName, sizeof(ArcName),
-                       "multi(0)disk(0)rdisk(%u)",
-                       DriveNumber);
-
-    DiskReportError(FALSE);
-    Status = BlockIoCreate(ArcName,
-                           DiskPeripheral,
-                           UlongToPtr((ULONG)DriveNumber),
-                           UefiDiskInit,
-                           UefiDiskUninit,
-                           UefiDiskReadBlocks,
-                           NULL,
-                           &InternalUefiDisk[DriveNumber].NumOfPartitions);
-    DiskReportError(TRUE);
-
-    if (Status != ESUCCESS)
-    {
-        /* The disk failed to be initialized, use a default identifier */
-        sprintf(Identifier, "BIOSDISK%u", DriveNumber);
-        return;
-    }
-
-//
-// TODO: Since we are a "miniport" of the lib/disk.c driver,
-// we should be able to have access to some of its data.
-//
-    /****/sprintf(Identifier, "BIOSDISK%u", DriveNumber);/****/
-#if 0
-    /* Convert checksum and signature to identifier string */
-    Identifier[0] = Hex[(Checksum >> 28) & 0x0F];
-    Identifier[1] = Hex[(Checksum >> 24) & 0x0F];
-    Identifier[2] = Hex[(Checksum >> 20) & 0x0F];
-    Identifier[3] = Hex[(Checksum >> 16) & 0x0F];
-    Identifier[4] = Hex[(Checksum >> 12) & 0x0F];
-    Identifier[5] = Hex[(Checksum >> 8) & 0x0F];
-    Identifier[6] = Hex[(Checksum >> 4) & 0x0F];
-    Identifier[7] = Hex[Checksum & 0x0F];
-    Identifier[8] = '-';
-    Identifier[9] = Hex[(Signature >> 28) & 0x0F];
-    Identifier[10] = Hex[(Signature >> 24) & 0x0F];
-    Identifier[11] = Hex[(Signature >> 20) & 0x0F];
-    Identifier[12] = Hex[(Signature >> 16) & 0x0F];
-    Identifier[13] = Hex[(Signature >> 12) & 0x0F];
-    Identifier[14] = Hex[(Signature >> 8) & 0x0F];
-    Identifier[15] = Hex[(Signature >> 4) & 0x0F];
-    Identifier[16] = Hex[Signature & 0x0F];
-    Identifier[17] = '-';
-    Identifier[18] = (ValidPartitionTable ? 'A' : 'X');
-    Identifier[19] = 0;
-    TRACE("Identifier: %s\n", Identifier);
-#endif
-}
+extern VOID
+GetHarddiskInformation(
+    _In_ PCSTR DeviceName,
+    _In_ UCHAR DriveNumber,
+    _Out_writes_z_(20) PSTR Identifier);
 
 static
 VOID
@@ -269,6 +213,7 @@ UefiSetupBlockDevices(VOID)
     ULONG SystemHandleCount;
     ULONG i;
     UINTN handle_size = 0;
+    CHAR ArcName[64];
 
     PcBiosDiskCount = 0;
     UefiBootRootIdentifier = 0;
@@ -325,11 +270,40 @@ UefiSetupBlockDevices(VOID)
         }
         if (bio->Media->LogicalPartition == FALSE)
         {
+            ARC_STATUS ArcStatus;
+
             TRACE("Found root of a HDD\n");
             PcBiosDiskCount++;
             InternalUefiDisk[BlockDeviceIndex].ArcDriveNumber = BlockDeviceIndex;
             InternalUefiDisk[BlockDeviceIndex].UefiRootNumber = i;
-            GetHarddiskInformation(BlockDeviceIndex);
+
+            /* Register the disk */
+            RtlStringCbPrintfA(ArcName, sizeof(ArcName),
+                               "multi(0)disk(0)rdisk(%u)",
+                               BlockDeviceIndex);
+            DiskReportError(FALSE);
+            ArcStatus = BlockIoCreate(ArcName,
+                                      DiskPeripheral,
+                                      UlongToPtr((ULONG)BlockDeviceIndex),
+                                      UefiDiskInit,
+                                      UefiDiskUninit,
+                                      UefiDiskReadBlocks,
+                                      NULL,
+                                      &InternalUefiDisk[BlockDeviceIndex].NumOfPartitions);
+            DiskReportError(TRUE);
+
+            /* Cache the hard disk information for later use */
+            if (ArcStatus == ESUCCESS)
+            {
+                GetHarddiskInformation(ArcName, BlockDeviceIndex,
+                                       PcDiskIdentifier[BlockDeviceIndex]);
+            }
+            else
+            {
+                /* The disk failed to be initialized, use a default identifier */
+                sprintf(PcDiskIdentifier[BlockDeviceIndex], "BIOSDISK%u", BlockDeviceIndex + 1);
+            }
+
             BlockDeviceIndex++;
         }
         else if (handles[i] == PublicBootHandle)
@@ -418,22 +392,28 @@ UefiInitializeBootDevices(VOID)
     /* Initialize FrLdrBootPath, the path FreeLoader starts from */
     UefiSetBootPath(&DriveType);
 
-    /* Add it, if it's a CD-ROM */
-    if (DriveType == CdromController)
+    /* Add it, if it's a floppy or CD-ROM */
+    if ((DriveType == FloppyDiskPeripheral || DriveType == CdromController))
     {
+        ARC_STATUS Status;
         DiskReportError(FALSE);
-        (void)BlockIoCreate(FrLdrBootPath,
-                            DriveType,
-                            UlongToPtr((ULONG)PublicBootArcDisk),
-                            UefiDiskInit,
-                            UefiDiskUninit,
-                            UefiDiskReadBlocks,
-                            NULL,
-                            &InternalUefiDisk[PublicBootArcDisk].NumOfPartitions);
+        Status = BlockIoCreate(FrLdrBootPath,
+                               DriveType,
+                               UlongToPtr((ULONG)PublicBootArcDisk),
+                               UefiDiskInit,
+                               UefiDiskUninit,
+                               UefiDiskReadBlocks,
+                               NULL,
+                               &InternalUefiDisk[PublicBootArcDisk].NumOfPartitions);
         DiskReportError(TRUE);
 
-        PcBiosDiskCount++; // This is not accounted for in the number of pre-enumerated BIOS drives!
-        TRACE("Additional boot drive detected: 0x%02X\n", PublicBootArcDisk);
+        if (Status == ESUCCESS)
+        {
+            PcBiosDiskCount++; // This is not accounted for in the number of pre-enumerated BIOS drives!
+            TRACE("Additional boot drive detected: 0x%02X\n", PublicBootArcDisk);
+        }
+        else
+            ERR("Additional boot drive 0x%02X failed\n", PublicBootArcDisk);
     }
     return TRUE;
 }
