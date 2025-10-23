@@ -26,11 +26,13 @@ const PCSTR ArcTypes[MaximumType + 1] = // CmTypeName
     "SecondaryICache",
     "SecondaryDCache",
     "SecondaryCache",
+/** Adapters */
     "EisaAdapter",
     "TcAdapter",
     "ScsiAdapter",
     "DtiAdapter",
     "MultifunctionAdapter",
+/** Controllers */
     "DiskController",
     "TapeController",
     "CdRomController",
@@ -43,6 +45,7 @@ const PCSTR ArcTypes[MaximumType + 1] = // CmTypeName
     "KeyboardController",
     "AudioController",
     "OtherController",
+/** Peripherals */
     "DiskPeripheral",
     "FloppyDiskPeripheral",
     "TapePeripheral",
@@ -62,38 +65,63 @@ const PCSTR ArcTypes[MaximumType + 1] = // CmTypeName
     "Undefined"
 };
 
-PCONFIGURATION_COMPONENT_DATA FldrArcHwTreeRoot;
+/* Mnemonics corresponding to CONFIGURATION_TYPE */
+const PCSTR Mnemonics[MaximumType + 1] =
+{
+    "arc",
+    "cpu",
+    "fpu",
+    "pic",
+    "pdc",
+    "sic",
+    "sdc",
+    "sc",
+/** Adapters */
+    "eisa",
+    "tc",
+    "scsi",
+    "dti",
+    "multi",
+/** Controllers */
+    "disk",
+    "tape",
+    "cdrom",
+    "worm",
+    "serial",
+    "net",
+    "video",
+    "par",
+    "point",
+    "key",
+    "audio",
+    "other",
+/** Peripherals */
+    "rdisk",
+    "fdisk",
+    "tape",
+    "modem",
+    "monitor",
+    "print",
+    "pointer",
+    "keyboard",
+    "term",
+    "other",
+    "line",
+    "network",
+/** Others */
+    "mem",  // SystemMemory
+    "dock", // DockingInformation
+    "irq",  // RealModeIrqRoutingTable
+    "pci",  // RealModePCIEnumeration
+    "???"   // ""      // Unknown
+};
 
-// ARC Disk Information
-ULONG reactos_disk_count = 0;
-ARC_DISK_SIGNATURE_EX reactos_arc_disk_info[32];
+PCONFIGURATION_COMPONENT_DATA FldrArcHwTreeRoot;
 
 /* FUNCTIONS ******************************************************************/
 
 #define TAG_HW_COMPONENT_DATA   'DCwH'
 #define TAG_HW_NAME             'mNwH'
-
-VOID
-AddReactOSArcDiskInfo(
-    IN PSTR ArcName,
-    IN ULONG Signature,
-    IN ULONG Checksum,
-    IN BOOLEAN ValidPartitionTable)
-{
-    ASSERT(reactos_disk_count < sizeof(reactos_arc_disk_info)/sizeof(reactos_arc_disk_info[0]));
-
-    /* Fill out the ARC disk block */
-
-    reactos_arc_disk_info[reactos_disk_count].DiskSignature.Signature = Signature;
-    reactos_arc_disk_info[reactos_disk_count].DiskSignature.CheckSum = Checksum;
-    reactos_arc_disk_info[reactos_disk_count].DiskSignature.ValidPartitionTable = ValidPartitionTable;
-
-    strcpy(reactos_arc_disk_info[reactos_disk_count].ArcName, ArcName);
-    reactos_arc_disk_info[reactos_disk_count].DiskSignature.ArcName =
-        reactos_arc_disk_info[reactos_disk_count].ArcName;
-
-    reactos_disk_count++;
-}
 
 //
 // ARC Component Configuration Routines
@@ -244,17 +272,50 @@ FldrCreateComponentKey(
     *ComponentKey = ComponentData;
 }
 
-ULONG ArcGetDiskCount(VOID)
+
+static BOOLEAN
+FldrGetComponentPathWorker(
+    _In_ PCONFIGURATION_COMPONENT_DATA Component,
+    _Inout_ PCHAR* pPath,
+    _Inout_ PSIZE_T pLength)
 {
-    return reactos_disk_count;
+    if (Component->Parent)
+    {
+        NTSTATUS Status;
+        if (!FldrGetComponentPathWorker(Component->Parent, pPath, pLength))
+            return FALSE;
+        Status = RtlStringCbPrintfExA(*pPath, *pLength, pPath, pLength, 0,
+                                      "%s(%lu)",
+                                      Mnemonics[Component->ComponentEntry.Type],
+                                      Component->ComponentEntry.Key);
+        if (Status != STATUS_SUCCESS)
+            return FALSE;
+    }
+    else
+    {
+        /* Parent is NULL, so we are at the top System node: don't print the name */
+        if (*pLength > 0)
+            **pPath = ANSI_NULL;
+    }
+    return TRUE;
 }
 
-PARC_DISK_SIGNATURE_EX ArcGetDiskInfo(ULONG Index)
+BOOLEAN
+FldrGetComponentPath(
+    _In_ PCONFIGURATION_COMPONENT_DATA Component,
+    _Out_writes_z_(Length) PSTR Path,
+    _In_ SIZE_T Length)
 {
-    if (Index >= reactos_disk_count)
+#if DBG
+    PCONFIGURATION_COMPONENT_DATA Current;
+    for (Current = Component; Current != NULL; Current = Current->Parent)
     {
-        return NULL;
+        /*TRACE*/ERR("%s(%lu) : Device 0x%p class %d type %d id '%s', parent %p\n",
+              Mnemonics[min(Current->ComponentEntry.Type, MaximumType)],
+              Current->ComponentEntry.Key,
+              Current, Current->ComponentEntry.Class, Current->ComponentEntry.Type,
+              VaToPa(Current->ComponentEntry.Identifier), Current->Parent);
     }
-
-    return &reactos_arc_disk_info[Index];
+#endif
+    return FldrGetComponentPathWorker(Component, &Path, &Length);
 }

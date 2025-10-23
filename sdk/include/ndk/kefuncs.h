@@ -299,21 +299,21 @@ KeSignalCallDpcSynchronize(
 #ifdef _ARC_
 PCONFIGURATION_COMPONENT_DATA
 NTAPI
-KeFindConfigurationNextEntry(
-    _In_ PCONFIGURATION_COMPONENT_DATA Child,
-    _In_ CONFIGURATION_CLASS Class,
-    _In_ CONFIGURATION_TYPE Type,
-    _In_opt_ PULONG ComponentKey,
-    _In_ PCONFIGURATION_COMPONENT_DATA *NextLink
-);
-
-PCONFIGURATION_COMPONENT_DATA
-NTAPI
 KeFindConfigurationEntry(
     _In_ PCONFIGURATION_COMPONENT_DATA Child,
     _In_ CONFIGURATION_CLASS Class,
     _In_ CONFIGURATION_TYPE Type,
     _In_opt_ PULONG ComponentKey
+);
+
+PCONFIGURATION_COMPONENT_DATA
+NTAPI
+KeFindConfigurationNextEntry(
+    _In_ PCONFIGURATION_COMPONENT_DATA Child,
+    _In_ CONFIGURATION_CLASS Class,
+    _In_ CONFIGURATION_TYPE Type,
+    _In_opt_ PULONG ComponentKey,
+    _Inout_ PCONFIGURATION_COMPONENT_DATA *NextLink
 );
 #endif
 

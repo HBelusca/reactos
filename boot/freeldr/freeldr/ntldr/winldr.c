@@ -6,6 +6,7 @@
  */
 
 #include <freeldr.h>
+#include <ndk/kefuncs.h> // For KeFindConfiguration*Entry()
 #include <ndk/ldrtypes.h>
 #include "winldr.h"
 #include "ntldropts.h"
@@ -14,9 +15,6 @@
 
 #include <debug.h>
 DBG_DEFAULT_CHANNEL(WINDOWS);
-
-ULONG ArcGetDiskCount(VOID);
-PARC_DISK_SIGNATURE_EX ArcGetDiskInfo(ULONG Index);
 
 BOOLEAN IsAcpiPresent(VOID);
 
@@ -110,6 +108,255 @@ AllocateAndInitLPB(
     *OutLoaderBlock = LoaderBlock;
 }
 
+
+/**
+ * @brief   Callback invoked for each enumerated component.
+ * @return  TRUE to continue enumeration, FALSE to stop it.
+ **/
+typedef BOOLEAN
+(NTAPI *PNT_ENUMERATE_COMPONENT)(
+    _In_ PCONFIGURATION_COMPONENT_DATA Entry,
+    _In_opt_ PVOID Context);
+
+/**
+ * @brief
+ * Enumerates all components of specified class/type listed
+ * in the ARC configuration tree.
+ **/
+BOOLEAN
+NtLdrEnumerateConfigTree(
+    _In_ PCONFIGURATION_COMPONENT_DATA ConfigTree,
+    _In_ CONFIGURATION_CLASS Class,
+    _In_ CONFIGURATION_TYPE Type,
+    _In_opt_ PULONG ComponentKey,
+    _In_ PNT_ENUMERATE_COMPONENT Callback,
+    _In_opt_ PVOID Context)
+{
+    PCONFIGURATION_COMPONENT_DATA Entry = NULL;
+
+    /* Enumerate all the components satisfying the criteria */
+    for (;;)
+    {
+        Entry = KeFindConfigurationNextEntry(ConfigTree,
+                                             Class,
+                                             Type,
+                                             ComponentKey,
+                                             &Entry);
+        if (!Entry)
+            break;
+
+        /* Invoke the callback */
+        if (!Callback(Entry, Context))
+            return FALSE; /* Stop enumerating if necessary */
+    }
+
+    return TRUE;
+}
+
+VOID
+DumpArcSig(PARC_DISK_SIGNATURE ArcDisk)
+{
+    ERR("ArcDisk %s - Checksum: 0x%X, Signature: 0x%X, ValidPartTable: %s\n",
+        ArcDisk->ArcName, ArcDisk->CheckSum, ArcDisk->Signature,
+        ArcDisk->ValidPartitionTable ? "TRUE" : "FALSE");
+}
+
+static ULONG NewDiskCount = 0;
+
+static ULONG
+GenSectorChecksum(
+    _In_ const VOID* Sector,
+    _In_ ULONG SectorSize)
+{
+    const ULONG* Buffer = (const ULONG*)Sector;
+    ULONG Checksum, i;
+
+    Checksum = 0;
+    for (i = 0; i < SectorSize / sizeof(ULONG); ++i)
+    {
+        Checksum += Buffer[i];
+    }
+    Checksum = ~Checksum + 1;
+    return Checksum;
+}
+
+#define TAG_ARCDISK_SIGNATURE   'giSD'
+
+static BOOLEAN
+NTAPI
+NtLdrReadArcDiskSignature(
+    _In_ PCSTR ArcName,
+    _In_ BOOLEAN CheckForDuplicates,
+    _Inout_ PLIST_ENTRY DiskSignatureListHead)
+{
+    PARC_DISK_SIGNATURE_EX ArcDiskSig;
+    ARC_STATUS Status;
+    ULONG DeviceId;
+    // FILEINFORMATION Information;
+    ULONG Signature, Checksum;
+    ULONGLONG SectorStart;
+    ULONG SectorSize;
+    BOOLEAN IsCdRom;
+    BOOLEAN ValidPartitionTable;
+    // MASTER_BOOT_RECORD Mbr;
+    PMASTER_BOOT_RECORD Mbr;
+
+    if (CheckForDuplicates)
+    {
+        PLIST_ENTRY Entry;
+
+        /* Quick case: if it's a ramdisk, don't add it */
+        if (strstr(ArcName, "ramdisk(") == ArcName)
+            return TRUE;
+
+        /* Check whether the given device is already present in the list */
+        for (Entry = DiskSignatureListHead->Flink;
+             Entry != DiskSignatureListHead;
+             Entry = Entry->Flink)
+        {
+            ArcDiskSig = CONTAINING_RECORD(Entry, ARC_DISK_SIGNATURE_EX, DiskSignature.ListEntry);
+            // if (strstr(ArcName, ")partition(") && ...)
+            if (strstr(ArcName, VaToPa(ArcDiskSig->DiskSignature.ArcName)) == ArcName)
+            {
+                WARN("ArcName '%s' -- Duplicate found: '%s'\n",
+                     ArcName, VaToPa(ArcDiskSig->DiskSignature.ArcName));
+                return TRUE; /* Don't add it and continue with the enumeration */
+            }
+        }
+    }
+
+    NewDiskCount++;
+
+    /* Allocate the ARC structure */
+    ArcDiskSig = FrLdrHeapAlloc(sizeof(*ArcDiskSig), TAG_ARCDISK_SIGNATURE);
+    if (!ArcDiskSig)
+    {
+        ERR("Couldn't allocate ARC disk signature! Ignoring remaining ARC disks.\n");
+        return FALSE; /* No available resources anymore, stop the enumeration */
+    }
+
+    Status = ArcOpen((PSTR)ArcName, OpenReadOnly, &DeviceId);
+    if (Status != ESUCCESS)
+    {
+        ERR("Couldn't open %s, Status %lu\n", ArcName, Status);
+        FrLdrHeapFree(ArcDiskSig, TAG_ARCDISK_SIGNATURE);
+        return TRUE; /* Continue nevertheless with other disks */
+    }
+#if 0
+    Status = ArcGetFileInformation(DeviceId, &Information);
+    IsCdRom = (Information.Type == CdromController);
+#else
+    IsCdRom = !!strstr(ArcName, ")cdrom(");
+#endif
+    if (IsCdRom)
+    {
+        SectorStart = 16ULL;
+        SectorSize = 2048;
+    }
+    else // (Information.Type == FloppyDiskPeripheral || DiskPeripheral)
+    {
+        SectorStart = 0ULL;
+        SectorSize = 512;
+    }
+
+    Mbr = FrLdrTempAlloc(SectorSize, TAG_ARCDISK_SIGNATURE);
+    if (!Mbr)
+    {
+        ERR("Couldn't allocate MBR buffer\n");
+        ArcClose(DeviceId);
+        FrLdrHeapFree(ArcDiskSig, TAG_ARCDISK_SIGNATURE);
+        return FALSE; /* No available resources anymore, stop enumeration */
+    }
+
+    /* Read the MBR */
+    //if (DiskReadSector(DeviceId, SectorStart, 1, Mbr) != ESUCCESS)
+    {
+        LARGE_INTEGER Position;
+        ULONG BytesRead;
+
+        Position.QuadPart = SectorStart * SectorSize;
+        Status = ArcSeek(DeviceId, &Position, SeekAbsolute);
+        if (Status == ESUCCESS)
+        {
+            Status = ArcRead(DeviceId, Mbr, SectorSize, &BytesRead);
+            if (Status != ESUCCESS || BytesRead != SectorSize)
+            {
+ERR("ArcRead(%lu) failed or read not completed (wanted %lu, got %lu), Status %lu\n",
+    DeviceId, SectorSize, BytesRead, Status);
+            }
+            else
+                Status = ESUCCESS;
+        }
+    }
+
+    ArcClose(DeviceId);
+
+    if (Status != ESUCCESS)
+    {
+        ERR("Reading MBR failed\n");
+        FrLdrTempFree(Mbr, TAG_ARCDISK_SIGNATURE);
+        FrLdrHeapFree(ArcDiskSig, TAG_ARCDISK_SIGNATURE);
+        return TRUE; /* Continue nevertheless with other disks */
+    }
+
+    Signature = Mbr->Signature;
+    /*TRACE*/ERR("Signature: %x\n", Signature);
+
+    /* Calculate the MBR checksum */
+    Checksum = GenSectorChecksum(Mbr, SectorSize);
+    /*TRACE*/ERR("Checksum: %x\n", Checksum);
+
+    ValidPartitionTable = (IsCdRom || (Mbr->MasterBootRecordMagic == 0xAA55));
+    /*TRACE*/ERR("IsPartitionValid: %s\n", ValidPartitionTable ? "TRUE" : "FALSE");
+
+    FrLdrTempFree(Mbr, TAG_ARCDISK_SIGNATURE);
+
+    /* Fill out the ARC disk signature */
+    ArcDiskSig->DiskSignature.Signature = Signature;
+    ArcDiskSig->DiskSignature.CheckSum = Checksum;
+    ArcDiskSig->DiskSignature.ValidPartitionTable = ValidPartitionTable;
+
+    /* Added in Win2000 */
+    ArcDiskSig->DiskSignature.xInt13 = TRUE; // TODO: Determine.
+
+    /* Added in WinXP+ */
+    // FIXME TODO: Add support for GPT disks
+    ArcDiskSig->DiskSignature.IsGpt = FALSE;
+    /*CHAR[16]*/ RtlZeroMemory(ArcDiskSig->DiskSignature.GptSignature,
+                               sizeof(ArcDiskSig->DiskSignature.GptSignature));
+
+    RtlStringCbCopyA(ArcDiskSig->ArcName, sizeof(ArcDiskSig->ArcName), ArcName);
+    /***/ArcDiskSig->DiskSignature.ArcName = ArcDiskSig->ArcName;/***/
+
+    DumpArcSig(&ArcDiskSig->DiskSignature);
+
+    /* Set the ARC name pointer and convert it to VA */
+    ArcDiskSig->DiskSignature.ArcName = PaToVa(ArcDiskSig->ArcName);
+
+    /* Insert into the list */
+    InsertTailList(DiskSignatureListHead, &ArcDiskSig->DiskSignature.ListEntry);
+    return TRUE;
+}
+
+static BOOLEAN
+NTAPI
+NtLdrMapArcDiskForNT(
+    _In_ PCONFIGURATION_COMPONENT_DATA Entry,
+    _In_opt_ PVOID Context)
+{
+    PLIST_ENTRY DiskSignatureListHead = (PLIST_ENTRY)Context;
+    CHAR ArcName[64];
+
+    /* Construct the component ARC path */
+    ArcName[0] = ANSI_NULL;
+    if (!FldrGetComponentPath(Entry, ArcName, sizeof(ArcName)))
+        return TRUE; /* Couldn't build path for this entry, ignore it and continue with the others */
+    ERR("Computed path: %s\n", ArcName);
+
+    return NtLdrReadArcDiskSignature(ArcName, FALSE, DiskSignatureListHead);
+}
+
+
 // Init "phase 1"
 VOID
 WinLdrInitializePhase1(PLOADER_PARAMETER_BLOCK LoaderBlock,
@@ -130,7 +377,6 @@ WinLdrInitializePhase1(PLOADER_PARAMETER_BLOCK LoaderBlock,
     CHAR  HalPath[] = "\\";
     CHAR  ArcBoot[MAX_PATH+1];
     CHAR  MiscFiles[MAX_PATH+1];
-    ULONG i;
     ULONG_PTR PathSeparator;
     PLOADER_PARAMETER_EXTENSION Extension;
 
@@ -192,39 +438,36 @@ WinLdrInitializePhase1(PLOADER_PARAMETER_BLOCK LoaderBlock,
 
     LoaderBlock->LoadOptions = PaToVa(LoaderBlock->LoadOptions);
 
-    /* ARC devices */
+    /*
+     * Enumerate all the firmware(ARC)-accessible fixed disk devices,
+     * and build the disk signatures list for each of these.
+     */
     LoaderBlock->ArcDiskInformation = &WinLdrSystemBlock->ArcDiskInformation;
     InitializeListHead(&LoaderBlock->ArcDiskInformation->DiskSignatureListHead);
-
-    /* Convert ARC disk information from freeldr to a correct format */
-    ULONG DiscCount = ArcGetDiskCount();
-    for (i = 0; i < DiscCount; i++)
-    {
-        PARC_DISK_SIGNATURE_EX ArcDiskSig;
-
-        /* Allocate the ARC structure */
-        ArcDiskSig = FrLdrHeapAlloc(sizeof(ARC_DISK_SIGNATURE_EX), 'giSD');
-        if (!ArcDiskSig)
-        {
-            ERR("Failed to allocate ARC structure! Ignoring remaining ARC disks. (i = %lu, DiskCount = %lu)\n",
-                i, DiscCount);
-            break;
-        }
-
-        /* Copy the data over */
-        RtlCopyMemory(ArcDiskSig, ArcGetDiskInfo(i), sizeof(ARC_DISK_SIGNATURE_EX));
-
-        /* Set the ARC Name pointer */
-        ArcDiskSig->DiskSignature.ArcName = PaToVa(ArcDiskSig->ArcName);
-
-        /* Insert into the list */
-        InsertTailList(&LoaderBlock->ArcDiskInformation->DiskSignatureListHead,
-                       &ArcDiskSig->DiskSignature.ListEntry);
-    }
+ERR("** Enumerate ARC disks from Configuration Tree:\n");
+    NtLdrEnumerateConfigTree(LoaderBlock->ConfigurationRoot,
+                             PeripheralClass,
+                             DiskPeripheral,
+                             NULL,
+                             NtLdrMapArcDiskForNT,
+                             &LoaderBlock->ArcDiskInformation->DiskSignatureListHead);
+    /*
+     * Add also the OS boot device for the NT kernel to find it.
+     * But do not add it if it is a block I/O device previously enumerated
+     * (i.e. a fixed disk or a partition there).
+     * Do not add it also if it is a ramdisk, because NT does not require
+     * a signature entry for it -- it will instead special-case its support.
+     * Removable media (floppies, CD-ROMs, ...) aren't automatically added.
+     */
+    // TODO (for future): What to do if the OS boot device is a file
+    // (e.g. VHD/WIM boot) on a block device?
+    NtLdrReadArcDiskSignature(ArcBoot, TRUE,
+                              &LoaderBlock->ArcDiskInformation->DiskSignatureListHead);
+ERR("** ARC disk enumeration saw %lu disks\n", NewDiskCount);
 
     /* Convert all lists to Virtual address */
 
-    /* Convert the ArcDisks list to virtual address */
+    /* Convert the ARC disks list to virtual address */
     List_PaToVa(&LoaderBlock->ArcDiskInformation->DiskSignatureListHead);
     LoaderBlock->ArcDiskInformation = PaToVa(LoaderBlock->ArcDiskInformation);
 

@@ -340,6 +340,8 @@ DetectBiosFloppyController(PCONFIGURATION_COMPONENT_DATA BusKey)
     return ControllerKey;
 }
 
+#define FIRST_BIOS_DISK 0x80 // FIXME: Hack
+
 VOID
 DetectBiosDisks(PCONFIGURATION_COMPONENT_DATA SystemKey,
                 PCONFIGURATION_COMPONENT_DATA BusKey)
@@ -388,7 +390,7 @@ DetectBiosDisks(PCONFIGURATION_COMPONENT_DATA SystemKey,
     Int13Drives = (PVOID)(((ULONG_PTR)PartialResourceList) + sizeof(CM_PARTIAL_RESOURCE_LIST));
     for (i = 0; i < DiskCount; i++)
     {
-        DriveNumber = 0x80 + i;
+        DriveNumber = FIRST_BIOS_DISK + i;
 
         if (MachDiskGetDriveGeometry(DriveNumber, &Geometry))
         {
@@ -415,7 +417,7 @@ DetectBiosDisks(PCONFIGURATION_COMPONENT_DATA SystemKey,
     {
         PCSTR Identifier;
 
-        DriveNumber = 0x80 + i;
+        DriveNumber = FIRST_BIOS_DISK + i;
 
         /* Get disk values */
         PartialResourceList = GetHarddiskConfigurationData(DriveNumber, &Size);

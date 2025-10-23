@@ -1,28 +1,37 @@
 /*
- * PROJECT:         ReactOS Kernel
- * LICENSE:         GPL - See COPYING in the top level directory
- * FILE:            ntoskrnl/ke/config.c
- * PURPOSE:         Configuration Tree Routines
- * PROGRAMMERS:     Alex Ionescu (alex.ionescu@reactos.org)
+ * PROJECT:     ReactOS Kernel
+ * LICENSE:     GPL-2.0+ (https://spdx.org/licenses/GPL-2.0+)
+ * PURPOSE:     Configuration Tree Routines
+ * COPYRIGHT:   Copyright 2005-2006 Alex Ionescu <alex.ionescu@reactos.org>
+ *
+ * NOTE: This module is shared by both the kernel and the bootloader.
  */
 
 /* INCLUDES ******************************************************************/
 
 #include <ntoskrnl.h>
-#define NDEBUG
-#include <debug.h>
 
 /* FUNCTIONS *****************************************************************/
+
+PCONFIGURATION_COMPONENT_DATA
+NTAPI
+KeFindConfigurationNextEntry(
+    _In_ PCONFIGURATION_COMPONENT_DATA Child,
+    _In_ CONFIGURATION_CLASS Class,
+    _In_ CONFIGURATION_TYPE Type,
+    _In_opt_ PULONG ComponentKey,
+    _Inout_ PCONFIGURATION_COMPONENT_DATA *NextLink);
 
 /*
  * @implemented
  */
 PCONFIGURATION_COMPONENT_DATA
 NTAPI
-KeFindConfigurationEntry(IN PCONFIGURATION_COMPONENT_DATA Child,
-                         IN CONFIGURATION_CLASS Class,
-                         IN CONFIGURATION_TYPE Type,
-                         IN PULONG ComponentKey OPTIONAL)
+KeFindConfigurationEntry(
+    _In_ PCONFIGURATION_COMPONENT_DATA Child,
+    _In_ CONFIGURATION_CLASS Class,
+    _In_ CONFIGURATION_TYPE Type,
+    _In_opt_ PULONG ComponentKey)
 {
     PCONFIGURATION_COMPONENT_DATA NextLink = NULL;
 
@@ -39,11 +48,12 @@ KeFindConfigurationEntry(IN PCONFIGURATION_COMPONENT_DATA Child,
  */
 PCONFIGURATION_COMPONENT_DATA
 NTAPI
-KeFindConfigurationNextEntry(IN PCONFIGURATION_COMPONENT_DATA Child,
-                             IN CONFIGURATION_CLASS Class,
-                             IN CONFIGURATION_TYPE Type,
-                             IN PULONG ComponentKey OPTIONAL,
-                             IN PCONFIGURATION_COMPONENT_DATA *NextLink)
+KeFindConfigurationNextEntry(
+    _In_ PCONFIGURATION_COMPONENT_DATA Child,
+    _In_ CONFIGURATION_CLASS Class,
+    _In_ CONFIGURATION_TYPE Type,
+    _In_opt_ PULONG ComponentKey,
+    _Inout_ PCONFIGURATION_COMPONENT_DATA *NextLink)
 {
     ULONG Key = 0;
     ULONG Mask = 0;
@@ -64,7 +74,8 @@ KeFindConfigurationNextEntry(IN PCONFIGURATION_COMPONENT_DATA Child,
         if (*NextLink)
         {
             /* If we've found the place where we started, clear and continue */
-            if (Child == *NextLink) *NextLink = NULL;
+            if (Child == *NextLink)
+                *NextLink = NULL;
         }
         else
         {
@@ -86,7 +97,8 @@ KeFindConfigurationNextEntry(IN PCONFIGURATION_COMPONENT_DATA Child,
             if (*NextLink)
             {
                 /* If we've found the place where we started, clear and continue */
-                if (Sibling == *NextLink) *NextLink = NULL;
+                if (Sibling == *NextLink)
+                    *NextLink = NULL;
             }
             else
             {
@@ -109,7 +121,8 @@ KeFindConfigurationNextEntry(IN PCONFIGURATION_COMPONENT_DATA Child,
                                                            Type,
                                                            ComponentKey,
                                                            NextLink);
-                if (ReturnEntry) return ReturnEntry;
+                if (ReturnEntry)
+                    return ReturnEntry;
             }
 
             /* Next Sibling */

@@ -20,6 +20,7 @@ DBG_DEFAULT_CHANNEL(DISK);
 typedef struct _DDISKDEVICE
 {
     CONFIGURATION_TYPE DeviceType;
+    ULONG DiskSignature;
     GEOMETRY Geometry;
     ULONG SectorSize;       // == Geometry.BytesPerSector
     ULONGLONG SectorCount;  // == Geometry.Sectors
@@ -385,6 +386,79 @@ static const DEVVTBL DiskVtbl =
     DiskSeek,
 };
 
+
+static ULONG
+GenSectorChecksum(
+    _In_ const VOID* Sector,
+    _In_ ULONG SectorSize)
+{
+    const ULONG* Buffer = (const ULONG*)Sector;
+    ULONG Checksum, i;
+
+    Checksum = 0;
+    for (i = 0; i < SectorSize / sizeof(ULONG); ++i)
+    {
+        Checksum += Buffer[i];
+    }
+    Checksum = ~Checksum + 1;
+    return Checksum;
+}
+
+// GetDiskSignatureAndChecksum
+static ARC_STATUS
+GetDiskSignature(
+    _In_ PDISKDEVICE Device)
+{
+    ARC_STATUS Status;
+    ULONGLONG SectorStart;
+    ULONG SectorSize;
+    PMASTER_BOOT_RECORD Mbr;
+    ULONG Checksum;
+    BOOLEAN IsCdRom;
+    BOOLEAN ValidPartitionTable;
+
+    IsCdRom = (Device->DeviceType == CdromController);
+    if (IsCdRom)
+    {
+        SectorStart = 16ULL;
+        SectorSize = 2048;
+    }
+    else // (DeviceType == FloppyDiskPeripheral || DiskPeripheral)
+    {
+        SectorStart = 0ULL;
+        SectorSize = 512;
+    }
+
+    Mbr = FrLdrTempAlloc(SectorSize, TAG_DISK_DEVICE);
+    if (!Mbr)
+    {
+        ERR("Couldn't allocate MBR buffer\n");
+        return FALSE; /* No available resources anymore, stop enumeration */
+    }
+
+    /* Read the MBR */
+    Status = Device->ReadBlocks(Device->Context, SectorStart, 1, Mbr);
+    if (Status != ESUCCESS)
+    {
+        ERR("Reading MBR failed\n");
+        FrLdrTempFree(Mbr, TAG_DISK_DEVICE);
+        return Status;
+    }
+    Device->DiskSignature = Mbr->Signature;
+    /*TRACE*/ERR("Signature: %x\n", Device->DiskSignature);
+
+    /* Calculate the MBR checksum */
+    Checksum = GenSectorChecksum(Mbr, SectorSize);
+    /*TRACE*/ERR("Checksum: %x\n", Checksum);
+
+    ValidPartitionTable = (IsCdRom || (Mbr->MasterBootRecordMagic == 0xAA55));
+    /*TRACE*/ERR("IsPartitionValid: %s\n", ValidPartitionTable ? "TRUE" : "FALSE");
+
+    FrLdrTempFree(Mbr, TAG_DISK_DEVICE);
+
+    return ESUCCESS;
+}
+
 ARC_STATUS
 BlockIoCreate(
     _In_ PCSTR DeviceName,
@@ -434,10 +508,13 @@ BlockIoCreate(
     BlockDev->ReadBlocks = ReadBlocks;
     BlockDev->WriteBlocks = WriteBlocks;
 
-    /* Fill out the ARC disk block */
-    // AddReactOSArcDiskInfo(DeviceName, Signature, Checksum, ValidPartitionTable);
+    /* Register the block device */
     if (!FsRegisterDevice(DeviceName, &DiskVtbl, BlockDev))
         return ENOMEM;
+
+    /* Retrieve the disk signature */
+    (void)GetDiskSignature(BlockDev);
+    ERR("** Block IO: '%s' has signature 0x%X\n", DeviceName, BlockDev->DiskSignature);
 
 #if 1 // TODO: Or should this be done by the partition() abstraction module?
     /* Register device with partition(0) suffix */

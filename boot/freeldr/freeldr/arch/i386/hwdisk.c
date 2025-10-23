@@ -174,67 +174,41 @@ GetHarddiskIdentifier(UCHAR DriveNumber)
     return PcDiskIdentifier[DriveNumber - FIRST_BIOS_DISK];
 }
 
-static ULONG
-GenSectorChecksum(
-    _In_ const VOID* Sector,
-    _In_ ULONG SectorSize)
-{
-    const ULONG* Buffer = (const ULONG*)Sector;
-    ULONG Checksum, i;
-
-    Checksum = 0;
-    for (i = 0; i < SectorSize / sizeof(ULONG); ++i)
-    {
-        Checksum += Buffer[i];
-    }
-    Checksum = ~Checksum + 1;
-    return Checksum;
-}
-
 static VOID
 GetHarddiskInformation(UCHAR DriveNumber)
 {
-    PMASTER_BOOT_RECORD Mbr;
-    ULONG Signature, Checksum;
-    BOOLEAN ValidPartitionTable;
     PCHAR Identifier = PcDiskIdentifier[DriveNumber - FIRST_BIOS_DISK];
+    ARC_STATUS Status;
     CHAR ArcName[64];
 
-    /* Read the MBR */
-    if (!MachDiskReadLogicalSectors(DriveNumber, 0ULL, 1, DiskReadBuffer))
-    {
-        ERR("Reading MBR failed\n");
-        /* We failed, use a default identifier */
-        sprintf(Identifier, "BIOSDISK%u", DriveNumber - FIRST_BIOS_DISK + 1);
-        return;
-    }
-    Mbr = (PMASTER_BOOT_RECORD)DiskReadBuffer;
-    Signature = Mbr->Signature;
-    TRACE("Signature: %x\n", Signature);
-
-    /* Calculate the MBR checksum */
-    Checksum = GenSectorChecksum(DiskReadBuffer, 512);
-    TRACE("Checksum: %x\n", Checksum);
-
-    ValidPartitionTable = (Mbr->MasterBootRecordMagic == 0xAA55);
-
-    /* Fill out the ARC disk block */
     RtlStringCbPrintfA(ArcName, sizeof(ArcName),
                        "multi(0)disk(0)rdisk(%u)",
                        DriveNumber - FIRST_BIOS_DISK);
-    AddReactOSArcDiskInfo(ArcName, Signature, Checksum, ValidPartitionTable);
 
     DiskReportError(FALSE);
-    (void)BlockIoCreate(ArcName,
-                        DiskPeripheral, // DiskGetConfigType(DriveNumber),
-                        UlongToPtr((ULONG)DriveNumber),
-                        BiosDiskInit,
-                        BiosDiskUninit,
-                        BiosDiskReadBlocks,
-                        NULL,
-                        NULL);
+    Status = BlockIoCreate(ArcName,
+                           DiskPeripheral, // DiskGetConfigType(DriveNumber),
+                           UlongToPtr((ULONG)DriveNumber),
+                           BiosDiskInit,
+                           BiosDiskUninit,
+                           BiosDiskReadBlocks,
+                           NULL,
+                           NULL);
     DiskReportError(TRUE);
 
+    if (Status != ESUCCESS)
+    {
+        /* The disk failed to be initialized, use a default identifier */
+        sprintf(Identifier, "BIOSDISK%u", DriveNumber - FIRST_BIOS_DISK + 1);
+        return;
+    }
+
+//
+// TODO: Since we are a "miniport" of the lib/disk.c driver,
+// we should be able to have access to some of its data.
+//
+    /****/sprintf(Identifier, "BIOSDISK%u", DriveNumber - FIRST_BIOS_DISK + 1);/****/
+#if 0
     /* Convert checksum and signature to identifier string */
     Identifier[0] = Hex[(Checksum >> 28) & 0x0F];
     Identifier[1] = Hex[(Checksum >> 24) & 0x0F];
@@ -257,6 +231,7 @@ GetHarddiskInformation(UCHAR DriveNumber)
     Identifier[18] = (ValidPartitionTable ? 'A' : 'X');
     Identifier[19] = 0;
     TRACE("Identifier: %s\n", Identifier);
+#endif
 }
 
 static UCHAR
@@ -397,27 +372,6 @@ PcInitializeBootDevices(VOID)
     if ((FrldrBootDrive >= FIRST_BIOS_DISK && !BootDriveReported) ||
         (DriveType == FloppyDiskPeripheral || DriveType == CdromController))
     {
-        /* TODO: Check if it's really a CD-ROM drive */
-        PMASTER_BOOT_RECORD Mbr;
-        ULONG Signature, Checksum;
-
-        /* Read the MBR */
-        if (!MachDiskReadLogicalSectors(FrldrBootDrive, 16ULL, 1, DiskReadBuffer))
-        {
-            ERR("Reading MBR failed\n");
-            return FALSE;
-        }
-        Mbr = (PMASTER_BOOT_RECORD)DiskReadBuffer;
-        Signature = Mbr->Signature;
-        TRACE("Signature: %x\n", Signature);
-
-        /* Calculate the MBR checksum */
-        Checksum = GenSectorChecksum(DiskReadBuffer, 2048);
-        TRACE("Checksum: %x\n", Checksum);
-
-        /* Fill out the ARC disk block */
-        AddReactOSArcDiskInfo(FrLdrBootPath, Signature, Checksum, TRUE);
-
         DiskReportError(FALSE);
         (void)BlockIoCreate(FrLdrBootPath,
                             DriveType,

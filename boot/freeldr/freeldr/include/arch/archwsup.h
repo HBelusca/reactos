@@ -22,13 +22,6 @@
 
 /* PROTOTYPES ***************************************************************/
 
-VOID
-AddReactOSArcDiskInfo(
-    IN PSTR ArcName,
-    IN ULONG Signature,
-    IN ULONG Checksum,
-    IN BOOLEAN ValidPartitionTable);
-
 //
 // ARC Component Configuration Routines
 //
@@ -55,5 +48,12 @@ FldrCreateComponentKey(
     _In_ PCM_PARTIAL_RESOURCE_LIST ResourceList,
     _In_ ULONG Size,
     _Out_ PCONFIGURATION_COMPONENT_DATA* ComponentKey);
+
+
+BOOLEAN
+FldrGetComponentPath(
+    _In_ PCONFIGURATION_COMPONENT_DATA Component,
+    _Out_writes_z_(Length) PSTR Path,
+    _In_ SIZE_T Length);
 
 /* EOF */

@@ -31,8 +31,6 @@ ULONG SecondLevelDcacheFillSize;
 ULONG SecondLevelIcacheSize;
 ULONG SecondLevelIcacheFillSize;
 
-extern ULONG reactos_disk_count;
-
 ULONG SizeBits[] =
 {
     -1,      // INVALID
@@ -125,10 +123,6 @@ ArmHwDetect(
 
     /* Initialize the RAMDISK Device */
     RamDiskInitialize(TRUE, NULL, NULL);
-
-    /* Fill out the ARC disk block */
-    AddReactOSArcDiskInfo("ramdisk(0)", 0xBADAB00F, 0xDEADBABE, TRUE);
-    ASSERT(reactos_disk_count == 1);
 
     /* Return the root node */
     return RootNode;

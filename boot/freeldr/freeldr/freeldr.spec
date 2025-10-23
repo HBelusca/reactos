@@ -1,8 +1,6 @@
 
 # ARC
 @ cdecl ArcClose()
-@ cdecl ArcGetDiskCount()
-@ cdecl ArcGetDiskInfo()
 @ cdecl ArcGetFileInformation()
 @ cdecl ArcGetTime()
 @ cdecl ArcOpen()
@@ -102,6 +100,7 @@
 @ cdecl DiskStopFloppyMotor()
 @ cdecl DriveMapGetBiosDriveNumber()
 @ cdecl -i386 DriveMapMapDrivesInSection()
+@ cdecl FldrGetComponentPath(ptr ptr long)
 @ cdecl FrldrGetBootDrive()
 @ cdecl FrldrGetBootPartition()
 @ cdecl FrLdrGetBootPath()

@@ -625,7 +625,7 @@ LoadReactOSSetup(
     }
 
     /* Check if we booted from floppy */
-    BootFromFloppy = strstr(BootPath, "fdisk") != NULL;
+    BootFromFloppy = !!strstr(BootPath, ")fdisk(");
 
     /* Open 'txtsetup.sif' from any of the source paths */
     FileName = BootPath + strlen(BootPath);
