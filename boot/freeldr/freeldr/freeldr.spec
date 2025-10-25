@@ -53,6 +53,7 @@
 @ cdecl MmGetMemoryMap()
 @ cdecl MmGetSystemMemoryMapTypeString()
 @ cdecl MmGetTotalPagesInLookupTable()
+@ cdecl MmSetMemoryType()
 
 # NtLdr options
 @ cdecl NtLdrGetNextOption()
@@ -100,18 +101,20 @@
 @ cdecl DissectArcPath()
 @ cdecl DiskStopFloppyMotor()
 @ cdecl DriveMapGetBiosDriveNumber()
+@ cdecl -i386 DriveMapMapDrivesInSection()
 @ cdecl FrldrGetBootDrive()
 @ cdecl FrldrGetBootPartition()
 @ cdecl FrLdrGetBootPath()
 @ cdecl FsGetServiceName()
-@ cdecl FsOpenFile() # Why not ArcOpen?
+@ cdecl FsOpenFile()
 @ cdecl GetArgumentValue()
 @ cdecl GetBootMgrInfo()
 @ cdecl IsAcpiPresent()
 @ cdecl LoadSettings()
 @ cdecl MachHwDetect()
-@ cdecl MachPrepareForReactOS()
+@ cdecl MachGetBootSectorLoadAddress()
 @ cdecl MachGetExtendedBIOSData()
+@ cdecl MachPrepareForReactOS()
 @ cdecl MachVideoGetFontsFromFirmware()
 @ cdecl PxeCallApi()
 @ cdecl RamDiskInitialize()
@@ -119,7 +122,6 @@
 @ cdecl Relocator16Boot()
 @ stdcall RtlAssert(ptr ptr long ptr)
 @ cdecl StallExecutionProcessor()
-@ cdecl MachGetBootSectorLoadAddress()
 
 # Additional stuff for scsiport
 @ stdcall CpDoesPortExist(ptr)
@@ -128,7 +130,6 @@
 @ stdcall CpInitialize(ptr ptr long)
 @ stdcall CpPutByte(ptr long)
 @ cdecl DissectArcPath2()
-@ cdecl -i386 DriveMapMapDrivesInSection()
 @ cdecl FsRegisterDevice()
 @ cdecl FsGetDeviceSpecific()
 @ cdecl FsSetDeviceSpecific()
@@ -136,4 +137,3 @@
 @ stdcall ExAllocatePoolWithTag(long long long)
 @ stdcall ExFreePool(ptr)
 @ stdcall ExFreePoolWithTag(ptr long)
-@ cdecl MmSetMemoryType()
