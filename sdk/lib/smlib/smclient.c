@@ -353,9 +353,13 @@ SmLoadDeferedSubsystem(
  * @param[in]   SmApiPort
  * Port handle returned by SmConnectToSm().
  *
- * @param[out]  pMuSessionId
- * Pointer to a variable that receives the session ID of the new
- * Terminal Services session that has been created.
+ * @param[in,out]   pMuSessionId
+ * Pointer to a variable that:
+ * - on input, specifies the ID of the new Terminal Services session that
+ *   the caller wishes to use; it will be re-assigned in case a kernel-mode
+ *   subsystem module ("Kmode") is started.
+ * - on output, receives the actual ID of the Terminal Services session
+ *   that has been created.
  *
  * @param[in]   CommandLine
  * Full path to the image to be used as the initial command.
@@ -375,7 +379,7 @@ NTSTATUS
 NTAPI
 SmStartCsr(
     _In_ HANDLE SmApiPort,
-    _Out_ PULONG pMuSessionId,
+    _Inout_ PULONG pMuSessionId,
     _In_opt_ PUNICODE_STRING CommandLine,
     _Out_ PHANDLE pWindowsSubSysProcessId,
     _Out_ PHANDLE pInitialCommandProcessId)
@@ -395,6 +399,9 @@ SmStartCsr(
                                 pInitialCommandProcessId);
     }
 #endif
+
+    /* Set the initial session ID */
+    StartCsr->MuSessionId = *pMuSessionId;
 
     /* Set the message data */
     if (CommandLine)

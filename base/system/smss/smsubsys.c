@@ -508,11 +508,33 @@ Quickie2:
     return Status;
 }
 
+/**
+ * @brief
+ * Loads all the available subsystems and other startup programs, and determine
+ * the initial command that should be run, for the new Terminal Services session.
+ *
+ * @param[in,out]   pMuSessionId
+ * Pointer to a ULONG variable that:
+ * - on input, specifies the ID of the new Terminal Services session that
+ *   the caller wishes to use; it will be re-assigned in case a kernel-mode
+ *   subsystem module ("Kmode") is started.
+ * - on output, receives the actual ID of the newly-created Terminal Services
+ *   session.
+ *
+ * @param[out]  pProcessId
+ * Pointer to a HANDLE variable that receives the process ID of the last
+ * subsystem process that has been started in the session.
+ *
+ * @param[out]  InitialCommand
+ * Pointer to a UNICODE_STRING variable that receives the initial command
+ * to be started by the caller.
+ **/
 NTSTATUS
 NTAPI
-SmpLoadSubSystemsForMuSession(IN PULONG MuSessionId,
-                              OUT PHANDLE ProcessId,
-                              IN PUNICODE_STRING InitialCommand)
+SmpLoadSubSystemsForMuSession(
+    _Inout_ PULONG pMuSessionId,
+    _Out_ PHANDLE pProcessId,
+    _Out_ PUNICODE_STRING InitialCommand)
 {
     NTSTATUS Status = STATUS_SUCCESS, Status2;
     PSMP_REGISTRY_VALUE RegEntry;
@@ -524,7 +546,7 @@ SmpLoadSubSystemsForMuSession(IN PULONG MuSessionId,
     /* Write a few last registry keys with the boot partition information */
     SmpTranslateSystemPartitionInformation();
 
-    /* Process "SetupExecute" values */
+    /* Process "SetupExecute" values, always on Session 0 */
     NextEntry = SmpSetupExecuteList.Flink;
     while (NextEntry != &SmpSetupExecuteList)
     {
@@ -560,8 +582,8 @@ SmpLoadSubSystemsForMuSession(IN PULONG MuSessionId,
                     /* Create the new session */
                     ASSERT(AttachedSessionId == -1);
                     Status = NtSetSystemInformation(SystemSessionCreate,
-                                                    MuSessionId,
-                                                    sizeof(*MuSessionId));
+                                                    pMuSessionId,
+                                                    sizeof(*pMuSessionId));
                     if (!NT_SUCCESS(Status))
                     {
                         DPRINT1("SMSS: Session space creation failed\n");
@@ -569,7 +591,7 @@ SmpLoadSubSystemsForMuSession(IN PULONG MuSessionId,
                         RtlFreeHeap(RtlGetProcessHeap(), 0, NtPath.Buffer);
                         return Status;
                     }
-                    AttachedSessionId = *MuSessionId;
+                    AttachedSessionId = *pMuSessionId;
 
                     /*
                      * Start Win32k.sys on this session. Use a hardcoded value
@@ -605,16 +627,16 @@ SmpLoadSubSystemsForMuSession(IN PULONG MuSessionId,
         {
             /* Load the internal debug system */
             Status = SmpExecuteCommand(&RegEntry->Value,
-                                       *MuSessionId,
-                                       ProcessId,
+                                       *pMuSessionId,
+                                       pProcessId,
                                        SMP_DEBUG_FLAG | SMP_SUBSYSTEM_FLAG);
         }
         else
         {
             /* Load the required subsystem */
             Status = SmpExecuteCommand(&RegEntry->Value,
-                                       *MuSessionId,
-                                       ProcessId,
+                                       *pMuSessionId,
+                                       pProcessId,
                                        SMP_SUBSYSTEM_FLAG);
         }
         if (!NT_SUCCESS(Status))
@@ -668,7 +690,7 @@ SmpLoadSubSystemsForMuSession(IN PULONG MuSessionId,
     {
         /* Execute each one */
         RegEntry = CONTAINING_RECORD(NextEntry, SMP_REGISTRY_VALUE, Entry);
-        SmpExecuteCommand(&RegEntry->Name, *MuSessionId, NULL, 0);
+        SmpExecuteCommand(&RegEntry->Name, *pMuSessionId, NULL, 0);
         NextEntry = NextEntry->Flink;
     }
 

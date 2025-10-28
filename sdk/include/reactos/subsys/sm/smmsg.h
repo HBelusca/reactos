@@ -309,7 +309,7 @@ NTSTATUS
 NTAPI
 SmStartCsr(
     _In_ HANDLE SmApiPort,
-    _Out_ PULONG pMuSessionId,
+    _Inout_ PULONG pMuSessionId,
     _In_opt_ PUNICODE_STRING CommandLine,
     _Out_ PHANDLE pWindowsSubSysProcessId,
     _Out_ PHANDLE pInitialCommandProcessId);

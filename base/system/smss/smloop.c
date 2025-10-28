@@ -47,12 +47,32 @@ SmpCreateForeignSession(IN PSM_API_MSG SmApiMsg,
 
 NTSTATUS
 NTAPI
-SmpSessionComplete(IN PSM_API_MSG SmApiMsg,
-                   IN PSMP_CLIENT_CONTEXT ClientContext,
-                   IN HANDLE SmApiPort)
+SmpSessionComplete(
+    _In_ PSM_API_MSG SmApiMsg,
+    _In_ PSMP_CLIENT_CONTEXT ClientContext,
+    _In_ HANDLE SmApiPort)
 {
-    DPRINT1("%s is not yet implemented\n", __FUNCTION__);
-    return STATUS_NOT_IMPLEMENTED;
+    PSM_SESSION_COMPLETE_MSG SmSessionComplete = &SmApiMsg->u.SessionComplete;
+    PSMP_SESSION Session;
+    BOOLEAN CanDeleteSession;
+
+    UNREFERENCED_PARAMETER(SmApiPort);
+
+    /* Check whether the calling subsystem (client) owns this session */
+
+    /* Enter the lock and get the session structure */
+    RtlEnterCriticalSection(&SmpSessionListLock);
+    Session = SmpSessionIdToSession(SmSessionComplete->SessionId);
+    CanDeleteSession = (Session && Session->Subsystem == ClientContext->Subsystem);
+    RtlLeaveCriticalSection(&SmpSessionListLock);
+
+    /* Fail if the caller doesn't own this session */
+    if (!CanDeleteSession)
+        return STATUS_INVALID_PARAMETER;
+
+    /* We are allowed to delete the session */
+    SmpDeleteSession(SmSessionComplete->SessionId);
+    return SmSessionComplete->SessionStatus; // STATUS_SUCCESS;
 }
 
 NTSTATUS
@@ -201,21 +221,24 @@ SmpLoadDeferedSubsystem(
 
 NTSTATUS
 NTAPI
-SmpStartCsr(IN PSM_API_MSG SmApiMsg,
-            IN PSMP_CLIENT_CONTEXT ClientContext,
-            IN HANDLE SmApiPort)
+SmpStartCsr(
+    _In_ PSM_API_MSG SmApiMsg,
+    _In_ PSMP_CLIENT_CONTEXT ClientContext,
+    _In_ HANDLE SmApiPort)
 {
     PSM_START_CSR_MSG SmStartCsr = &SmApiMsg->u.StartCsr;
     UNICODE_STRING InitialCommand;
     HANDLE InitialCommandProcess, InitialCommandProcessId, WindowsSubSysProcessId;
     NTSTATUS Status;
 
+    // TODO: Handle the SmStartCsr->MuSessionId == 0 case.
+
     Status = SmpLoadSubSystemsForMuSession(&SmStartCsr->MuSessionId,
                                            &WindowsSubSysProcessId,
                                            &InitialCommand);
     if (!NT_SUCCESS(Status))
     {
-        DPRINT1("SMSS: SmpLoadSubSystemsForMuSession failed with status 0x%08x\n", Status);
+        DPRINT1("SMSS: SmpLoadSubSystemsForMuSession failed with status 0x%08lx\n", Status);
         return Status;
     }
 
@@ -231,8 +254,8 @@ SmpStartCsr(IN PSM_API_MSG SmApiMsg,
                                       &InitialCommandProcessId);
     if (!NT_SUCCESS(Status))
     {
-        DPRINT1("SMSS: SmpExecuteInitialCommand failed with status 0x%08x\n", Status);
-        /* FIXME: undo effects of SmpLoadSubSystemsForMuSession */
+        DPRINT1("SMSS: SmpExecuteInitialCommand failed with status 0x%08lx\n", Status);
+        // FIXME: TODO: undo effects of SmpLoadSubSystemsForMuSession
         ASSERT(FALSE);
         return Status;
     }
@@ -247,12 +270,60 @@ SmpStartCsr(IN PSM_API_MSG SmApiMsg,
 
 NTSTATUS
 NTAPI
-SmpStopCsr(IN PSM_API_MSG SmApiMsg,
-           IN PSMP_CLIENT_CONTEXT ClientContext,
-           IN HANDLE SmApiPort)
+SmpStopCsr(
+    _In_ PSM_API_MSG SmApiMsg,
+    _In_ PSMP_CLIENT_CONTEXT ClientContext,
+    _In_ HANDLE SmApiPort)
 {
-    DPRINT1("%s is not yet implemented\n", __FUNCTION__);
-    return STATUS_NOT_IMPLEMENTED;
+    PSM_STOP_CSR_MSG SmStopCsr = &SmApiMsg->u.StopCsr;
+    PLIST_ENTRY NextEntry;
+    NTSTATUS Status = STATUS_SUCCESS;
+
+    UNREFERENCED_PARAMETER(ClientContext);
+    UNREFERENCED_PARAMETER(SmApiPort);
+
+    /* Lock the subsystem database */
+    RtlEnterCriticalSection(&SmpKnownSubSysLock);
+
+    /* Loop each subsystem in the database and terminate each one
+     * that belongs to the given session */
+    NextEntry = SmpKnownSubSysHead.Flink;
+    while (NextEntry != &SmpKnownSubSysHead)
+    {
+        /* Get the subsystem and go to the next entry, as we may delete it */
+        PSMP_SUBSYSTEM Subsystem = CONTAINING_RECORD(NextEntry, SMP_SUBSYSTEM, Entry);
+        NextEntry = NextEntry->Flink;
+
+        /* Check if this one matches the uID and is still valid */
+        if ((Subsystem->MuSessionId == SmStopCsr->MuSessionId) && !Subsystem->Terminating)
+        {
+            /* Reference the subsystem while we are dealing with it */
+            Subsystem->ReferenceCount++;
+
+            /* Flag this subsystem for termination and kill it (temporarily unlock) */
+            Subsystem->Terminating = TRUE;
+            RtlLeaveCriticalSection(&SmpKnownSubSysLock);
+            Status = NtTerminateProcess(Subsystem->ProcessHandle, STATUS_SUCCESS);
+            RtlEnterCriticalSection(&SmpKnownSubSysLock);
+
+            if (!NT_SUCCESS(Status) && (Status != STATUS_PROCESS_IS_TERMINATING))
+            {
+                DPRINT1("SMSS: Subsystem type %lu failed to terminate, Status 0x%08lx\n",
+                        Subsystem->ImageType, Status);
+            }
+
+            /* Remove this subsystem from the list and dereference it. It will
+             * go away once all other outstanding references are released. */
+            RemoveEntryList(Subsystem->Entry);
+            SmpDereferenceSubsystem(Subsystem);
+        }
+    }
+
+    /* Release the lock */
+    RtlLeaveCriticalSection(&SmpKnownSubSysLock);
+
+    /* Return the termination status of the last subsystem */
+    return Status;
 }
 
 PSM_API_HANDLER SmpApiDispatch[SmpMaxApiNumber - SmpCreateForeignSessionApi] =

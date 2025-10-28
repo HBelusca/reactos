@@ -278,10 +278,9 @@ SmpLoadSubSystem(
 NTSTATUS
 NTAPI
 SmpLoadSubSystemsForMuSession(
-    IN PULONG MuSessionId,
-    OUT PHANDLE ProcessId,
-    IN PUNICODE_STRING InitialCommand
-);
+    _Inout_ PULONG pMuSessionId,
+    _Out_ PHANDLE pProcessId,
+    _Out_ PUNICODE_STRING InitialCommand);
 
 /* smutil.c */
 
