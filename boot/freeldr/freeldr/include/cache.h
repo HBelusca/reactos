@@ -12,8 +12,31 @@
  * If CACHE_FOR_FILESYSTEM is defined, the cache code is used for file systems.
  * If it isn't defined however, the cache code is used by the disk driver.
  */
-#define CACHE_FOR_FILESYSTEM
+// #define CACHE_FOR_FILESYSTEM
 // #define CACHE_DISKDRIVE
+
+#ifndef CACHE_FOR_FILESYSTEM
+///typedef struct _DISKDEVICE *PDISKDEVICE;
+#include "disk.h"
+/* Driver-specific disk device object extension */
+typedef struct _DDISKDEVICE
+{
+    CONFIGURATION_TYPE DeviceType;
+    ULONG DiskSignature;
+    GEOMETRY Geometry;
+    ULONG SectorSize;       // == Geometry.BytesPerSector
+    ULONGLONG SectorCount;  // == Geometry.Sectors
+    ULONGLONG SectorOffset; // Always 0 (whole disk) -- FIXME: Remove?
+    PVOID Context; // For "miniports"
+    PBLOCK_INIT DevInit;
+    PBLOCK_UNINIT DevUninit;
+    PBLOCK_READ ReadBlocks;
+    PBLOCK_WRITE WriteBlocks;
+/** Partition support */
+    PARTITION_STYLE PartitionStyle;
+} DISKDEVICE, *PDISKDEVICE; // BLOCK_IO_MEDIA
+
+#endif
 
 
 #define TAG_CACHE_DATA  'DcaC'

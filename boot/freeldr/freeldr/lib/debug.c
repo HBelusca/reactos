@@ -89,6 +89,7 @@ DebugInit(
     DbgChannels[DPRINT_WARNING] = MAX_LEVEL;
     DbgChannels[DPRINT_WINDOWS] = MAX_LEVEL;
 #endif
+    DbgChannels[DPRINT_CACHE] = MAX_LEVEL;
     DbgChannels[DPRINT_DISK] = MAX_LEVEL;
     DbgChannels[DPRINT_FILESYSTEM] = MAX_LEVEL;
     DbgChannels[DPRINT_SCSIPORT] = MAX_LEVEL;

@@ -16,6 +16,9 @@ DBG_DEFAULT_CHANNEL(DISK);
 #define TAG_PART_DEVICE     'traP'
 #define TAG_DISK_CONTEXT    'xCkD'
 
+#define USE_CACHE
+
+#ifndef USE_CACHE // See cache.h
 /* Driver-specific disk device object extension */
 typedef struct _DDISKDEVICE
 {
@@ -33,6 +36,7 @@ typedef struct _DDISKDEVICE
 /** Partition support */
     PARTITION_STYLE PartitionStyle;
 } DISKDEVICE, *PDISKDEVICE; // BLOCK_IO_MEDIA
+#endif
 
 #if 0
 /* Partition device object extension */
@@ -93,6 +97,29 @@ DiskGetFileInformation(
     Information->Type = Device->DeviceType;
 
     return ESUCCESS;
+}
+
+static ARC_STATUS
+DiskReadBlocks(
+    _In_ PVOID This, // This is a PDISKDEVICE, and NOT the "DeviceData" given to BlockIoCreate()!
+    _In_ ULONGLONG SectorNumber,
+    _In_ ULONG SectorCount,
+    _Out_ PVOID Buffer)
+{
+    PDISKDEVICE Device = This;
+#ifdef USE_CACHE
+    BOOLEAN Success;
+    Success = CacheReadDiskSectors(Device,
+                                   SectorNumber,
+                                   SectorCount,
+                                   Buffer);
+    return (Success ? ESUCCESS : EIO);
+#else
+    return Device->ReadBlocks(Device->Context,
+                              SectorNumber,
+                              SectorCount,
+                              Buffer);
+#endif
 }
 
 static ARC_STATUS
@@ -157,14 +184,17 @@ ERR("DissectArcPath2(%s):\n"
         Device->SectorSize = Device->Geometry.BytesPerSector;
         Device->SectorOffset = 0;
         Device->SectorCount = Device->Geometry.Sectors;
+
+        // (void)CacheInitializeDrive(Device); // FIXME!!!!
     }
+/*********/(void)CacheInitializeDrive(Device);/*********/
 
 #if 1 // TODO: Temporarily handle partitions here....
     if (DrivePartition != 0)
     {
         PARTITION_TABLE_ENTRY PartitionTableEntry;
 
-        if (!DiskGetPartitionEntry(Device->Context, Device->ReadBlocks,
+        if (!DiskGetPartitionEntry(Device/*->Context*/, DiskReadBlocks,
                                    Device->PartitionStyle, DrivePartition, &PartitionTableEntry))
         {
             return EINVAL;
@@ -244,10 +274,10 @@ DiskReadByBlocks(
     {
         ReadSectors = min(TotalSectors, MaxSectors);
 
-        Status = Device->ReadBlocks(Device->Context,
-                                    SectorOffset,
-                                    ReadSectors,
-                                    DiskReadBuffer);
+        Status = DiskReadBlocks(Device,
+                                SectorOffset,
+                                ReadSectors,
+                                DiskReadBuffer);
         if (Status != ESUCCESS)
             break;
 
@@ -302,10 +332,10 @@ DiskRead(
     Lba = (ULONG)(/*Device*/Context->SectorOffset + Context->SectorNumber);
     if (FullSectors > 0)
     {
-        Status = Device->ReadBlocks(Device->Context,
-                                    Lba, // === SectorOffset,
-                                    FullSectors,
-                                    Buffer);
+        Status = DiskReadBlocks(Device,
+                                Lba, // === SectorOffset,
+                                FullSectors,
+                                Buffer);
         if (Status != ESUCCESS)
             return Status;
 
@@ -323,10 +353,10 @@ DiskRead(
         if (!Sector)
             return ENOMEM;
 
-        Status = Device->ReadBlocks(Device->Context,
-                                    Lba, // === SectorOffset,
-                                    1,
-                                    Sector);
+        Status = DiskReadBlocks(Device,
+                                Lba, // === SectorOffset,
+                                1,
+                                Sector);
         if (Status != ESUCCESS)
         {
             ExFreePool(Sector);

@@ -41,20 +41,26 @@ CacheInitializeDrive(
 #endif
 )
 {
+#if 0 // FIXME: Rework cache reinitialization
     /* If we already have a cache for this drive then by all means lets keep it,
      * unless it is a removable drive, in which case we'll invalidate the cache */
     if (CacheManagerInitialized &&
+#ifdef CACHE_FOR_FILESYSTEM
+        (DeviceId == CacheManagerDrive.DeviceId) &&
+#else
+        (Device == CacheManagerDrive.Device) &&
+#endif
 #if 0
 // TODO: We should retrieve the "Removable" bit in the
 // configuration tree for this device.
     /** (Device->Flags & Removable) && **/
-        (DriveNumber == CacheManagerDrive.DriveNumber) &&
         (DriveNumber >= 0x80) &&
 #endif
         !CacheManagerDataInvalid)
     {
         return TRUE;
     }
+#endif
 
     CacheManagerDataInvalid = FALSE;
 
@@ -95,6 +101,7 @@ CacheInitializeDrive(
     CacheManagerDrive.Device = Device;
     CacheManagerDrive.BytesPerSector = Device->SectorSize;
 #endif
+    ASSERT(CacheManagerDrive.BytesPerSector > 0);
 
     /* Get the number of sectors in each cache block */
     // FIXME: Make it a parameter of the init function??
