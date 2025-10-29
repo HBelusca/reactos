@@ -34,15 +34,22 @@ CacheInternalFreeBlock(
 
 BOOLEAN
 CacheInitializeDrive(
-    _In_ UCHAR DriveNumber)
+#ifdef CACHE_FOR_FILESYSTEM
+    _In_ ULONG DeviceId
+#else
+    _In_ PDISKDEVICE Device
+#endif
+)
 {
-    GEOMETRY DriveGeometry;
-
     /* If we already have a cache for this drive then by all means lets keep it,
      * unless it is a removable drive, in which case we'll invalidate the cache */
     if (CacheManagerInitialized &&
+#if 0
+// TODO: We should retrieve the "Removable" bit in the
+// configuration tree for this device.
         (DriveNumber == CacheManagerDrive.DriveNumber) &&
         (DriveNumber >= 0x80) &&
+#endif
         !CacheManagerDataInvalid)
     {
         return TRUE;
@@ -73,10 +80,20 @@ CacheInitializeDrive(
     /* Initialize the structure */
     RtlZeroMemory(&CacheManagerDrive, sizeof(CacheManagerDrive));
     InitializeListHead(&CacheManagerDrive.CacheBlockHead);
-    CacheManagerDrive.DriveNumber = DriveNumber;
-    if (!MachDiskGetDriveGeometry(DriveNumber, &DriveGeometry))
-        return FALSE;
-    CacheManagerDrive.BytesPerSector = DriveGeometry.BytesPerSector;
+#ifdef CACHE_FOR_FILESYSTEM
+    CacheManagerDrive.DeviceId = DeviceId;
+    {
+    FILEINFORMATION Information;
+    ARC_STATUS Status = ArcGetFileInformation(DeviceId, &Information);
+    if (Information.Type == CdromController)
+        CacheManagerDrive.BytesPerSector = 2048;
+    else
+        CacheManagerDrive.BytesPerSector = 512;
+    }
+#else
+    CacheManagerDrive.Device = Device;
+    CacheManagerDrive.BytesPerSector = Device->SectorSize;
+#endif
 
     /* Get the number of sectors in each cache block */
     CacheManagerDrive.BlockSize = MachDiskGetCacheableBlockCount(DriveNumber);
@@ -88,7 +105,11 @@ CacheInitializeDrive(
 
     CacheManagerInitialized = TRUE;
 
-    TRACE("Initializing BIOS drive 0x%x:\n", DriveNumber);
+#ifdef CACHE_FOR_FILESYSTEM
+    TRACE("Initializing device ID 0x%x:\n", CacheManagerDrive.DeviceId);
+#else
+    TRACE("Initializing device 0x%p:\n", CacheManagerDrive.Device);
+#endif
     TRACE("BytesPerSector: %lu\n", CacheManagerDrive.BytesPerSector);
     TRACE("BlockSize: %lu\n", CacheManagerDrive.BlockSize);
     TRACE("CacheSizeLimit: %Iu\n", CacheSizeLimit);
@@ -103,7 +124,11 @@ VOID CacheInvalidateCacheData(VOID)
 
 BOOLEAN
 CacheReadDiskSectors(
-    _In_ UCHAR DriveNumber,
+#ifdef CACHE_FOR_FILESYSTEM
+    _In_ ULONG DeviceId,
+#else
+    _In_ PDISKDEVICE Device,
+#endif
     _In_ ULONGLONG StartSector,
     _In_ ULONG SectorCount,
     _Out_ PVOID Buffer)
@@ -117,8 +142,13 @@ CacheReadDiskSectors(
     ULONG BlockCount;
     ULONG Idx;
 
-    TRACE("CacheReadDiskSectors(DriveNumber: 0x%x) StartSector: %I64u SectorCount: %u Buffer: 0x%p\n",
-          DriveNumber, StartSector, SectorCount, Buffer);
+#ifdef CACHE_FOR_FILESYSTEM
+    TRACE("CacheReadDiskSectors(DeviceId: 0x%x) StartSector: %I64u SectorCount: %lu Buffer: 0x%p\n",
+          DeviceId, StartSector, SectorCount, Buffer);
+#else
+    TRACE("CacheReadDiskSectors(Device: 0x%p) StartSector: %I64u SectorCount: %lu Buffer: 0x%p\n",
+          Device, StartSector, SectorCount, Buffer);
+#endif
 
     /* If we aren't initialized yet then we cannot do this */
     if (CacheManagerInitialized == FALSE)
@@ -209,7 +239,11 @@ CacheReadDiskSectors(
 #if 0
 BOOLEAN
 CacheForceDiskSectorsIntoCache(
-    _In_ UCHAR DriveNumber,
+#ifdef CACHE_FOR_FILESYSTEM
+    _In_ ULONG DeviceId,
+#else
+    _In_ PDISKDEVICE Device,
+#endif
     _In_ ULONGLONG StartSector,
     _In_ ULONG SectorCount)
 {
@@ -217,8 +251,13 @@ CacheForceDiskSectorsIntoCache(
     ULONG StartBlock, EndBlock, BlockCount;
     ULONG Idx;
 
-    TRACE("CacheForceDiskSectorsIntoCache(DriveNumber: 0x%x) StartSector: %llu SectorCount: %lu\n",
-          DriveNumber, StartSector, SectorCount);
+#ifdef CACHE_FOR_FILESYSTEM
+    TRACE("CacheForceDiskSectorsIntoCache(DeviceId: 0x%x) StartSector: %I64u SectorCount: %lu\n",
+          DeviceId, StartSector, SectorCount);
+#else
+    TRACE("CacheForceDiskSectorsIntoCache(Device: 0x%p) StartSector: %I64u SectorCount: %lu\n",
+          Device, StartSector, SectorCount);
+#endif
 
     /* If we aren't initialized yet then we cannot do this */
     if (CacheManagerInitialized == FALSE)

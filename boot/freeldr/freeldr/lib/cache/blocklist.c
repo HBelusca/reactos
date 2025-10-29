@@ -27,7 +27,11 @@ CacheInternalDumpBlockList(
 {
     PLIST_ENTRY Entry;
 
-    TRACE("Dumping block list for BIOS drive 0x%x:\n", CacheDrive->DriveNumber);
+#ifdef CACHE_FOR_FILESYSTEM
+    TRACE("Dumping block list for device ID 0x%x:\n", CacheDrive->DeviceId);
+#else
+    TRACE("Dumping block list for device 0x%p:\n", CacheDrive->Device);
+#endif
     TRACE("BytesPerSector: %lu\n", CacheDrive->BytesPerSector);
     TRACE("BlockSize: %lu\n", CacheDrive->BlockSize);
     TRACE("CacheBlockCount:  %lu\n", CacheBlockCount);
@@ -84,7 +88,7 @@ CacheInternalFindBlock(
 
     TRACE("CacheInternalFindBlock(BlockNumber: %lu)\n", BlockNumber);
 
-    /* Search the block list and find the BIOS drive number */
+    /* Search in the block list the block matching the corresponding number */
     for (Entry = CacheDrive->CacheBlockHead.Flink;
          Entry != &CacheDrive->CacheBlockHead;
          Entry = Entry->Flink)
@@ -139,6 +143,7 @@ CacheInternalAddBlockToCache(
     _In_ ULONG BlockNumber)
 {
     PCACHE_BLOCK CacheBlock;
+    ARC_STATUS Status;
 
     TRACE("CacheInternalAddBlockToCache(BlockNumber: %lu)\n", BlockNumber);
 
@@ -163,15 +168,35 @@ CacheInternalAddBlockToCache(
     }
 
     /* Now try to read in the block */
-    if (!MachDiskReadLogicalSectors(CacheDrive->DriveNumber,
-                                    (BlockNumber * CacheDrive->BlockSize),
-                                    CacheDrive->BlockSize, DiskReadBuffer))
+#ifdef CACHE_FOR_FILESYSTEM
+    {
+    LARGE_INTEGER Position;
+    ULONG BytesRead;
+
+    Position.QuadPart = ((ULONGLONG)BlockNumber * CacheDrive->BlockSize) * CacheDrive->BytesPerSector;
+    Status = ArcSeek(CacheDrive->DeviceId, &Position, SeekAbsolute);
+    if (Status == ESUCCESS)
+    {
+        Status = ArcRead(CacheDrive->DeviceId,
+                         CacheBlock->BlockData,
+                         CacheDrive->BlockSize * CacheDrive->BytesPerSector,
+                         &BytesRead);
+        if (/*Status != ESUCCESS ||*/ BytesRead != CacheDrive->BlockSize * CacheDrive->BytesPerSector)
+            Status = EIO;
+    }
+    }
+#else
+    Status = CacheDrive->Device->ReadBlocks(CacheDrive->Device->Context,
+                                            (ULONGLONG)BlockNumber * CacheDrive->BlockSize,
+                                            CacheDrive->BlockSize,
+                                            CacheBlock->BlockData);
+#endif
+    if (Status != ESUCCESS)
     {
         FrLdrTempFree(CacheBlock->BlockData, TAG_CACHE_DATA);
         FrLdrTempFree(CacheBlock, TAG_CACHE_BLOCK);
         return NULL;
     }
-    RtlCopyMemory(CacheBlock->BlockData, DiskReadBuffer, CacheDrive->BlockSize * CacheDrive->BytesPerSector);
 
     /* Add it to our list of blocks managed by the cache */
     InsertTailList(&CacheDrive->CacheBlockHead, &CacheBlock->ListEntry);

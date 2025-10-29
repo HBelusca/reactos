@@ -1785,7 +1785,6 @@ MachInit(const char *CmdLine)
     MachVtbl.GetFloppyCount = PcGetFloppyCount;
     MachVtbl.DiskReadLogicalSectors = PcDiskReadLogicalSectors;
     MachVtbl.DiskGetDriveGeometry = PcDiskGetDriveGeometry;
-    MachVtbl.DiskGetCacheableBlockCount = PcDiskGetCacheableBlockCount;
     MachVtbl.GetTime = PcGetTime;
     MachVtbl.InitializeBootDevices = PcInitializeBootDevices;
     MachVtbl.HwDetect = PcHwDetect;

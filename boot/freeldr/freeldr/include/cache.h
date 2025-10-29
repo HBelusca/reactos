@@ -7,6 +7,15 @@
 
 #pragma once
 
+/*
+ * Defines how the cache code is to be used.
+ * If CACHE_FOR_FILESYSTEM is defined, the cache code is used for file systems.
+ * If it isn't defined however, the cache code is used by the disk driver.
+ */
+#define CACHE_FOR_FILESYSTEM
+// #define CACHE_DISKDRIVE
+
+
 #define TAG_CACHE_DATA  'DcaC'
 #define TAG_CACHE_BLOCK 'BcaC'
 
@@ -31,13 +40,17 @@ typedef struct _CACHE_BLOCK
 
 /**
  * @brief
- * This structure describes a cached drive. It contains the BIOS drive number
+ * This structure describes a cached drive. It contains the drive device ID
  * and indicates whether or not LBA is supported. If LBA is not supported then
  * the drive's geometry is described here.
  **/
 typedef struct _CACHE_DRIVE
 {
-    UCHAR DriveNumber;
+#ifdef CACHE_FOR_FILESYSTEM
+    ULONG DeviceId;     ///< ID of the underlying disk device.
+#else
+    PDISKDEVICE Device; ///< Disk device.
+#endif
     ULONG BytesPerSector;
 
     ULONG BlockSize;            ///< Block size (in sectors)
@@ -49,13 +62,22 @@ typedef struct _CACHE_DRIVE
 
 BOOLEAN
 CacheInitializeDrive(
-    _In_ UCHAR DriveNumber);
+#ifdef CACHE_FOR_FILESYSTEM
+    _In_ ULONG DeviceId
+#else
+    _In_ PDISKDEVICE Device
+#endif
+);
 
 VOID CacheInvalidateCacheData(VOID);
 
 BOOLEAN
 CacheReadDiskSectors(
-    _In_ UCHAR DriveNumber,
+#ifdef CACHE_FOR_FILESYSTEM
+    _In_ ULONG DeviceId,
+#else
+    _In_ PDISKDEVICE Device,
+#endif
     _In_ ULONGLONG StartSector,
     _In_ ULONG SectorCount,
     _Out_ PVOID Buffer);
@@ -63,7 +85,11 @@ CacheReadDiskSectors(
 #if 0
 BOOLEAN
 CacheForceDiskSectorsIntoCache(
-    _In_ UCHAR DriveNumber,
+#ifdef CACHE_FOR_FILESYSTEM
+    _In_ ULONG DeviceId,
+#else
+    _In_ PDISKDEVICE Device,
+#endif
     _In_ ULONGLONG StartSector,
     _In_ ULONG SectorCount);
 #endif
