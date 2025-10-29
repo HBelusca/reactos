@@ -207,14 +207,16 @@ DetectBiosFloppyPeripheral(PCONFIGURATION_COMPONENT_DATA ControllerKey)
     ULONG Size;
     UCHAR FloppyNumber;
     UCHAR FloppyType;
-    ULONG MaxDensity[6] = {0, 360, 1200, 720, 1440, 2880};
+    /* See https://fd.lod.bz/rbil/interrup/bios/1308.html#table-00242 */
+    ULONG MaxDensity[] = {0, 360, 1200, 720, 1440, 2880, 2880};
     PUCHAR Ptr;
 
     for (FloppyNumber = 0; FloppyNumber < 2; FloppyNumber++)
     {
         FloppyType = GetFloppyType(FloppyNumber);
+        // NOTA: Type 0x10 corresponds to an ATAPI Removable Media Device (super floppy).
 
-        if ((FloppyType > 5) || (FloppyType == 0))
+        if ((FloppyType >= RTL_NUMBER_OF(MaxDensity)) || (FloppyType == 0))
             continue;
 
         if (!DiskResetController(FloppyNumber))
@@ -246,11 +248,17 @@ DetectBiosFloppyPeripheral(PCONFIGURATION_COMPONENT_DATA ControllerKey)
         PartialDescriptor->u.DeviceSpecificData.DataSize = sizeof(CM_FLOPPY_DEVICE_DATA);
 
         FloppyData = (PVOID)(((ULONG_PTR)PartialResourceList) + sizeof(CM_PARTIAL_RESOURCE_LIST));
-        FloppyData->Version = 2;
+        FloppyData->Version = 2; // We use CM_FLOPPY_DEVICE_DATA instead of FLOPPY_CONFIGURATION_DATA.
         FloppyData->Revision = 0;
         FloppyData->MaxDensity = MaxDensity[FloppyType];
         FloppyData->MountDensity = 0;
-        RtlCopyMemory(&FloppyData->StepRateHeadUnloadTime, Ptr, 11);
+        /* See https://fd.lod.bz/rbil/interrup/bios/1e.html#table-01264 */
+        RtlCopyMemory(&FloppyData->StepRateHeadUnloadTime, Ptr,
+                      /*sizeof(CM_FLOPPY_DEVICE_DATA)*/
+                      RTL_SIZEOF_THROUGH_FIELD(CM_FLOPPY_DEVICE_DATA, MotorSettleTime)
+                        - FIELD_OFFSET(CM_FLOPPY_DEVICE_DATA, StepRateHeadUnloadTime));
+        /* NOTA: The following two values may be also obtained from the
+         * diskette parameter table on some computers (IBM SurePath BIOS) */
         FloppyData->MaximumTrackValue = (FloppyType == 1) ? 39 : 79;
         FloppyData->DataTransferRate = 0;
 

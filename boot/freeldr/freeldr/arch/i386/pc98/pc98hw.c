@@ -157,13 +157,13 @@ DetectBiosFloppyPeripheral(PCONFIGURATION_COMPONENT_DATA ControllerKey)
     ULONG Size;
     UCHAR FloppyNumber;
     UCHAR FloppyType;
-    ULONG MaxDensity[6] = {0, 360, 1200, 720, 1440, 2880};
+    ULONG MaxDensity[] = {0, 360, 1200, 720, 1440, 2880};
 
     for (FloppyNumber = 0; FloppyNumber < Pc98GetFloppyCount(); FloppyNumber++)
     {
         FloppyType = GetFloppyType(FloppyNumber);
 
-        if ((FloppyType > 5) || (FloppyType == 0))
+        if ((FloppyType >= RTL_NUMBER_OF(MaxDensity)) || (FloppyType == 0))
             continue;
 
         /* TODO: Properly detect */
@@ -199,11 +199,11 @@ DetectBiosFloppyPeripheral(PCONFIGURATION_COMPONENT_DATA ControllerKey)
         FloppyData->StepRateHeadUnloadTime = 175;
         FloppyData->HeadLoadTime = 2;
         FloppyData->MotorOffTime = 37;
-        FloppyData->SectorLengthCode = 2;
+        FloppyData->SectorLengthCode = 2; /* i.e. 512 bytes per sector */
         FloppyData->SectorPerTrack = 18;
-        FloppyData->ReadWriteGapLength = 27;
+        FloppyData->ReadWriteGapLength = 27;    /* For 3.5" floppy */
         FloppyData->DataTransferLength = 255;
-        FloppyData->FormatGapLength = 108;
+        FloppyData->FormatGapLength = 108;      /* For 3.5" floppy */
         FloppyData->FormatFillCharacter = 0xF6;
         FloppyData->HeadSettleTime = 15;
         FloppyData->MotorSettleTime = 8;
