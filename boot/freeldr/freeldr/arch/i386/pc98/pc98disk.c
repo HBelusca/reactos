@@ -894,22 +894,3 @@ Pc98DiskGetDriveGeometry(UCHAR DriveNumber, PGEOMETRY Geometry)
 
     return TRUE;
 }
-
-ULONG
-Pc98DiskGetCacheableBlockCount(UCHAR DriveNumber)
-{
-    PPC98_DISK_DRIVE DiskDrive;
-
-    DiskDrive = Pc98DiskDriveNumberToDrive(DriveNumber);
-    if (!DiskDrive)
-        return 1; // Unknown count.
-
-    /*
-     * If LBA is supported then the block size will be 64 sectors (32k).
-     * If not then the block size is the size of one track.
-     */
-    if (DiskDrive->LBASupported)
-        return 64;
-    else
-        return DiskDrive->Geometry.SectorsPerTrack;
-}

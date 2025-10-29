@@ -852,6 +852,7 @@ PcDiskGetDriveGeometry(UCHAR DriveNumber, PGEOMETRY Geometry)
     return TRUE;
 }
 
+#if 0 // Unused, kept for reference only
 ULONG
 PcDiskGetCacheableBlockCount(UCHAR DriveNumber)
 {
@@ -866,9 +867,48 @@ PcDiskGetCacheableBlockCount(UCHAR DriveNumber)
      * If not then the block size is the size of one track.
      */
     if (DiskDrive->Int13ExtensionsSupported)
+        return 64; // Which is (max_sectors_per_track_in_extended_int13 + 1)
+    else
+        return DiskDrive->Geometry.SectorsPerTrack;
+}
+
+ULONG
+Pc98DiskGetCacheableBlockCount(UCHAR DriveNumber)
+{
+    PPC98_DISK_DRIVE DiskDrive;
+
+    DiskDrive = Pc98DiskDriveNumberToDrive(DriveNumber);
+    if (!DiskDrive)
+        return 1; // Unknown count.
+
+    /*
+     * If LBA is supported then the block size will be 64 sectors (32k).
+     * If not then the block size is the size of one track.
+     */
+    if (DiskDrive->LBASupported)
         return 64;
     else
         return DiskDrive->Geometry.SectorsPerTrack;
 }
+
+ULONG
+XboxDiskGetCacheableBlockCount(UCHAR DriveNumber)
+{
+    PDEVICE_UNIT DeviceUnit;
+
+    DeviceUnit = XboxDiskDriveNumberToDeviceUnit(DriveNumber);
+    if (!DeviceUnit)
+        return 1; // Unknown count.
+
+    /*
+     * If LBA is supported then the block size will be 64 sectors (32k).
+     * If not then the block size is the size of one track.
+     */
+    if (DeviceUnit->Flags & ATA_DEVICE_LBA)
+        return 64;
+    else
+        return DeviceUnit->SectorsPerTrack;
+}
+#endif
 
 /* EOF */

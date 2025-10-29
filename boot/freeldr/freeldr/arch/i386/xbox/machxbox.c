@@ -353,7 +353,6 @@ MachInit(const char *CmdLine)
     MachVtbl.GetFloppyCount = XboxGetFloppyCount;
     MachVtbl.DiskReadLogicalSectors = XboxDiskReadLogicalSectors;
     MachVtbl.DiskGetDriveGeometry = XboxDiskGetDriveGeometry;
-    MachVtbl.DiskGetCacheableBlockCount = XboxDiskGetCacheableBlockCount;
     MachVtbl.GetTime = XboxGetTime;
     MachVtbl.InitializeBootDevices = PcInitializeBootDevices;
     MachVtbl.HwDetect = XboxHwDetect;

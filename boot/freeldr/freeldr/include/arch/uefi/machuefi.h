@@ -75,9 +75,6 @@ UefiGetExtendedBIOSData(PULONG ExtendedBIOSDataArea,
 UCHAR
 UefiGetFloppyCount(VOID);
 
-ULONG
-UefiDiskGetCacheableBlockCount(UCHAR DriveNumber);
-
 TIMEINFO*
 UefiGetTime(VOID);
 

@@ -66,7 +66,6 @@ typedef struct tagMACHVTBL
     UCHAR (*GetFloppyCount)(VOID);
     BOOLEAN (*DiskReadLogicalSectors)(UCHAR DriveNumber, ULONGLONG SectorNumber, ULONG SectorCount, PVOID Buffer);
     BOOLEAN (*DiskGetDriveGeometry)(UCHAR DriveNumber, PGEOMETRY DriveGeometry);
-    ULONG (*DiskGetCacheableBlockCount)(UCHAR DriveNumber);
 
     // NOTE: In the machine.c under the name of "ArcGetXXXTime"
     TIMEINFO* (*GetTime)(VOID);
@@ -121,8 +120,6 @@ VOID MachInit(const char *CmdLine);
     MachVtbl.DiskReadLogicalSectors((Drive), (Start), (Count), (Buf))
 #define MachDiskGetDriveGeometry(Drive, Geom)   \
     MachVtbl.DiskGetDriveGeometry((Drive), (Geom))
-#define MachDiskGetCacheableBlockCount(Drive)   \
-    MachVtbl.DiskGetCacheableBlockCount(Drive)
 
 #define MachInitializeBootDevices() \
     MachVtbl.InitializeBootDevices()

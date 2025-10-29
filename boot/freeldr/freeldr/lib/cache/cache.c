@@ -47,6 +47,7 @@ CacheInitializeDrive(
 #if 0
 // TODO: We should retrieve the "Removable" bit in the
 // configuration tree for this device.
+    /** (Device->Flags & Removable) && **/
         (DriveNumber == CacheManagerDrive.DriveNumber) &&
         (DriveNumber >= 0x80) &&
 #endif
@@ -96,7 +97,12 @@ CacheInitializeDrive(
 #endif
 
     /* Get the number of sectors in each cache block */
-    CacheManagerDrive.BlockSize = MachDiskGetCacheableBlockCount(DriveNumber);
+    // FIXME: Make it a parameter of the init function??
+#ifdef CACHE_FOR_FILESYSTEM
+    CacheManagerDrive.BlockSize = 64;
+#else
+    CacheManagerDrive.BlockSize = min(Device->Geometry.SectorsPerTrack, 64);
+#endif
 
     CacheBlockCount = 0;
     CacheSizeCurrent = 0;

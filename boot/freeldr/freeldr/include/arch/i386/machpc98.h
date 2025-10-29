@@ -150,7 +150,6 @@ BOOLEAN DiskResetController(IN PPC98_DISK_DRIVE DiskDrive);
 
 BOOLEAN Pc98DiskReadLogicalSectors(UCHAR DriveNumber, ULONGLONG SectorNumber, ULONG SectorCount, PVOID Buffer);
 BOOLEAN Pc98DiskGetDriveGeometry(UCHAR DriveNumber, PGEOMETRY DriveGeometry);
-ULONG Pc98DiskGetCacheableBlockCount(UCHAR DriveNumber);
 UCHAR Pc98GetFloppyCount(VOID);
 PPC98_DISK_DRIVE Pc98DiskDriveNumberToDrive(IN UCHAR DriveNumber);
 

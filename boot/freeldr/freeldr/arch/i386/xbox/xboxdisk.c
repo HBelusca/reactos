@@ -132,23 +132,4 @@ XboxDiskGetDriveGeometry(UCHAR DriveNumber, PGEOMETRY Geometry)
     return TRUE;
 }
 
-ULONG
-XboxDiskGetCacheableBlockCount(UCHAR DriveNumber)
-{
-    PDEVICE_UNIT DeviceUnit;
-
-    DeviceUnit = XboxDiskDriveNumberToDeviceUnit(DriveNumber);
-    if (!DeviceUnit)
-        return 1; // Unknown count.
-
-    /*
-     * If LBA is supported then the block size will be 64 sectors (32k).
-     * If not then the block size is the size of one track.
-     */
-    if (DeviceUnit->Flags & ATA_DEVICE_LBA)
-        return 64;
-    else
-        return DeviceUnit->SectorsPerTrack;
-}
-
 /* EOF */

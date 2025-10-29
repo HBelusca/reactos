@@ -424,18 +424,3 @@ UefiGetFloppyCount(VOID)
     /* No floppy for you for now... */
     return 0;
 }
-
-ULONG
-UefiDiskGetCacheableBlockCount(UCHAR DriveNumber)
-{
-    EFI_STATUS Status;
-    EFI_BLOCK_IO* bio;
-    ULONG UefiDriveNumber = InternalUefiDisk[DriveNumber].UefiRootNumber;
-
-    TRACE("UefiDiskGetCacheableBlockCount: DriveNumber: %u\n", UefiDriveNumber);
-
-    Status = GlobalSystemTable->BootServices->HandleProtocol(handles[UefiDriveNumber], &bioGuid, (void**)&bio);
-    if (EFI_ERROR(Status) || bio == NULL || bio->Media->BlockSize == 0)
-        return 0;
-    return (bio->Media->LastBlock + 1);
-}
