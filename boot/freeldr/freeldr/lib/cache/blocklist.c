@@ -27,6 +27,7 @@ CacheInternalDumpBlockList(
 {
     PLIST_ENTRY Entry;
 
+#if 0 //
 #ifdef CACHE_FOR_FILESYSTEM
     TRACE("Dumping block list for device ID 0x%x:\n", CacheDrive->DeviceId);
 #else
@@ -37,19 +38,19 @@ CacheInternalDumpBlockList(
     TRACE("CacheBlockCount:  %lu\n", CacheBlockCount);
     TRACE("CacheSizeLimit:   %Iu\n", CacheSizeLimit);
     TRACE("CacheSizeCurrent: %Iu\n", CacheSizeCurrent);
-
+#endif
     for (Entry = CacheDrive->CacheBlockHead.Flink;
          Entry != &CacheDrive->CacheBlockHead;
          Entry = Entry->Flink)
     {
         PCACHE_BLOCK CacheBlock = CONTAINING_RECORD(Entry, CACHE_BLOCK, ListEntry);
-
+#if 0 //
         TRACE("Cache Block: CacheBlock: 0x%p\n", CacheBlock);
         TRACE("Cache Block: Block Number: %lu\n", CacheBlock->BlockNumber);
         TRACE("Cache Block: Access Count: %lu\n", CacheBlock->AccessCount);
         TRACE("Cache Block: Block Data: 0x%p\n", CacheBlock->BlockData);
         TRACE("Cache Block: Locked in cache: %s\n", CacheBlock->LockedInCache ? "TRUE" : "FALSE");
-
+#endif
         if (CacheBlock->BlockData == NULL)
             BugCheck("CacheBlock->BlockData == NULL\n");
     }
