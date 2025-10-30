@@ -12,7 +12,7 @@
  * If CACHE_FOR_FILESYSTEM is defined, the cache code is used for file systems.
  * If it isn't defined however, the cache code is used by the disk driver.
  */
-// #define CACHE_FOR_FILESYSTEM
+#define CACHE_FOR_FILESYSTEM
 // #define CACHE_DISKDRIVE
 
 #ifndef CACHE_FOR_FILESYSTEM
@@ -27,6 +27,8 @@ typedef struct _DDISKDEVICE
     ULONG SectorSize;       // == Geometry.BytesPerSector
     ULONGLONG SectorCount;  // == Geometry.Sectors
     ULONGLONG SectorOffset; // Always 0 (whole disk) -- FIXME: Remove?
+    PVOID SectorCache; // A SectorSize-sized buffer to cache whole sectors for reads/writes.
+    ULONGLONG CurrentLBA;  // LBA of the current sector in the cache.
     PVOID Context; // For "miniports"
     PBLOCK_INIT DevInit;
     PBLOCK_UNINIT DevUninit;

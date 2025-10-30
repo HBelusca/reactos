@@ -16,7 +16,7 @@ DBG_DEFAULT_CHANNEL(DISK);
 #define TAG_PART_DEVICE     'traP'
 #define TAG_DISK_CONTEXT    'xCkD'
 
-#define USE_CACHE
+// #define USE_CACHE // And disable CACHE_FOR_FILESYSTEM in cache.h
 
 #ifndef USE_CACHE // See cache.h
 /* Driver-specific disk device object extension */
@@ -28,6 +28,8 @@ typedef struct _DDISKDEVICE
     ULONG SectorSize;       // == Geometry.BytesPerSector
     ULONGLONG SectorCount;  // == Geometry.Sectors
     ULONGLONG SectorOffset; // Always 0 (whole disk) -- FIXME: Remove?
+    PVOID SectorCache; // A SectorSize-sized buffer to cache whole sectors for reads/writes.
+    ULONGLONG CurrentLBA;  // LBA of the current sector in the cache.
     PVOID Context; // For "miniports"
     PBLOCK_INIT DevInit;
     PBLOCK_UNINIT DevUninit;
@@ -70,6 +72,10 @@ DiskClose(
     PDISKDEVICE Device = Context->Device;
     //if (????) // RefCount reaches zero, etc.
         Device->DevUninit(Device->Context);
+    if (Device->SectorCache)
+        FrLdrTempFree(Device->SectorCache, TAG_DISK_CONTEXT);
+    Device->SectorCache = NULL;
+    Device->CurrentLBA = -1; // Invalidate the LBA
     FrLdrTempFree(Context, TAG_DISK_CONTEXT);
     return ESUCCESS;
 }
@@ -185,9 +191,21 @@ ERR("DissectArcPath2(%s):\n"
         Device->SectorOffset = 0;
         Device->SectorCount = Device->Geometry.Sectors;
 
+        /* Reset the sector cache if it exists, since the media sector size
+         * may have changed. The cache remains uninitialized; it'll be lazily
+         * initialized by DiskRead() */
+        if (Device->SectorCache)
+            FrLdrTempFree(Device->SectorCache, TAG_DISK_CONTEXT);
+        Device->SectorCache = NULL;
+        Device->CurrentLBA = -1; // Invalidate the LBA
+
+// #ifdef USE_CACHE
         // (void)CacheInitializeDrive(Device); // FIXME!!!!
+// #endif
     }
+#ifdef USE_CACHE
 /*********/(void)CacheInitializeDrive(Device);/*********/
+#endif
 
 #if 1 // TODO: Temporarily handle partitions here....
     if (DrivePartition != 0)
@@ -203,15 +221,30 @@ ERR("DissectArcPath2(%s):\n"
         SectorOffset = PartitionTableEntry.SectorCountBeforePartition;
         SectorCount = PartitionTableEntry.PartitionSectorCount;
 
-        // TODO: Clamp offset and count to what's allowable from the Device.
-        // SectorOffset = ;
-        // SectorCount = ;
+        /* Validate the offset and count */
+        if (!(0 <= SectorOffset && SectorOffset < Device->SectorCount) ||
+            !(SectorOffset <= SectorOffset + SectorCount) || // Check for wrapping.
+            !(SectorOffset + SectorCount <= Device->SectorCount))
+        {
+            ERR("Invalid partition: Offset: %I64u - Count: %I64u",
+                SectorOffset, SectorCount);
+            return EIO;
+        }
+
+        // /* Clamp offset and count to what's allowable from the device */
+        // SectorOffset = min(SectorOffset, Device->SectorCount - 1);
+        // SectorCount = min(SectorCount, Device->SectorCount - SectorOffset);
     }
     else
 #endif
     {
         SectorOffset = Device->SectorOffset;
         SectorCount = Device->SectorCount;
+    }
+    if (SectorCount == 0)
+    {
+        ERR("Invalid SectorCount: %I64u", SectorCount);
+        return EIO;
     }
 
 ERR("-- Drive %lu:\n"
@@ -222,7 +255,6 @@ ERR("-- Drive %lu:\n"
     "   Context:      0x%p\n",
     DriveNumber,
     Device->DeviceType,
-    // GEOMETRY Geometry;
     Device->SectorSize,
     Device->SectorCount,
     Device->SectorOffset,
@@ -301,6 +333,7 @@ DiskReadByBlocks(
 #endif
 
 // TODO: Merge both DiskRead*() functions together.
+// TODO: Support reads where the beginning isn't sector-aligned.
 static ARC_STATUS
 DiskRead(
     _In_ ULONG FileId,
@@ -313,7 +346,7 @@ DiskRead(
     ARC_STATUS Status;
 
     ULONG FullSectors, NbSectors;
-    ULONG Lba;
+    ULONGLONG Lba;
 
     *Count = 0;
 
@@ -329,7 +362,26 @@ DiskRead(
 
     /* Read full sectors */
     ASSERT(Context->SectorNumber < MAXULONG);
-    Lba = (ULONG)(/*Device*/Context->SectorOffset + Context->SectorNumber);
+    Lba = /*Device*/Context->SectorOffset + Context->SectorNumber;
+
+    /* Check whether this LBA is in cache; if so, read from it */
+    if (FullSectors > 0 && Device->SectorCache && Device->CurrentLBA == Lba)
+    {
+        /* Copy the cache contents and invalidate its LBA */
+        TRACE("Sector Cache hit! LBA: %I64u\n", Lba);
+        RtlCopyMemory(Buffer, Device->SectorCache, Device->SectorSize);
+        Device->CurrentLBA = -1;
+
+        /* We've read only one sector */
+        Buffer = (PUCHAR)Buffer + Device->SectorSize;
+        N -= Device->SectorSize;
+        *Count += Device->SectorSize;
+        Context->SectorNumber++;
+        Lba++;
+        FullSectors--;
+    }
+
+    /* Read whole sectors directly */
     if (FullSectors > 0)
     {
         Status = DiskReadBlocks(Device,
@@ -349,24 +401,30 @@ DiskRead(
     /* Read incomplete last sector */
     if (N > 0)
     {
-        PUCHAR Sector = ExAllocatePool(PagedPool, Device->SectorSize);
-        if (!Sector)
+        /* Lazy-initialize the sector cache */
+        // ExAllocatePool(PagedPool, Device->SectorSize);
+        if (!Device->SectorCache)
+            Device->SectorCache = FrLdrTempAlloc(Device->SectorSize, TAG_DISK_CONTEXT);
+        if (!Device->SectorCache)
+        {
+            ERR("Couldn't allocate SectorCache for device 0x%p\n", Device);
             return ENOMEM;
+        }
+        Device->CurrentLBA = -1; // Invalidate the LBA
 
         Status = DiskReadBlocks(Device,
                                 Lba, // === SectorOffset,
                                 1,
-                                Sector);
+                                Device->SectorCache);
         if (Status != ESUCCESS)
-        {
-            ExFreePool(Sector);
-            return Status; // EIO;
-        }
+            return Status;
 
-        RtlCopyMemory(Buffer, Sector, N);
+        /* Read succeeded, update the cached LBA */
+        Device->CurrentLBA = Lba;
+
+        RtlCopyMemory(Buffer, Device->SectorCache, N);
         *Count += N;
         /* Context->SectorNumber remains untouched (incomplete sector read) */
-        ExFreePool(Sector);
     }
 
     return ESUCCESS;
@@ -525,6 +583,8 @@ BlockIoCreate(
     BlockDev->DeviceType = DeviceType; // Or determine it from the DeviceName?
     BlockDev->Context = DeviceData;
     RtlFillMemory(&BlockDev->Geometry, sizeof(BlockDev->Geometry), 0xFF);
+    BlockDev->SectorCache = NULL;
+    BlockDev->CurrentLBA = -1; // Invalidate the LBA
 #if 0 // Re-enable if we don't want to do delay-initialization in DiskOpen().
     Status = BlockDev->DevInit(BlockDev->Context, DeviceName, &BlockDev->Geometry);
     if (Status != ESUCCESS)
