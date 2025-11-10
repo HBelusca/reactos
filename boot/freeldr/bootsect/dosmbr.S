@@ -6,54 +6,59 @@
  * PROGRAMMERS:     Casper Hornstrup (chorns@users.sourceforge.net)
  */
 
-/* INCLUDES ******************************************************************/
-
 #include <asm.inc>
+
+.code16
 
 //-----------------------------------------------------------------------
 //   ENTRY (copied from freedos bootsector)
 //
-// IN: DL = boot drive
+// CS:IP = 0:7C00
+// IN : DL = boot drive
 // OUT: DL = boot drive
 //
 //-----------------------------------------------------------------------
 
-.code16
-real_start:
+// ORG HEX(7c00)
+// ORG HEX(0600)
+
+start:
     cli
-    cld
+    /* Setup segment registers */
+ASSUME CS:.text, DS:.text, ES:.text, SS:.text
     xor ax, ax
-    mov ss, ax          // initialize stack
     mov ds, ax
-    mov bp, HEX(7c00)
+    mov es, ax
+    mov ss, ax           // Initialize stack at SS:SP = 0:7BE0,
+    mov sp, HEX(7c00)-32 // right below original boot code with 0x20 bytes of safety margin
+/*
+    If bp contains the original start IP (determined at runtime),
+    then we could define the stack pointer with:
+    // mov bp, HEX(7c00)
     lea sp, [bp-32]
+*/
     sti
 
-    /* Copy 512 bytes of MBR to 1fe0:7c00 */
-    mov ax, HEX(1FE0)
-    mov es, ax
-    mov si, bp
-    mov di, bp
-    mov cx, 256
+    /* Relocate 512 bytes of MBR down to 0:0600 */
+    cld
+    mov si, HEX(7c00)
+    mov di, offset start
+    mov cx, 512 / 2
     rep movsw
 
     /* Jump into relocated code */
-    ljmp16 HEX(1FE0), cont
+    ljmp16 0, cont
+
+ASSUME CS:.text, DS:.text, ES:.text, SS:.text
 cont:
 
-    /* Setup segment registers */
-    mov ds, ax
-    mov ss, ax
-    xor ax, ax
-    mov es, ax
-
     /* Search for active partition */
-    lea di, [bp + HEX(1be)] // start of partition table
+    mov di, offset parttbl // start of partition table
 test_next_for_active:
     test byte ptr ds:[di], HEX(80)
     jne active_partition_found
-    add di, 16                    // next table
-    cmp di, HEX(07c00) + HEX(1fe) // scanned beyond end of table ??
+    add di, 16                   // next table entry
+    cmp di, offset BootSignature // scanned beyond end of table?
     jb test_next_for_active
 
 /*****************************************************************/
@@ -75,20 +80,15 @@ trouble_reading_drive:
 invalid_partition_code:
     call print
     .asciz "Partition signature != 55AA"
-
     jmp WAIT_FOR_REBOOT
 
 /*****************************************************************/
 
 active_partition_found:
-//  call print
-//  .asciz "Loading active partition"
-
     call read_boot_sector
+    jc trouble_reading_drive
 
-    jc  trouble_reading_drive
-
-    cmp word ptr es:[HEX(7c00)+HEX(1fe)], HEX(0aa55)
+    cmp word ptr ds:[HEX(7c00) + HEX(1fe)], HEX(0aa55)
     jne invalid_partition_code
 
     ljmp16 0, HEX(7c00)            // and jump to boot sector code
@@ -137,7 +137,7 @@ LBABios:
     // copy start address of partition to DAP
     mov ax, [di + 8]
     mov word ptr ds:[_bios_LBA_low], ax
-    mov ax,[di + 8 + 2]
+    mov ax, [di + 8 + 2]
     mov word ptr ds:[_bios_LBA_high], ax
 
     mov ax, HEX(4200)    //  regs.a.x = LBA_READ;
@@ -179,7 +179,12 @@ print1:
     jne print_1char              // until done
     ret                          // and jump to it
 
-.org 510
+.org 446 // HEX(1be)
+parttbl:
+    // 4 primary partition table entries here...
+
+.org 510 // HEX(1fe)
+BootSignature:
     .byte HEX(55), HEX(0aa)
 
 .endcode16
