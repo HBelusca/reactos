@@ -8,6 +8,7 @@
 #include <asm.inc>
 
 .code16
+ASSUME CS:.text, DS:.text, ES:.text, SS:.text
 
 // The "isohybrid" tool patching our ISO will write the LBA of the El Torito BIOS Boot Sector to this address.
 pBootSectorLBA = start+432

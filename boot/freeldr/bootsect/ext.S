@@ -86,6 +86,7 @@
 #define LBASectorsRead                          (ExtFileSizeState - 4)
 
 .code16
+ASSUME CS:.text, DS:.text, /*ES:.text,*/ SS:.text
 
 #ifndef INCLUDED_ASM
 

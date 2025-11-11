@@ -11,6 +11,7 @@
  */
 
 /* INCLUDES ******************************************************************/
+
 #include <asm.inc>
 #include <freeldr/include/arch/pc/x86common.h>
 
@@ -18,11 +19,11 @@
 #define WAIT_FOR_KEY
 #endif
 
-
 .code16
-ASSUME CS:.text, DS:.text, ES:.text
+ASSUME CS:.text, DS:.text, ES:.text, SS:.text
 
-/* CONSTANTS ******************************************************************/
+/* CONSTANTS *****************************************************************/
+
 BIOS_timer = HEX(046C)      // Timer ticks (1 word)
 BIOS_magic = HEX(0472)      // BIOS reset magic (1 word)
 
@@ -49,7 +50,8 @@ SECTOR_SHIFT = 11           // 2048 bytes/sector (El Torito requirement)
 SECTOR_SIZE = 2048
 retry_count = 6             // How patient are we with the BIOS?
 
-/* UNINITIALIZED VARIABLES ****************************************************/
+/* UNINITIALIZED VARIABLES ***************************************************/
+
 absolute HEX(5000)          // Here we keep our BSS stuff
 
 resb ISOFileName, 64        // ISO filename canonicalization buffer
@@ -68,7 +70,7 @@ absolute HEX(5070)
 resb Files, (MAX_OPEN * open_file_t_size)
 
 
-/* ENTRY POINTS ***************************************************************/
+/* ENTRY POINTS **************************************************************/
 
 // Entry point when booted from CD (El Torito standard)
 start:
@@ -1058,6 +1060,7 @@ pollchar_and_empty:
 
 
 /* INITIALIZED VARIABLES *****************************************************/
+
 presskey_msg:
     .ascii "Press any key to boot from the ReactOS medium", NUL
 dot_msg:

@@ -13,11 +13,12 @@
 
 .code16
 
-//ORG HEX(7c00)
+// ORG HEX(7c00)
 
 start:
     jmp short main
     nop
+
 OEMName:
     .ASCII "NTFS    "   // NTFS signature
 BytesPerSector:
@@ -69,10 +70,11 @@ Checksum:
     .long 0
 
 main:
-    xor ax,ax               // Setup segment registers
-    mov ds,ax               // Make DS correct
-    mov es,ax               // Make ES correct
-    mov ss,ax               // Make SS correct
+ASSUME CS:.text, DS:.text, ES:.text, SS:.text
+    xor ax, ax              // Setup segment registers
+    mov ds, ax              // Make DS correct
+    mov es, ax              // Make ES correct
+    mov ss, ax              // Make SS correct
     mov sp, HEX(7c00)
     mov bp, sp              // Setup a stack
 
@@ -415,8 +417,8 @@ StartSearch:
         cmp   ecx, edx
         jbe   FreeLdrLoad
 
-    mov    dl, byte ptr [BootDrive]
-    mov    dh, byte ptr [BootPartition]
+    mov dl, byte ptr [BootDrive]
+    mov dh, byte ptr [BootPartition]
     ljmp16 FREELDR_BASE / 16, 0
 
 // Error message if Freeldr is compressed, encrypted or sparse

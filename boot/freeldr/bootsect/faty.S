@@ -55,9 +55,10 @@ PutCharsOffset        = BootSectorStackTop + 20 /* word */
 #define BP_REL(x) ss:[bp + x - BootSectorStackTop]
 
 /* The code starts at 0x7c00 */
-// org 7c00h
+// ORG HEX(7c00)
 
 .code16
+ASSUME CS:.text, DS:.text, SS:.text
 
 /******************************************************************************
  *                      BIOS Parameter Block (BPB)                            *
@@ -246,7 +247,7 @@ main:
     /* Point ES:DI to the memory that is later the disk read buffer for freeldr.
        This way we cannot overwrite our FAT with freeldr data */
     mov bx, DISKREADBUFFER / 16
-    mov es,bx
+    mov es, bx
     xor di, di
 
     /* Read the sectors */
@@ -395,8 +396,8 @@ main:
     jb .LoadNextCluster
 
     /* Load boot drive into DL, boot partition into DH */
-    mov  dl, byte ptr ds:[BootDrive]
-    mov  dh, byte ptr ds:[BootPartition]
+    mov dl, byte ptr ds:[BootDrive]
+    mov dh, byte ptr ds:[BootPartition]
 
     /* Now the complete freeldr imag is loaded.
        Jump to the realmode entry point. */
@@ -478,7 +479,7 @@ ReadCluster:
 #endif
 
     /* Restore ES and return */
-    pop  es
+    pop es
     ret
 
 

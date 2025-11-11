@@ -14,8 +14,9 @@
 #define BP_REL(x) [bp+x-offset start]
 
 .code16
+ASSUME CS:.text, DS:.text, SS:.text
 
-//ORG HEX(7c00)
+// ORG HEX(7c00)
 
 start:
     jmp short main

@@ -44,7 +44,7 @@ if 0
 .endm
 endif
 
-// org 7C00h
+// ORG HEX(7c00)
 
 .code16
 
@@ -133,7 +133,7 @@ endif
     mov ax, HEX(0000)
     mov es, ax
     mov di, HEX(7C00)
-    mov cx, 512
+    mov cx, 512 / 2
     rep movsw                                   // Move our 512 bytes boot sector to the [0000:7C00]
     pop si
 

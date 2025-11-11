@@ -54,9 +54,10 @@ PutCharsOffset          =   20
 BootSectorStackTop      =   HEX(7c00) - 22
 
 
-// org 7c00h
+// ORG HEX(7c00)
 
 .code16
+ASSUME CS:.text, DS:.text, SS:.text
 
 start:
     jmp main

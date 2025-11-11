@@ -36,6 +36,7 @@ MAX_CHUNK_ITEMS = 255
 start:
     jmp short main
     nop
+
 // globals
 ChunkMapSize:
     .byte 0
@@ -746,7 +747,6 @@ CompareKeys_end:
     pop si
     pop ds
     ret
-
 
 
 btrfsSignature:
