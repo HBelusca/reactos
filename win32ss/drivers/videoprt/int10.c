@@ -412,7 +412,7 @@ IntInt10FreeBufferV86(
     _In_ USHORT Off)
 {
     NTSTATUS Status;
-    PVOID MemoryAddress = (PVOID)((ULONG_PTR)(Seg << 4) | Off);
+    PVOID MemoryAddress = (PVOID)((ULONG_PTR)(Seg << 4) + Off);
     PKPROCESS CallingProcess;
     KAPC_STATE ApcState;
     SIZE_T Size = 0;
@@ -487,7 +487,7 @@ IntInt10ReadMemoryV86(
 
     if (IsLowV86Mem(Seg, Off))
         UnprotectLowV86Mem();
-    RtlCopyMemory(Buffer, (PVOID)((ULONG_PTR)(Seg << 4) | Off), Length);
+    RtlCopyMemory(Buffer, (PVOID)((ULONG_PTR)(Seg << 4) + Off), Length);
     if (IsLowV86Mem(Seg, Off))
         ProtectLowV86Mem();
 
@@ -554,7 +554,7 @@ IntInt10WriteMemoryV86(
 
     if (IsLowV86Mem(Seg, Off))
         UnprotectLowV86Mem();
-    RtlCopyMemory((PVOID)((ULONG_PTR)(Seg << 4) | Off), Buffer, Length);
+    RtlCopyMemory((PVOID)((ULONG_PTR)(Seg << 4) + Off), Buffer, Length);
     if (IsLowV86Mem(Seg, Off))
         ProtectLowV86Mem();
 
