@@ -1,6 +1,8 @@
 
 include_directories(${REACTOS_SOURCE_DIR}/ntoskrnl/include)
 add_definitions(-D_VIDEOPORT_)
+remove_definitions(-DDLL_EXPORT_VERSION=0x502)
+add_definitions(-DDLL_EXPORT_VERSION=0x600)
 spec2def(videoprt.sys videoprt.spec ADD_IMPORTLIB)
 
 # Embed RTC libs
