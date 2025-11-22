@@ -14,7 +14,17 @@
 
 #include <fast486.h>
 
+// #define SEPARATE_MEMORY_MAPPING
+// #define SEPARATELY_MAP_VGA_MEMORY
+
 /* GLOBALS *******************************************************************/
+
+//
+// Base address of VGA memory range.  Also used as base address of VGA
+// memory when loading a font, which is done with the VGA mapped at A0000.
+//
+#define MEM_VGA      0xA0000
+#define MEM_VGA_SIZE 0x20000
 
 /* This page serves as fallback for pages used by Mm */
 PFN_NUMBER x86BiosFallbackPfn;
@@ -22,6 +32,9 @@ PFN_NUMBER x86BiosFallbackPfn;
 static BOOLEAN x86BiosInitialized;
 static LONG x86BiosBufferIsAllocated = 0;
 static PUCHAR x86BiosMemoryMapping;
+#ifdef SEPARATELY_MAP_VGA_MEMORY
+static PUCHAR x86BiosVGAMemory;
+#endif
 
 /* This the physical address of the BIOS buffer */
 static ULONG64 x86BiosBufferPhysical;
@@ -29,21 +42,54 @@ static ULONG64 x86BiosBufferPhysical;
 /* The internal emulator context */
 static FAST486_STATE EmulatorContext;
 
+#define HOW_MUCH_PER_LINE   32
+VOID
+DbgDumpBuffer(PUCHAR MemBuffer, ULONG Begin, ULONG Size)
+{
+    ULONG x, y, Offset, LineSize;
+    PCHAR ptr;
+    CHAR Line[(8+2) + (3*HOW_MUCH_PER_LINE) + 1 + HOW_MUCH_PER_LINE + 2];
+
+    for (y = 0; y < 1 + (Size / HOW_MUCH_PER_LINE); y++)
+    {
+        LineSize = min(Size - (y * HOW_MUCH_PER_LINE), HOW_MUCH_PER_LINE);
+        if (LineSize == 0)
+            break; /* We are done */
+        Offset = Begin + y * HOW_MUCH_PER_LINE;
+        ptr = Line;
+        sprintf(ptr, "%08lx: ", Offset), ptr += (8+2);
+        for (x = 0; x < LineSize; x++)
+        {
+            sprintf(ptr, "%02x ", MemBuffer[Offset]), ptr += 3;
+            Offset++;
+        }
+        for (x = LineSize; x < HOW_MUCH_PER_LINE; x++)
+        {
+            ptr[0] = ptr[1] = ptr[2] = ' ', ptr += 3;
+        }
+        ptr[0] = ' ', ptr += 1;
+        Offset = Begin + y * HOW_MUCH_PER_LINE;
+        for (x = 0; x < LineSize; x++)
+        {
+            UCHAR Char = MemBuffer[Offset];
+            ptr[0] = (isprint(Char) ? Char : '.'), ptr += 1;
+            Offset++;
+        }
+        for (x = LineSize; x < HOW_MUCH_PER_LINE; x++)
+        {
+            ptr[0] = ' ', ptr += 1;
+        }
+        ptr[0] = '\n', ptr[1] = ANSI_NULL;
+        DbgPrint("%s", Line);
+    }
+}
+
 VOID
 DbgDumpPage(PUCHAR MemBuffer, USHORT Segment)
 {
-    ULONG x, y, Offset;
-
-    for (y = 0; y < 0x100; y++)
-    {
-        for (x = 0; x < 0x10; x++)
-        {
-            Offset = Segment * 16 + y * 16 + x;
-            DbgPrint("%02x ", MemBuffer[Offset]);
-        }
-        DbgPrint("\n");
-    }
+    DbgDumpBuffer(MemBuffer, Segment * 16, 0x1000);
 }
+#undef HOW_MUCH_PER_LINE
 
 
 static
@@ -58,7 +104,44 @@ x86MemRead(
     /* Validate the address range */
     if (((ULONG64)Address + Size) < 0x100000)
     {
+        /* Copy the memory to the buffer */
+#ifdef SEPARATELY_MAP_VGA_MEMORY
+        while (Size)
+        {
+            ULONG ChunkSize;
+
+            if (MEM_VGA <= Address && Address < MEM_VGA + MEM_VGA_SIZE)
+            {
+                /* Buffer starts inside VGA buffer: limit chunk to inside VGA buffer */
+                ChunkSize = min(Size, (MEM_VGA + MEM_VGA_SIZE) - Address);
+DbgPrint("Rx @ 0x%lx (0x%lx)\n", Address, ChunkSize);
+                RtlCopyMemory(Buffer, x86BiosVGAMemory + Address - MEM_VGA, ChunkSize);
+            }
+            else
+            {
+                if (Address < MEM_VGA && Address + Size > MEM_VGA)
+                {
+                    /* Buffer starts before VGA and ends inside or after VGA */
+                    ChunkSize = MEM_VGA - Address;
+                }
+                else
+                {
+                    /* Buffer is either fully before VGA buffer or fully after */
+                    ChunkSize = Size;
+                }
+                RtlCopyMemory(Buffer, x86BiosMemoryMapping + Address, ChunkSize);
+            }
+
+            Address += ChunkSize;
+            Buffer = (PVOID)((ULONG_PTR)Buffer + ChunkSize);
+            Size -= ChunkSize;
+        }
+#else
         RtlCopyMemory(Buffer, x86BiosMemoryMapping + Address, Size);
+DbgPrint("Rx @ 0x%lx (0x%lx) -->\n", Address, Size);
+DbgDumpBuffer(Buffer, 0, Size);
+DbgPrint("<--\n");
+#endif
     }
     else
     {
@@ -79,7 +162,44 @@ x86MemWrite(
     /* Validate the address range */
     if (((ULONG64)Address + Size) < 0x100000)
     {
+        /* Copy the memory from the buffer */
+#ifdef SEPARATELY_MAP_VGA_MEMORY
+        while (Size)
+        {
+            ULONG ChunkSize;
+
+            if (MEM_VGA <= Address && Address < MEM_VGA + MEM_VGA_SIZE)
+            {
+                /* Buffer starts inside VGA buffer: limit chunk to inside VGA buffer */
+                ChunkSize = min(Size, (MEM_VGA + MEM_VGA_SIZE) - Address);
+DbgPrint("Wx @ 0x%lx (0x%lx)\n", Address, ChunkSize);
+                RtlCopyMemory(x86BiosVGAMemory + Address - MEM_VGA, Buffer, ChunkSize);
+            }
+            else
+            {
+                if (Address < MEM_VGA && Address + Size > MEM_VGA)
+                {
+                    /* Buffer starts before VGA and ends inside or after VGA */
+                    ChunkSize = MEM_VGA - Address;
+                }
+                else
+                {
+                    /* Buffer is either fully before VGA buffer or fully after */
+                    ChunkSize = Size;
+                }
+                RtlCopyMemory(x86BiosMemoryMapping + Address, Buffer, ChunkSize);
+            }
+
+            Address += ChunkSize;
+            Buffer = (PVOID)((ULONG_PTR)Buffer + ChunkSize);
+            Size -= ChunkSize;
+        }
+#else
         RtlCopyMemory(x86BiosMemoryMapping + Address, Buffer, Size);
+DbgPrint("Wx @ 0x%lx (0x%lx) -->\n", Address, Size);
+DbgDumpBuffer(Buffer, 0, Size);
+DbgPrint("<--\n");
+#endif
     }
     else
     {
@@ -189,10 +309,38 @@ x86IoRead(
 
     switch (DataSize)
     {
-        case 1: READ_PORT_BUFFER_UCHAR((PUCHAR)(ULONG_PTR)Port, Buffer, DataCount); return;
-        case 2: READ_PORT_BUFFER_USHORT((PUSHORT)(ULONG_PTR)Port, Buffer, DataCount); return;
-        case 4: READ_PORT_BUFFER_ULONG((PULONG)(ULONG_PTR)Port, Buffer, DataCount); return;
+        case 1: READ_PORT_BUFFER_UCHAR((PUCHAR)(ULONG_PTR)Port, Buffer, DataCount); break;
+        case 2: READ_PORT_BUFFER_USHORT((PUSHORT)(ULONG_PTR)Port, Buffer, DataCount); break;
+        case 4: READ_PORT_BUFFER_ULONG((PULONG)(ULONG_PTR)Port, Buffer, DataCount); break;
+        default:
+            DPRINT1("%s(0x%x, DataSize: %lu, DataCount: %lu) not supported\n",
+                    __FUNCTION__, Port, DataSize, DataCount);
     }
+
+    if (DataCount < 0x1000)
+    {
+        static CHAR Line[0x1000 * 3 + 1];
+        PCHAR ptr = Line;
+        ULONG x;
+
+        ptr[0] = ANSI_NULL;
+        for (x = 0; x < DataCount; x++)
+        {
+            switch (DataSize)
+            {
+                case 1:
+                    sprintf(ptr, "%02x ", ((PUCHAR)Buffer)[x]), ptr += 3; break;
+                case 2:
+                    sprintf(ptr, "%04x ", ((PUSHORT)Buffer)[x]), ptr += 5; break;
+                case 4:
+                    sprintf(ptr, "%08x ", ((PULONG)Buffer)[x]), ptr += 9; break;
+            }
+        }
+        ptr[0] = ANSI_NULL;
+        DbgPrint("RIO 0x%04x (%u) -- %s\n", Port, DataSize, Line);
+    }
+    else
+        DbgPrint("RIO 0x%04x (%u) -- DataCount: %lu\n", Port, DataSize, DataCount);
 }
 
 static
@@ -211,11 +359,39 @@ x86IoWrite(
         DPRINT1("Invalid IO port write access (port: 0x%x, count: 0x%x)\n", Port, DataSize);
     }
 
+    if (DataCount < 0x1000)
+    {
+        static CHAR Line[0x1000 * 3 + 1];
+        PCHAR ptr = Line;
+        ULONG x;
+
+        ptr[0] = ANSI_NULL;
+        for (x = 0; x < DataCount; x++)
+        {
+            switch (DataSize)
+            {
+                case 1:
+                    sprintf(ptr, "%02x ", ((PUCHAR)Buffer)[x]), ptr += 3; break;
+                case 2:
+                    sprintf(ptr, "%04x ", ((PUSHORT)Buffer)[x]), ptr += 5; break;
+                case 4:
+                    sprintf(ptr, "%08x ", ((PULONG)Buffer)[x]), ptr += 9; break;
+            }
+        }
+        ptr[0] = ANSI_NULL;
+        DbgPrint("WIO 0x%04x (%u) -- %s\n", Port, DataSize, Line);
+    }
+    else
+        DbgPrint("WIO 0x%04x (%u) -- DataCount: %lu\n", Port, DataSize, DataCount);
+
     switch (DataSize)
     {
         case 1: WRITE_PORT_BUFFER_UCHAR((PUCHAR)(ULONG_PTR)Port, Buffer, DataCount); return;
         case 2: WRITE_PORT_BUFFER_USHORT((PUSHORT)(ULONG_PTR)Port, Buffer, DataCount); return;
         case 4: WRITE_PORT_BUFFER_ULONG((PULONG)(ULONG_PTR)Port, Buffer, DataCount); return;
+        default:
+            DPRINT1("%s(0x%x, DataSize: %lu, DataCount: %lu) not supported\n",
+                    __FUNCTION__, Port, DataSize, DataCount);
     }
 }
 
@@ -246,11 +422,13 @@ HalInitializeBios(
     _In_ ULONG Phase,
     _In_ PLOADER_PARAMETER_BLOCK LoaderBlock)
 {
+#ifdef SEPARATE_MEMORY_MAPPING
     PPFN_NUMBER PfnArray;
     PFN_NUMBER Pfn, Last;
     PMEMORY_ALLOCATION_DESCRIPTOR Descriptor;
     PLIST_ENTRY ListEntry;
     PMDL Mdl;
+#endif
     ULONG64 PhysicalAddress;
 
     if (Phase == 0)
@@ -280,6 +458,7 @@ HalInitializeBios(
     }
     else
     {
+#ifdef SEPARATE_MEMORY_MAPPING
         /* Allocate an MDL for 1MB */
         Mdl = IoAllocateMdl(NULL, 0x100000, FALSE, FALSE, NULL);
         if (!Mdl)
@@ -332,11 +511,25 @@ HalInitializeBios(
 
         /* Map the MDL to system space */
         x86BiosMemoryMapping = MmGetSystemAddressForMdlSafe(Mdl, HighPagePriority);
+#else
+        PHYSICAL_ADDRESS NullAddress = {{0, 0}};
+        x86BiosMemoryMapping = (PUCHAR)MmMapIoSpace(NullAddress, 0x100000, MmNonCached);
+#endif
         ASSERT(x86BiosMemoryMapping);
 
         DPRINT1("*x86BiosMemoryMapping: %p, %p\n",
                 *(PVOID*)x86BiosMemoryMapping, *(PVOID*)(x86BiosMemoryMapping + 8));
         //DbgDumpPage(x86BiosMemoryMapping, 0xc351);
+
+#ifdef SEPARATELY_MAP_VGA_MEMORY
+        /* Try mapping the VGA memory without going through the HalFindBusAddressTranslation() stuff */
+        PHYSICAL_ADDRESS VgaAddress;
+        VgaAddress.LowPart = MEM_VGA;
+        VgaAddress.HighPart = 0;
+        x86BiosVGAMemory = (PUCHAR)MmMapIoSpace(VgaAddress, MEM_VGA_SIZE, MmNonCached);
+        if (!x86BiosVGAMemory)
+            ASSERT(FALSE);
+#endif
 
         /* Initialize the emulator context */
         Fast486Initialize(&EmulatorContext,
@@ -376,7 +569,7 @@ x86BiosAllocateBuffer(
 
     /* The buffer is sufficient, return hardcoded address and size */
     *Size = PAGE_SIZE;
-    *Segment = x86BiosBufferPhysical / 16;
+    *Segment = 0x2000; // x86BiosBufferPhysical / 16;
     *Offset = 0;
 
     return STATUS_SUCCESS;
@@ -427,7 +620,43 @@ x86BiosReadMemory(
     }
 
     /* Copy the memory to the buffer */
+#ifdef SEPARATELY_MAP_VGA_MEMORY
+    while (Size)
+    {
+        ULONG ChunkSize;
+
+        if (MEM_VGA <= Address && Address < MEM_VGA + MEM_VGA_SIZE)
+        {
+            /* Buffer starts inside VGA buffer: limit chunk to inside VGA buffer */
+            ChunkSize = min(Size, (MEM_VGA + MEM_VGA_SIZE) - Address);
+DbgPrint("RM @ 0x%lx (0x%lx)\n", Address, ChunkSize);
+            RtlCopyMemory(Buffer, x86BiosVGAMemory + Address - MEM_VGA, ChunkSize);
+        }
+        else
+        {
+            if (Address < MEM_VGA && Address + Size > MEM_VGA)
+            {
+                /* Buffer starts before VGA and ends inside or after VGA */
+                ChunkSize = MEM_VGA - Address;
+            }
+            else
+            {
+                /* Buffer is either fully before VGA buffer or fully after */
+                ChunkSize = Size;
+            }
+            RtlCopyMemory(Buffer, x86BiosMemoryMapping + Address, ChunkSize);
+        }
+
+        Address += ChunkSize;
+        Buffer = (PVOID)((ULONG_PTR)Buffer + ChunkSize);
+        Size -= ChunkSize;
+    }
+#else
     RtlCopyMemory(Buffer, x86BiosMemoryMapping + Address, Size);
+DbgPrint("RM @ 0x%lx (0x%lx) -->\n", Address, Size);
+DbgDumpBuffer(Buffer, 0, Size);
+DbgPrint("<--\n");
+#endif
 
     /* Return success */
     return STATUS_SUCCESS;
@@ -454,7 +683,43 @@ x86BiosWriteMemory(
     }
 
     /* Copy the memory from the buffer */
+#ifdef SEPARATELY_MAP_VGA_MEMORY
+    while (Size)
+    {
+        ULONG ChunkSize;
+
+        if (MEM_VGA <= Address && Address < MEM_VGA + MEM_VGA_SIZE)
+        {
+            /* Buffer starts inside VGA buffer: limit chunk to inside VGA buffer */
+            ChunkSize = min(Size, (MEM_VGA + MEM_VGA_SIZE) - Address);
+DbgPrint("WM @ 0x%lx (0x%lx)\n", Address, ChunkSize);
+            RtlCopyMemory(x86BiosVGAMemory + Address - MEM_VGA, Buffer, ChunkSize);
+        }
+        else
+        {
+            if (Address < MEM_VGA && Address + Size > MEM_VGA)
+            {
+                /* Buffer starts before VGA and ends inside or after VGA */
+                ChunkSize = MEM_VGA - Address;
+            }
+            else
+            {
+                /* Buffer is either fully before VGA buffer or fully after */
+                ChunkSize = Size;
+            }
+            RtlCopyMemory(x86BiosMemoryMapping + Address, Buffer, ChunkSize);
+        }
+
+        Address += ChunkSize;
+        Buffer = (PVOID)((ULONG_PTR)Buffer + ChunkSize);
+        Size -= ChunkSize;
+    }
+#else
     RtlCopyMemory(x86BiosMemoryMapping + Address, Buffer, Size);
+DbgPrint("WM @ 0x%lx (0x%lx) -->\n", Address, Size);
+DbgDumpBuffer(Buffer, 0, Size);
+DbgPrint("<--\n");
+#endif
 
     /* Return success */
     return STATUS_SUCCESS;
@@ -628,7 +893,7 @@ HalCallBios(
 // #endif
 
 
-#ifdef _M_AMD64
+#if 1 // def _M_AMD64
 BOOLEAN
 NTAPI
 HalpBiosDisplayReset(VOID)
@@ -645,6 +910,16 @@ HalpBiosDisplayReset(VOID)
     InReset = HalpBiosDisplayInReset;
     HalpBiosDisplayInReset = TRUE;
 
+//__debugbreak();
+#if 0
+DbgDumpBuffer(x86BiosMemoryMapping, 0x0, 0x10000);
+DbgDumpBuffer(x86BiosMemoryMapping, 0x10000, 0x10000);
+DbgDumpBuffer(x86BiosMemoryMapping, 0x20000, 0x10000);
+DbgDumpBuffer(x86BiosMemoryMapping, 0xA0000, 0x10000);
+DbgDumpBuffer(x86BiosMemoryMapping, 0xB0000, 0x10000);
+DbgDumpBuffer(x86BiosMemoryMapping, 0xC0000, 0x10000);
+#endif
+
     /* Call INT 0x10, AH = 0 (Set video mode), AL = 0x12 (640x480x16 VGA) */
     Registers.Eax = 0x0012;
     Success = x86BiosCall(0x10, &Registers);
@@ -654,6 +929,7 @@ HalpBiosDisplayReset(VOID)
 
     /* Restore previous flags */
     __writeeflags(OldEflags);
+//__debugbreak();
     return Success;
 }
 #endif // _M_AMD64

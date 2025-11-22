@@ -637,6 +637,10 @@ HalpUnmapRealModeMemory(VOID)
     HalpFlushTLB();
 }
 
+extern VOID
+DbgDumpBuffer(PUCHAR MemBuffer, ULONG Begin, ULONG Size);
+
+#if 0
 BOOLEAN
 NTAPI
 HalpBiosDisplayReset(VOID)
@@ -679,6 +683,14 @@ HalpBiosDisplayReset(VOID)
     //
     HalpSetupRealModeIoPermissionsAndTask();
 
+__debugbreak();
+DbgDumpBuffer(NULL, 0x0, 0x10000);
+DbgDumpBuffer(NULL, 0x10000, 0x10000);
+DbgDumpBuffer(NULL, 0x20000, 0x10000);
+DbgDumpBuffer(NULL, 0xA0000, 0x10000);
+DbgDumpBuffer(NULL, 0xB0000, 0x10000);
+DbgDumpBuffer(NULL, 0xC0000, 0x10000);
+
     //
     // Now jump to real mode
     //
@@ -708,8 +720,10 @@ HalpBiosDisplayReset(VOID)
     // Restore interrupts if they were previously enabled
     //
     __writeeflags(Flags);
+__debugbreak();
     return TRUE;
 #endif
 }
+#endif
 
 /* EOF */
