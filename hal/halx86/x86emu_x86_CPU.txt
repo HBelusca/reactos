@@ -1,0 +1,619 @@
+kd> dt -b EmulatorContext
+hal!EmulatorContext
+   +0x000 MemReadCallback  : 0x80666770 
+   +0x004 MemWriteCallback : 0x806668a0 
+   +0x008 IoReadCallback   : 0x80666390 
+   +0x00c IoWriteCallback  : 0x80666580 
+   +0x010 BopCallback      : 0x80666350 
+   +0x014 IntAckCallback   : 0x80666370 
+   +0x018 FpuCallback      : 0x80674380 
+   +0x01c GeneralRegs      : 
+    [00] _FAST486_REG
+      +0x000 LowByte          : 0x12 ''
+      +0x001 HighByte         : 0 ''
+      +0x000 LowWord          : 0x12
+      +0x000 Long             : 0x12
+    [01] 
+      +0x000 LowByte          : 0 ''
+      +0x001 HighByte         : 0 ''
+      +0x000 LowWord          : 0
+      +0x000 Long             : 0
+    [02] 
+      +0x000 LowByte          : 0 ''
+      +0x001 HighByte         : 0 ''
+      +0x000 LowWord          : 0
+      +0x000 Long             : 0
+    [03] 
+      +0x000 LowByte          : 0 ''
+      +0x001 HighByte         : 0 ''
+      +0x000 LowWord          : 0
+      +0x000 Long             : 0
+    [04] 
+      +0x000 LowByte          : 0xf8 ''
+      +0x001 HighByte         : 0x1f ''
+      +0x000 LowWord          : 0x1ff8
+      +0x000 Long             : 0x1ff8
+    [05] 
+      +0x000 LowByte          : 0 ''
+      +0x001 HighByte         : 0 ''
+      +0x000 LowWord          : 0
+      +0x000 Long             : 0
+    [06] 
+      +0x000 LowByte          : 0 ''
+      +0x001 HighByte         : 0 ''
+      +0x000 LowWord          : 0
+      +0x000 Long             : 0
+    [07] 
+      +0x000 LowByte          : 0 ''
+      +0x001 HighByte         : 0 ''
+      +0x000 LowWord          : 0
+      +0x000 Long             : 0
+   +0x03c SegmentRegs      : 
+    [00] _FAST486_SEG_REG
+      +0x000 Selector         : 0
+      +0x004 Accessed         : 0y0
+      +0x004 ReadWrite        : 0y1
+      +0x004 DirConf          : 0y0
+      +0x004 Executable       : 0y0
+      +0x004 SystemType       : 0y1
+      +0x004 Rpl              : 0y00
+      +0x004 Dpl              : 0y00
+      +0x004 Present          : 0y1
+      +0x004 Size             : 0y0
+      +0x008 Limit            : 0xffff
+      +0x00c Base             : 0
+    [01] 
+      +0x000 Selector         : 0
+      +0x004 Accessed         : 0y0
+      +0x004 ReadWrite        : 0y1
+      +0x004 DirConf          : 0y0
+      +0x004 Executable       : 0y1
+      +0x004 SystemType       : 0y1
+      +0x004 Rpl              : 0y00
+      +0x004 Dpl              : 0y00
+      +0x004 Present          : 0y1
+      +0x004 Size             : 0y0
+      +0x008 Limit            : 0xffff
+      +0x00c Base             : 0
+    [02] 
+      +0x000 Selector         : 0
+      +0x004 Accessed         : 0y0
+      +0x004 ReadWrite        : 0y1
+      +0x004 DirConf          : 0y0
+      +0x004 Executable       : 0y0
+      +0x004 SystemType       : 0y1
+      +0x004 Rpl              : 0y00
+      +0x004 Dpl              : 0y00
+      +0x004 Present          : 0y1
+      +0x004 Size             : 0y0
+      +0x008 Limit            : 0xffff
+      +0x00c Base             : 0
+    [03] 
+      +0x000 Selector         : 0
+      +0x004 Accessed         : 0y0
+      +0x004 ReadWrite        : 0y1
+      +0x004 DirConf          : 0y0
+      +0x004 Executable       : 0y0
+      +0x004 SystemType       : 0y1
+      +0x004 Rpl              : 0y00
+      +0x004 Dpl              : 0y00
+      +0x004 Present          : 0y1
+      +0x004 Size             : 0y0
+      +0x008 Limit            : 0xffff
+      +0x00c Base             : 0
+    [04] 
+      +0x000 Selector         : 0
+      +0x004 Accessed         : 0y0
+      +0x004 ReadWrite        : 0y1
+      +0x004 DirConf          : 0y0
+      +0x004 Executable       : 0y0
+      +0x004 SystemType       : 0y1
+      +0x004 Rpl              : 0y00
+      +0x004 Dpl              : 0y00
+      +0x004 Present          : 0y1
+      +0x004 Size             : 0y0
+      +0x008 Limit            : 0xffff
+      +0x00c Base             : 0
+    [05] 
+      +0x000 Selector         : 0
+      +0x004 Accessed         : 0y0
+      +0x004 ReadWrite        : 0y1
+      +0x004 DirConf          : 0y0
+      +0x004 Executable       : 0y0
+      +0x004 SystemType       : 0y1
+      +0x004 Rpl              : 0y00
+      +0x004 Dpl              : 0y00
+      +0x004 Present          : 0y1
+      +0x004 Size             : 0y0
+      +0x008 Limit            : 0xffff
+      +0x00c Base             : 0
+   +0x09c InstPtr          : _FAST486_REG
+      +0x000 LowByte          : 0xfc ''
+      +0x001 HighByte         : 0x1f ''
+      +0x000 LowWord          : 0x1ffc
+      +0x000 Long             : 0x1ffc
+   +0x0a0 SavedInstPtr     : _FAST486_REG
+      +0x000 LowByte          : 0 ''
+      +0x001 HighByte         : 0 ''
+      +0x000 LowWord          : 0
+      +0x000 Long             : 0
+   +0x0a4 SavedStackPtr    : _FAST486_REG
+      +0x000 LowByte          : 0 ''
+      +0x001 HighByte         : 0 ''
+      +0x000 LowWord          : 0
+      +0x000 Long             : 0
+   +0x0a8 Flags            : _FAST486_FLAGS_REG
+      +0x000 LowWord          : 0x202
+      +0x000 Long             : 0x202
+      +0x000 Cf               : 0y0
+      +0x000 AlwaysSet        : 0y1
+      +0x000 Pf               : 0y0
+      +0x000 Reserved0        : 0y0
+      +0x000 Af               : 0y0
+      +0x000 Reserved1        : 0y0
+      +0x000 Zf               : 0y0
+      +0x000 Sf               : 0y0
+      +0x000 Tf               : 0y0
+      +0x000 If               : 0y1
+      +0x000 Df               : 0y0
+      +0x000 Of               : 0y0
+      +0x000 Iopl             : 0y00
+      +0x000 Nt               : 0y0
+      +0x000 Reserved2        : 0y0
+      +0x000 Rf               : 0y0
+      +0x000 Vm               : 0y0
+      +0x000 Ac               : 0y0
+   +0x0ac Gdtr             : _FAST486_TABLE_REG
+      +0x000 Size             : 0
+      +0x004 Address          : 0
+   +0x0b4 Idtr             : _FAST486_TABLE_REG
+      +0x000 Size             : 0x3ff
+      +0x004 Address          : 0
+   +0x0bc Ldtr             : _FAST486_LDT_REG
+      +0x000 Selector         : 0
+      +0x004 Base             : 0
+      +0x008 Limit            : 0
+   +0x0c8 TaskReg          : _FAST486_TASK_REG
+      +0x000 Selector         : 0
+      +0x004 Base             : 0
+      +0x008 Limit            : 0
+      +0x00c Modern           : 0 ''
+   +0x0d8 Cpl              : 0 ''
+   +0x0dc ControlRegisters : 
+    [00] 0x10
+    [01] 0
+    [02] 0
+   +0x0e8 DebugRegisters   : 
+    [00] 0
+    [01] 0
+    [02] 0
+    [03] 0
+    [04] 0
+    [05] 0
+   +0x100 ExceptionCount   : 0
+   +0x104 PrefixFlags      : 0
+   +0x108 SegmentOverride  : 0 ( FAST486_REG_ES )
+   +0x10c Halted           : 0 ''
+   +0x10d IntSignaled      : 0 ''
+   +0x10e DoNotInterrupt   : 0 ''
+   +0x110 Tlb              : (null) 
+   +0x114 TlbEmpty         : 0 ''
+   +0x115 PrefetchValid    : 0 ''
+   +0x118 PrefetchAddress  : 0
+   +0x11c PrefetchCache    :  ""
+    [00] 0 ''
+    [01] 0 ''
+    [02] 0 ''
+    [03] 0 ''
+    [04] 0 ''
+    [05] 0 ''
+    [06] 0 ''
+    [07] 0 ''
+    [08] 0 ''
+    [09] 0 ''
+    [10] 0 ''
+    [11] 0 ''
+    [12] 0 ''
+    [13] 0 ''
+    [14] 0 ''
+    [15] 0 ''
+    [16] 0 ''
+    [17] 0 ''
+    [18] 0 ''
+    [19] 0 ''
+    [20] 0 ''
+    [21] 0 ''
+    [22] 0 ''
+    [23] 0 ''
+    [24] 0 ''
+    [25] 0 ''
+    [26] 0 ''
+    [27] 0 ''
+    [28] 0 ''
+    [29] 0 ''
+    [30] 0 ''
+    [31] 0 ''
+   +0x140 FpuRegisters     : 
+    [00] _FAST486_FPU_DATA_REG
+      +0x000 Mantissa         : 0
+      +0x008 Exponent         : 0
+      +0x00a Sign             : 0 ''
+    [01] 
+      +0x000 Mantissa         : 0
+      +0x008 Exponent         : 0
+      +0x00a Sign             : 0 ''
+    [02] 
+      +0x000 Mantissa         : 0
+      +0x008 Exponent         : 0
+      +0x00a Sign             : 0 ''
+    [03] 
+      +0x000 Mantissa         : 0
+      +0x008 Exponent         : 0
+      +0x00a Sign             : 0 ''
+    [04] 
+      +0x000 Mantissa         : 0
+      +0x008 Exponent         : 0
+      +0x00a Sign             : 0 ''
+    [05] 
+      +0x000 Mantissa         : 0
+      +0x008 Exponent         : 0
+      +0x00a Sign             : 0 ''
+    [06] 
+      +0x000 Mantissa         : 0
+      +0x008 Exponent         : 0
+      +0x00a Sign             : 0 ''
+    [07] 
+      +0x000 Mantissa         : 0
+      +0x008 Exponent         : 0
+      +0x00a Sign             : 0 ''
+   +0x1c0 FpuStatus        : _FAST486_FPU_STATUS_REG
+      +0x000 Value            : 0
+      +0x000 Ie               : 0y0
+      +0x000 De               : 0y0
+      +0x000 Ze               : 0y0
+      +0x000 Oe               : 0y0
+      +0x000 Ue               : 0y0
+      +0x000 Pe               : 0y0
+      +0x000 Sf               : 0y0
+      +0x000 Es               : 0y0
+      +0x000 Code0            : 0y0
+      +0x000 Code1            : 0y0
+      +0x000 Code2            : 0y0
+      +0x000 Top              : 0y000
+      +0x000 Code3            : 0y0
+      +0x000 Busy             : 0y0
+   +0x1c4 FpuControl       : _FAST486_FPU_CONTROL_REG
+      +0x000 Value            : 0x37f
+      +0x000 Im               : 0y1
+      +0x000 Dm               : 0y1
+      +0x000 Zm               : 0y1
+      +0x000 Om               : 0y1
+      +0x000 Um               : 0y1
+      +0x000 Pm               : 0y1
+      +0x000 Reserved         : 0y01
+      +0x000 Pc               : 0y11
+      +0x000 Rc               : 0y00
+      +0x000 Inf              : 0y0
+   +0x1c8 FpuTag           : 0xffff
+   +0x1cc FpuLastInstPtr   : _FAST486_REG
+      +0x000 LowByte          : 0 ''
+      +0x001 HighByte         : 0 ''
+      +0x000 LowWord          : 0
+      +0x000 Long             : 0
+   +0x1d0 FpuLastCodeSel   : 0
+   +0x1d4 FpuLastOpPtr     : _FAST486_REG
+      +0x000 LowByte          : 0 ''
+      +0x001 HighByte         : 0 ''
+      +0x000 LowWord          : 0
+      +0x000 Long             : 0
+   +0x1d8 FpuLastDataSel   : 0
+
+kd> dt -b EmulatorContext
+hal!EmulatorContext
+   +0x000 MemReadCallback  : 0x80666770 
+   +0x004 MemWriteCallback : 0x806668a0 
+   +0x008 IoReadCallback   : 0x80666390 
+   +0x00c IoWriteCallback  : 0x80666580 
+   +0x010 BopCallback      : 0x80666350 
+   +0x014 IntAckCallback   : 0x80666370 
+   +0x018 FpuCallback      : 0x80674380 
+   +0x01c GeneralRegs      : 
+    [00] _FAST486_REG
+      +0x000 LowByte          : 0x20 ' '
+      +0x001 HighByte         : 0 ''
+      +0x000 LowWord          : 0x20
+      +0x000 Long             : 0x20
+    [01] 
+      +0x000 LowByte          : 0 ''
+      +0x001 HighByte         : 0 ''
+      +0x000 LowWord          : 0
+      +0x000 Long             : 0
+    [02] 
+      +0x000 LowByte          : 0 ''
+      +0x001 HighByte         : 0 ''
+      +0x000 LowWord          : 0
+      +0x000 Long             : 0
+    [03] 
+      +0x000 LowByte          : 0 ''
+      +0x001 HighByte         : 0 ''
+      +0x000 LowWord          : 0
+      +0x000 Long             : 0
+    [04] 
+      +0x000 LowByte          : 0xf8 ''
+      +0x001 HighByte         : 0x1f ''
+      +0x000 LowWord          : 0x1ff8
+      +0x000 Long             : 0x1ff8
+    [05] 
+      +0x000 LowByte          : 0 ''
+      +0x001 HighByte         : 0 ''
+      +0x000 LowWord          : 0
+      +0x000 Long             : 0
+    [06] 
+      +0x000 LowByte          : 0 ''
+      +0x001 HighByte         : 0 ''
+      +0x000 LowWord          : 0
+      +0x000 Long             : 0
+    [07] 
+      +0x000 LowByte          : 0 ''
+      +0x001 HighByte         : 0 ''
+      +0x000 LowWord          : 0
+      +0x000 Long             : 0
+   +0x03c SegmentRegs      : 
+    [00] _FAST486_SEG_REG
+      +0x000 Selector         : 0
+      +0x004 Accessed         : 0y0
+      +0x004 ReadWrite        : 0y1
+      +0x004 DirConf          : 0y0
+      +0x004 Executable       : 0y0
+      +0x004 SystemType       : 0y1
+      +0x004 Rpl              : 0y00
+      +0x004 Dpl              : 0y00
+      +0x004 Present          : 0y1
+      +0x004 Size             : 0y0
+      +0x008 Limit            : 0xffff
+      +0x00c Base             : 0
+    [01] 
+      +0x000 Selector         : 0
+      +0x004 Accessed         : 0y0
+      +0x004 ReadWrite        : 0y1
+      +0x004 DirConf          : 0y0
+      +0x004 Executable       : 0y1
+      +0x004 SystemType       : 0y1
+      +0x004 Rpl              : 0y00
+      +0x004 Dpl              : 0y00
+      +0x004 Present          : 0y1
+      +0x004 Size             : 0y0
+      +0x008 Limit            : 0xffff
+      +0x00c Base             : 0
+    [02] 
+      +0x000 Selector         : 0
+      +0x004 Accessed         : 0y0
+      +0x004 ReadWrite        : 0y1
+      +0x004 DirConf          : 0y0
+      +0x004 Executable       : 0y0
+      +0x004 SystemType       : 0y1
+      +0x004 Rpl              : 0y00
+      +0x004 Dpl              : 0y00
+      +0x004 Present          : 0y1
+      +0x004 Size             : 0y0
+      +0x008 Limit            : 0xffff
+      +0x00c Base             : 0
+    [03] 
+      +0x000 Selector         : 0
+      +0x004 Accessed         : 0y0
+      +0x004 ReadWrite        : 0y1
+      +0x004 DirConf          : 0y0
+      +0x004 Executable       : 0y0
+      +0x004 SystemType       : 0y1
+      +0x004 Rpl              : 0y00
+      +0x004 Dpl              : 0y00
+      +0x004 Present          : 0y1
+      +0x004 Size             : 0y0
+      +0x008 Limit            : 0xffff
+      +0x00c Base             : 0
+    [04] 
+      +0x000 Selector         : 0
+      +0x004 Accessed         : 0y0
+      +0x004 ReadWrite        : 0y1
+      +0x004 DirConf          : 0y0
+      +0x004 Executable       : 0y0
+      +0x004 SystemType       : 0y1
+      +0x004 Rpl              : 0y00
+      +0x004 Dpl              : 0y00
+      +0x004 Present          : 0y1
+      +0x004 Size             : 0y0
+      +0x008 Limit            : 0xffff
+      +0x00c Base             : 0
+    [05] 
+      +0x000 Selector         : 0
+      +0x004 Accessed         : 0y0
+      +0x004 ReadWrite        : 0y1
+      +0x004 DirConf          : 0y0
+      +0x004 Executable       : 0y0
+      +0x004 SystemType       : 0y1
+      +0x004 Rpl              : 0y00
+      +0x004 Dpl              : 0y00
+      +0x004 Present          : 0y1
+      +0x004 Size             : 0y0
+      +0x008 Limit            : 0xffff
+      +0x00c Base             : 0
+   +0x09c InstPtr          : _FAST486_REG
+      +0x000 LowByte          : 0xfe ''
+      +0x001 HighByte         : 0x1f ''
+      +0x000 LowWord          : 0x1ffe
+      +0x000 Long             : 0x1ffe
+   +0x0a0 SavedInstPtr     : _FAST486_REG
+      +0x000 LowByte          : 0xf4 ''
+      +0x001 HighByte         : 0 ''
+      +0x000 LowWord          : 0xf4
+      +0x000 Long             : 0xf4
+   +0x0a4 SavedStackPtr    : _FAST486_REG
+      +0x000 LowByte          : 0xf2 ''
+      +0x001 HighByte         : 0x1f ''
+      +0x000 LowWord          : 0x1ff2
+      +0x000 Long             : 0x1ff2
+   +0x0a8 Flags            : _FAST486_FLAGS_REG
+      +0x000 LowWord          : 0x202
+      +0x000 Long             : 0x202
+      +0x000 Cf               : 0y0
+      +0x000 AlwaysSet        : 0y1
+      +0x000 Pf               : 0y0
+      +0x000 Reserved0        : 0y0
+      +0x000 Af               : 0y0
+      +0x000 Reserved1        : 0y0
+      +0x000 Zf               : 0y0
+      +0x000 Sf               : 0y0
+      +0x000 Tf               : 0y0
+      +0x000 If               : 0y1
+      +0x000 Df               : 0y0
+      +0x000 Of               : 0y0
+      +0x000 Iopl             : 0y00
+      +0x000 Nt               : 0y0
+      +0x000 Reserved2        : 0y0
+      +0x000 Rf               : 0y0
+      +0x000 Vm               : 0y0
+      +0x000 Ac               : 0y0
+   +0x0ac Gdtr             : _FAST486_TABLE_REG
+      +0x000 Size             : 0
+      +0x004 Address          : 0
+   +0x0b4 Idtr             : _FAST486_TABLE_REG
+      +0x000 Size             : 0x3ff
+      +0x004 Address          : 0
+   +0x0bc Ldtr             : _FAST486_LDT_REG
+      +0x000 Selector         : 0
+      +0x004 Base             : 0
+      +0x008 Limit            : 0
+   +0x0c8 TaskReg          : _FAST486_TASK_REG
+      +0x000 Selector         : 0
+      +0x004 Base             : 0
+      +0x008 Limit            : 0
+      +0x00c Modern           : 0 ''
+   +0x0d8 Cpl              : 0 ''
+   +0x0dc ControlRegisters : 
+    [00] 0x10
+    [01] 0
+    [02] 0
+   +0x0e8 DebugRegisters   : 
+    [00] 0
+    [01] 0
+    [02] 0
+    [03] 0
+    [04] 0
+    [05] 0
+   +0x100 ExceptionCount   : 0
+   +0x104 PrefixFlags      : 0
+   +0x108 SegmentOverride  : 2 ( FAST486_REG_SS )
+   +0x10c Halted           : 0 ''
+   +0x10d IntSignaled      : 0 ''
+   +0x10e DoNotInterrupt   : 0 ''
+   +0x110 Tlb              : (null) 
+   +0x114 TlbEmpty         : 0 ''
+   +0x115 PrefetchValid    : 0x1 ''
+   +0x118 PrefetchAddress  : 0xc00f0
+   +0x11c PrefetchCache    :  "a???"
+    [00] 0x61 'a'
+    [01] 0x1f ''
+    [02] 0x7 ''
+    [03] 0x9d ''
+    [04] 0xcf ''
+    [05] 0x80 ''
+    [06] 0xff ''
+    [07] 0 ''
+    [08] 0x74 't'
+    [09] 0x6 ''
+    [10] 0x80 ''
+    [11] 0xff ''
+    [12] 0x1 ''
+    [13] 0x74 't'
+    [14] 0x52 'R'
+    [15] 0xc3 ''
+    [16] 0x50 'P'
+    [17] 0x53 'S'
+    [18] 0x51 'Q'
+    [19] 0x52 'R'
+    [20] 0x1e ''
+    [21] 0xba ''
+    [22] 0x40 '@'
+    [23] 0 ''
+    [24] 0x8e ''
+    [25] 0xda ''
+    [26] 0xba ''
+    [27] 0xda ''
+    [28] 0x3 ''
+    [29] 0xec ''
+    [30] 0x80 ''
+    [31] 0x3e '>'
+   +0x140 FpuRegisters     : 
+    [00] _FAST486_FPU_DATA_REG
+      +0x000 Mantissa         : 0
+      +0x008 Exponent         : 0
+      +0x00a Sign             : 0 ''
+    [01] 
+      +0x000 Mantissa         : 0
+      +0x008 Exponent         : 0
+      +0x00a Sign             : 0 ''
+    [02] 
+      +0x000 Mantissa         : 0
+      +0x008 Exponent         : 0
+      +0x00a Sign             : 0 ''
+    [03] 
+      +0x000 Mantissa         : 0
+      +0x008 Exponent         : 0
+      +0x00a Sign             : 0 ''
+    [04] 
+      +0x000 Mantissa         : 0
+      +0x008 Exponent         : 0
+      +0x00a Sign             : 0 ''
+    [05] 
+      +0x000 Mantissa         : 0
+      +0x008 Exponent         : 0
+      +0x00a Sign             : 0 ''
+    [06] 
+      +0x000 Mantissa         : 0
+      +0x008 Exponent         : 0
+      +0x00a Sign             : 0 ''
+    [07] 
+      +0x000 Mantissa         : 0
+      +0x008 Exponent         : 0
+      +0x00a Sign             : 0 ''
+   +0x1c0 FpuStatus        : _FAST486_FPU_STATUS_REG
+      +0x000 Value            : 0
+      +0x000 Ie               : 0y0
+      +0x000 De               : 0y0
+      +0x000 Ze               : 0y0
+      +0x000 Oe               : 0y0
+      +0x000 Ue               : 0y0
+      +0x000 Pe               : 0y0
+      +0x000 Sf               : 0y0
+      +0x000 Es               : 0y0
+      +0x000 Code0            : 0y0
+      +0x000 Code1            : 0y0
+      +0x000 Code2            : 0y0
+      +0x000 Top              : 0y000
+      +0x000 Code3            : 0y0
+      +0x000 Busy             : 0y0
+   +0x1c4 FpuControl       : _FAST486_FPU_CONTROL_REG
+      +0x000 Value            : 0x37f
+      +0x000 Im               : 0y1
+      +0x000 Dm               : 0y1
+      +0x000 Zm               : 0y1
+      +0x000 Om               : 0y1
+      +0x000 Um               : 0y1
+      +0x000 Pm               : 0y1
+      +0x000 Reserved         : 0y01
+      +0x000 Pc               : 0y11
+      +0x000 Rc               : 0y00
+      +0x000 Inf              : 0y0
+   +0x1c8 FpuTag           : 0xffff
+   +0x1cc FpuLastInstPtr   : _FAST486_REG
+      +0x000 LowByte          : 0 ''
+      +0x001 HighByte         : 0 ''
+      +0x000 LowWord          : 0
+      +0x000 Long             : 0
+   +0x1d0 FpuLastCodeSel   : 0
+   +0x1d4 FpuLastOpPtr     : _FAST486_REG
+      +0x000 LowByte          : 0 ''
+      +0x001 HighByte         : 0 ''
+      +0x000 LowWord          : 0
+      +0x000 Long             : 0
+   +0x1d8 FpuLastDataSel   : 0
