@@ -50,12 +50,12 @@ TuiDisplayMenu(
      * may handle a specific user keypress. If it does, the
      * timeout is cancelled.
      */
-    if (!MenuTimeOut && KeyPressFilter && MachConsKbHit())
+    if (!MenuTimeOut && KeyPressFilter && ConsKbHit())
     {
         /* Get the key (get the extended key if needed) */
-        KeyPress = MachConsGetCh();
+        KeyPress = ConsGetCh();
         if (KeyPress == KEY_EXTENDED)
-            KeyPress = MachConsGetCh();
+            KeyPress = ConsGetCh();
 
         /*
          * Call the supplied key filter callback function to see
@@ -469,7 +469,7 @@ TuiProcessMenuKeyboardEvent(
     ULONG Selected, Count;
 
     /* Check for a keypress */
-    if (!MachConsKbHit())
+    if (!ConsKbHit())
         return 0; // None, bail out
 
     /* Check if the timeout is not already complete */
@@ -481,9 +481,9 @@ TuiProcessMenuKeyboardEvent(
     }
 
     /* Get the key (get the extended key if needed) */
-    KeyEvent = MachConsGetCh();
+    KeyEvent = ConsGetCh();
     if (KeyEvent == KEY_EXTENDED)
-        KeyEvent = MachConsGetCh();
+        KeyEvent = ConsGetCh();
 
     /*
      * Call the supplied key filter callback function to see

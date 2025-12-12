@@ -196,7 +196,7 @@ MachInit(IN PCCH CommandLine)
     {
         /* Check for Feroceon-base boards */
         case MACH_TYPE_FEROCEON:
-            TuiPrintf("Not implemented\n");
+            printf("Not implemented\n");
             while (TRUE);
             break;
 
@@ -218,7 +218,7 @@ MachInit(IN PCCH CommandLine)
 
         /* Check for TI OMAP3 Beagleboard */
         case MACH_TYPE_OMAP3_BEAGLE:
-            TuiPrintf("Not implemented\n");
+            printf("Not implemented\n");
             while (TRUE);
             break;
 

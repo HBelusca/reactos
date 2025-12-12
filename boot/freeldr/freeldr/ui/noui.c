@@ -96,7 +96,7 @@ NoUiMessageBoxCritical(
      */
     printf("%s\n", MessageText);
     printf("Press any key\n");
-    MachConsGetCh();
+    ConsGetCh();
 }
 
 /* Loading Progress-Bar Functions ********************************************/

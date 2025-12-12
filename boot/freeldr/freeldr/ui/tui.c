@@ -31,34 +31,6 @@ PVOID TextVideoBuffer = NULL;
 
 /* GENERIC TUI UTILS *********************************************************/
 
-/*
- * TuiPrintf()
- * Prints formatted text to the screen.
- */
-INT
-TuiPrintf(
-    _In_ PCSTR Format, ...)
-{
-    INT i;
-    INT Length;
-    va_list ap;
-    CHAR Buffer[512];
-
-    va_start(ap, Format);
-    Length = _vsnprintf(Buffer, sizeof(Buffer), Format, ap);
-    va_end(ap);
-
-    if (Length == -1)
-        Length = (INT)sizeof(Buffer);
-
-    for (i = 0; i < Length; i++)
-    {
-        MachConsPutChar(Buffer[i]);
-    }
-
-    return Length;
-}
-
 VOID
 TuiTruncateStringEllipsis(
     _Inout_z_ PSTR StringText,
@@ -203,8 +175,8 @@ extern UCHAR MachDefaultTextColor;
 BOOLEAN TuiInitialize(VOID)
 {
     MachVideoHideShowTextCursor(FALSE);
-    MachVideoSetTextCursorPosition(0, 0);
-    MachVideoClearScreen(ATTR(COLOR_GRAY, COLOR_BLACK));
+    ConsSetCursorPosition(0, 0);
+    ConsClearScreen(ATTR(COLOR_GRAY, COLOR_BLACK));
 
     TextVideoBuffer = VideoAllocateOffScreenBuffer();
     if (TextVideoBuffer == NULL)
@@ -264,8 +236,8 @@ VOID TuiUnInitialize(VOID)
     VideoFreeOffScreenBuffer();
     TextVideoBuffer = NULL;
 
-    MachVideoClearScreen(ATTR(COLOR_GRAY, COLOR_BLACK));
-    MachVideoSetTextCursorPosition(0, 0);
+    ConsClearScreen(ATTR(COLOR_GRAY, COLOR_BLACK));
+    ConsSetCursorPosition(0, 0);
     MachVideoHideShowTextCursor(TRUE);
 }
 
@@ -780,11 +752,11 @@ TuiMessageBoxCritical(
 
     for (;;)
     {
-        if (MachConsKbHit())
+        if (ConsKbHit())
         {
-            key = MachConsGetCh();
+            key = ConsGetCh();
             if (key == KEY_EXTENDED)
-                key = MachConsGetCh();
+                key = ConsGetCh();
 
             if ((key == KEY_ENTER) || (key == KEY_SPACE) || (key == KEY_ESC))
                 break;
@@ -1067,7 +1039,7 @@ BOOLEAN TuiEditBox(PCSTR MessageText, PCHAR EditTextBuffer, ULONG Length)
 
     // Show the cursor
     EditBoxCursorX = EditBoxStartX;
-    MachVideoSetTextCursorPosition(EditBoxCursorX, EditBoxLine);
+    ConsSetCursorPosition(EditBoxCursorX, EditBoxLine);
     MachVideoHideShowTextCursor(TRUE);
 
     // Draw status text
@@ -1082,14 +1054,14 @@ BOOLEAN TuiEditBox(PCSTR MessageText, PCHAR EditTextBuffer, ULONG Length)
     //
     for (;;)
     {
-        if (MachConsKbHit())
+        if (ConsKbHit())
         {
             Extended = FALSE;
-            key = MachConsGetCh();
+            key = ConsGetCh();
             if (key == KEY_EXTENDED)
             {
                 Extended = TRUE;
-                key = MachConsGetCh();
+                key = ConsGetCh();
             }
 
             if (key == KEY_ENTER)
@@ -1198,7 +1170,7 @@ BOOLEAN TuiEditBox(PCSTR MessageText, PCHAR EditTextBuffer, ULONG Length)
         UiDrawText2(EditBoxStartX, EditBoxLine, EditBoxEndX - EditBoxStartX + 1, &EditTextBuffer[EditBoxTextDisplayIndex], ATTR(UiEditBoxTextColor, UiEditBoxBgColor));
 
         // Move the cursor
-        MachVideoSetTextCursorPosition(EditBoxCursorX, EditBoxLine);
+        ConsSetCursorPosition(EditBoxCursorX, EditBoxLine);
 
         TuiUpdateDateTime();
 

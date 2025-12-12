@@ -29,6 +29,7 @@ list(APPEND FREELDR_ARC_SOURCE
     arcname.c
     arch/arcemul.c
     arch/archwsup.c
+    arch/console.c
     disk/disk.c
     disk/partition.c
     disk/ramdisk.c)

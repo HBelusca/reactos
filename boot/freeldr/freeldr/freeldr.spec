@@ -92,7 +92,6 @@
 @ cdecl UiShowMessageBoxesInSection()
 @ cdecl UiUnInitialize()
 @ cdecl UiUpdateProgressBar()
-@ cdecl TuiPrintf()
 
 # Other
 @ cdecl ChainLoadBiosBootSectorCode()
@@ -120,6 +119,7 @@
 @ stdcall RtlAssert(ptr ptr long ptr)
 @ cdecl StallExecutionProcessor()
 @ cdecl MachGetBootSectorLoadAddress()
+@ cdecl printf()
 
 # Additional stuff for scsiport
 @ stdcall CpDoesPortExist(ptr)

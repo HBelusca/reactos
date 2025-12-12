@@ -12,10 +12,6 @@
 
 UCHAR MachDefaultTextColor = COLOR_GRAY;
 
-static unsigned CurrentCursorX = 0;
-static unsigned CurrentCursorY = 0;
-static UCHAR CurrentAttr = ATTR(COLOR_GRAY, COLOR_BLACK);
-
 extern EFI_SYSTEM_TABLE* GlobalSystemTable;
 static BOOLEAN ExtendedKey = FALSE;
 static char ExtendedScanCode = 0;
@@ -25,41 +21,8 @@ static char ExtendedScanCode = 0;
 VOID
 UefiConsPutChar(int c)
 {
-    ULONG Width, Height, Unused;
-    BOOLEAN NeedScroll;
-
-    UefiVideoGetDisplaySize(&Width, &Height, &Unused);
-
-    NeedScroll = (CurrentCursorY >= Height);
-    if (NeedScroll)
-    {
-        FbConsScrollUp(CurrentAttr);
-        --CurrentCursorY;
-    }
-    if (c == '\r')
-    {
-        CurrentCursorX = 0;
-    }
-    else if (c == '\n')
-    {
-        CurrentCursorX = 0;
-        if (!NeedScroll)
-            ++CurrentCursorY;
-    }
-    else if (c == '\t')
-    {
-        CurrentCursorX = (CurrentCursorX + 8) & ~7;
-    }
-    else
-    {
-        UefiVideoPutChar(c, CurrentAttr, CurrentCursorX, CurrentCursorY);
-        CurrentCursorX++;
-    }
-    if (CurrentCursorX >= Width)
-    {
-        CurrentCursorX = 0;
-        CurrentCursorY++;
-    }
+    /* No direct hardware text console */
+    // TODO: Handle EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL
 }
 
 static

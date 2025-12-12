@@ -33,12 +33,14 @@ extern multiboot_info_t * MultibootInfoPtr;
 
 #define MAKE_COLOR(Red, Green, Blue) (0xff000000 | (((Red) & 0xff) << 16) | (((Green) & 0xff) << 8) | ((Blue) & 0xff))
 
+// NOTE: Console support.
 VOID
 XboxVideoClearScreen(UCHAR Attr)
 {
     FbConsClearScreen(Attr);
 }
 
+// NOTE: Console support.
 VOID
 XboxVideoPutChar(int Ch, UCHAR Attr, unsigned X, unsigned Y)
 {
@@ -210,7 +212,7 @@ XboxVideoGetPaletteColor(UCHAR Color, UCHAR* Red, UCHAR* Green, UCHAR* Blue)
 VOID
 XboxVideoSync(VOID)
 {
-  /* Not supported */
+    /* Not supported */
 }
 
 VOID

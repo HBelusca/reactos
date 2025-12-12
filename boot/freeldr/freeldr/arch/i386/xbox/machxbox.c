@@ -397,7 +397,7 @@ MachInit(const char *CmdLine)
 
     /* Setup vtbl */
     RtlZeroMemory(&MachVtbl, sizeof(MachVtbl));
-    MachVtbl.ConsPutChar = XboxConsPutChar;
+    MachVtbl.ConsPutChar = NULL;
     MachVtbl.ConsKbHit = XboxConsKbHit;
     MachVtbl.ConsGetCh = XboxConsGetCh;
     MachVtbl.VideoClearScreen = XboxVideoClearScreen;

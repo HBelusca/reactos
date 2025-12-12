@@ -1409,7 +1409,7 @@ PcVideoGetBufferSize(VOID)
     {
 ERR("** GetBufferSize(%lu, %lu, %lu) for text mode!\n", ScreenWidth, ScreenHeight, VGA_CHAR_SIZE);
         // return ScreenHeight * BytesPerScanLine;
-        return ScreenWidth * ScreenHeight * VGA_CHAR_SIZE;
+        return ScreenHeight * ScreenWidth * VGA_CHAR_SIZE;
     }
     /* VESA banked graphics mode */
     else if (DisplayMode == VideoGraphicsMode && VesaVideoMode &&
@@ -1467,17 +1467,10 @@ PcVideoGetFontsFromFirmware(PULONG RomFontPointers)
     RomFontPointers[5] = BiosRegs.w.es << 16 | BiosRegs.w.bp;
 }
 
-// NOTE: Console support. // FIXME: Move to pccons.c
-extern unsigned CurrentCursorX;
-extern unsigned CurrentCursorY;
 VOID
 PcVideoSetTextCursorPosition(UCHAR X, UCHAR Y)
 {
     REGS Regs;
-
-    // FIXME: Do this only in graphics mode.
-    CurrentCursorX = X;
-    CurrentCursorY = Y;
 
     /* Int 10h AH=02h
      * VIDEO - SET CURSOR POSITION

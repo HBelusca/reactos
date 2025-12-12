@@ -1281,9 +1281,9 @@ LoadAndBootWindowsCommon(
         }
 
         /* It is booting in debug mode, show the banner */
-        TuiPrintf("You need to connect a debugger on port %.*s\n"
-                  "For more information, visit https://reactos.org/wiki/Debugging.\n",
-                  DebugPortLength, DebugPort);
+        printf("You need to connect a debugger on port %.*s\n"
+               "For more information, visit https://reactos.org/wiki/Debugging.\n",
+               DebugPortLength, DebugPort);
     }
 
     /* Debugging... */
