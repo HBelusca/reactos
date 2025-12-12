@@ -33,37 +33,7 @@ static const CHAR *i386ExceptionDescriptionText[] =
     "MACHINE CHECK"
 };
 
-#define SCREEN_ATTR 0x1F    // Bright white on blue background
-
-/* Used to store the current X and Y position on the screen */
-static ULONG i386_ScreenPosX = 0;
-static ULONG i386_ScreenPosY = 0;
-
-static void
-i386PrintText(CHAR *pszText)
-{
-    ULONG Width, Unused;
-
-    MachVideoGetDisplaySize(&Width, &Unused, &Unused);
-
-    for (; *pszText != ANSI_NULL; ++pszText)
-    {
-        if (*pszText == '\n')
-        {
-            i386_ScreenPosX = 0;
-            ++i386_ScreenPosY;
-            continue;
-        }
-
-        MachVideoPutChar(*pszText, SCREEN_ATTR, i386_ScreenPosX, i386_ScreenPosY);
-        if (++i386_ScreenPosX >= Width)
-        {
-            i386_ScreenPosX = 0;
-            ++i386_ScreenPosY;
-        }
-    // FIXME: Implement vertical screen scrolling if we are at the end of the screen.
-    }
-}
+#define SCREEN_ATTR ATTR(COLOR_WHITE, COLOR_BLUE) // Bright white on blue background
 
 static void
 PrintTextV(const CHAR *Format, va_list args)
@@ -73,7 +43,7 @@ PrintTextV(const CHAR *Format, va_list args)
     _vsnprintf(Buffer, sizeof(Buffer), Format, args);
     Buffer[sizeof(Buffer) - 1] = ANSI_NULL;
 
-    i386PrintText(Buffer);
+    ConsWriteString(Buffer, -1);
 }
 
 static void
@@ -112,9 +82,7 @@ i386PrintExceptionText(ULONG TrapIndex, PKTRAP_FRAME TrapFrame, PKSPECIAL_REGIST
     PUCHAR InstructionPointer;
 
     MachVideoHideShowTextCursor(FALSE);
-    MachVideoClearScreen(SCREEN_ATTR);
-    i386_ScreenPosX = 0;
-    i386_ScreenPosY = 0;
+    ConsClearScreen(SCREEN_ATTR);
 
     PrintText("FreeLdr " KERNEL_VERSION_STR " " KERNEL_VERSION_BUILD_STR "\n"
               "Report this error on the ReactOS Bug Tracker: https://jira.reactos.org\n\n"
@@ -209,18 +177,14 @@ FrLdrBugCheckWithMessage(
     va_list argptr;
 
     MachVideoHideShowTextCursor(FALSE);
-    MachVideoClearScreen(SCREEN_ATTR);
-    i386_ScreenPosX = 0;
-    i386_ScreenPosY = 0;
+    ConsClearScreen(SCREEN_ATTR);
 
     PrintText("A problem has been detected and FreeLoader boot has been aborted.\n\n");
 
     PrintText("%ld: %s\n\n", BugCode, BugCodeStrings[BugCode]);
 
     if (File)
-    {
         PrintText("Location: %s:%ld\n\n", File, Line);
-    }
 
     va_start(argptr, Format);
     PrintTextV(Format, argptr);
@@ -240,18 +204,14 @@ FrLdrBugCheckEx(
     ULONG Line)
 {
     MachVideoHideShowTextCursor(FALSE);
-    MachVideoClearScreen(SCREEN_ATTR);
-    i386_ScreenPosX = 0;
-    i386_ScreenPosY = 0;
+    ConsClearScreen(SCREEN_ATTR);
 
     PrintText("A problem has been detected and FreeLoader boot has been aborted.\n\n");
 
     PrintText("%ld: %s\n\n", BugCode, BugCodeStrings[BugCode]);
 
     if (File)
-    {
         PrintText("Location: %s:%ld\n\n", File, Line);
-    }
 
     PrintText("Bug Information:\n    %p\n    %p\n    %p\n    %p\n    %p\n\n",
               BugCheckInfo[0], BugCheckInfo[1], BugCheckInfo[2], BugCheckInfo[3], BugCheckInfo[4]);

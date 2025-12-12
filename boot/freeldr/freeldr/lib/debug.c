@@ -198,7 +198,7 @@ VOID DebugPrintChar(UCHAR Character)
     }
     if (DebugPort & SCREEN)
     {
-        MachConsPutChar(Character);
+        ConsWriteChar(Character);
     }
 }
 

@@ -24,7 +24,6 @@
 
 #include <drivers/xbox/xgpu.h>
 
-VOID XboxConsPutChar(int Ch);
 BOOLEAN XboxConsKbHit(VOID);
 int XboxConsGetCh(VOID);
 

@@ -50,7 +50,7 @@ VOID
 UiDrawBackdrop(ULONG DrawHeight)
 {
     /* Clear the screen */
-    MachVideoClearScreen(ATTR(COLOR_WHITE, COLOR_BLACK));
+    ConsClearScreen(ATTR(COLOR_WHITE, COLOR_BLACK));
 }
 
 VOID
@@ -96,21 +96,21 @@ VOID
 UiInfoBox(
     _In_ PCSTR MessageText)
 {
-    TuiPrintf(MessageText);
+    printf(MessageText);
 }
 
 VOID
 UiMessageBox(
     _In_ PCSTR MessageText)
 {
-    TuiPrintf(MessageText);
+    printf(MessageText);
 }
 
 VOID
 UiMessageBoxCritical(
     _In_ PCSTR MessageText)
 {
-    TuiPrintf(MessageText);
+    printf(MessageText);
 }
 
 VOID

@@ -86,6 +86,8 @@
 #include <settings.h>
 #include <ver.h>
 
+#include <console.h>
+
 /* NTOS loader */
 #include <include/ntldr/winldr.h>
 #include <conversion.h> // More-or-less related to MM also...
@@ -100,7 +102,6 @@
 #include <fs/btrfs.h>
 
 /* UI support */
-#define printf TuiPrintf
 #include <ui.h>
 #include <ui/video.h>
 

@@ -23,10 +23,6 @@ extern VIDEODISPLAYMODE DisplayMode;
 
 UCHAR MachDefaultTextColor = COLOR_GRAY;
 
-/*static*/ unsigned CurrentCursorX = 0;
-/*static*/ unsigned CurrentCursorY = 0;
-static UCHAR CurrentAttr = ATTR(COLOR_GRAY, COLOR_BLACK);
-
 /**
 * TODO Consider this for console support:
 All of the following TTY functions must be supported when this bit is set:
@@ -47,67 +43,9 @@ PcConsPutChar(int Ch)
 {
     REGS Regs;
 
-    /* If we are displaying a CR '\n' then do a LF also */
-    if (Ch == '\n')
-    {
-        /* Display the LF */
-        PcConsPutChar('\r');
-    }
-
-    /* If we are displaying a TAB '\t' then display 8 spaces ' ' */
-    if (Ch == '\t')
-    {
-        /* Display the 8 spaces ' ' */
-        PcConsPutChar(' ');
-        PcConsPutChar(' ');
-        PcConsPutChar(' ');
-        PcConsPutChar(' ');
-        PcConsPutChar(' ');
-        PcConsPutChar(' ');
-        PcConsPutChar(' ');
-        PcConsPutChar(' ');
-        return;
-    }
-
     if (DisplayMode == VideoGraphicsMode)
     {
-        ULONG Width, Height, Unused;
-        BOOLEAN NeedScroll;
-
-        PcVideoGetDisplaySize(&Width, &Height, &Unused);
-
-        NeedScroll = (CurrentCursorY >= Height);
-        if (NeedScroll)
-        {
-            FbConsScrollUp(CurrentAttr);
-            --CurrentCursorY;
-        }
-
-        if (Ch == '\r')
-        {
-            CurrentCursorX = 0;
-        }
-        else if (Ch == '\n')
-        {
-            CurrentCursorX = 0;
-            if (!NeedScroll)
-                ++CurrentCursorY;
-        }
-        else if (Ch == '\t')
-        {
-            CurrentCursorX = (CurrentCursorX + 8) & ~ 7;
-        }
-        else
-        {
-            PcVideoPutChar(Ch, CurrentAttr, CurrentCursorX, CurrentCursorY);
-            CurrentCursorX++;
-        }
-
-        if (CurrentCursorX >= Width)
-        {
-            CurrentCursorX = 0;
-            CurrentCursorY++;
-        }
+        ConsWriteChar(Ch);
         return;
     }
     // else, VideoTextMode

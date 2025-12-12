@@ -21,6 +21,12 @@ static USHORT CursorPosition = 0;
 
 /* FUNCTIONS ******************************************************************/
 
+// See also "UNDOCUMENTED 9801/9821 Vol.1 BIOS and Interrupts floppy disk"
+// https://archive.org/details/undoc98vol1floppy
+// https://ia800902.us.archive.org/view_archive.php?archive=/0/items/undoc98vol1floppy/undoc98.zip&file=int18grp.txt
+//
+// INT 18h - Function 28h (CRT BIOS) "Single Character Display (Display Character)"
+// INT 18h - Function 49h (GRAPH BIOS) "Graphic character drawing"
 VOID
 Pc98ConsPutChar(int Ch)
 {
@@ -38,20 +44,6 @@ Pc98ConsPutChar(int Ch)
     {
         if (CursorPosition % TextCols != 0)
             CursorPosition += TextCols - (CursorPosition % TextCols);
-
-        return;
-    }
-
-    if (Ch == '\t')
-    {
-        Pc98ConsPutChar(' ');
-        Pc98ConsPutChar(' ');
-        Pc98ConsPutChar(' ');
-        Pc98ConsPutChar(' ');
-        Pc98ConsPutChar(' ');
-        Pc98ConsPutChar(' ');
-        Pc98ConsPutChar(' ');
-        Pc98ConsPutChar(' ');
 
         return;
     }
@@ -96,7 +88,6 @@ Pc98ConsGetCh(VOID)
     if (ExtendedKey)
     {
         ExtendedKey = FALSE;
-
         return ExtendedScanCode;
     }
 

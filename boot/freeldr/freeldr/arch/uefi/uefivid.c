@@ -644,6 +644,7 @@ UefiVideoClearScreen(UCHAR Attr)
     FbConsClearScreen(Attr);
 }
 
+// NOTE: Console support.
 VOID
 UefiVideoPutChar(int Ch, UCHAR Attr, unsigned X, unsigned Y)
 {

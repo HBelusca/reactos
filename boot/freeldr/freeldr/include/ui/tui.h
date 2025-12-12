@@ -21,10 +21,6 @@
 
 /* GENERIC TUI UTILS *********************************************************/
 
-INT
-TuiPrintf(
-    _In_ PCSTR Format, ...);
-
 VOID
 TuiTruncateStringEllipsis(
     _Inout_z_ PSTR StringText,

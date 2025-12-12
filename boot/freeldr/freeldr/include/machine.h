@@ -83,22 +83,12 @@ extern MACHVTBL MachVtbl;
 /* NOTE: Implemented by each architecture */
 VOID MachInit(const char *CmdLine);
 
-#define MachConsPutChar(Ch) \
-    MachVtbl.ConsPutChar(Ch)
-#define MachConsKbHit()     \
-    MachVtbl.ConsKbHit()
-#define MachConsGetCh()     \
-    MachVtbl.ConsGetCh()
-#define MachVideoClearScreen(Attr)  \
-    MachVtbl.VideoClearScreen(Attr)
 #define MachVideoSetDisplayMode(Mode, Init) \
     MachVtbl.VideoSetDisplayMode((Mode), (Init))
 #define MachVideoGetDisplaySize(W, H, D)    \
     MachVtbl.VideoGetDisplaySize((W), (H), (D))
 #define MachVideoGetBufferSize()    \
     MachVtbl.VideoGetBufferSize()
-#define MachVideoSetTextCursorPosition(X, Y)    \
-    MachVtbl.VideoSetTextCursorPosition((X), (Y))
 #define MachVideoHideShowTextCursor(Show)   \
     MachVtbl.VideoHideShowTextCursor(Show)
 #define MachVideoPutChar(Ch, Attr, X, Y)    \

@@ -21,53 +21,6 @@
 
 UCHAR MachDefaultTextColor = COLOR_GRAY;
 
-static unsigned CurrentCursorX = 0;
-static unsigned CurrentCursorY = 0;
-static UCHAR CurrentAttr = ATTR(COLOR_GRAY, COLOR_BLACK);
-
-VOID
-XboxConsPutChar(int c)
-{
-    ULONG Width, Height, Unused;
-    BOOLEAN NeedScroll;
-
-    XboxVideoGetDisplaySize(&Width, &Height, &Unused);
-
-    NeedScroll = (CurrentCursorY >= Height);
-    if (NeedScroll)
-    {
-        FbConsScrollUp(CurrentAttr);
-        --CurrentCursorY;
-    }
-
-    if (c == '\r')
-    {
-        CurrentCursorX = 0;
-    }
-    else if (c == '\n')
-    {
-        CurrentCursorX = 0;
-
-        if (!NeedScroll)
-            ++CurrentCursorY;
-    }
-    else if (c == '\t')
-    {
-        CurrentCursorX = (CurrentCursorX + 8) & ~ 7;
-    }
-    else
-    {
-        XboxVideoPutChar(c, CurrentAttr, CurrentCursorX, CurrentCursorY);
-        CurrentCursorX++;
-    }
-
-    if (CurrentCursorX >= Width)
-    {
-        CurrentCursorX = 0;
-        CurrentCursorY++;
-    }
-}
-
 BOOLEAN
 XboxConsKbHit(VOID)
 {
