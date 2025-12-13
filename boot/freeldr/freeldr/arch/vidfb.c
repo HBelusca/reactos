@@ -28,6 +28,8 @@ typedef ULONG RGBQUAD; // , COLORREF;
 #define GetGValue(quad) ((UCHAR)(((quad)>>8) & 0xFF))
 #define GetBValue(quad) ((UCHAR)((quad) & 0xFF))
 
+#define CONST_STR_LEN(x)  (sizeof(x)/sizeof(x[0]) - 1)
+
 
 /* GLOBALS ********************************************************************/
 
@@ -67,6 +69,9 @@ typedef struct _FRAMEBUFFER_INFO
 
 static FRAMEBUFFER_INFO framebufInfo = {0};
 static CM_FRAMEBUF_DEVICE_DATA FrameBufferData = {0};
+
+static UINT8 VidpXScale = 1;
+static UINT8 VidpYScale = 1;
 
 
 /**
@@ -439,14 +444,61 @@ VidFbInitializeVideo(
     // TEMPTEMP: Investigate two possible color palettes.
     if (BootMgrInfo.VideoOptions && *BootMgrInfo.VideoOptions)
     {
-        PCSTR pszPal = strchr(BootMgrInfo.VideoOptions, ',');
-        if (pszPal)
-            iPal = (UINT8)strtoul(pszPal + 1, NULL, 0);
+        PCSTR p;
+
+        /* Find the "pal:" palette option */
+        for (p = BootMgrInfo.VideoOptions; p;)
+        {
+            if (_strnicmp(p, "pal:", CONST_STR_LEN("pal:")) == 0)
+            {
+                p += CONST_STR_LEN("pal:");
+                break;
+            }
+            p = strchr(p, ',');
+            if (p) ++p;
+        }
+        if (p)
+            iPal = (UINT8)strtoul(p, NULL, 0);
 
         if (iPal == 0)
             Palette = CgaEgaPalette;
         else if (iPal == 1)
             Palette = ConsPalette;
+
+        /* Find the "scale:" X/Y scaling option */
+        for (p = BootMgrInfo.VideoOptions; p;)
+        {
+            if (_strnicmp(p, "scale:", CONST_STR_LEN("scale:")) == 0)
+            {
+                p += CONST_STR_LEN("scale:");
+                break;
+            }
+            p = strchr(p, ',');
+            if (p) ++p;
+        }
+        if (p)
+        {
+            /*
+             * The parameter value has the following format:
+             *   X[:Y]
+             * The first value is the X scaling, the second value (if any) is
+             * the Y scaling. If Y is absent, use the same X (i.e. proportional)
+             * scaling.
+             */
+ERR("Scaling option: '%s'\n", p);
+            VidpXScale = (UINT8)strtoul(p, (PSTR*)&p, 0);
+            if (!VidpXScale) // Fixup if invalid.
+                VidpXScale = 1;
+ERR("VidpXScale: %u\n", VidpXScale);
+            VidpYScale = VidpXScale;
+            if (p && *p == ':')
+            {
+                VidpYScale = (UINT8)strtoul(++p, NULL, 0);
+                if (!VidpYScale) // Fixup if invalid.
+                    VidpYScale = 1;
+            }
+ERR("VidpYScale: %u\n", VidpYScale);
+        }
     }
 
     if ((BitMasks->RedMask | BitMasks->GreenMask |
@@ -603,16 +655,16 @@ VidFbOutputChar(
     ULONG Line, Col;
 
     /* Don't display outside of the screen, nor partial characters */
-    if ((X + CHAR_WIDTH - 1 >= framebufInfo.ScreenWidth) ||
-        (Y + CHAR_HEIGHT - 1 >= (framebufInfo.ScreenHeight - 2 * TOP_BOTTOM_LINES)))
+    if ((X + CHAR_WIDTH - 1 >= framebufInfo.ScreenWidth / VidpXScale) ||
+        (Y + CHAR_HEIGHT - 1 >= (framebufInfo.ScreenHeight - 2 * TOP_BOTTOM_LINES) / VidpYScale))
     {
         return;
     }
 
     FontPtr = BitmapFont8x16 + Char * CHAR_HEIGHT;
     Pixel = (PUCHAR)framebufInfo.BaseAddress
-            + (TOP_BOTTOM_LINES + Y) * framebufInfo.Delta
-            + X * framebufInfo.BytesPerPixel;
+            + (TOP_BOTTOM_LINES + Y * VidpYScale) * framebufInfo.Delta
+            + X * VidpXScale * framebufInfo.BytesPerPixel;
 
     /* Convert ARGB color to pixel format */
     if (framebufInfo.BitsPerPixel > 8)
@@ -627,10 +679,26 @@ VidFbOutputChar(
         UCHAR Mask = 0x80; // 1 << (CHAR_WIDTH - 1);
         for (Col = 0; Col < CHAR_WIDTH; ++Col)
         {
-            p = pWritePixel(p, ((FontPtr[Line] & Mask) ? FgColor : BgColor));
+            // p = pWritePixel(p, ((FontPtr[Line] & Mask) ? FgColor : BgColor)); // Works only if VidpXScale == 1
+            p = pWritePixels(p, ((FontPtr[Line] & Mask) ? FgColor : BgColor), VidpXScale);
             Mask >>= 1;
         }
-        Pixel += framebufInfo.Delta;
+        if (VidpYScale > 1)
+        {
+            /* Copy (VidpYScale - 1) times the same line as that built above */
+            PUCHAR Dst = Pixel + framebufInfo.Delta;
+            ULONG sub = VidpYScale;
+            while (sub-- > 1)
+            {
+                RtlCopyMemory(Dst, Pixel, p - Pixel);
+                Dst += framebufInfo.Delta;
+            }
+            Pixel = Dst;
+        }
+        else
+        {
+            Pixel += framebufInfo.Delta;
+        }
     }
 }
 
@@ -645,8 +713,8 @@ VidFbGetDisplaySize(
     _Out_ PULONG Height,
     _Out_ PULONG Depth)
 {
-    *Width  = framebufInfo.ScreenWidth;
-    *Height = framebufInfo.ScreenHeight - 2 * TOP_BOTTOM_LINES;
+    *Width  = framebufInfo.ScreenWidth / VidpXScale;
+    *Height = (framebufInfo.ScreenHeight - 2 * TOP_BOTTOM_LINES) / VidpYScale;
     *Depth  = framebufInfo.BitsPerPixel;
 }
 
@@ -658,8 +726,8 @@ VidFbGetDisplaySize(
 ULONG
 VidFbGetBufferSize(VOID)
 {
-    return ((framebufInfo.ScreenHeight - 2 * TOP_BOTTOM_LINES) *
-            framebufInfo.ScreenWidth * framebufInfo.BytesPerPixel);
+    return ((framebufInfo.ScreenHeight - 2 * TOP_BOTTOM_LINES) / VidpYScale *
+            (framebufInfo.ScreenWidth / VidpXScale) * framebufInfo.BytesPerPixel);
 }
 
 VOID
@@ -667,10 +735,17 @@ VidFbScrollUp(
     _In_ UINT32 Color,
     _In_ ULONG Scroll)
 {
-    PUCHAR Dst = (PUCHAR)framebufInfo.BaseAddress + TOP_BOTTOM_LINES * framebufInfo.Delta;
-    PUCHAR Src = Dst + Scroll * framebufInfo.Delta;
-    SIZE_T Size = (framebufInfo.ScreenHeight - 2 * TOP_BOTTOM_LINES) * framebufInfo.Delta - Scroll * framebufInfo.Delta;
+    PUCHAR Dst, Src;
+    SIZE_T Size;
     ULONG Line;
+
+    /* Rescale scrolling */
+    Scroll *= VidpYScale;
+
+    /* Compute what to move */
+    Dst = (PUCHAR)framebufInfo.BaseAddress + TOP_BOTTOM_LINES * framebufInfo.Delta;
+    Src = Dst + Scroll * framebufInfo.Delta;
+    Size = (framebufInfo.ScreenHeight - 2 * TOP_BOTTOM_LINES) * framebufInfo.Delta - Scroll * framebufInfo.Delta;
 
     /* Move up the visible contents (skipping the first character line) */
     // TODO: When scrolling a screen region that doesn't start at X = 0
@@ -691,6 +766,7 @@ VidFbScrollUp(
     }
 }
 
+// NOTE: Console support.
 #if 0
 VOID
 VidFbSetTextCursorPosition(UCHAR X, UCHAR Y)
@@ -703,7 +779,9 @@ VidFbHideShowTextCursor(BOOLEAN Show)
 {
     /* We don't have a cursor yet */
 }
+#endif
 
+#if 0
 BOOLEAN
 VidFbIsPaletteFixed(VOID)
 {
@@ -739,8 +817,8 @@ VidFbGetPaletteColor(
 
 #define VGA_CHAR_SIZE 2
 
-#define FBCONS_WIDTH    (framebufInfo.ScreenWidth / CHAR_WIDTH)
-#define FBCONS_HEIGHT   ((framebufInfo.ScreenHeight - 2 * TOP_BOTTOM_LINES) / CHAR_HEIGHT)
+#define FBCONS_WIDTH    (framebufInfo.ScreenWidth / VidpXScale / CHAR_WIDTH)
+#define FBCONS_HEIGHT   ((framebufInfo.ScreenHeight - 2 * TOP_BOTTOM_LINES) / VidpYScale / CHAR_HEIGHT)
 
 
 /**
