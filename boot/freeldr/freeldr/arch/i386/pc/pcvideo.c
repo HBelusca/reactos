@@ -40,12 +40,21 @@ DBG_DEFAULT_CHANNEL(UI);
 #define VIDEOCARD_EGA           1
 #define VIDEOCARD_VGA           2
 
+/* This code uses an extended set of video mode numbers. These include:
+ * Aliases for standard modes
+ *	NORMAL_VGA (-1)
+ *	EXTENDED_VGA (-2)
+ *	ASK_VGA (-3)
+ * Video modes numbered by menu position -- NOT RECOMMENDED because of lack
+ * of compatibility when extending the table. These are between 0x00 and 0xff.
+ */
+
 #define VIDEOMODE_NORMAL_TEXT   0
 #define VIDEOMODE_EXTENDED_TEXT 1
 #define    VIDEOMODE_80X28         0x501C
 #define    VIDEOMODE_80X30         0x501E
 #define    VIDEOMODE_80X34         0x5022
-#define    VIDEOMODE_80X43         0x502B
+#define    VIDEOMODE_80X43         0x502B   // FIXME: This one adds too much empty space at the bottom
 #define    VIDEOMODE_80X60         0x503C
 #define    VIDEOMODE_132X25        0x8419
 #define    VIDEOMODE_132X43        0x842B
@@ -199,6 +208,9 @@ PcVideoDetectVideoCard(VOID)
     Regs.b.bl = 0x10;
     Int386(0x10, &Regs, &Regs);
 
+    /* NOTE: One possible check for the presence of an EGA or later
+     * display card is to call this function with BH=FFh; if not present,
+     * BH will be unchanged on return. */
     /* If BL is still equal to 0x10 then there is no EGA/VGA present */
     if (Regs.b.bl == 0x10)
         return VIDEOCARD_CGA_OR_OTHER;
@@ -436,6 +448,7 @@ PcVideoGetBiosMode(
     Regs.b.ah = 0x0F;
     Int386(0x10, &Regs, &Regs);
 
+    /******/*Mode = Regs.b.al;/*****/
     if (Regs.b.ah == 0)
         return FALSE;
 
@@ -921,11 +934,19 @@ PcVideoSetMode80x25(VOID)
     return TRUE;
 }
 
+// Reference: https://raw.githubusercontent.com/torvalds/linux/refs/heads/master/arch/x86/boot/video-vga.c
 static BOOLEAN
 PcVideoSetMode80x50_80x43(VOID)
 {
     if (VideoCard == VIDEOCARD_VGA)
     {
+        // Setting 400 scanlines as per https://groups.google.com/g/rec.games.programmer/c/c-E9tJr6yoY/m/ciwwkvyYMF8J
+        //PcVideoSetVerticalResolution(VERTRES_400_SCANLINES);
+//
+// FIXME: We have done a FIXME for commit 1b3e649577a0b9e52be063d76b4fea95c14e1aed
+// (r25751), where the correct PcVideoSetBiosMode(0x03); was replaced by PcVideoSetBiosMode(0x12);
+//
+        //PcVideoSetBiosMode(0x12); // But note that interestingly we still get some text output!
         PcVideoSetBiosMode(0x03);
         PcVideoSetFont8x8();
         PcVideoSelectAlternatePrintScreen();
@@ -969,7 +990,7 @@ PcVideoSetMode80x30(VOID)
 {
     /* FIXME: Is this VGA-only? */
     PcVideoSetMode80x25();
-    PcVideoSet480ScanLines();
+    PcVideoSet480ScanLines(); // NOTE: Linux adds: vga_set_vertical_end(30*16);
     ScreenWidth = 80;
     ScreenHeight = 30;
     return TRUE;
@@ -983,7 +1004,7 @@ PcVideoSetMode80x34(VOID)
     PcVideoSet480ScanLines();
     PcVideoSetFont8x14();
     PcVideoDefineCursor(11, 12);
-    PcVideoSetDisplayEnd();
+    PcVideoSetDisplayEnd(); // NOTE: Linux: vga_set_vertical_end(34*14);
     ScreenWidth = 80;
     ScreenHeight = 34;
     return TRUE;
@@ -1014,7 +1035,7 @@ PcVideoSetMode80x60(VOID)
     PcVideoSelectAlternatePrintScreen();
     PcVideoDisableCursorEmulation();
     PcVideoDefineCursor(6, 7);
-    PcVideoSetDisplayEnd();
+    PcVideoSetDisplayEnd(); // NOTE: Linux: vga_set_vertical_end(60*8);
     ScreenWidth = 80;
     ScreenHeight = 60;
     return TRUE;
@@ -1069,12 +1090,79 @@ PcVideoSetMode(USHORT NewMode)
     {
         /* 640x480x16 */
         PcVideoSetBiosMode((UCHAR)NewMode);
-        WRITE_PORT_USHORT((USHORT*)0x03CE, 0x0F01); /* For some reason this is necessary? */
+
+#if 0
+        /* For some reason this is necessary? (16-color modes only, Write Mode 0)
+         * Write VGA_GC_ENABLE_RESET_REG (0x01) to VGA_GC_INDEX (0x03CE) and
+         * 0x0F to VGA_GC_DATA (0x03CF) to set the enable set/reset register
+         * to the white color. */
+        WRITE_PORT_USHORT((USHORT*)0x03CE, 0x0F01);
+
         ScreenWidth = 640;
         ScreenHeight = 480;
-        BytesPerScanLine = 80;
+        BytesPerScanLine = 640;// original: 80;
+        BitsPerPixel = 4;
+        //DisplayMode = VideoGraphicsMode;
+#else
+
+        REGS Regs;
+        // http://www.techhelpmanual.com/113-int_10h__video_services.html
+        // http://www.techhelpmanual.com/156-int_10h_1104h__load_rom_8x16_character_set.html
+        // http://www.techhelpmanual.com/160-int_10h_1114h__load_and_activate_rom_8x16_character_set.html
+        // http://www.techhelpmanual.com/165-int_10h_1124h__setup_rom_8x16_font_for_graphics_mode.html
+        Regs.w.ax = 0x1114;
+        Regs.b.bl = 0x00;
+        //Regs.w.ax = 0x1124;
+        //Regs.b.bl = 0x02;
+        Int386(0x10, &Regs, &Regs);
+
+        PcVideoSelectAlternatePrintScreen();
+        //PcVideoDisableCursorEmulation();
+        //PcVideoDefineCursor(6, 7);
+
+WRITE_PORT_USHORT((USHORT*)0x03CE, 0x0F01);
+
+        ScreenWidth = 80;
+        ScreenHeight = 30;
+        BytesPerScanLine = 160;
+        BitsPerPixel = 4;
+        DisplayMode = VideoTextMode;
+#endif
         BiosVideoMode = NewMode;
-        DisplayMode = VideoGraphicsMode;
+        //DisplayMode = VideoGraphicsMode;
+
+USHORT Mode = 0xCDCD;
+if (!PcVideoGetBiosMode(&Mode))
+    ERR("** PcVideoGetBiosMode() failed?!\n");
+{
+    /*
+     * The BIOS data area 0x400 holds information about the current video mode.
+     * Infos at: https://web.archive.org/web/20240119203029/http://www.bioscentral.com/misc/bda.htm
+     * https://stanislavs.org/helppc/bios_data_area.html
+     */
+
+    UCHAR BiosMode = (*(PUCHAR)0x449) & 0x7F; /* Current video mode */
+ERR("** Mode: 0x%04x , BiosMode: 0x%02x\n", Mode, BiosMode);
+
+    ULONG BiosScreenWidth = *(PUSHORT)0x44A; /* Number of screen columns */
+    ULONG BiosScreenHeight = 1 + *(PUCHAR)0x484; /* 1 + "Rows on the screen (less 1, EGA+)" */
+ERR("** ScreenWidth: %lu , ScreenHeight: %lu\n", BiosScreenWidth, BiosScreenHeight);
+
+    ULONG BiosBytesPerScanLine = (*(PUCHAR)0x489) & 0x90;
+    BiosBytesPerScanLine = ((BiosBytesPerScanLine & 0x80) >> 6) | ((BiosBytesPerScanLine & 0x10) >> 4);
+    switch (BiosBytesPerScanLine)
+    {
+        case VERTRES_200_SCANLINES:
+            BiosBytesPerScanLine = 200; break;
+        case VERTRES_350_SCANLINES:
+            BiosBytesPerScanLine = 350; break;
+        case VERTRES_400_SCANLINES:
+            BiosBytesPerScanLine = 400; break;
+        default:
+            BiosBytesPerScanLine = 160; break;
+    }
+ERR("** BytesPerScanLine = %lu , BiosBytesPerScanLine = %lu\n", BytesPerScanLine, BiosBytesPerScanLine);
+}
 
         return TRUE;
     }
@@ -1319,6 +1407,7 @@ PcVideoGetBufferSize(VOID)
     /* Text mode (BIOS or VESA) */
     if (DisplayMode == VideoTextMode)
     {
+ERR("** GetBufferSize(%lu, %lu, %lu) for text mode!\n", ScreenWidth, ScreenHeight, VGA_CHAR_SIZE);
         // return ScreenHeight * BytesPerScanLine;
         return ScreenWidth * ScreenHeight * VGA_CHAR_SIZE;
     }
@@ -1326,16 +1415,19 @@ PcVideoGetBufferSize(VOID)
     else if (DisplayMode == VideoGraphicsMode && VesaVideoMode &&
              !(VesaVideoModeInformation.ModeAttributes & 0x80))
     {
+ERR("** GetBufferSize(%lu, %lu) for VESA non-linear mode!\n", ScreenHeight, BytesPerScanLine);
         return ScreenHeight * BytesPerScanLine;
     }
     /* Linear framebuffer mode */
     else if (DisplayMode == VideoGraphicsMode)
     {
+ERR("** FbConsGetBufferSize()\n");
         return FbConsGetBufferSize();
     }
     /* BIOS graphics mode */
     else
     {
+ERR("** GetBufferSize(%lu, %lu) for unimplemented mode!\n", ScreenHeight, BytesPerScanLine);
         UNIMPLEMENTED;
         return ScreenHeight * BytesPerScanLine;
     }
@@ -1541,8 +1633,18 @@ PcVideoSync(VOID)
 VOID
 PcVideoPrepareForReactOS(VOID)
 {
-    // PcVideoSetMode80x50_80x43();
-    PcVideoSetMode80x25();
+// NOTE: See commit f37fb1f7f8950cdae899d86c401f3135374cd3b1
+// But also commit 1b3e649577a0b9e52be063d76b4fea95c14e1aed (r25751)
+// Note that the latter says:
+// "Re-enable FreeLDR's "prepare for ros video" routine, but change it to match
+//  the new BootVid, which uses Mode 0x12. This is roughly what HalDisplayReset does,
+//  which isn't yet implemented (except the latter needs to setup a BIOS call trampoline)."
+// Which kind of implicitly implies that VideoPrepareForReactOS() is kind of a
+// hack we used to use because at that time, the HalDisplayReset() (to be invoked
+// by bootvid) wasn't implemented!
+    ///**/PcVideoSetMode80x50_80x43();/**/
+    // PcVideoSetMode80x25();// Original code.
+    /****/PcVideoSetBiosMode(0x12);/****/
     PcVideoHideShowTextCursor(FALSE);
 }
 
