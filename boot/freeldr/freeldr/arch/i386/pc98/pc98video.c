@@ -213,7 +213,7 @@ Pc98VideoSetTextCursorPosition(UCHAR X, UCHAR Y)
 {
     CSRWPARAM CursorParameters;
 
-    RtlZeroMemory(&CursorParameters, sizeof(CSRWPARAM));
+    RtlZeroMemory(&CursorParameters, sizeof(CursorParameters));
     CursorParameters.CursorAddress = X + Y * TextCols;
     CursorParameters.DotAddress = 0;
 
@@ -226,7 +226,7 @@ Pc98VideoHideShowTextCursor(BOOLEAN Show)
 {
     CSRFORMPARAM CursorParameters;
 
-    RtlZeroMemory(&CursorParameters, sizeof(CSRFORMPARAM));
+    RtlZeroMemory(&CursorParameters, sizeof(CursorParameters));
     CursorParameters.Show = Show;
     CursorParameters.Blink = TRUE;
     CursorParameters.BlinkRate = 12;
@@ -242,6 +242,9 @@ static
 UCHAR
 Pc98VideoAttrToGdcAttr(UCHAR Attr)
 {
+    // See also:
+    // https://ia800902.us.archive.org/view_archive.php?archive=/0/items/undoc98vol1floppy/undoc98.zip&file=int18crt.txt
+    // "表1 [標準アトリビュートモード時]" (Table 1) and following.
     switch (Attr & 0xF)
     {
         case COLOR_BLACK:
@@ -261,13 +264,13 @@ Pc98VideoAttrToGdcAttr(UCHAR Attr)
             return GDC_ATTR_RED;
         case COLOR_MAGENTA:
         case COLOR_LIGHTMAGENTA:
-            return GDC_ATTR_PURPLE;
+            return GDC_ATTR_PURPLE; // "Magenta"
         case COLOR_BROWN:
         case COLOR_YELLOW:
             return GDC_ATTR_YELLOW;
         case COLOR_LIGHTBLUE:
         case COLOR_LIGHTCYAN:
-            return GDC_ATTR_LIGHTBLUE;
+            return GDC_ATTR_LIGHTBLUE; // "Cyan"
         default:
             return GDC_ATTR_BLACK;
     }
