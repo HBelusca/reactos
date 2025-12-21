@@ -91,14 +91,6 @@ VidFbClearScreenColor(
     _In_ BOOLEAN FullScreen);
 
 VOID
-VidFbOutputChar(
-    _In_ UCHAR Char,
-    _In_ ULONG X,
-    _In_ ULONG Y,
-    _In_ UINT32 FgColor,
-    _In_ UINT32 BgColor);
-
-VOID
 VidFbGetDisplaySize(
     _Out_ PULONG Width,
     _Out_ PULONG Height,
@@ -108,17 +100,15 @@ ULONG
 VidFbGetBufferSize(VOID);
 
 VOID
+VidFbCopyOffScreenBufferToVRAM(
+    _In_ PVOID Buffer);
+
+VOID
 VidFbScrollUp(
     _In_ UINT32 Color,
     _In_ ULONG Scroll);
 
 #if 0
-VOID
-VidFbSetTextCursorPosition(UCHAR X, UCHAR Y);
-
-VOID
-VidFbHideShowTextCursor(BOOLEAN Show);
-
 BOOLEAN
 VidFbIsPaletteFixed(VOID);
 
@@ -180,3 +170,12 @@ FbConsCopyOffScreenBufferToVRAM(
 VOID
 FbConsScrollUp(
     _In_ UCHAR Attr);
+
+
+#if 0
+VOID
+VidFbSetTextCursorPosition(UCHAR X, UCHAR Y);
+
+VOID
+VidFbHideShowTextCursor(BOOLEAN Show);
+#endif

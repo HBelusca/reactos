@@ -8,7 +8,6 @@
 
 #include <freeldr.h>
 #include "vidfb.h"
-#include "vgafont.h"
 
 #include <debug.h>
 DBG_DEFAULT_CHANNEL(UI);
@@ -16,7 +15,7 @@ DBG_DEFAULT_CHANNEL(UI);
 #define TRACE ERR
 
 /* This is used to introduce artificial symmetric borders at the top and bottom */
-#define TOP_BOTTOM_LINES (2 * CHAR_HEIGHT) // 0
+#define TOP_BOTTOM_LINES    0
 
 typedef ULONG RGBQUAD; // , COLORREF;
 
@@ -28,7 +27,7 @@ typedef ULONG RGBQUAD; // , COLORREF;
 #define GetGValue(quad) ((UCHAR)(((quad)>>8) & 0xFF))
 #define GetBValue(quad) ((UCHAR)((quad) & 0xFF))
 
-#define CONST_STR_LEN(x)  (sizeof(x)/sizeof(x[0]) - 1)
+#define CONST_STR_LEN(x)    (sizeof(x)/sizeof(x[0]) - 1)
 
 
 /* GLOBALS ********************************************************************/
@@ -73,62 +72,6 @@ static CM_FRAMEBUF_DEVICE_DATA FrameBufferData = {0};
 static UINT8 VidpXScale = 1;
 static UINT8 VidpYScale = 1;
 
-
-/**
- * @brief   Standard 16-color CGA/EGA text palette.
- *
- * Corresponds to the following formulae (see also
- * https://moddingwiki.shikadi.net/wiki/EGA_Palette):
- * // - - R0 G0 B0 R1 G1 B1
- * UINT8 red   = 0x55 * (((ega >> 1) & 2) | (ega >> 5) & 1);
- * UINT8 green = 0x55 * (( ega       & 2) | (ega >> 4) & 1);
- * UINT8 blue  = 0x55 * (((ega << 1) & 2) | (ega >> 3) & 1);
- *
- * And from a 16-bit CGA index:
- * UINT8 red   = 0x55 * (((cga & 4) >> 1) | ((cga & 8) >> 3));
- * UINT8 green = 0x55 * ( (cga & 2) | ((cga & 8) >> 3));
- * UINT8 blue  = 0x55 * (((cga & 1) << 1) | ((cga & 8) >> 3));
- * if (cga == 6) green /= 2;
- **/
-// NOTE: Console support.
-static const RGBQUAD CgaEgaPalette[16] =
-{
-    RGB(0x00, 0x00, 0x00), RGB(0x00, 0x00, 0xAA), RGB(0x00, 0xAA, 0x00), RGB(0x00, 0xAA, 0xAA),
-    RGB(0xAA, 0x00, 0x00), RGB(0xAA, 0x00, 0xAA), RGB(0xAA, 0x55, 0x00), RGB(0xAA, 0xAA, 0xAA),
-    RGB(0x55, 0x55, 0x55), RGB(0x55, 0x55, 0xFF), RGB(0x55, 0xFF, 0x55), RGB(0x55, 0xFF, 0xFF),
-    RGB(0xFF, 0x55, 0x55), RGB(0xFF, 0x55, 0xFF), RGB(0xFF, 0xFF, 0x55), RGB(0xFF, 0xFF, 0xFF)
-};
-
-/**
- * @brief
- * Default 16-color palette for foreground and background colors.
- * Taken from win32ss/user/winsrv/consrv/frontends/gui/conwnd.c
- * and win32ss/user/winsrv/concfg/settings.c
- **/
-// NOTE: Console support.
-static const RGBQUAD ConsPalette[16] =
-{
-    RGB(  0,   0,   0), /* Black */
-    RGB(  0,   0, 128), /* Blue */
-    RGB(  0, 128,   0), /* Green */
-    RGB(  0, 128, 128), /* Cyan */
-    RGB(128,   0,   0), /* Red */
-    RGB(128,   0, 128), /* Magenta */
-    RGB(128, 128,   0), /* Brown */
-    RGB(192, 192, 192), /* Light Gray */
-    RGB(128, 128, 128), /* Dark Gray */
-    RGB(  0,   0, 255), /* Light Blue */
-    RGB(  0, 255,   0), /* Light Green */
-    RGB(  0, 255, 255), /* Light Cyan */
-    RGB(255,   0,   0), /* Light Red */
-    RGB(255,   0, 255), /* Light Magenta */
-    RGB(255, 255,   0), /* Yellow */
-    RGB(255, 255, 255), /* White */
-};
-
-// NOTE: Console support.
-static const RGBQUAD* Palette = CgaEgaPalette;
-static UINT8 CgaToEga[16]; // Palette to map 16-color CGA indexes to 6-bit EGA.
 
 /**
  * @brief   Pixel handlers.
@@ -311,7 +254,6 @@ VidFbInitializeVideo(
     _In_ BOOLEAN FormatByMask)
 {
     PPIXEL_BITMASK BitMasks = &framebufInfo.PixelMasks;
-    UINT8 iPal = 0;
 
     if (pFbData)
         *pFbData = NULL;
@@ -441,29 +383,20 @@ VidFbInitializeVideo(
     }
 #endif
 
-    // TEMPTEMP: Investigate two possible color palettes.
+    /* Sanity check */
+    if ((BitMasks->RedMask | BitMasks->GreenMask |
+         BitMasks->BlueMask | BitMasks->ReservedMask) == 0)
+    {
+        if (framebufInfo.BitsPerPixel > 8)
+        {
+            ERR("BitsPerPixel = %lu but no pixel masks\n", BitsPerPixel);
+            return FALSE;
+        }
+    }
+
     if (BootMgrInfo.VideoOptions && *BootMgrInfo.VideoOptions)
     {
         PCSTR p;
-
-        /* Find the "pal:" palette option */
-        for (p = BootMgrInfo.VideoOptions; p;)
-        {
-            if (_strnicmp(p, "pal:", CONST_STR_LEN("pal:")) == 0)
-            {
-                p += CONST_STR_LEN("pal:");
-                break;
-            }
-            p = strchr(p, ',');
-            if (p) ++p;
-        }
-        if (p)
-            iPal = (UINT8)strtoul(p, NULL, 0);
-
-        if (iPal == 0)
-            Palette = CgaEgaPalette;
-        else if (iPal == 1)
-            Palette = ConsPalette;
 
         /* Find the "scale:" X/Y scaling option */
         for (p = BootMgrInfo.VideoOptions; p;)
@@ -498,38 +431,6 @@ ERR("VidpXScale: %u\n", VidpXScale);
                     VidpYScale = 1;
             }
 ERR("VidpYScale: %u\n", VidpYScale);
-        }
-    }
-
-    if ((BitMasks->RedMask | BitMasks->GreenMask |
-         BitMasks->BlueMask | BitMasks->ReservedMask) == 0)
-    {
-        UINT8 Cga;
-
-        if (framebufInfo.BitsPerPixel > 8)
-        {
-            ERR("BitsPerPixel = %lu but no pixel masks\n", BitsPerPixel);
-            return FALSE;
-        }
-
-        /* Palette mode: prepare the CGA/EGA palette */
-        for (Cga = 0; Cga < RTL_NUMBER_OF(CgaToEga); ++Cga)
-        {
-            if (BaseAddress < 0xC0000)
-            {
-                /* VGA graphics mode, it already uses the correct palette
-                 * (the palette's first 16 colors correspond to CGA) */
-                CgaToEga[Cga] = Cga;
-            }
-            else
-            {
-                /* SVGA/VBE/... uses an EGA-like palette, so create the CGA->EGA mapping */
-                // https://godbolt.org/z/x8j8xTP3f
-                if (Cga != 6)
-                    CgaToEga[Cga] = ((iPal == 0) ? 7 : (7*!(Cga & 7) | (Cga & 7))) * (Cga & 8) | (Cga & 7);
-                else
-                    CgaToEga[Cga] = 0x14; // Switch to using Brown instead of "Dark Yellow"
-            }
         }
     }
 
@@ -637,70 +538,76 @@ VidFbClearScreenColor(
     }
 }
 
+#if 0
+typedef enum _FB_BLT_OPERATION
+{
+    BltVideoFill,
+    BltVideoToBltBuffer,
+    BltBufferToVideo,
+    BltVideoToVideo,
+    BltOperationMax
+} FB_BLT_OPERATION;
+
 /**
  * @brief
- * Displays a character at a given pixel position with specific foreground
- * and background colors.
+ * The Blt() function is used to draw the BltBuffer rectangle onto the video screen.
+ *
+ * The BltBuffer represents a rectangle of Height by Width pixels that will be
+ * drawn on the graphics screen using the operation specified by BltOperation.
+ * The Delta value can be used to enable the BltOperation to be performed on a
+ * sub-rectangle of the BltBuffer.
+ *
+ * @param[in,out]   Buffer
+ * The data to transfer to the graphics screen. Size is at least
+ * Width * Height * sizeof(EFI_GRAPHICS_OUTPUT_BLT_PIXEL).
+ *
+ * @param[in]   BltOperation
+ * The operation to perform when copying BltBuffer on to the graphics screen.
+ *
+ * @param[in]   SourceX
+ * The X coordinate of the source for the BltOperation. The origin of the
+ * screen is (0,0) and that is the upper left-hand corner of the screen.
+ *
+ * @param[in]   SourceY
+ * The Y coordinate of the source for the BltOperation. The origin of the
+ * screen is (0,0) and that is the upper left-hand corner of the screen.
+ *
+ * @param[in]   DestinationX
+ * The X coordinate of the destination for the BltOperation. The origin of
+ * the screen is (0,0) and that is the upper left-hand corner of the screen.
+ *
+ * @param[in]   DestinationY
+ * The Y coordinate of the destination for the BltOperation. The origin of
+ * the screen is (0,0) and that is the upper left-hand corner of the screen.
+ *
+ * @param[in]   Width
+ * The width of a rectangle in the blt rectangle in pixels. Each pixel is
+ * represented by an EFI_GRAPHICS_OUTPUT_BLT_PIXEL element.
+ *
+ * @param[in]   Height
+ * The height of a rectangle in the blt rectangle in pixels. Each pixel is
+ * represented by an EFI_GRAPHICS_OUTPUT_BLT_PIXEL element.
+ *
+ * @param[in]   Delta
+ * Not used for BltVideoFill or the BltVideoToVideo operation. If a Delta of
+ * zero is used, the entire BltBuffer is being operated on. If a subrectangle
+ * of the BltBuffer is being used then Delta represents the number of bytes
+ * in a row of the BltBuffer.
  **/
 VOID
-VidFbOutputChar(
-    _In_ UCHAR Char,
-    _In_ ULONG X,
-    _In_ ULONG Y,
-    _In_ UINT32 FgColor,
-    _In_ UINT32 BgColor)
+VidFbBitBlt(
+    _Inout_opt_ PVOID Buffer,
+    _In_ FB_BLT_OPERATION BltOperation,
+    _In_ ULONG SourceX,
+    _In_ ULONG SourceY,
+    _In_ ULONG DestinationX,
+    _In_ ULONG DestinationY,
+    _In_ ULONG Width,
+    _In_ ULONG Height,
+    _In_opt_ ULONG Delta)
 {
-    const UCHAR* FontPtr;
-    PUCHAR Pixel;
-    ULONG Line, Col;
-
-    /* Don't display outside of the screen, nor partial characters */
-    if ((X + CHAR_WIDTH - 1 >= framebufInfo.ScreenWidth / VidpXScale) ||
-        (Y + CHAR_HEIGHT - 1 >= (framebufInfo.ScreenHeight - 2 * TOP_BOTTOM_LINES) / VidpYScale))
-    {
-        return;
-    }
-
-    FontPtr = BitmapFont8x16 + Char * CHAR_HEIGHT;
-    Pixel = (PUCHAR)framebufInfo.BaseAddress
-            + (TOP_BOTTOM_LINES + Y * VidpYScale) * framebufInfo.Delta
-            + X * VidpXScale * framebufInfo.BytesPerPixel;
-
-    /* Convert ARGB color to pixel format */
-    if (framebufInfo.BitsPerPixel > 8)
-    {
-        FgColor = color_scale_argb(FgColor, &framebufInfo);
-        BgColor = color_scale_argb(BgColor, &framebufInfo);
-    }
-
-    for (Line = 0; Line < CHAR_HEIGHT; ++Line)
-    {
-        PUCHAR p = Pixel;
-        UCHAR Mask = 0x80; // 1 << (CHAR_WIDTH - 1);
-        for (Col = 0; Col < CHAR_WIDTH; ++Col)
-        {
-            // p = pWritePixel(p, ((FontPtr[Line] & Mask) ? FgColor : BgColor)); // Works only if VidpXScale == 1
-            p = pWritePixels(p, ((FontPtr[Line] & Mask) ? FgColor : BgColor), VidpXScale);
-            Mask >>= 1;
-        }
-        if (VidpYScale > 1)
-        {
-            /* Copy (VidpYScale - 1) times the same line as that built above */
-            PUCHAR Dst = Pixel + framebufInfo.Delta;
-            ULONG sub = VidpYScale;
-            while (sub-- > 1)
-            {
-                RtlCopyMemory(Dst, Pixel, p - Pixel);
-                Dst += framebufInfo.Delta;
-            }
-            Pixel = Dst;
-        }
-        else
-        {
-            Pixel += framebufInfo.Delta;
-        }
-    }
 }
+#endif
 
 /**
  * @brief
@@ -728,6 +635,25 @@ VidFbGetBufferSize(VOID)
 {
     return ((framebufInfo.ScreenHeight - 2 * TOP_BOTTOM_LINES) / VidpYScale *
             (framebufInfo.ScreenWidth / VidpXScale) * framebufInfo.BytesPerPixel);
+}
+
+/**
+ * @brief
+ * Copies a full graphics pixel buffer rectangle to the graphics framebuffer.
+ **/
+VOID
+VidFbCopyOffScreenBufferToVRAM(
+    _In_ PVOID Buffer)
+{
+    PUCHAR OffScreenBuffer = (PUCHAR)Buffer;
+    ULONG Line, Col;
+
+    for (Line = 0; Line < (framebufInfo.ScreenHeight - 2 * TOP_BOTTOM_LINES) / VidpYScale; ++Line)
+    {
+        for (Col = 0; Col < framebufInfo.ScreenWidth / VidpXScale; ++Col)
+        {
+        }
+    }
 }
 
 VOID
@@ -766,21 +692,6 @@ VidFbScrollUp(
     }
 }
 
-// NOTE: Console support.
-#if 0
-VOID
-VidFbSetTextCursorPosition(UCHAR X, UCHAR Y)
-{
-    /* We don't have a cursor yet */
-}
-
-VOID
-VidFbHideShowTextCursor(BOOLEAN Show)
-{
-    /* We don't have a cursor yet */
-}
-#endif
-
 #if 0
 BOOLEAN
 VidFbIsPaletteFixed(VOID)
@@ -815,11 +726,182 @@ VidFbGetPaletteColor(
  * COPYRIGHT:   Copyright 2025-2026 Hermès Bélusca-Maïto <hermes.belusca-maito@reactos.org>
  */
 
+#include "vgafont.h"
+
 #define VGA_CHAR_SIZE 2
 
 #define FBCONS_WIDTH    (framebufInfo.ScreenWidth / VidpXScale / CHAR_WIDTH)
 #define FBCONS_HEIGHT   ((framebufInfo.ScreenHeight - 2 * TOP_BOTTOM_LINES) / VidpYScale / CHAR_HEIGHT)
 
+
+/* GLOBALS ********************************************************************/
+
+static UINT8 FontXScale = 1;
+static UINT8 FontYScale = 1;
+
+/**
+ * @brief   Standard 16-color CGA/EGA text palette.
+ *
+ * Corresponds to the following formulae (see also
+ * https://moddingwiki.shikadi.net/wiki/EGA_Palette):
+ * // - - R0 G0 B0 R1 G1 B1
+ * UINT8 red   = 0x55 * (((ega >> 1) & 2) | (ega >> 5) & 1);
+ * UINT8 green = 0x55 * (( ega       & 2) | (ega >> 4) & 1);
+ * UINT8 blue  = 0x55 * (((ega << 1) & 2) | (ega >> 3) & 1);
+ *
+ * And from a 16-bit CGA index:
+ * UINT8 red   = 0x55 * (((cga & 4) >> 1) | ((cga & 8) >> 3));
+ * UINT8 green = 0x55 * ( (cga & 2) | ((cga & 8) >> 3));
+ * UINT8 blue  = 0x55 * (((cga & 1) << 1) | ((cga & 8) >> 3));
+ * if (cga == 6) green /= 2;
+ **/
+static const RGBQUAD CgaEgaPalette[16] =
+{
+    RGB(0x00, 0x00, 0x00), RGB(0x00, 0x00, 0xAA), RGB(0x00, 0xAA, 0x00), RGB(0x00, 0xAA, 0xAA),
+    RGB(0xAA, 0x00, 0x00), RGB(0xAA, 0x00, 0xAA), RGB(0xAA, 0x55, 0x00), RGB(0xAA, 0xAA, 0xAA),
+    RGB(0x55, 0x55, 0x55), RGB(0x55, 0x55, 0xFF), RGB(0x55, 0xFF, 0x55), RGB(0x55, 0xFF, 0xFF),
+    RGB(0xFF, 0x55, 0x55), RGB(0xFF, 0x55, 0xFF), RGB(0xFF, 0xFF, 0x55), RGB(0xFF, 0xFF, 0xFF)
+};
+
+/**
+ * @brief
+ * Default 16-color palette for foreground and background colors.
+ * Taken from win32ss/user/winsrv/consrv/frontends/gui/conwnd.c
+ * and win32ss/user/winsrv/concfg/settings.c
+ **/
+static const RGBQUAD ConsPalette[16] =
+{
+    RGB(  0,   0,   0), /* Black */
+    RGB(  0,   0, 128), /* Blue */
+    RGB(  0, 128,   0), /* Green */
+    RGB(  0, 128, 128), /* Cyan */
+    RGB(128,   0,   0), /* Red */
+    RGB(128,   0, 128), /* Magenta */
+    RGB(128, 128,   0), /* Brown */
+    RGB(192, 192, 192), /* Light Gray */
+    RGB(128, 128, 128), /* Dark Gray */
+    RGB(  0,   0, 255), /* Light Blue */
+    RGB(  0, 255,   0), /* Light Green */
+    RGB(  0, 255, 255), /* Light Cyan */
+    RGB(255,   0,   0), /* Light Red */
+    RGB(255,   0, 255), /* Light Magenta */
+    RGB(255, 255,   0), /* Yellow */
+    RGB(255, 255, 255), /* White */
+};
+
+static const RGBQUAD* Palette = CgaEgaPalette;
+static UINT8 CgaToEga[16]; // Palette to map 16-color CGA indexes to 6-bit EGA.
+
+
+/* FUNCTIONS ******************************************************************/
+
+/**
+ * @brief
+ * Initializes the framebuffer console, attached to the hardware framebuffer.
+ *
+ * @return
+ * TRUE if initialization is successful; FALSE if not.
+ **/
+BOOLEAN
+FbConsInitialize(
+    VOID
+    // _In_ PFRAMEBUFFER_INFO FbInfo,
+    // _In_ UINT32 ScreenWidth, // Where to position the console? For now: fullscreen.
+    // _In_ UINT32 ScreenHeight
+)
+{
+    PPIXEL_BITMASK BitMasks = &framebufInfo.PixelMasks;
+    UINT8 iPal = 0;
+
+    // TEMPTEMP: Investigate two possible color palettes.
+    if (BootMgrInfo.VideoOptions && *BootMgrInfo.VideoOptions)
+    {
+        PCSTR p;
+
+        /* Find the "pal:" palette option */
+        for (p = BootMgrInfo.VideoOptions; p;)
+        {
+            if (_strnicmp(p, "pal:", CONST_STR_LEN("pal:")) == 0)
+            {
+                p += CONST_STR_LEN("pal:");
+                break;
+            }
+            p = strchr(p, ',');
+            if (p) ++p;
+        }
+        if (p)
+            iPal = (UINT8)strtoul(p, NULL, 0);
+
+        if (iPal == 0)
+            Palette = CgaEgaPalette;
+        else if (iPal == 1)
+            Palette = ConsPalette;
+
+#if 0
+        /* Find the "scale:" X/Y scaling option */
+        for (p = BootMgrInfo.VideoOptions; p;)
+        {
+            if (_strnicmp(p, "scale:", CONST_STR_LEN("scale:")) == 0)
+            {
+                p += CONST_STR_LEN("scale:");
+                break;
+            }
+            p = strchr(p, ',');
+            if (p) ++p;
+        }
+        if (p)
+        {
+            /*
+             * The parameter value has the following format:
+             *   X[:Y]
+             * The first value is the X scaling, the second value (if any) is
+             * the Y scaling. If Y is absent, use the same X (i.e. proportional)
+             * scaling.
+             */
+ERR("Scaling option: '%s'\n", p);
+            FontXScale = (UINT8)strtoul(p, (PSTR*)&p, 0);
+            if (!FontXScale) // Fixup if invalid.
+                FontXScale = 1;
+ERR("FontXScale: %u\n", FontXScale);
+            FontYScale = FontXScale;
+            if (p && *p == ':')
+            {
+                FontYScale = (UINT8)strtoul(++p, NULL, 0);
+                if (!FontYScale) // Fixup if invalid.
+                    FontYScale = 1;
+            }
+ERR("FontYScale: %u\n", FontYScale);
+        }
+#endif
+    }
+
+    if ((BitMasks->RedMask | BitMasks->GreenMask |
+         BitMasks->BlueMask | BitMasks->ReservedMask) == 0)
+    {
+        /* Palette mode: prepare the CGA/EGA palette */
+        UINT8 Cga;
+        for (Cga = 0; Cga < RTL_NUMBER_OF(CgaToEga); ++Cga)
+        {
+            if (framebufInfo.BaseAddress < 0xC0000)
+            {
+                /* VGA graphics mode, it already uses the correct palette
+                 * (the palette's first 16 colors correspond to CGA) */
+                CgaToEga[Cga] = Cga;
+            }
+            else
+            {
+                /* SVGA/VBE/... uses an EGA-like palette, so create the CGA->EGA mapping */
+                // https://godbolt.org/z/x8j8xTP3f
+                if (Cga != 6)
+                    CgaToEga[Cga] = ((iPal == 0) ? 7 : (7*!(Cga & 7) | (Cga & 7))) * (Cga & 8) | (Cga & 7);
+                else
+                    CgaToEga[Cga] = 0x14; // Switch to using Brown instead of "Dark Yellow"
+            }
+        }
+    }
+
+    return TRUE;
+}
 
 /**
  * @brief
@@ -864,7 +946,7 @@ FbConsClearScreen(
 {
     UINT32 FgColor, BgColor;
     FbConsAttrToColors(Attr, &FgColor, &BgColor);
-    VidFbClearScreenColor(BgColor, FALSE);
+    VidFbClearScreenColor(BgColor, FALSE); // VidFbClearScreen(BgColor);
 }
 
 /**
@@ -875,15 +957,64 @@ FbConsClearScreen(
 VOID
 FbConsOutputChar(
     _In_ UCHAR Char,
-    _In_ ULONG Column,
-    _In_ ULONG Row,
+    _In_ ULONG X,
+    _In_ ULONG Y,
     _In_ UINT32 FgColor,
     _In_ UINT32 BgColor)
 {
-    /* Don't display outside of the screen */
-    if ((Column >= FBCONS_WIDTH) || (Row >= FBCONS_HEIGHT))
+    const UCHAR* FontPtr;
+    PUCHAR Pixel;
+    ULONG Line, Col;
+
+    // /* Maximally sized buffer to contain one scanline of character font */
+    // UCHAR Buffer[CHAR_WIDTH /** FontXScale*/ * /*framebufInfo.BytesPerPixel*/ (32/8)];
+
+    /* Don't display outside of the screen, nor partial characters */
+    if ((X + CHAR_WIDTH - 1 >= framebufInfo.ScreenWidth / VidpXScale /*/ FontXScale*/) ||
+        (Y + CHAR_HEIGHT - 1 >= (framebufInfo.ScreenHeight - 2 * TOP_BOTTOM_LINES) / VidpYScale /*/ FontYScale*/))
+    {
         return;
-    VidFbOutputChar(Char, Column * CHAR_WIDTH, Row * CHAR_HEIGHT, FgColor, BgColor);
+    }
+
+    FontPtr = BitmapFont8x16 + Char * CHAR_HEIGHT;
+    Pixel = (PUCHAR)framebufInfo.BaseAddress
+            + (TOP_BOTTOM_LINES + Y * VidpYScale * CHAR_HEIGHT /** FontYScale*/) * framebufInfo.Delta
+            + X * VidpXScale * CHAR_WIDTH /** FontXScale*/ * framebufInfo.BytesPerPixel;
+
+    /* Convert ARGB color to pixel format */
+    if (framebufInfo.BitsPerPixel > 8)
+    {
+        FgColor = color_scale_argb(FgColor, &framebufInfo);
+        BgColor = color_scale_argb(BgColor, &framebufInfo);
+    }
+
+    for (Line = 0; Line < CHAR_HEIGHT; ++Line)
+    {
+        PUCHAR p = Pixel;
+        UCHAR Mask = 0x80; // 1 << (CHAR_WIDTH - 1);
+        for (Col = 0; Col < CHAR_WIDTH; ++Col)
+        {
+            // p = pWritePixel(p, ((FontPtr[Line] & Mask) ? FgColor : BgColor)); // Works only if XScale == 1
+            p = pWritePixels(p, ((FontPtr[Line] & Mask) ? FgColor : BgColor), VidpXScale /**FontXScale*/);
+            Mask >>= 1;
+        }
+        if (VidpYScale /**FontYScale*/ > 1)
+        {
+            /* Copy (FontYScale - 1) times the same line as that built above */
+            PUCHAR Dst = Pixel + framebufInfo.Delta;
+            ULONG sub = VidpYScale /**FontYScale*/;
+            while (sub-- > 1)
+            {
+                RtlCopyMemory(Dst, Pixel, p - Pixel);
+                Dst += framebufInfo.Delta;
+            }
+            Pixel = Dst;
+        }
+        else
+        {
+            Pixel += framebufInfo.Delta;
+        }
+    }
 }
 
 /**
@@ -913,12 +1044,9 @@ FbConsGetDisplaySize(
     _Out_ PULONG Height,
     _Out_ PULONG Depth)
 {
-    // VidFbGetDisplaySize(Width, Height, Depth);
-    // *Width  /= CHAR_WIDTH;
-    // *Height /= CHAR_HEIGHT;
-    *Width  = FBCONS_WIDTH;
-    *Height = FBCONS_HEIGHT;
-    *Depth  = framebufInfo.BitsPerPixel;
+    VidFbGetDisplaySize(Width, Height, Depth);
+    *Width  = *Width / CHAR_WIDTH /*/ FontXScale*/;
+    *Height = *Height / CHAR_HEIGHT /*/ FontYScale*/;
 }
 
 /**
@@ -929,14 +1057,15 @@ FbConsGetDisplaySize(
 ULONG
 FbConsGetBufferSize(VOID)
 {
-    return (FBCONS_HEIGHT * FBCONS_WIDTH * VGA_CHAR_SIZE);
+    ULONG Width, Height, Depth;
+    VidFbGetDisplaySize(&Width, &Height, &Depth);
+    return (Height / CHAR_HEIGHT /*/ FontYScale*/ * (Width / CHAR_WIDTH /*/ FontXScale*/) * VGA_CHAR_SIZE);
 }
 
 /**
  * @brief
  * Copies a full text-mode CGA-style character buffer rectangle to the console.
  **/
-// TODO: Write a VidFb "BitBlt" equivalent.
 VOID
 FbConsCopyOffScreenBufferToVRAM(
     _In_ PVOID Buffer)
@@ -944,9 +1073,8 @@ FbConsCopyOffScreenBufferToVRAM(
     PUCHAR OffScreenBuffer = (PUCHAR)Buffer;
     ULONG Row, Col;
 
-    // ULONG Width, Height, Depth;
-    // FbConsGetDisplaySize(&Width, &Height, &Depth);
-    ULONG Width = FBCONS_WIDTH, Height = FBCONS_HEIGHT;
+    ULONG Width, Height, Depth;
+    FbConsGetDisplaySize(&Width, &Height, &Depth);
 
     for (Row = 0; Row < Height; ++Row)
     {
@@ -964,5 +1092,13 @@ FbConsScrollUp(
 {
     UINT32 BgColor, Dummy;
     FbConsAttrToColors(Attr, &Dummy, &BgColor);
-    VidFbScrollUp(BgColor, CHAR_HEIGHT);
+    VidFbScrollUp(BgColor, CHAR_HEIGHT /** FontYScale*/);
 }
+
+#if 0
+VOID
+FbConsHideShowTextCursor(BOOLEAN Show)
+{
+    /* We don't have a cursor yet */
+}
+#endif
