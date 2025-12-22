@@ -122,7 +122,7 @@ UefiInitializeGop(VOID)
                               gop->Mode->Info->VerticalResolution,
                               gop->Mode->Info->PixelsPerScanLine,
                               BitsPerPixel,
-                              (PPIXEL_BITMASK)pPixelBitmask))
+                              (PPIXEL_FORMAT)pPixelBitmask, TRUE))
     {
         ERR("Couldn't initialize video framebuffer\n");
         Status = EFI_UNSUPPORTED;
