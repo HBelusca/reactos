@@ -283,7 +283,7 @@ GetComputerIdentifier(
 #else
     if (IsAcpiComputer())
     {
-        if (pFullInfo->SubKeys == 1)
+        if (pFullInfo->SubKeys <= 1)
         {
             /* Computer is mono-CPU */
             ComputerIdentifier = L"ACPI UP";
@@ -296,7 +296,7 @@ GetComputerIdentifier(
     }
     else
     {
-        if (pFullInfo->SubKeys == 1)
+        if (pFullInfo->SubKeys <= 1)
         {
             /* Computer is mono-CPU */
             ComputerIdentifier = L"PC UP";
@@ -308,6 +308,10 @@ GetComputerIdentifier(
         }
     }
 #endif
+    // TODO: Determine UEFI
+
+// L"\\Registry\\Machine\\HARDWARE\\DESCRIPTION\\System"
+// "Identifier"="SGI-320_ARCx86_mp"
 
     RtlFreeHeap(RtlGetProcessHeap(), 0, pFullInfo);
 
