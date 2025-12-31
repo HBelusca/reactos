@@ -51,11 +51,11 @@ extern "C" {
 
 typedef enum _ARCHITECTURE_TYPE
 {
-    ARCH_PcAT,      //< Standard BIOS-based PC-AT
-    ARCH_NEC98x86,  //< NEC PC-98
-    ARCH_Xbox,      //< Original Xbox
-    ARCH_Arc,       //< ARC-based (MIPS, SGI)
-    ARCH_Efi,       //< EFI and UEFI
+    ARCH_PcAT,      ///< Standard BIOS-based PC-AT
+    ARCH_NEC98x86,  ///< NEC PC-98
+    ARCH_Xbox,      ///< Original Xbox
+    ARCH_Arc,       ///< ARC-based (MIPS, SGI)
+    ARCH_Efi,       ///< EFI and UEFI
 // Place other architectures supported by the Setup below.
 } ARCHITECTURE_TYPE;
 
@@ -142,7 +142,9 @@ typedef struct _USETUP_DATA
     PGENERIC_LIST LanguageList;
 
 /* Settings *****/
-    ARCHITECTURE_TYPE ArchType; //< Target architecture (MachineType)
+    BOOLEAN RepairUpdateFlag;   ///< Specifies if this is an update/repair of an existing ReactOS installation
+    // TODO: Distinguish between a repair of an existing installation, and an actual upgrade to a newer version.
+    ARCHITECTURE_TYPE ArchType; ///< Target architecture (MachineType)
     PCWSTR ComputerType;
     PCWSTR DisplayType;
     // PCWSTR KeyboardDriver;
@@ -252,7 +254,6 @@ ERROR_NUMBER
 NTAPI
 UpdateRegistry(
     IN OUT PUSETUP_DATA pSetupData,
-    /**/IN BOOLEAN RepairUpdateFlag,     /* HACK HACK! */
     /**/IN PPARTLIST PartitionList,      /* HACK HACK! */
     /**/IN WCHAR DestinationDriveLetter, /* HACK HACK! */
     /**/IN PCWSTR SelectedLanguageId,    /* HACK HACK! */

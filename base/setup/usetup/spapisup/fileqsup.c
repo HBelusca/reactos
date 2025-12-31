@@ -45,6 +45,7 @@ typedef struct _QUEUEENTRY
     PWSTR SourceFileName;
     PWSTR TargetDirectory;
     PWSTR TargetFileName;
+    ULONG CopyStyle; ///< Flags specifying the file copy behaviour (ignored otherwise).
 } QUEUEENTRY, *PQUEUEENTRY;
 
 typedef struct _FILEQUEUEHEADER
@@ -165,11 +166,9 @@ SetupOpenFileQueue(VOID)
     PFILEQUEUEHEADER QueueHeader;
 
     /* Allocate the queue header */
-    QueueHeader = RtlAllocateHeap(ProcessHeap, 0, sizeof(FILEQUEUEHEADER));
+    QueueHeader = RtlAllocateHeap(ProcessHeap, HEAP_ZERO_MEMORY, sizeof(*QueueHeader));
     if (QueueHeader == NULL)
         return NULL;
-
-    RtlZeroMemory(QueueHeader, sizeof(FILEQUEUEHEADER));
 
     /* Initialize the file queues */
     InitializeListHead(&QueueHeader->DeleteQueue);
@@ -293,11 +292,9 @@ SetupQueueCopyWithCab(
            TargetDirectory, TargetFileName);
 
     /* Allocate new queue entry */
-    Entry = RtlAllocateHeap(ProcessHeap, 0, sizeof(QUEUEENTRY));
+    Entry = RtlAllocateHeap(ProcessHeap, HEAP_ZERO_MEMORY, sizeof(*Entry));
     if (Entry == NULL)
         return FALSE;
-
-    RtlZeroMemory(Entry, sizeof(QUEUEENTRY));
 
     /* Copy source cabinet if available */
     Entry->SourceCabinet = NULL;
@@ -423,6 +420,9 @@ SetupQueueCopyWithCab(
         RtlStringCchCopyW(Entry->TargetFileName, Length + 1, TargetFileName);
     }
 
+    /* File copy behaviour */
+    Entry->CopyStyle = CopyStyle;
+
     /* Append queue entry */
     InsertTailList(&QueueHeader->CopyQueue, &Entry->ListEntry);
     ++QueueHeader->CopyCount;
@@ -452,11 +452,9 @@ SetupQueueDeleteW(
            PathPart1, PathPart2);
 
     /* Allocate new queue entry */
-    Entry = RtlAllocateHeap(ProcessHeap, 0, sizeof(QUEUEENTRY));
+    Entry = RtlAllocateHeap(ProcessHeap, HEAP_ZERO_MEMORY, sizeof(*Entry));
     if (Entry == NULL)
         return FALSE;
-
-    RtlZeroMemory(Entry, sizeof(QUEUEENTRY));
 
     Entry->SourceCabinet = NULL;
     Entry->SourceRootPath = NULL;
@@ -526,11 +524,9 @@ SetupQueueRenameW(
            SourcePath, SourceFileName, TargetPath, TargetFileName);
 
     /* Allocate a new queue entry */
-    Entry = RtlAllocateHeap(ProcessHeap, 0, sizeof(QUEUEENTRY));
+    Entry = RtlAllocateHeap(ProcessHeap, HEAP_ZERO_MEMORY, sizeof(*Entry));
     if (Entry == NULL)
         return FALSE;
-
-    RtlZeroMemory(Entry, sizeof(QUEUEENTRY));
 
     Entry->SourceCabinet  = NULL;
     Entry->SourceRootPath = NULL;
@@ -672,7 +668,7 @@ SetupCommitFileQueueW(
         CombinePaths(FileDstPath, ARRAYSIZE(FileDstPath), 2,
                      Entry->TargetDirectory, Entry->TargetFileName);
 
-        DPRINT1(" -----> " "Delete: '%S'\n", FileDstPath);
+        DPRINT1("  --> Delete: '%S'\n", FileDstPath);
 
         FilePathInfo.Target = FileDstPath;
         FilePathInfo.Source = NULL;
@@ -767,7 +763,7 @@ EndDelete:
         CombinePaths(FileDstPath, ARRAYSIZE(FileDstPath), 2,
                      Entry->TargetDirectory, Entry->TargetFileName);
 
-        DPRINT1(" -----> " "Rename: '%S' ==> '%S'\n", FileSrcPath, FileDstPath);
+        DPRINT1("  --> Rename: '%S' ==> '%S'\n", FileSrcPath, FileDstPath);
 
         FilePathInfo.Target = FileDstPath;
         FilePathInfo.Source = FileSrcPath;
@@ -897,7 +893,7 @@ EndRename:
             ConcatPaths(FileDstPath, ARRAYSIZE(FileDstPath), 1, Entry->SourceFileName);
         }
 
-        DPRINT(" -----> " "Copy: '%S' ==> '%S'\n", FileSrcPath, FileDstPath);
+        DPRINT("  --> Copy: '%S' ==> '%S'\n", FileSrcPath, FileDstPath);
 
         //
         // Technically, here we should create the target directory,
@@ -923,6 +919,38 @@ EndRename:
         // else (Result == FILEOP_DOIT)
 
 RetryCopy:
+        /* Verify the file copy behaviour */
+        if (Entry->CopyStyle & SP_COPY_REPLACEONLY)
+        {
+            /* Copy if present (i.e. do NOT copy if NOT present) */
+            if (!DoesFileExist(NULL, FileDstPath))
+            {
+                DPRINT1("  --> Skipped copy (file NOT present): '%S' ==> '%S'\n", FileSrcPath, FileDstPath);
+                Status = STATUS_SUCCESS;
+                goto EndCopy;
+            }
+        }
+#if 0
+        if (Entry->CopyStyle & (SP_COPY_NEWER_OR_SAME | SP_COPY_NEWER_ONLY | SP_COPY_FORCE_NEWER))
+        {
+            UNIMPLEMENTED;
+            MsgHandler(Context, SPFILENOTIFY_TARGETNEWER, ...);
+        }
+#endif
+        if (Entry->CopyStyle & (SP_COPY_NOOVERWRITE | SP_COPY_FORCE_NOOVERWRITE))
+        {
+            /* Copy if not present (i.e. do NOT copy if present) */
+            if (DoesFileExist(NULL, FileDstPath))
+            {
+                DPRINT1("  --> Skipped copy (file present): '%S' ==> '%S'\n", FileSrcPath, FileDstPath);
+                // TODO: Notify user target file exists, if SP_COPY_FORCE_NOOVERWRITE not set.
+                // MsgHandler(Context, SPFILENOTIFY_TARGETEXISTS, ...);
+                Status = STATUS_SUCCESS;
+                goto EndCopy;
+            }
+        }
+        // TODO: SP_COPY_NOSKIP, SP_COPY_WARNIFSKIP
+
         if (Entry->SourceCabinet != NULL)
         {
             /*

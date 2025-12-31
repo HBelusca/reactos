@@ -84,6 +84,7 @@ SpFileQueueCopy_NtToWin32(
      * *ONLY IF* the files do not already exist in the same directory where
      * the cabinet file resides!!
      */
+    CopyStyle = SP_COPY_NOOVERWRITE /* | SP_COPY_SOURCE_ABSOLUTE | SP_COPY_SOURCEPATH_ABSOLUTE */;
     return SetupQueueCopyW(QueueHandle,
                            Win32SourceRootPath,
                            SourcePath,
@@ -95,8 +96,7 @@ SpFileQueueCopy_NtToWin32(
                            Win32TargetDirectory,
                            TargetFileName,
     // We choose to decompress the archive, so do NOT specify SP_COPY_NODECOMP !
-                           SP_COPY_NOOVERWRITE /* | SP_COPY_SOURCE_ABSOLUTE | SP_COPY_SOURCEPATH_ABSOLUTE */
-                           );
+                           (CopyStyle & ~SP_COPY_NODECOMP));
 }
 
 BOOL

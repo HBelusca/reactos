@@ -273,15 +273,16 @@ BuildFullDirectoryPath(
 }
 
 
-/*
+/**
+ * @brief
  * This code enumerates the list of files in reactos.dff / reactos.inf
  * that need to be extracted from reactos.cab and be installed in their
  * respective directories.
- */
-/*
+ *
+ * @note
  * IMPORTANT NOTE: The INF file specification used for the .CAB in ReactOS
  * is not compliant with respect to TXTSETUP.SIF syntax or the standard syntax.
- */
+ **/
 static BOOLEAN
 AddSectionToCopyQueueCab(
     IN PUSETUP_DATA pSetupData,
@@ -405,8 +406,10 @@ AddSectionToCopyQueue(
     PCWSTR SourcePath;
     PCWSTR TargetDirectory;
     PCWSTR TargetFileName;
+    PCWSTR CopyDisposition;
     WCHAR FileSrcRootPath[MAX_PATH];
     WCHAR FileDstPath[MAX_PATH];
+    ULONG CopyStyle;
 
     /*
      * This code enumerates the list of files in txtsetup.sif
@@ -431,6 +434,32 @@ AddSectionToCopyQueue(
             /* FIXME: Handle error! */
             DPRINT1("INF_GetData() failed\n");
             break;
+        }
+
+        /* Get the install (index 10) or upgrade (index 9) file copy disposition */
+        if (!INF_GetDataField(&FilesContext,
+                              pSetupData->RepairUpdateFlag ? 9 : 10,
+                              &CopyDisposition))
+        {
+            /* FIXME: Handle error! */
+__debugbreak(); // This should be optional......
+            DPRINT1("INF_GetData() failed\n");
+            return STATUS_NOT_FOUND;
+        }
+        CopyStyle = _wtoi(CopyDisposition); // wcstoul(CopyDisposition, NULL, 10);
+        INF_FreeData(CopyDisposition);
+
+        /* Ignore file copy if disposition >= 3 */
+        if (CopyStyle >= 3)
+        {
+            if (CopyStyle > 3)
+            {
+                DPRINT1("[%S] - %S : copy disposition %lu invalid\n",
+                        SectionName, SourceFileName, CopyStyle);
+            }
+            DPRINT1("%S copy ignored\n", SourceFileName);
+            INF_FreeData(SourceFileName);
+            continue;
         }
 
         Status = GetSourceFileAndTargetLocation(InfFile,
@@ -476,6 +505,22 @@ AddSectionToCopyQueue(
 
         INF_FreeData(TargetDirectory);
 
+        /* Convert file copy disposition to SpInf file copy style */
+        if (CopyStyle == 0) /* Always copy (default) */
+            CopyStyle = 0;
+        else if (CopyStyle == 1) /* Copy if present (i.e. do NOT copy if NOT present) */
+            CopyStyle = SP_COPY_REPLACEONLY;
+        else if (CopyStyle == 2) /* Copy if not present (i.e. do NOT copy if present) */
+            CopyStyle = SP_COPY_NOOVERWRITE | SP_COPY_FORCE_NOOVERWRITE;
+        // Ignored, see above.
+        // else if (CopyStyle >= 3) /* Never copy */
+        //     CopyStyle = 0;
+
+        /* NOTE: In pure upgrade (not repair) scenarii, we may need to add
+         * SP_COPY_NEWER_OR_SAME and/or SP_COPY_FORCE_NEWER flags. */
+
+        CopyStyle |= SP_COPY_NOSKIP /*| SP_COPY_WARNIFSKIP*/;
+
         if (!SpFileQueueCopy((HSPFILEQ)pSetupData->SetupFileQueue,
                              FileSrcRootPath,
                              SourcePath,
@@ -485,7 +530,7 @@ AddSectionToCopyQueue(
                              NULL,
                              FileDstPath,
                              TargetFileName,
-                             0 /* FIXME */))
+                             CopyStyle))
         {
             /* FIXME: Handle error! */
             DPRINT1("SpFileQueueCopy() failed\n");
@@ -509,12 +554,13 @@ PrepareCopyInfFile(
     BOOLEAN Success;
     NTSTATUS Status;
     INFCONTEXT DirContext;
-    PWCHAR AdditionalSectionName = NULL;
+    PCWSTR AdditionalSectionName = NULL;
     PCWSTR DirKeyValue;
     WCHAR PathBuffer[MAX_PATH];
 
     if (SourceCabinet == NULL)
     {
+__debugbreak();
         /* Add common files -- Search for the SourceDisksFiles section */
         /* Search in the optional platform-specific first (currently hardcoded; make it runtime-dependent?) */
         Success = AddSectionToCopyQueue(pSetupData, InfFile,
@@ -538,17 +584,24 @@ PrepareCopyInfFile(
         }
 
         /* Add specific files depending of computer type */
-        {
-        PGENERIC_LIST_ENTRY Entry;
-        Entry = GetCurrentListEntry(pSetupData->ComputerList);
-        ASSERT(Entry);
-        pSetupData->ComputerType = ((PGENENTRY)GetListEntryData(Entry))->Id;
         ASSERT(pSetupData->ComputerType);
-
         if (!ProcessComputerFiles(InfFile, pSetupData->ComputerType, &AdditionalSectionName))
+            return FALSE;
+        if (AdditionalSectionName &&
+            !AddSectionToCopyQueue(pSetupData, InfFile,
+                                   AdditionalSectionName,
+                                   &pSetupData->DestinationPath))
+        {
+            pSetupData->LastErrorNumber = ERROR_TXTSETUP_SECTION;
+            if (pSetupData->ErrorRoutine)
+                pSetupData->ErrorRoutine(pSetupData, AdditionalSectionName);
             return FALSE;
         }
 
+        /* Add optional specific files depending of display type */
+        ASSERT(pSetupData->DisplayType);
+        if (!ProcessDisplayFiles(InfFile, pSetupData->DisplayType, &AdditionalSectionName))
+            return FALSE;
         if (AdditionalSectionName &&
             !AddSectionToCopyQueue(pSetupData, InfFile,
                                    AdditionalSectionName,
@@ -696,6 +749,20 @@ PrepareFileCopy(
     CABINET_CONTEXT CabinetContext;
 #endif
     WCHAR PathBuffer[MAX_PATH];
+
+    /* Initialize installation: retrieve the final selections from lists */
+    {
+    PGENERIC_LIST_ENTRY Entry;
+    Entry = GetCurrentListEntry(pSetupData->ComputerList);
+    ASSERT(Entry);
+    pSetupData->ComputerType = ((PGENENTRY)GetListEntryData(Entry))->Id;
+    ASSERT(pSetupData->ComputerType);
+
+    Entry = GetCurrentListEntry(pSetupData->DisplayList);
+    ASSERT(Entry);
+    pSetupData->DisplayType = ((PGENENTRY)GetListEntryData(Entry))->Id;
+    ASSERT(pSetupData->DisplayType);
+    }
 
     /* Create the file queue */
     pSetupData->SetupFileQueue = (PVOID)SpFileQueueOpen();
