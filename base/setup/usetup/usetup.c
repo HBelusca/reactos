@@ -69,8 +69,6 @@ PCWSTR SelectedLanguageId;
 static WCHAR DefaultLanguage[20];   // Copy of string inside LanguageList
 static WCHAR DefaultKBLayout[20];   // Copy of string inside KeyboardList
 
-static BOOLEAN RepairUpdateFlag = FALSE;
-
 /* Global partition list on the system */
 static PPARTLIST PartitionList = NULL;
 
@@ -914,7 +912,7 @@ RepairIntroPage(PINPUT_RECORD Ir)
         }
         else if (toupper(Ir->Event.KeyEvent.uChar.AsciiChar) == 'U')  /* U */
         {
-            RepairUpdateFlag = TRUE;
+            USetupData.RepairUpdateFlag = TRUE;
             return INSTALL_INTRO_PAGE;
         }
         else if (toupper(Ir->Event.KeyEvent.uChar.AsciiChar) == 'R')  /* R */
@@ -975,7 +973,7 @@ UpgradeRepairPage(PINPUT_RECORD Ir)
      */
     if (!NtOsInstallsList || GetNumberOfListEntries(NtOsInstallsList) == 0)
     {
-        RepairUpdateFlag = FALSE;
+        USetupData.RepairUpdateFlag = FALSE;
 
         // return INSTALL_INTRO_PAGE;
         return DEVICE_SETTINGS_PAGE;
@@ -1063,7 +1061,7 @@ UpgradeRepairPage(PINPUT_RECORD Ir)
                 DPRINT1("Selected installation for repair: \"%S\" ; DiskNumber = %d , PartitionNumber = %d\n",
                         CurrentInstallation->InstallationName, CurrentInstallation->DiskNumber, CurrentInstallation->PartitionNumber);
 
-                RepairUpdateFlag = TRUE;
+                USetupData.RepairUpdateFlag = TRUE;
 
                 // return nextPage;
                 /***/return INSTALL_INTRO_PAGE;/***/
@@ -1095,7 +1093,7 @@ UpgradeRepairPage(PINPUT_RECORD Ir)
 static PAGE_NUMBER
 InstallIntroPage(PINPUT_RECORD Ir)
 {
-    if (RepairUpdateFlag)
+    if (USetupData.RepairUpdateFlag)
     {
 #if 1 /* Old code that looks good */
 
@@ -1275,7 +1273,7 @@ DeviceSettingsPage(PINPUT_RECORD Ir)
         }
     }
 
-    if (RepairUpdateFlag)
+    if (USetupData.RepairUpdateFlag)
         return SELECT_PARTITION_PAGE;
 
     // if (IsUnattendedSetup)
@@ -1571,7 +1569,7 @@ SelectPartitionPage(PINPUT_RECORD Ir)
         }
     }
 
-    if (RepairUpdateFlag)
+    if (USetupData.RepairUpdateFlag)
     {
         ASSERT(CurrentInstallation);
 
@@ -2671,7 +2669,7 @@ FsVolCallback(
              * an unattended setup without formatting, just go to the
              * file system check step.
              */
-            if (RepairUpdateFlag)
+            if (USetupData.RepairUpdateFlag)
                 return FSVOL_SKIP; /** HACK!! **/
 
             if (IsUnattendedSetup && !USetupData.FormatPartition)
@@ -2885,7 +2883,7 @@ InstallDirectoryPage(PINPUT_RECORD Ir)
     }
 
     // if (IsUnattendedSetup)
-    if (RepairUpdateFlag)
+    if (USetupData.RepairUpdateFlag)
         wcscpy(InstallDir, CurrentInstallation->PathComponent); // SystemNtPath
     else if (USetupData.InstallationDirectory[0])
         wcscpy(InstallDir, USetupData.InstallationDirectory);
@@ -2899,7 +2897,7 @@ InstallDirectoryPage(PINPUT_RECORD Ir)
      * of an invalid path, or we are in regular setup), display the UI and allow
      * the user to specify a new installation path.
      */
-    if (RepairUpdateFlag || IsUnattendedSetup)
+    if (USetupData.RepairUpdateFlag || IsUnattendedSetup)
     {
         /* Check for the validity of the installation directory and pop up
          * an error if it is not the case. Then the user can fix it. */
@@ -3377,7 +3375,6 @@ RegistryPage(PINPUT_RECORD Ir)
     MUIDisplayPage(REGISTRY_PAGE);
 
     Error = UpdateRegistry(&USetupData,
-                           RepairUpdateFlag,
                            PartitionList,
                            InstallVolume->Info.DriveLetter,
                            SelectedLanguageId,
@@ -3421,7 +3418,7 @@ BootLoaderSelectPage(PINPUT_RECORD Ir)
      * this means a valid bootloader and boot entry have been found.
      * Thus, there is no need to re-install it: skip its installation.
      */
-    if (RepairUpdateFlag)
+    if (USetupData.RepairUpdateFlag)
     {
         USetupData.BootLoaderLocation = 0;
         goto Quit;

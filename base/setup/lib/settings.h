@@ -45,7 +45,13 @@ BOOLEAN
 ProcessComputerFiles(
     _In_ HINF InfFile,
     _In_ PCWSTR ComputerType,
-    _Out_ PWSTR* AdditionalSectionName);
+    _Outptr_ PWSTR* AdditionalSectionName);
+
+BOOLEAN
+ProcessDisplayFiles(
+    _In_ HINF InfFile,
+    _In_ PCWSTR DisplayType,
+    _Outptr_ PWSTR* AdditionalSectionName);
 
 BOOLEAN
 ProcessDisplayRegistry(

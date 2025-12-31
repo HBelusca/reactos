@@ -468,7 +468,7 @@ TypeDlgProc(
                         GetNumberOfListEntries(pSetupData->NtOsInstallsList) != 0 &&
                         IsDlgButtonChecked(hwndDlg, IDC_UPDATE) == BST_CHECKED)
                     {
-                        pSetupData->RepairUpdateFlag = TRUE;
+                        pSetupData->USetupData.RepairUpdateFlag = TRUE;
 
                         /*
                          * Display the existing NT installations page only
@@ -493,7 +493,7 @@ TypeDlgProc(
                     else
                     {
                         pSetupData->CurrentInstallation = NULL;
-                        pSetupData->RepairUpdateFlag = FALSE;
+                        pSetupData->USetupData.RepairUpdateFlag = FALSE;
                         SetWindowLongPtrW(hwndDlg, DWLP_MSGRESULT, IDD_DEVICEPAGE);
                     }
 
@@ -818,7 +818,7 @@ UpgradeRepairDlgProc(
                 {
                     /* Skip the upgrade and do the usual new-installation workflow */
                     pSetupData->CurrentInstallation = NULL;
-                    pSetupData->RepairUpdateFlag = FALSE;
+                    pSetupData->USetupData.RepairUpdateFlag = FALSE;
                     PropSheet_SetCurSelByID(GetParent(hwndDlg), IDD_DEVICEPAGE);
                     return TRUE;
                 }
@@ -902,7 +902,7 @@ UpgradeRepairDlgProc(
                         GetNumberOfListEntries(pSetupData->NtOsInstallsList) == 0)
                     {
                         pSetupData->CurrentInstallation = NULL;
-                        pSetupData->RepairUpdateFlag = FALSE;
+                        pSetupData->USetupData.RepairUpdateFlag = FALSE;
                         break;
                     }
 
@@ -915,7 +915,7 @@ UpgradeRepairDlgProc(
                         (PNTOS_INSTALLATION)GetListEntryData(GetCurrentListEntry(pSetupData->NtOsInstallsList));
 
                     /* We perform an upgrade */
-                    pSetupData->RepairUpdateFlag = TRUE;
+                    pSetupData->USetupData.RepairUpdateFlag = TRUE;
                     return TRUE;
                 }
 
@@ -1086,7 +1086,7 @@ SummaryDlgProc(
                     /* Show the current selected settings */
 
                     // FIXME! Localize
-                    if (pSetupData->RepairUpdateFlag)
+                    if (pSetupData->USetupData.RepairUpdateFlag)
                     {
                         StringCchPrintfW(CurrentItemText, ARRAYSIZE(CurrentItemText),
                                          L"Upgrading/Repairing \"%s\" from \"%s\"",
@@ -1363,7 +1363,7 @@ FsVolCallback(
              * an unattended setup without formatting, just go to the
              * filesystem check step.
              */
-            if (FsVolContext->pSetupData->RepairUpdateFlag)
+            if (FsVolContext->pSetupData->USetupData.RepairUpdateFlag)
                 return FSVOL_SKIP; /** HACK!! **/
 
             if (IsUnattendedSetup && !FsVolContext->pSetupData->USetupData.FormatPartition)
@@ -2020,8 +2020,8 @@ PrepareAndDoCopyThread(
     /* Set status text */
     SetWindowResTextW(GetDlgItem(hwndDlg, IDC_ACTIVITY),
                       pSetupData->hInstance,
-                      pSetupData->RepairUpdateFlag ? IDS_UPDATE_REGISTRY
-                                                   : IDS_CREATE_REGISTRY);
+                      pSetupData->USetupData.RepairUpdateFlag
+                            ? IDS_UPDATE_REGISTRY : IDS_CREATE_REGISTRY);
     SetDlgItemTextW(hwndDlg, IDC_ITEM, L"");
 
     /* Set up the progress bar */
@@ -2034,7 +2034,6 @@ PrepareAndDoCopyThread(
                  PBM_SETPOS, 0, 0);
 
     ErrorNumber = UpdateRegistry(&pSetupData->USetupData,
-                                 pSetupData->RepairUpdateFlag,
                                  pSetupData->PartitionList,
                                  InstallVolume->Info.DriveLetter,
                                  pSetupData->SelectedLanguageId,

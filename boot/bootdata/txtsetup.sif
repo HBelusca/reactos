@@ -94,6 +94,8 @@ buslogic.sys = 1,,,,,,x,4,,,,1,4
 blue.sys     = 1,,,,,,x,4,,,,1,4
 vgafonts.cab = 1,,,,,,,1,,,,1,1
 bootvid.dll  = 1,,,,,,,2,,,,1,2
+lfbbvid.dll  = 1,,,,,,,2,2,3,,1,2
+genfbvmp.sys = 1,,,,,,,4,2,3,,1,4
 c_437.nls    = 1,,,,,,,2,,,,1,2
 c_1252.nls   = 1,,,,,,,2,,,,1,2
 cdfs.sys     = 1,,,,,,x,4,,,,1,4
@@ -105,6 +107,9 @@ kdvbox.dll   = 1,,,,,,,2,,,,1,2
 disk.sys     = 1,,,,,,x,4,,,,1,4
 floppy.sys   = 1,,,,,,x,4,,,,1,4
 i8042prt.sys = 1,,,,,,,4,,,,1,4
+hal.dll      = 1,,,,,,,2,2,3,,1,2
+halmp.dll    = 1,,,,,,,2,2,3,,1,2
+;halmps.dll   = 1,,,,,,,2,2,3,,1,2
 hidclass.sys = 1,,,,,,,4,,,,1,4
 hidparse.sys = 1,,,,,,,4,,,,1,4
 hidusb.sys   = 1,,,,,,,4,,,,1,4
@@ -124,6 +129,7 @@ scsiport.sys = 1,,,,,,,4,,,,1,4
 storport.sys = 1,,,,,,,4,,,,1,4
 fastfat.sys  = 1,,,,,,x,4,,,,1,4
 btrfs.sys    = 1,,,,,,x,4,,,,1,4
+vfatfs.sys   = 1,,,,,,,4,3,3,,1,4
 ramdisk.sys  = 1,,,,,,x,4,,,,1,4
 pciide.sys   = 1,,,,,,,4,,,,1,4
 pciidex.sys  = 1,,,,,,,4,,,,1,4
@@ -131,6 +137,8 @@ pcix.sys     = 1,,,,,,,4,,,,1,4
 pcmcia.sys   = 1,,,,,,,4,,,,1,4
 swenum.sys   = 1,,,,,,,4,,,,1,4
 ntdll.dll    = 1,,,,,,,2,,,,1,2
+ntoskrnl.exe = 1,,,,,,,2,3,3,,1,2
+ntkrnlmp.exe = 1,,,,,,,2,3,3,,1,2
 wmilib.sys   = 1,,,,,,,4,,,,1,4
 ksecdd.sys   = 1,,,,,,,4,,,,1,4
 mountmgr.sys = 1,,,,,,x,4,,,,1,4
@@ -139,10 +147,22 @@ wdfldr.sys   = 1,,,,,,,4,,,,1,4
 wdf01000.sys = 1,,,,,,x,4,,,,1,4
 
 [SourceDisksFiles.x86]
+halacpi.dll  = 1,,,,,,,2,2,3,,1,2
+halaacpi.dll = 1,,,,,,,2,2,3,,1,2
+halapic.dll  = 1,,,,,,,2,2,3,,1,2
+halmacpi.dll = 1,,,,,,,2,2,3,,1,2
+;halmps.dll   = 1,,,,,,,2,2,3,,1,2
+halxbox.dll  = 1,,,,,,,2,2,3,,1,2
+halpc98.dll  = 1,,,,,,,2,2,3,,1,2
 acpi.sys     = 1,,,,,,,4,1,,,1,4
+pc98bvid.dll = 1,,,,,,,2,2,3,,1,2
+pc98vid.sys  = 1,,,,,,,4,2,3,,1,4
+xboxbvid.dll = 1,,,,,,,2,2,3,,1,2
+xboxvmp.sys  = 1,,,,,,,4,2,3,,1,4
 
 [SourceDisksFiles.amd64]
-acpi.sys     = 1,,,,,,x,4,,,,1,4
+halmp.dll = 1,,,,,,,2,2,3,,1,2
+acpi.sys  = 1,,,,,,x,4,,,,1,4
 
 ;
 ; The [SystemPartitionFiles] section lists all the files
@@ -268,56 +288,56 @@ x64_up = "X64 UP"
 x64_mp = "X64 MP"
 
 [Files.pci_up]
-ntoskrnl.exe = 1,,,,,,,2,,,,1,2
-hal.dll      = 1,,,,,,,2,,,,1,2
+ntoskrnl.exe,2
+hal.dll,2
 
 ;[Files.pci_mp]
-;ntkrnlmp.exe = 1,,,,,,,2,,,ntoskrnl.exe,1,2
-;halmps.dll   = 1,,,,,,,2,,,hal.dll,1,2
+;ntkrnlmp.exe,2,ntoskrnl.exe
+;halmps.dll,2,hal.dll
 
 [Files.acpi_up]
-ntoskrnl.exe = 1,,,,,,,2,,,,1,2
-halacpi.dll  = 1,,,,,,,2,,,hal.dll,1,2
+ntoskrnl.exe,2
+halacpi.dll,2,hal.dll
 
 [Files.acpi_mp]
-ntkrnlmp.exe = 1,,,,,,,2,,,ntoskrnl.exe,1,2
-halmacpi.dll  = 1,,,,,,,2,,,hal.dll,1,2
+ntkrnlmp.exe,2,ntoskrnl.exe
+halmacpi.dll,2,hal.dll
 
 [Files.apic_up]
-ntoskrnl.exe = 1,,,,,,,2,,,,1,2
-halapic.dll  = 1,,,,,,,2,,,hal.dll,1,2
+ntoskrnl.exe,2
+halapic.dll,2,hal.dll
 
 [Files.aacpi_up]
-ntoskrnl.exe = 1,,,,,,,2,,,,1,2
-halaacpi.dll  = 1,,,,,,,2,,,hal.dll,1,2
+ntoskrnl.exe,2
+halaacpi.dll,2,hal.dll
 
 [Files.xbox]
-ntoskrnl.exe = 1,,,,,,,2,,,,1,2
-halxbox.dll  = 1,,,,,,,2,,,hal.dll,1,2
-vfatfs.sys   = 1,,,,,,,4,,,,1,4
+ntoskrnl.exe,2
+halxbox.dll,2,hal.dll
+vfatfs.sys,4
 
 [Files.pc98_up]
-ntoskrnl.exe = 1,,,,,,,2,,,,1,2
-halpc98.dll  = 1,,,,,,,2,,,hal.dll,1,2
+ntoskrnl.exe,2
+halpc98.dll,2,hal.dll
 
 [Files.x64_up]
-ntoskrnl.exe = 1,,,,,,,2,,,,1,2
-hal.dll      = 1,,,,,,,2,,,,1,2
+ntoskrnl.exe,2
+hal.dll,2
 
 [Files.x64_mp]
-ntkrnlmp.exe = 1,,,,,,,2,,,ntoskrnl.exe,1,2
-halmp.dll    = 1,,,,,,,2,,,hal.dll,1,2
+ntkrnlmp.exe,2,ntoskrnl.exe
+halmp.dll,2,hal.dll
 
 [Files.efi_up]
-ntoskrnl.exe = 1,,,,,,,2,,,,1,2
-halefi.dll   = 1,,,,,,,2,,,hal.dll,1,2
+ntoskrnl.exe,2
+halefi.dll,2,hal.dll
 
 [Files.efi_mp]
-ntkrnlmp.exe = 1,,,,,,,2,,,ntoskrnl.exe,1,2
-halefimp.dll = 1,,,,,,,2,,,hal.dll,1,2
+ntkrnlmp.exe,2,ntoskrnl.exe
+halefimp.dll,2,hal.dll
 
 [Display]
-;<id> = <user friendly name>,<spare>,<service key name>,<width>,<height>,<bpp>
+;<id> = <user friendly name>,<file copy SIF section name>,<service key name>,<width>,<height>,<bpp>
 vga              = "VGA Display (640x480x4)",,VgaSave,640,480,4
 vbe_640x480x8    = "VESA Display (640x480x8)",,vga,640,480,8
 vbe_640x480x16   = "VESA Display (640x480x16)",,vga,640,480,16
@@ -343,17 +363,36 @@ vbe_1600x1200x8  = "VESA Display (1600x1200x8)",,vga,1600,1200,8
 vbe_1600x1200x16 = "VESA Display (1600x1200x16)",,vga,1600,1200,16
 vbe_1600x1200x24 = "VESA Display (1600x1200x24)",,vga,1600,1200,24
 vbe_1600x1200x32 = "VESA Display (1600x1200x32)",,vga,1600,1200,32
-xbox             = "Original Xbox NV2A Framebuffer (640x480x32)",,XboxVmp,640,480,32
-efifb            = "UEFI GOP Framebuffer",,genfbvmp
-genfb            = "Generic Linear Framebuffer",,genfbvmp
+;pc98vid          = "NEC PC-9821 Display (640x400x32)",files.pc98vid,vga,640,400,32
+xbox             = "Original Xbox NV2A Framebuffer (640x480x32)",files.xboxvmp,XboxVmp,640,480,32
+efifb            = "UEFI GOP Framebuffer",files.efifb,GenericFramebuffer
+genfb            = "Generic Linear Framebuffer",files.genfb,GenericFramebuffer
 
 [Map.Display]
 ;<id> = <pnp id string>
 vga = "VGA Display"
 vbe = "VBE Display"
+;pc98vid = "NEC PC-9821 Display"
 xbox = "NV2A Framebuffer"
 efifb = "UEFI GOP Framebuffer"
 genfb = "Generic Framebuffer"
+
+[files.pc98vid]
+pc98bvid.dll,2,bootvid.dll
+pc98vid.sys ,4,vgapnp.sys
+
+[files.xboxvmp]
+xboxbvid.dll,2,bootvid.dll
+xboxvmp.sys ,4
+
+[files.efifb]
+lfbbvid.dll ,2,bootvid.dll
+genfbvmp.sys,4
+
+[files.genfb]
+lfbbvid.dll ,2,bootvid.dll
+genfbvmp.sys,4
+
 
 [Keyboard]
 Default = "XT-, AT- or extended keyboard (83-105 keys)"

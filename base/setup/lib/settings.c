@@ -791,7 +791,7 @@ BOOLEAN
 ProcessComputerFiles(
     _In_ HINF InfFile,
     _In_ PCWSTR ComputerType,
-    _Out_ PWSTR* AdditionalSectionName)
+    _Outptr_ PWSTR* AdditionalSectionName)
 {
     static WCHAR SectionName[128];
 
@@ -800,6 +800,39 @@ ProcessComputerFiles(
     RtlStringCchPrintfW(SectionName, _countof(SectionName),
                         L"Files.%s", ComputerType);
     *AdditionalSectionName = SectionName;
+
+    // TODO: More things to do?
+
+    return TRUE;
+}
+
+BOOLEAN
+ProcessDisplayFiles(
+    _In_ HINF InfFile,
+    _In_ PCWSTR DisplayType,
+    _Outptr_ PWSTR* AdditionalSectionName)
+{
+    static PCWSTR SectionName = NULL;
+
+    DPRINT("ProcessDisplayFiles(%S) called\n", DisplayType);
+
+    if (!SpInfFindFirstLine(InfFile, L"Display", DisplayType, &Context))
+    {
+        DPRINT1("SpInfFindFirstLine() failed\n");
+        return FALSE;
+    }
+
+    /* Get the section name listing the files to copy */
+    if (!INF_GetDataField(&Context, 2, &SectionName))
+    {
+        DPRINT1("INF_GetDataField() failed\n");
+        return FALSE;
+    }
+
+    if (SectionName && *SectionName)
+        *AdditionalSectionName = SectionName;
+    else
+        *AdditionalSectionName = NULL;
 
     // TODO: More things to do?
 
@@ -871,13 +904,27 @@ ProcessDisplayRegistry(
         return FALSE;
     }
 
-    /* Set the resolution */
+    /* Set the resolution (optional if neither Width/Height/Bpp are present,
+     * otherwise they must all be specified) */
 
-    if (!INF_GetDataField(&Context, 4, &Buffer))
+    if (INF_GetDataField(&Context, 4, &Buffer))
+        Width = wcstoul(Buffer, NULL, 10);
+
+    if (!INF_GetDataField(&Context, 5, &Buffer))
     {
         DPRINT1("INF_GetDataField() failed\n");
+        NtClose(KeyHandle);
         return FALSE;
     }
+    Height = wcstoul(Buffer, NULL, 10);
+
+    if (!INF_GetDataField(&Context, 6, &Buffer))
+    {
+        DPRINT1("INF_GetDataField() failed\n");
+        NtClose(KeyHandle);
+        return FALSE;
+    }
+    Bpp = wcstoul(Buffer, NULL, 10);
 
     RtlStringCchPrintfW(RegPath, ARRAYSIZE(RegPath),
                         L"System\\CurrentControlSet\\Hardware Profiles\\Current\\System\\CurrentControlSet\\Services\\%s\\Device0",
@@ -909,7 +956,6 @@ ProcessDisplayRegistry(
         return FALSE;
     }
 
-    Width = wcstoul(Buffer, NULL, 10);
     Status = RtlWriteRegistryValue(RTL_REGISTRY_HANDLE, KeyHandle,
                                    L"DefaultSettings.XResolution",
                                    REG_DWORD,
@@ -922,14 +968,6 @@ ProcessDisplayRegistry(
         return FALSE;
     }
 
-    if (!INF_GetDataField(&Context, 5, &Buffer))
-    {
-        DPRINT1("INF_GetDataField() failed\n");
-        NtClose(KeyHandle);
-        return FALSE;
-    }
-
-    Height = wcstoul(Buffer, NULL, 10);
     Status = RtlWriteRegistryValue(RTL_REGISTRY_HANDLE, KeyHandle,
                                    L"DefaultSettings.YResolution",
                                    REG_DWORD,
@@ -942,14 +980,6 @@ ProcessDisplayRegistry(
         return FALSE;
     }
 
-    if (!INF_GetDataField(&Context, 6, &Buffer))
-    {
-        DPRINT1("INF_GetDataField() failed\n");
-        NtClose(KeyHandle);
-        return FALSE;
-    }
-
-    Bpp = wcstoul(Buffer, NULL, 10);
     Status = RtlWriteRegistryValue(RTL_REGISTRY_HANDLE, KeyHandle,
                                    L"DefaultSettings.BitsPerPel",
                                    REG_DWORD,
@@ -962,10 +992,10 @@ ProcessDisplayRegistry(
         return FALSE;
     }
 
+Quit:
     NtClose(KeyHandle);
 
     DPRINT("ProcessDisplayRegistry() done\n");
-
     return TRUE;
 }
 

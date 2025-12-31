@@ -147,8 +147,6 @@ typedef struct _SETUPDATA
 
     USETUP_DATA USetupData;
 
-    BOOLEAN RepairUpdateFlag; // flag for update/repair an installed reactos
-
     PPARTLIST PartitionList;
     PNTOS_INSTALLATION CurrentInstallation;
     PGENERIC_LIST NtOsInstallsList;

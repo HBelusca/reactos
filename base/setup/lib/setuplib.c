@@ -1096,6 +1096,9 @@ InitializeSetup(
     pSetupData->ArchType = (IsNEC_98 ? ARCH_NEC98x86 : ARCH_PcAT);
 #endif
 
+    /* By default this is a clean installation */
+    pSetupData->RepairUpdateFlag = FALSE;
+
     return ERROR_SUCCESS;
 }
 
@@ -1154,7 +1157,6 @@ ERROR_NUMBER
 NTAPI
 UpdateRegistry(
     IN OUT PUSETUP_DATA pSetupData,
-    /**/IN BOOLEAN RepairUpdateFlag,     /* HACK HACK! */
     /**/IN PPARTLIST PartitionList,      /* HACK HACK! */
     /**/IN WCHAR DestinationDriveLetter, /* HACK HACK! */
     /**/IN PCWSTR SelectedLanguageId,    /* HACK HACK! */
@@ -1171,7 +1173,7 @@ UpdateRegistry(
     BOOLEAN ShouldRepairRegistry = FALSE;
     BOOLEAN Delete;
 
-    if (RepairUpdateFlag)
+    if (pSetupData->RepairUpdateFlag)
     {
         DPRINT1("TODO: Updating / repairing the registry is not completely implemented yet!\n");
 
@@ -1211,7 +1213,7 @@ DoUpdate:
         }
     }
 
-    if (!RepairUpdateFlag || ShouldRepairRegistry)
+    if (!pSetupData->RepairUpdateFlag || ShouldRepairRegistry)
     {
         /*
          * We fully setup the hives, in case we are doing a fresh installation
@@ -1231,7 +1233,7 @@ DoUpdate:
             goto Cleanup;
         }
     }
-    else // if (RepairUpdateFlag && !ShouldRepairRegistry)
+    else // if (pSetupData->RepairUpdateFlag && !ShouldRepairRegistry)
     {
         /*
          * In case we are doing an update (RepairUpdateFlag == TRUE) and
@@ -1293,17 +1295,21 @@ DoUpdate:
         }
     } while (SpInfFindNextLine(&InfContext, &InfContext));
 
-    if (!RepairUpdateFlag || ShouldRepairRegistry)
+    if (!pSetupData->RepairUpdateFlag || ShouldRepairRegistry)
     {
         /* See the explanation for this test above */
 
         PGENERIC_LIST_ENTRY Entry;
         PCWSTR LanguageId; // LocaleID;
 
-        Entry = GetCurrentListEntry(pSetupData->DisplayList);
-        ASSERT(Entry);
-        pSetupData->DisplayType = ((PGENENTRY)GetListEntryData(Entry))->Id;
-        ASSERT(pSetupData->DisplayType);
+        if (!pSetupData->DisplayType)
+        {
+DPRINT1("%s: DisplayType was NULL\n", __FUNCTION__);
+            Entry = GetCurrentListEntry(pSetupData->DisplayList);
+            ASSERT(Entry);
+            pSetupData->DisplayType = ((PGENENTRY)GetListEntryData(Entry))->Id;
+            ASSERT(pSetupData->DisplayType);
+        }
 
         /* Update display registry settings */
         if (StatusRoutine) StatusRoutine(DisplaySettingsUpdate);
@@ -1396,7 +1402,7 @@ Cleanup:
      * and we now reset the flag and run the proper registry update.
      * Otherwise we have finished the registry update!
      */
-    if (RepairUpdateFlag && ShouldRepairRegistry)
+    if (pSetupData->RepairUpdateFlag && ShouldRepairRegistry)
     {
         ShouldRepairRegistry = FALSE;
         goto DoUpdate;
