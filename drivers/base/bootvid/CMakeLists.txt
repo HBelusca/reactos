@@ -23,7 +23,10 @@ function(add_bootvid _target _configfile)
     endif()
 
     # Add the common sources
-    list(APPEND SOURCE common.c console.c fontdata.c precomp.h)
+    list(APPEND SOURCE console.c precomp.h)
+    if(NOT NO_VIDEO_GRAPHICS)
+        list(APPEND SOURCE common.c fontdata.c)
+    endif()
 
     # Generate the per-target version resource file in two passes:
     # 1. Configure-time generation to replace the values with generator expressions;
@@ -65,6 +68,7 @@ if(ARCH STREQUAL "i386")
 endif()
 if((ARCH STREQUAL "i386") OR (ARCH STREQUAL "amd64"))
     add_bootvid(bootvid i386/pc/vgabvid.cmake NAME_ON_CD ${VGABVID_NAME_ON_CD})
+    add_bootvid(txtbootvid i386/pc/txtbootvid.cmake)
 elseif(ARCH STREQUAL "arm")
     add_bootvid(bootvid arm/armbvid.cmake)
 endif()
