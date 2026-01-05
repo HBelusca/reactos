@@ -1085,6 +1085,7 @@
 @ stdcall RtlCompareMemoryUlong(ptr long long)
 @ stdcall RtlCompareString(ptr ptr long)
 @ stdcall RtlCompareUnicodeString(ptr ptr long)
+@ stdcall -version=0x601+ RtlCompareUnicodeStrings(wstr long wstr long long)
 @ stdcall RtlCompressBuffer(long ptr long ptr long long ptr ptr)
 @ stdcall RtlCompressChunks(ptr long ptr long ptr long ptr)
 @ stdcall RtlConvertLongToLargeInteger(long)
