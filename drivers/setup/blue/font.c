@@ -2,12 +2,12 @@
  * PROJECT:     ReactOS Console Text-Mode Device Driver
  * LICENSE:     GPL-2.0+ (https://spdx.org/licenses/GPL-2.0+)
  * PURPOSE:     Loading specific fonts into VGA.
- * COPYRIGHT:   Copyright 2008-2019 Aleksey Bragin (aleksey@reactos.org)
- *              Copyright 2008-2019 Colin Finck (mail@colinfinck.de)
- *              Copyright 2008-2019 Christoph von Wittich (christoph_vw@reactos.org)
+ * COPYRIGHT:   Copyright 2008-2019 Aleksey Bragin <aleksey@reactos.org>
+ *              Copyright 2008-2019 Colin Finck <colin@reactos.org>
+ *              Copyright 2008-2019 Christoph von Wittich <christoph_vw@reactos.org>
  */
 
-/* INCLUDES ***************************************************************/
+/* INCLUDES ******************************************************************/
 
 #include "blue.h"
 
@@ -15,38 +15,9 @@
 // FIXME: For the moment we support only a fixed 256-char 8-bit font.
 //
 
-VOID OpenBitPlane(VOID);
-VOID CloseBitPlane(VOID);
-VOID LoadFont(_In_ PUCHAR Bitplane, _In_ PUCHAR FontBitfield);
-
-/* FUNCTIONS ****************************************************************/
-
-VOID
-ScrSetFont(
-    _In_ PUCHAR FontBitfield)
-{
-    PHYSICAL_ADDRESS BaseAddress;
-    PUCHAR Bitplane;
-
-    /* open bit plane for font table access */
-    OpenBitPlane();
-
-    /* get pointer to video memory */
-    BaseAddress.QuadPart = BITPLANE_BASE;
-    Bitplane = (PUCHAR)MmMapIoSpace(BaseAddress, 0xFFFF, MmNonCached);
-
-    LoadFont(Bitplane, FontBitfield);
-
-    MmUnmapIoSpace(Bitplane, 0xFFFF);
-
-    /* close bit plane */
-    CloseBitPlane();
-}
-
 /* PRIVATE FUNCTIONS *********************************************************/
 
-/* Font-load specific funcs */
-VOID
+static VOID
 OpenBitPlane(VOID)
 {
     /* disable interrupts */
@@ -67,7 +38,7 @@ OpenBitPlane(VOID)
     _enable();
 }
 
-VOID
+static VOID
 CloseBitPlane(VOID)
 {
     /* disable interrupts */
@@ -88,7 +59,7 @@ CloseBitPlane(VOID)
     _enable();
 }
 
-VOID
+static VOID
 LoadFont(
     _In_ PUCHAR Bitplane,
     _In_ PUCHAR FontBitfield)
@@ -110,4 +81,28 @@ LoadFont(
             Bitplane++;
         }
     }
+}
+
+/* FUNCTIONS *****************************************************************/
+
+VOID
+VgaScrSetFont(
+    _In_ PUCHAR FontBitfield)
+{
+    PHYSICAL_ADDRESS BaseAddress;
+    PUCHAR Bitplane;
+
+    /* open bit plane for font table access */
+    OpenBitPlane();
+
+    /* get pointer to video memory */
+    BaseAddress.QuadPart = BITPLANE_BASE;
+    Bitplane = (PUCHAR)MmMapIoSpace(BaseAddress, 0xFFFF, MmNonCached);
+
+    LoadFont(Bitplane, FontBitfield);
+
+    MmUnmapIoSpace(Bitplane, 0xFFFF);
+
+    /* close bit plane */
+    CloseBitPlane();
 }

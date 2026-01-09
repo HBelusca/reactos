@@ -2,91 +2,68 @@
  * PROJECT:     ReactOS Console Text-Mode Device Driver
  * LICENSE:     GPL-2.0+ (https://spdx.org/licenses/GPL-2.0+)
  * PURPOSE:     Driver Management Functions.
- * COPYRIGHT:   Copyright 1999 Boudewijn Dekker
- *              Copyright 1999-2019 Eric Kohl
- *              Copyright 2006 Filip Navara
- *              Copyright 2019 Hermes Belusca-Maito
+ * COPYRIGHT:   Copyright 1999 Boudewijn Dekker <ariadne@xs4all.nl>
+ *              Copyright 1999-2019 Eric Kohl <eric.kohl@reactos.org>
+ *              Copyright 2006 Filip Navara <navaraf@reactos.org>
+ *              Copyright 2019 Hermès Bélusca-Maïto <hermes.belusca-maito@reactos.org>
  */
 
 /* INCLUDES ******************************************************************/
 
 #include "blue.h"
+#include "vga.h"
 #include <ndk/inbvfuncs.h>
 
 #define NDEBUG
 #include <debug.h>
 
-/* NOTES ******************************************************************/
+/* NOTES *********************************************************************/
 /*
  *  [[character][attribute]][[character][attribute]]....
  */
 
-/* TYPEDEFS ***************************************************************/
+/* TYPEDEFS ******************************************************************/
 
 typedef struct _DEVICE_EXTENSION
 {
-    PUCHAR  VideoMemory;    /* Pointer to video memory */
+    PUCHAR  VideoMemory;    ///< Pointer to video memory
     SIZE_T  VideoMemorySize;
     BOOLEAN Enabled;
-    PUCHAR  ScreenBuffer;   /* Pointer to screenbuffer */
+    PUCHAR  ScreenBuffer;   ///< Pointer to screen buffer
     SIZE_T  ScreenBufferSize;
     ULONG   CursorSize;
-    INT     CursorVisible;
+    LOGICAL CursorVisible;
     USHORT  CharAttribute;
     ULONG   Mode;
-    UCHAR   ScanLines;  /* Height of a text line */
-    USHORT  Rows;       /* Number of rows        */
-    USHORT  Columns;    /* Number of columns     */
-    USHORT  CursorX, CursorY; /* Cursor position */
-    PUCHAR  FontBitfield; /* Specifies the font  */
+    UCHAR   ScanLines;      ///< Height of a text line
+    USHORT  Rows;           ///< Number of rows
+    USHORT  Columns;        ///< Number of columns
+    USHORT  CursorX, CursorY; ///< Cursor position
+    PUCHAR  FontBitfield;   ///< Specifies the font
+    PVOID   Context;        ///< ?? TBD
 } DEVICE_EXTENSION, *PDEVICE_EXTENSION;
 
-typedef struct _VGA_REGISTERS
+static const RGBQUAD /*COLORREF*/ DefaultPalette[] =
 {
-    UCHAR CRT[24];
-    UCHAR Attribute[21];
-    UCHAR Graphics[9];
-    UCHAR Sequencer[5];
-    UCHAR Misc;
-} VGA_REGISTERS, *PVGA_REGISTERS;
-
-static const VGA_REGISTERS VidpMode3Regs =
-{
-    /* CRT Controller Registers */
-    {0x5F, 0x4F, 0x50, 0x82, 0x55, 0x81, 0xBF, 0x1F, 0x00, 0x47, 0x1E, 0x00,
-    0x00, 0x00, 0x05, 0xF0, 0x9C, 0x8E, 0x8F, 0x28, 0x1F, 0x96, 0xB9, 0xA3},
-    /* Attribute Controller Registers */
-    {0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x14, 0x07, 0x38, 0x39, 0x3A, 0x3B,
-    0x3C, 0x3D, 0x3E, 0x3F, 0x0C, 0x00, 0x0F, 0x08, 0x00},
-    /* Graphics Controller Registers */
-    {0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x0E, 0x00, 0xFF},
-    /* Sequencer Registers */
-    {0x03, 0x00, 0x03, 0x00, 0x02},
-    /* Misc Output Register */
-    0x67
+    RGB(0, 0, 0),
+    RGB(0, 0, 0xC0),
+    RGB(0, 0xC0, 0),
+    RGB(0, 0xC0, 0xC0),
+    RGB(0xC0, 0, 0),
+    RGB(0xC0, 0, 0xC0),
+    RGB(0xC0, 0xC0, 0),
+    RGB(0xC0, 0xC0, 0xC0),
+    RGB(0x80, 0x80, 0x80),
+    RGB(0, 0, 0xFF),
+    RGB(0, 0xFF, 0),
+    RGB(0, 0xFF, 0xFF),
+    RGB(0xFF, 0, 0),
+    RGB(0xFF, 0, 0xFF),
+    RGB(0xFF, 0xFF, 0),
+    RGB(0xFF, 0xFF, 0xFF),
 };
 
-static const UCHAR DefaultPalette[] =
-{
-    0, 0, 0,
-    0, 0, 0xC0,
-    0, 0xC0, 0,
-    0, 0xC0, 0xC0,
-    0xC0, 0, 0,
-    0xC0, 0, 0xC0,
-    0xC0, 0xC0, 0,
-    0xC0, 0xC0, 0xC0,
-    0x80, 0x80, 0x80,
-    0, 0, 0xFF,
-    0, 0xFF, 0,
-    0, 0xFF, 0xFF,
-    0xFF, 0, 0,
-    0xFF, 0, 0xFF,
-    0xFF, 0xFF, 0,
-    0xFF, 0xFF, 0xFF
-};
-
-/* INBV MANAGEMENT FUNCTIONS **************************************************/
+/* INBV MANAGEMENT FUNCTIONS *************************************************/
 
 static BOOLEAN
 ScrResetScreen(
@@ -99,10 +76,10 @@ static HANDLE InbvThreadHandle = NULL;
 static BOOLEAN InbvMonitoring = FALSE;
 
 /*
- * Reinitialize the display to base VGA mode.
+ * Reinitialize the display back to boot mode.
  *
  * Returns TRUE if it completely resets the adapter to the given character mode.
- * Returns FALSE otherwise, indicating that the HAL should perform the VGA mode
+ * Returns FALSE otherwise, indicating that the HAL should perform the boot mode
  * reset itself after HwVidResetHw() returns control.
  *
  * This callback has been registered with InbvNotifyDisplayOwnershipLost()
@@ -301,80 +278,18 @@ ScrInbvCleanup(VOID)
     return STATUS_SUCCESS;
 }
 
-/* FUNCTIONS **************************************************************/
-
-static VOID
-FASTCALL
-ScrSetRegisters(const VGA_REGISTERS *Registers)
-{
-    UINT32 i;
-
-    /* Update misc output register */
-    WRITE_PORT_UCHAR(MISC, Registers->Misc);
-
-    /* Synchronous reset on */
-    WRITE_PORT_UCHAR(SEQ, 0x00);
-    WRITE_PORT_UCHAR(SEQDATA, 0x01);
-
-    /* Write sequencer registers */
-    for (i = 1; i < sizeof(Registers->Sequencer); i++)
-    {
-        WRITE_PORT_UCHAR(SEQ, i);
-        WRITE_PORT_UCHAR(SEQDATA, Registers->Sequencer[i]);
-    }
-
-    /* Synchronous reset off */
-    WRITE_PORT_UCHAR(SEQ, 0x00);
-    WRITE_PORT_UCHAR(SEQDATA, 0x03);
-
-    /* Deprotect CRT registers 0-7 */
-    WRITE_PORT_UCHAR(CRTC, 0x11);
-    WRITE_PORT_UCHAR(CRTCDATA, Registers->CRT[0x11] & 0x7f);
-
-    /* Write CRT registers */
-    for (i = 0; i < sizeof(Registers->CRT); i++)
-    {
-        WRITE_PORT_UCHAR(CRTC, i);
-        WRITE_PORT_UCHAR(CRTCDATA, Registers->CRT[i]);
-    }
-
-    /* Write graphics controller registers */
-    for (i = 0; i < sizeof(Registers->Graphics); i++)
-    {
-        WRITE_PORT_UCHAR(GRAPHICS, i);
-        WRITE_PORT_UCHAR(GRAPHICSDATA, Registers->Graphics[i]);
-    }
-
-    /* Write attribute controller registers */
-    for (i = 0; i < sizeof(Registers->Attribute); i++)
-    {
-        READ_PORT_UCHAR(STATUS);
-        WRITE_PORT_UCHAR(ATTRIB, i);
-        WRITE_PORT_UCHAR(ATTRIB, Registers->Attribute[i]);
-    }
-
-    /* Set the PEL mask */
-    WRITE_PORT_UCHAR(PELMASK, 0xff);
-}
+/* FUNCTIONS *****************************************************************/
 
 static VOID
 FASTCALL
 ScrSetCursor(
     _In_ PDEVICE_EXTENSION DeviceExtension)
 {
-    ULONG Offset;
-
     if (!DeviceExtension->VideoMemory)
         return;
 
-    Offset = (DeviceExtension->CursorY * DeviceExtension->Columns) + DeviceExtension->CursorX;
-
-    _disable();
-    WRITE_PORT_UCHAR(CRTC_COMMAND, CRTC_CURSORPOSLO);
-    WRITE_PORT_UCHAR(CRTC_DATA, Offset);
-    WRITE_PORT_UCHAR(CRTC_COMMAND, CRTC_CURSORPOSHI);
-    WRITE_PORT_UCHAR(CRTC_DATA, Offset >> 8);
-    _enable();
+    // DeviceExtension->CursorY, DeviceExtension->Columns, DeviceExtension->CursorX
+    VgaScrSetCursor(DeviceExtension);
 }
 
 static VOID
@@ -382,28 +297,21 @@ FASTCALL
 ScrSetCursorShape(
     _In_ PDEVICE_EXTENSION DeviceExtension)
 {
-    ULONG size, height;
-    UCHAR data, value;
-
     if (!DeviceExtension->VideoMemory)
         return;
 
-    height = DeviceExtension->ScanLines;
-    data = (DeviceExtension->CursorVisible) ? 0x00 : 0x20;
+    // DeviceExtension->ScanLines, DeviceExtension->CursorSize, DeviceExtension->CursorVisible
+    VgaScrSetCursorShape(DeviceExtension);
+}
 
-    size = (DeviceExtension->CursorSize * height) / 100;
-    if (size < 1)
-        size = 1;
+VOID
+ScrSetFont(
+    _In_ PUCHAR FontBitfield)
+{
+    // if (!DeviceExtension->VideoMemory)
+    //     return;
 
-    data |= (UCHAR)(height - size);
-
-    _disable();
-    WRITE_PORT_UCHAR(CRTC_COMMAND, CRTC_CURSORSTART);
-    WRITE_PORT_UCHAR(CRTC_DATA, data);
-    WRITE_PORT_UCHAR(CRTC_COMMAND, CRTC_CURSOREND);
-    value = READ_PORT_UCHAR(CRTC_DATA) & 0xE0;
-    WRITE_PORT_UCHAR(CRTC_DATA, value | (height - 1));
-    _enable();
+    VgaScrSetFont(FontBitfield);
 }
 
 static VOID
@@ -411,75 +319,31 @@ FASTCALL
 ScrAcquireOwnership(
     _In_ PDEVICE_EXTENSION DeviceExtension)
 {
-    UCHAR data, value;
-    ULONG offset;
-    ULONG Index;
+    VgaScrAcquireOwnership(DeviceExtension);
 
-    _disable();
+    /* Set the palette */
+    VgaScrSetPalette(DefaultPalette, RTL_NUMBER_OF(DefaultPalette));
 
-    ScrSetRegisters(&VidpMode3Regs);
+    // /* Read screen information */
+    // DeviceExtension->Columns = ...;
+    // DeviceExtension->Rows = ...;
+    // DeviceExtension->Rows = ...;
+    // DeviceExtension->ScanLines = ...;
 
-    /* Disable screen and enable palette access */
-    READ_PORT_UCHAR(STATUS);
-    WRITE_PORT_UCHAR(ATTRIB, 0x00);
+    // /* Retrieve the current output cursor position */
+    // /* Show blinking cursor */
+    // // FIXME: cursor block? Call ScrSetCursorShape() instead?
 
-    for (Index = 0; Index < sizeof(DefaultPalette) / 3; Index++)
-    {
-        WRITE_PORT_UCHAR(PELINDEX, Index);
-        WRITE_PORT_UCHAR(PELDATA, DefaultPalette[Index * 3] >> 2);
-        WRITE_PORT_UCHAR(PELDATA, DefaultPalette[Index * 3 + 1] >> 2);
-        WRITE_PORT_UCHAR(PELDATA, DefaultPalette[Index * 3 + 2] >> 2);
-    }
-
-    /* Enable screen and disable palette access */
-    READ_PORT_UCHAR(STATUS);
-    WRITE_PORT_UCHAR(ATTRIB, 0x20);
-
-    /* Switch blinking characters off */
-    READ_PORT_UCHAR(ATTRC_INPST1);
-    value = READ_PORT_UCHAR(ATTRC_WRITEREG);
-    WRITE_PORT_UCHAR(ATTRC_WRITEREG, 0x10);
-    data  = READ_PORT_UCHAR(ATTRC_READREG);
-    data  = data & ~0x08;
-    WRITE_PORT_UCHAR(ATTRC_WRITEREG, data);
-    WRITE_PORT_UCHAR(ATTRC_WRITEREG, value);
-    READ_PORT_UCHAR(ATTRC_INPST1);
-
-    /* Read screen information from CRT controller */
-    WRITE_PORT_UCHAR(CRTC_COMMAND, CRTC_COLUMNS);
-    DeviceExtension->Columns = READ_PORT_UCHAR(CRTC_DATA) + 1;
-    WRITE_PORT_UCHAR(CRTC_COMMAND, CRTC_ROWS);
-    DeviceExtension->Rows = READ_PORT_UCHAR(CRTC_DATA);
-    WRITE_PORT_UCHAR(CRTC_COMMAND, CRTC_OVERFLOW);
-    data = READ_PORT_UCHAR(CRTC_DATA);
-    DeviceExtension->Rows |= (((data & 0x02) << 7) | ((data & 0x40) << 3));
-    DeviceExtension->Rows++;
-    WRITE_PORT_UCHAR(CRTC_COMMAND, CRTC_SCANLINES);
-    DeviceExtension->ScanLines = (READ_PORT_UCHAR(CRTC_DATA) & 0x1F) + 1;
-
-    /* Retrieve the current output cursor position */
-    WRITE_PORT_UCHAR(CRTC_COMMAND, CRTC_CURSORPOSLO);
-    offset = READ_PORT_UCHAR(CRTC_DATA);
-    WRITE_PORT_UCHAR(CRTC_COMMAND, CRTC_CURSORPOSHI);
-    offset += (READ_PORT_UCHAR(CRTC_DATA) << 8);
-
-    /* Show blinking cursor */
-    // FIXME: cursor block? Call ScrSetCursorShape() instead?
-    WRITE_PORT_UCHAR(CRTC_COMMAND, CRTC_CURSORSTART);
-    WRITE_PORT_UCHAR(CRTC_DATA, (DeviceExtension->ScanLines - 1) & 0x1F);
-    WRITE_PORT_UCHAR(CRTC_COMMAND, CRTC_CURSOREND);
-    data = READ_PORT_UCHAR(CRTC_DATA) & 0xE0;
-    WRITE_PORT_UCHAR(CRTC_DATA,
-                     data | ((DeviceExtension->ScanLines - 1) & 0x1F));
-
-    _enable();
-
+#if 0
     /* Calculate number of text rows */
     DeviceExtension->Rows = DeviceExtension->Rows / DeviceExtension->ScanLines;
+#endif
 
     /* Set the cursor position, clipping it to the screen */
+#if 0
     DeviceExtension->CursorX = (USHORT)(offset % DeviceExtension->Columns);
     DeviceExtension->CursorY = (USHORT)(offset / DeviceExtension->Columns);
+#endif
     // DeviceExtension->CursorX = min(max(DeviceExtension->CursorX, 0), DeviceExtension->Columns - 1);
     DeviceExtension->CursorY = min(max(DeviceExtension->CursorY, 0), DeviceExtension->Rows - 1);
 
@@ -487,7 +351,7 @@ ScrAcquireOwnership(
     if (DeviceExtension->FontBitfield)
         ScrSetFont(DeviceExtension->FontBitfield);
 
-    DPRINT("%d Columns  %d Rows %d Scanlines\n",
+    DPRINT1("%u Columns  %u Rows %u Scanlines\n",
            DeviceExtension->Columns,
            DeviceExtension->Rows,
            DeviceExtension->ScanLines);
@@ -543,7 +407,7 @@ ScrResetScreen(
             DeviceExtension->VideoMemory = NULL;
             DeviceExtension->VideoMemorySize = 0;
 
-            /* Free any previously allocated backup screenbuffer */
+            /* Free any previously allocated backup screen buffer */
             if (DeviceExtension->ScreenBuffer)
             {
                 ASSERT(DeviceExtension->ScreenBufferSize != 0);
@@ -567,13 +431,13 @@ ScrResetScreen(
                 return FALSE; // STATUS_NONE_MAPPED; STATUS_NOT_MAPPED_VIEW; STATUS_CONFLICTING_ADDRESSES;
             }
 
-            /* Initialize the backup screenbuffer in non-paged pool (must be accessible at high IRQL) */
+            /* Initialize the backup screen buffer in non-paged pool (must be accessible at high IRQL) */
             DeviceExtension->ScreenBufferSize = DeviceExtension->VideoMemorySize;
             DeviceExtension->ScreenBuffer =
                 (PUCHAR)ExAllocatePoolWithTag(NonPagedPool, DeviceExtension->ScreenBufferSize, TAG_BLUE);
             if (!DeviceExtension->ScreenBuffer)
             {
-                DPRINT1("Could not allocate screenbuffer, ignore...\n");
+                DPRINT1("Could not allocate screen buffer, ignore...\n");
                 DeviceExtension->ScreenBufferSize = 0;
             }
 
@@ -586,7 +450,7 @@ ScrResetScreen(
              * Restore the previously disabled screen.
              */
 
-            /* Restore the snapshot of the video memory from the backup screenbuffer */
+            /* Restore the snapshot of the video memory from the backup screen buffer */
             if (DeviceExtension->ScreenBuffer)
             {
                 ASSERT(DeviceExtension->VideoMemory);
@@ -626,7 +490,7 @@ ScrResetScreen(
             DeviceExtension->VideoMemory = NULL;
             DeviceExtension->VideoMemorySize = 0;
 
-            /* Free any previously allocated backup screenbuffer */
+            /* Free any previously allocated backup screen buffer */
             if (DeviceExtension->ScreenBuffer)
             {
                 ASSERT(DeviceExtension->ScreenBufferSize != 0);
@@ -646,7 +510,7 @@ ScrResetScreen(
              * Partially disable the screen such that it can be restored later.
              */
 
-            /* Take a snapshot of the video memory into the backup screenbuffer */
+            /* Take a snapshot of the video memory into the backup screen buffer */
             if (DeviceExtension->ScreenBuffer)
             {
                 ASSERT(DeviceExtension->VideoMemory);
@@ -727,8 +591,10 @@ ScrWrite(
         offset = cursorx + cursory * columns;
 
         // FIXME: Does the buffer only contains chars? or chars + attributes?
-        // FIXME2: Fix buffer overflow.
-        RtlCopyMemory(&vidmem[offset * 2], pch, stk->Parameters.Write.Length);
+        VgaScrWriteCharactersAttributes(DeviceExtension,
+                                        pch, stk->Parameters.Write.Length,
+                                        cursorx, cursory,
+                                        _Out_opt_ PULONG WrittenLength);
         offset += (stk->Parameters.Write.Length / 2);
 
         /* Set the cursor position, clipping it to the screen */
@@ -744,6 +610,10 @@ ScrWrite(
         {
             switch (*pch)
             {
+            case '\a':
+                // Beep(800, 200);
+                break;
+
             case '\b':
             {
                 if (cursorx > 0)
@@ -755,9 +625,9 @@ ScrWrite(
                     cursory--;
                     cursorx = columns - 1;
                 }
-                offset = cursorx + cursory * columns;
-                vidmem[offset * 2] = ' ';
-                vidmem[offset * 2 + 1] = (char)DeviceExtension->CharAttribute;
+                VgaScrWriteCharacter(DeviceExtension,
+                                     ' ', DeviceExtension->CharAttribute,
+                                     cursorx, cursory);
                 break;
             }
 
@@ -773,6 +643,10 @@ ScrWrite(
                 offset = TAB_WIDTH - (cursorx % TAB_WIDTH);
                 while (offset--)
                 {
+                    VgaScrWriteCharacter(DeviceExtension,
+                                         ' ', DeviceExtension->CharAttribute,
+                                         cursorx, cursory);
+
                     vidmem[(cursorx + cursory * columns) * 2] = ' ';
                     cursorx++;
                     if (cursorx >= columns)
@@ -788,9 +662,9 @@ ScrWrite(
 
             default:
             {
-                offset = cursorx + cursory * columns;
-                vidmem[offset * 2] = *pch;
-                vidmem[offset * 2 + 1] = (char)DeviceExtension->CharAttribute;
+                VgaScrWriteCharacter(DeviceExtension,
+                                     *pch, DeviceExtension->CharAttribute,
+                                     cursorx, cursory);
                 cursorx++;
                 if (cursorx >= columns)
                 {
@@ -804,25 +678,9 @@ ScrWrite(
             /* Scroll up the contents of the screen if we are at the end */
             if (cursory >= rows)
             {
-                PUSHORT LinePtr;
-
-                RtlCopyMemory(vidmem,
-                              &vidmem[columns * 2],
-                              columns * (rows - 1) * 2);
-
-                LinePtr = (PUSHORT)&vidmem[columns * (rows - 1) * 2];
-
-                for (j = 0; j < columns; j++)
-                {
-                    LinePtr[j] = DeviceExtension->CharAttribute << 8;
-                }
+                VgaScrScrollUp(DeviceExtension,
+                               ' ', DeviceExtension->CharAttribute);
                 cursory = rows - 1;
-                for (j = 0; j < columns; j++)
-                {
-                    offset = j + cursory * columns;
-                    vidmem[offset * 2] = ' ';
-                    vidmem[offset * 2 + 1] = (char)DeviceExtension->CharAttribute;
-                }
             }
         }
     }
@@ -1040,6 +898,7 @@ ScrIoControl(
             break;
         }
 
+////////////
         case IOCTL_CONSOLE_FILL_OUTPUT_ATTRIBUTE:
         {
             POUTPUT_ATTRIBUTE Buf;
@@ -1419,6 +1278,7 @@ ScrIoControl(
             Status = STATUS_SUCCESS;
             break;
         }
+////////////
 
         case IOCTL_CONSOLE_DRAW:
         {
@@ -1573,8 +1433,6 @@ DriverEntry(
     UNICODE_STRING DeviceName = RTL_CONSTANT_STRING(L"\\Device\\BlueScreen");
     UNICODE_STRING SymlinkName = RTL_CONSTANT_STRING(L"\\??\\BlueScreen");
 
-    DPRINT("Screen Driver 0.0.6\n");
-
     DriverObject->MajorFunction[IRP_MJ_CREATE] = ScrCreateClose;
     DriverObject->MajorFunction[IRP_MJ_CLOSE]  = ScrCreateClose;
     DriverObject->MajorFunction[IRP_MJ_READ]   = ScrDispatch;
@@ -1589,9 +1447,7 @@ DriverEntry(
                             TRUE,
                             &DeviceObject);
     if (!NT_SUCCESS(Status))
-    {
         return Status;
-    }
 
     Status = IoCreateSymbolicLink(&SymlinkName, &DeviceName);
     if (NT_SUCCESS(Status))
