@@ -4225,6 +4225,8 @@ NtProcessStartup(PPEB Peb)
     NTSTATUS Status;
     LARGE_INTEGER Time;
 
+    NtTerminateProcess(NtCurrentProcess(), 0xDEADBEEF);
+
     RtlNormalizeProcessParams(Peb->ProcessParameters);
 
     ProcessHeap = Peb->ProcessHeap;
