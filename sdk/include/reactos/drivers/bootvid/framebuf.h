@@ -50,16 +50,34 @@ typedef struct _CM_FRAMEBUF_DEVICE_DATA
     ULONG PixelsPerScanLine; ///< Pitch/stride in pixels
     ULONG BitsPerPixel;      ///< Pixel depth
 
-    /* Pixel physical format for BPP > 8 */
-    struct
+    /* Pixel physical format for BPP > 8, specified by bit-masks.
+     * A bit being set defines those used for the given color component,
+     * such as Red, Green, Blue, or Reserved. */
+    struct /*_PIXEL_BITMASK*/
     {
         ULONG RedMask;
         ULONG GreenMask;
         ULONG BlueMask;
         ULONG ReservedMask;
-    } PixelMasks;
+    } PixelMasks; /*PIXEL_BITMASK, *PPIXEL_BITMASK*/
 
 } CM_FRAMEBUF_DEVICE_DATA, *PCM_FRAMEBUF_DEVICE_DATA;
+
+
+/* UEFI support, see efi/GraphicsOutput.h */
+#ifdef EFI_GRAPHICS_OUTPUT_PROTOCOL_GUID // __GRAPHICS_OUTPUT_H__
+// TODO: this version of the struct is temporary
+// REACTOS_INTERNAL_BGCONTEXT
+typedef struct _ROSEFI_FRAMEBUFFER_DATA
+{
+    ULONG_PTR BaseAddress;
+    ULONG  BufferSize;
+    UINT32 ScreenWidth;
+    UINT32 ScreenHeight;
+    UINT32 PixelsPerScanLine;
+    UINT32 PixelFormat;
+} ROSEFI_FRAMEBUFFER_DATA, *PROSEFI_FRAMEBUFFER_DATA;
+#endif
 
 #ifdef __cplusplus
 }
