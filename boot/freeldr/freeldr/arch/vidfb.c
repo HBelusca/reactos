@@ -33,28 +33,20 @@ typedef ULONG RGBQUAD; // , COLORREF;
 
 /* GLOBALS ********************************************************************/
 
-typedef struct _FRAMEBUFFER_INFO
+typedef struct _FRAMEBUFFER_DATA
 {
     ULONG_PTR BaseAddress;
     ULONG BufferSize;
 
-    /* Horizontal and Vertical resolution in pixels */
-    ULONG ScreenWidth;
-    ULONG ScreenHeight;
-
-    /* Number of pixel elements per video memory line */
-    ULONG PixelsPerScanLine; // aka. "Pitch" or "ScreenStride", but Stride is in bytes or bits...
-    ULONG BitsPerPixel;      // aka. "PixelStride".
-
-    /* Physical format of the pixel for BPP > 8, specified by bit-mask */
-    PIXEL_BITMASK PixelMasks;
+    /* Framebuffer characteristics */
+    FRAMEBUFFER_INFO;
 
 /** Calculated values */
 
     ULONG BytesPerPixel;
-    ULONG Delta;             // aka. "Pitch": actual size in bytes of a scanline.
+    ULONG Delta;    // aka. "Pitch": actual size in bytes of a scanline.
 
-    /* Calculated number of bits from the masks above */
+    /* Calculated number of bits from pixel masks */
     UCHAR RedMaskSize;
     UCHAR GreenMaskSize;
     UCHAR BlueMaskSize;
@@ -65,9 +57,9 @@ typedef struct _FRAMEBUFFER_INFO
     UCHAR GreenMaskPosition;
     UCHAR BlueMaskPosition;
     UCHAR ReservedMaskPosition;
-} FRAMEBUFFER_INFO, *PFRAMEBUFFER_INFO;
+} FRAMEBUFFER_DATA, *PFRAMEBUFFER_DATA;
 
-static FRAMEBUFFER_INFO framebufInfo = {0};
+static FRAMEBUFFER_DATA framebufInfo = {0};
 static CM_FRAMEBUF_DEVICE_DATA FrameBufferData = {0};
 
 static UINT8 VidpXScale = 1;
@@ -643,7 +635,7 @@ color_scale_component(
 static UINT32 // RescaleColor()
 color_scale_argb(
     _In_ UINT32 Color,
-    _In_ PFRAMEBUFFER_INFO FbInfo)
+    _In_ PFRAMEBUFFER_DATA FbInfo)
 {
     //UINT32 scRsvd  = color_scale_component(GetAValue(Color), FbInfo->ReservedMaskSize);
     UINT32 scRed   = color_scale_component(GetRValue(Color), FbInfo->RedMaskSize);
