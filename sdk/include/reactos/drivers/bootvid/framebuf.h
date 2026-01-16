@@ -15,6 +15,46 @@ extern "C" {
 #endif
 
 /**
+ * @brief
+ * Physical format of an RGB pixel, specified with per-component bit-masks.
+ * A bit being set defines those used for the given color component, such
+ * as Red, Green, Blue, or Reserved.
+ *
+ * @note
+ * Supports up to 32 bits-per-pixel deep pixels.
+ **/
+typedef struct _PIXEL_BITMASK
+{
+    ULONG RedMask;
+    ULONG GreenMask;
+    ULONG BlueMask;
+    ULONG ReservedMask;
+} PIXEL_BITMASK, *PPIXEL_BITMASK;
+
+/**
+ * @brief   Framebuffer characteristics.
+ **/
+typedef struct _FRAMEBUFFER_INFO
+{
+    /* The framebuffer size is obtained by:
+     * FrameBufferSize = ScreenHeight * PixelsPerScanLine * BytesPerPixel */
+    // ULONG BufferSize;
+
+    /* Horizontal and Vertical resolution in pixels */
+    ULONG ScreenWidth;
+    ULONG ScreenHeight;
+
+    /* Number of pixel elements per video memory line. Related to
+     * the number of bytes per scan-line (pitch/screen stride) via:
+     * Pitch = PixelsPerScanLine * BytesPerPixel */
+    ULONG PixelsPerScanLine; ///< Pitch/stride in pixels
+    ULONG BitsPerPixel;      ///< Pixel depth
+
+    /* Pixel physical format for BPP > 8 */
+    PIXEL_BITMASK PixelMasks;
+} FRAMEBUFFER_INFO, *PFRAMEBUFFER_INFO;
+
+/**
  * @brief   ReactOS Framebuffer-specific video device configuration data.
  *
  * Supplemental data that extends CM_VIDEO_DEVICE_DATA.
@@ -35,31 +75,11 @@ typedef struct _CM_FRAMEBUF_DEVICE_DATA
 {
     CM_VIDEO_DEVICE_DATA;
 
-    /* Absolute offset from the start of the video RAM of the framebuffer
-     * to be displayed on the monitor. The framebuffer size is obtained by:
-     * FrameBufferSize = ScreenHeight * PixelsPerScanLine * BytesPerPixel */
+    /* Absolute offset from the start of the video RAM
+     * of the framebuffer to be displayed */
     ULONG FrameBufferOffset;
 
-    /* Horizontal and Vertical resolution in pixels */
-    ULONG ScreenWidth;
-    ULONG ScreenHeight;
-
-    /* Number of pixel elements per video memory line. Related to
-     * the number of bytes per scan-line (pitch/screen stride) via:
-     * Pitch = PixelsPerScanLine * BytesPerPixel */
-    ULONG PixelsPerScanLine; ///< Pitch/stride in pixels
-    ULONG BitsPerPixel;      ///< Pixel depth
-
-    /* Pixel physical format for BPP > 8, specified by bit-masks.
-     * A bit being set defines those used for the given color component,
-     * such as Red, Green, Blue, or Reserved. */
-    struct /*_PIXEL_BITMASK*/
-    {
-        ULONG RedMask;
-        ULONG GreenMask;
-        ULONG BlueMask;
-        ULONG ReservedMask;
-    } PixelMasks; /*PIXEL_BITMASK, *PPIXEL_BITMASK*/
+    FRAMEBUFFER_INFO; ///< Framebuffer characteristics
 
 } CM_FRAMEBUF_DEVICE_DATA, *PCM_FRAMEBUF_DEVICE_DATA;
 
