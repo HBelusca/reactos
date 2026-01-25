@@ -544,6 +544,59 @@ typedef struct _VP_GET_DEVICE_DATA_CONTEXT
     VP_STATUS CallbackStatus;
 } VP_GET_DEVICE_DATA_CONTEXT, *PVP_GET_DEVICE_DATA_CONTEXT;
 
+#ifdef __REACTOS__
+/*
+ * For WinNT3,4 and Win2000:
+ *
+ * DisplayController data is a VIDEO_HARDWARE_CONFIGURATION_DATA structure,
+ * and MonitorPeripheral data is a MONITOR_HARDWARE_CONFIGURATION_DATA
+ * structure (see vpcfgcnv.h), based on MONITOR_CONFIGURATION_DATA (see arc.h).
+ * Both of these are truncated versions of CM_FULL_RESOURCE_DESCRIPTOR and
+ * CM_PARTIAL_RESOURCE_LIST, where the fields in common are:
+ * InterfaceType, BusNumber, and Version, Revision.
+ *
+ * Ensure this format is maintained, even if the configuration data is
+ * upgraded to a standard CM_FULL_RESOURCE_DESCRIPTOR with one or more
+ * CM_PARTIAL_RESOURCE_LIST entries, by converting these to the legacy
+ * format. A pointer to the original data is appended afterwards and
+ * update the reported data length. (It has been verified that standard
+ * Windows miniports do not check this value.)
+ *
+ * This will allow to ensure backward compatibility with _legacy_ Windows
+ * video miniports that could use this data (typically NT <= 4 or 5,
+ * mostly for MIPS machines but also few x86 ones).
+ */
+#include <arc/arc.h> // For MONITOR_CONFIGURATION_DATA
+#include <drivers/videoprt/vpcfgcnv.h>
+
+/* Data structure we can receive from ConfigurationData
+ * for either VpControllerData or VpMonitorData. */
+typedef union _VP_HARDWARE_CONFIGURATION_DATA
+{
+    /* For VpControllerData */
+    struct
+    {
+        /* Legacy configuration data */
+        VIDEO_HARDWARE_CONFIGURATION_DATA legacyConfigData;
+
+        /* New configuration data via resource descriptor, if any */
+        PCM_FULL_RESOURCE_DESCRIPTOR cmDescriptor;
+        ULONG cmDescriptorLength;
+    } video;
+
+    /* For VpMonitorData */
+    struct
+    {
+        /* Legacy configuration data */
+        MONITOR_HARDWARE_CONFIGURATION_DATA legacyConfigData;
+
+        /* New configuration data via resource descriptor, if any */
+        PCM_FULL_RESOURCE_DESCRIPTOR cmDescriptor;
+        ULONG cmDescriptorLength;
+    } monitor;
+} VP_HARDWARE_CONFIGURATION_DATA, *PVP_HARDWARE_CONFIGURATION_DATA;
+#endif // __REACTOS__
+
 /**
  * @brief
  * A PIO_QUERY_DEVICE_ROUTINE callback to IoQueryDeviceDescription()
@@ -584,6 +637,13 @@ IntVideoPortConfigCallback(
     PVOID ConfigurationData;
     ULONG ConfigurationDataLength;
 
+#ifdef __REACTOS__
+    PVIDEO_PORT_DEVICE_EXTENSION DeviceExtension;
+    PVIDEO_PORT_DRIVER_EXTENSION DriverExtension;
+    /* Local buffer for conversion of VpControllerData and VpMonitorData */
+    VP_HARDWARE_CONFIGURATION_DATA configData = {0};
+#endif
+
     /* Determine what to give to the CallbackRoutine, depending on
      * the value of DeviceDataType: either the ControllerInformation
      * or the PeripheralInformation. */
@@ -609,6 +669,41 @@ IntVideoPortConfigCallback(
             ConfigurationDataLength =
                 GetDeviceInfoLength(DeviceInformation[IoQueryDeviceConfigurationData]);
 
+#ifdef __REACTOS__
+            /* Do not perform any conversion for WinXP/2003+ miniports
+             * but give them the original data directly. */
+            DeviceExtension =
+                VIDEO_PORT_GET_DEVICE_EXTENSION(GetDeviceContext->HwDeviceExtension);
+            DriverExtension = DeviceExtension->DriverExtension;
+            if (DriverExtension->InitializationData.HwInitDataSize
+                    > SIZE_OF_W2K_VIDEO_HW_INITIALIZATION_DATA)
+            {
+                break;
+            }
+
+            /* If the data is of legacy format, do not convert */
+            if (IsLegacyConfigDataFull(ConfigurationData, ConfigurationDataLength,
+                                       sizeof(VIDEO_HARDWARE_CONFIGURATION_DATA)))
+            {
+                break;
+            }
+            else
+            /* If the data is of unknown format, do not convert */
+            if (!IsNewConfigDataFull(ConfigurationData, ConfigurationDataLength))
+            {
+                break;
+            }
+
+            /* We should have a new-format configuration data,
+             * convert it back to legacy format */
+            ConvertVideoDataToLegacyConfigData(&configData.video.legacyConfigData,
+                                               ConfigurationData);
+            configData.video.cmDescriptor = ConfigurationData;
+            configData.video.cmDescriptorLength = ConfigurationDataLength;
+            ConfigurationData = &configData.video;
+            ConfigurationDataLength = sizeof(configData.video);
+#endif // __REACTOS__
+
             break;
         }
 
@@ -623,6 +718,41 @@ IntVideoPortConfigCallback(
                 GetDeviceInfoData(DeviceInformation[IoQueryDeviceConfigurationData]);
             ConfigurationDataLength =
                 GetDeviceInfoLength(DeviceInformation[IoQueryDeviceConfigurationData]);
+
+#ifdef __REACTOS__
+            /* Do not perform any conversion for WinXP/2003+ miniports
+             * but give them the original data directly. */
+            DeviceExtension =
+                VIDEO_PORT_GET_DEVICE_EXTENSION(GetDeviceContext->HwDeviceExtension);
+            DriverExtension = DeviceExtension->DriverExtension;
+            if (DriverExtension->InitializationData.HwInitDataSize
+                    > SIZE_OF_W2K_VIDEO_HW_INITIALIZATION_DATA)
+            {
+                break;
+            }
+
+            /* If the data is of legacy format, do not convert */
+            if (IsLegacyConfigDataFull(ConfigurationData, ConfigurationDataLength,
+                                       sizeof(MONITOR_HARDWARE_CONFIGURATION_DATA)))
+            {
+                break;
+            }
+            else
+            /* If the data is of unknown format, do not convert */
+            if (!IsNewConfigDataFull(ConfigurationData, ConfigurationDataLength))
+            {
+                break;
+            }
+
+            /* We should have a new-format configuration data,
+             * convert it back to legacy format */
+            ConvertMonitorDataToLegacyConfigData(&configData.monitor.legacyConfigData,
+                                                 ConfigurationData);
+            configData.monitor.cmDescriptor = ConfigurationData;
+            configData.monitor.cmDescriptorLength = ConfigurationDataLength;
+            ConfigurationData = &configData.monitor;
+            ConfigurationDataLength = sizeof(configData.monitor);
+#endif // __REACTOS__
 
             break;
         }
@@ -1408,6 +1538,19 @@ VideoPortGetDeviceData(
             /* Restart peripheral enumeration on this new controller */
             DeviceExtension->EnumDevice.PeripheralNumber = 0;
 
+            /*
+             * For WinNT3,4 and Win2000: DisplayController data is a
+             * VIDEO_HARDWARE_CONFIGURATION_DATA structure, which is
+             * a truncated version of CM_FULL_RESOURCE_DESCRIPTOR and
+             * CM_PARTIAL_RESOURCE_LIST (fields in common are:
+             * InterfaceType, BusNumber, and Version, Revision).
+             *
+             * Ensure this format is maintained, even if the configuration
+             * data is upgraded to a standard CM_FULL_RESOURCE_DESCRIPTOR
+             * with one or more CM_PARTIAL_RESOURCE_LIST entries, by
+             * converting these to the legacy format, and appending the
+             * pointers to the original (new format) data afterwards.
+             */
             Status = IoQueryDeviceDescription(&(DeviceExtension->AdapterInterfaceType),
                                               &(DeviceExtension->SystemIoBusNumber),
                                               &ControllerType,
@@ -1434,6 +1577,19 @@ VideoPortGetDeviceData(
             GetDeviceContext.CallbackRoutine = CallbackRoutine;
             GetDeviceContext.Context = Context;
 
+            /*
+             * For WinNT3,4 and Win2000: MonitorPeripheral data is a
+             * MONITOR_HARDWARE_CONFIGURATION_DATA structure, which is
+             * a truncated version of CM_FULL_RESOURCE_DESCRIPTOR and
+             * CM_PARTIAL_RESOURCE_LIST (fields in common are:
+             * InterfaceType, BusNumber, and Version, Revision).
+             *
+             * Ensure this format is maintained, even if the configuration
+             * data is upgraded to a standard CM_FULL_RESOURCE_DESCRIPTOR
+             * with one or more CM_PARTIAL_RESOURCE_LIST entries, by
+             * converting these to the legacy format, and appending the
+             * pointers to the original (new format) data afterwards.
+             */
             Status = IoQueryDeviceDescription(&(DeviceExtension->AdapterInterfaceType),
                                               &(DeviceExtension->SystemIoBusNumber),
                                               &ControllerType,
