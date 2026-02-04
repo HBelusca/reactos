@@ -641,7 +641,7 @@ FindBootDisplay(
     if (BusNumber)
         *BusNumber = LocalBusNumber;
 
-    if ((VideoConfigData->ScreenWidth <= 1) || (VideoConfigData->ScreenHeight <= 1))
+    if ((VideoConfigData->ScreenWidth < 1) || (VideoConfigData->ScreenHeight < 1))
     {
         DPRINT1("Cannot obtain current screen resolution\n");
         /* Don't fail, but the caller will have to cope with it */
