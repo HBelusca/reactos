@@ -7,7 +7,15 @@
 extern "C" {
 #endif /* defined(__cplusplus) */
 
-/* Built in class atoms */
+#if !defined(WINUSERAPI)
+#if !defined(_USER32_)
+#define WINUSERAPI DECLSPEC_IMPORT
+#else
+#define WINUSERAPI
+#endif
+#endif
+
+/* Built-in class atoms */
 #define WC_MENU       (MAKEINTATOM(0x8000))
 #define WC_DESKTOP    (MAKEINTATOM(0x8001))
 #define WC_DIALOG     (MAKEINTATOM(0x8002))
@@ -29,7 +37,7 @@ extern "C" {
 #define WS_EX_UISTATEFOCUSRECTHIDDEN   0x80000000
 #define WS_EX_SETANSICREATOR           0x80000000 // For WNDS_ANSICREATOR
 
-/* Non SDK Window Message types. */
+/* Non SDK Window Message types */
 #define WM_SETVISIBLE       0x00000009
 #define WM_ALTTABACTIVE     0x00000029
 #define WM_ISACTIVEICON     0x00000035
@@ -70,10 +78,10 @@ extern "C" {
 #define DCX_KEEPLAYOUT   0x40000000
 #define DCX_PROCESSOWNED 0x80000000
 
-/* Non SDK TPM types.*/
+/* Non SDK TPM types */
 #define TPM_SYSTEM_MENU  0x00000200
 
-/* NtUserCreateWindowEx dwFlags bits. */
+/* NtUserCreateWindowEx dwFlags bits */
 #define NUCWE_ANSI       0x00000001
 #define NUCWE_SIDEBYSIDE 0x40000000
 
@@ -92,12 +100,19 @@ extern "C" {
 /* ScrollWindow uses the window DC, ScrollWindowEx doesn't */
 #define SW_SCROLLWNDDCE 0x8000
 
-/* Non SDK Queue state flags. */
+/* Non SDK Queue state flags */
 #define QS_SMRESULT 0x8000 /* see "Undoc. Windows" */
 //
 #define QS_EVENT          0x2000
 #define QS_SYSEVENT       (QS_EVENT|QS_SENDMESSAGE)
 //
+
+/* Flags for TranslateMessageEx and ToUnicode/ToUnicodeEx */
+#define TM_MENUMODE         1
+#define TM_POSTCHARBREAKS   2
+#if (NTDDI_VERSION >= NTDDI_WIN10_RS1)
+#define TM_NOKBDSTATECHANGE 4
+#endif
 
 //
 // Definitions used by WM_CLIENTSHUTDOWN
@@ -184,6 +199,16 @@ extern "C" {
 
 // co_IntUnloadKeyboardLayoutEx undocumented flags
 #define UKL_NOACTIVATENEXT 0x80000000
+
+
+#ifndef NOMSG
+WINUSERAPI
+BOOL
+WINAPI
+TranslateMessageEx(
+    _In_ CONST MSG *lpMsg,
+    _In_ UINT flags);
+#endif // !NOMSG
 
 BOOL WINAPI UpdatePerUserSystemParameters(DWORD dwReserved, BOOL bEnable);
 BOOL WINAPI SetLogonNotifyWindow(HWND Wnd);
