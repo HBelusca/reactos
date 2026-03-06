@@ -219,7 +219,11 @@ VidInitialize(
         /* Essentially MmMapVideoDisplay() */
         FrameBufferBase = MmMapIoSpace(FrameBuffer, MappedSize, MmFrameBufferCached);
         if (!FrameBufferBase)
+        {
+            /* MmMapIoSpace failed, this may be because MmWriteCombined
+             * isn't supported, so try again with MmNonCached */
             FrameBufferBase = MmMapIoSpace(FrameBuffer, MappedSize, MmNonCached);
+        }
         if (!FrameBufferBase)
         {
             DPRINT1("Could not map framebuffer 0x%I64X (%lu bytes)\n",
@@ -304,8 +308,8 @@ VOID
 NTAPI
 VidCleanUp(VOID)
 {
-    /* Just fill the screen black */
-    VidSolidColorFill(0, 0, SCREEN_WIDTH - 1, SCREEN_HEIGHT - 1, BV_COLOR_BLACK);
+    /* No specific hardware state to reset */
+    NOTHING;
 }
 
 VOID
