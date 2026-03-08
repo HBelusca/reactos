@@ -682,10 +682,10 @@ BOOL ReadCommand(LPTSTR str, INT maxlen)
             }
 #ifdef _UNICODE
             ch = ir.Event.KeyEvent.uChar.UnicodeChar;
-            if (ch >= 32 && (charcount != (maxlen - 2)) && bCharInput)
+            if (ch > 0 /*>= 32*/ && (charcount != (maxlen - 2)) && bCharInput)
 #else
             ch = ir.Event.KeyEvent.uChar.AsciiChar;
-            if ((UCHAR)ch >= 32 && (charcount != (maxlen - 2)) && bCharInput)
+            if ((UCHAR)ch > 0 /*>= 32*/ && (charcount != (maxlen - 2)) && bCharInput)
 #endif /* _UNICODE */
             {
                 /* insert character into string... */

@@ -2274,6 +2274,135 @@ CreateFrameBufferBitmap(HDC hDC, int width, int height)
     return CreateDIBSection(NULL, &bmi, DIB_RGB_COLORS, NULL, NULL, 0);
 }
 
+static void consrv_tprintf(const CHAR *fmt, ...)
+{
+    CHAR szText[512];
+    va_list va;
+    va_start(va, fmt);
+    vsprintf(szText, fmt, va);
+    va_end(va);
+    DbgPrint("CONSRV: %s", szText);
+}
+#define MSGDUMP_PRINTF consrv_tprintf
+//#include "msgdump.h"
+#define MSGDUMP_PREFIX ""
+#define MSGDUMP_API WINAPI
+
+static __inline void MSGDUMP_API
+MD_OnKey(HWND hwnd, BOOL fDown, WPARAM wParam, LPARAM lParam)
+{
+    UINT vk = (UINT)wParam;
+    UINT cRepeat = (UINT)LOWORD(lParam);
+    USHORT flags = HIWORD(lParam);
+    UCHAR ScanCode = flags & 0xFF;
+    if (fDown)
+    {
+        MSGDUMP_PRINTF("%p\t%sWM_KEYDOWN\tnVirtKey:%lX cRepeat:%u ScanCode:%02x fExtended:%u fAltDown:%u fRepeat:%u fUp:%u [wParam:%08lX lParam:%08lX]\n",
+                      hwnd, MSGDUMP_PREFIX, vk, cRepeat, ScanCode,
+                      !!(flags & KF_EXTENDED), !!(flags & KF_ALTDOWN), !!(flags & KF_REPEAT), !!(flags & KF_UP),
+                      wParam, lParam);
+    }
+    else
+    {
+        MSGDUMP_PRINTF("%p\t%sWM_KEYUP\tnVirtKey:%lX cRepeat:%u ScanCode:%02x fExtended:%u fAltDown:%u fRepeat:%u fUp:%u [wParam:%08lX lParam:%08lX]\n",
+                      hwnd, MSGDUMP_PREFIX, vk, cRepeat, ScanCode,
+                      !!(flags & KF_EXTENDED), !!(flags & KF_ALTDOWN), !!(flags & KF_REPEAT), !!(flags & KF_UP),
+                      wParam, lParam);
+    }
+}
+
+static __inline void MSGDUMP_API
+MD_OnChar(HWND hwnd, WPARAM wParam, LPARAM lParam)
+{
+    WCHAR ch = (WCHAR)wParam;
+    UINT cRepeat = (UINT)LOWORD(lParam);
+    USHORT flags = HIWORD(lParam);
+    UCHAR ScanCode = flags & 0xFF;
+    MSGDUMP_PRINTF("%p\t%sWM_CHAR\tchChar:'%04x' (%u) cRepeat:%u ScanCode:%02x fExtended:%u fAltDown:%u fRepeat:%u fUp:%u [wParam:%08lX lParam:%08lX]\n",
+                   hwnd, MSGDUMP_PREFIX, ch, ch, cRepeat, ScanCode,
+                   !!(flags & KF_EXTENDED), !!(flags & KF_ALTDOWN), !!(flags & KF_REPEAT), !!(flags & KF_UP),
+                   wParam, lParam);
+}
+
+static __inline void MSGDUMP_API
+MD_OnDeadChar(HWND hwnd, WPARAM wParam, LPARAM lParam)
+{
+    WCHAR ch = (WCHAR)wParam;
+    UINT cRepeat = (UINT)LOWORD(lParam);
+    USHORT flags = HIWORD(lParam);
+    UCHAR ScanCode = flags & 0xFF;
+    MSGDUMP_PRINTF("%p\t%sWM_DEADCHAR\tchChar:'%04x' (%u) cRepeat:%u ScanCode:%02x fExtended:%u fAltDown:%u fRepeat:%u fUp:%u [wParam:%08lX lParam:%08lX]\n",
+                   hwnd, MSGDUMP_PREFIX, ch, ch, cRepeat, ScanCode,
+                   !!(flags & KF_EXTENDED), !!(flags & KF_ALTDOWN), !!(flags & KF_REPEAT), !!(flags & KF_UP),
+                   wParam, lParam);
+}
+
+static __inline void MSGDUMP_API
+MD_OnSysKey(HWND hwnd, BOOL fDown, WPARAM wParam, LPARAM lParam)
+{
+    UINT vk = (UINT)wParam;
+    UINT cRepeat = (UINT)LOWORD(lParam);
+    USHORT flags = HIWORD(lParam);
+    UCHAR ScanCode = flags & 0xFF;
+    if (fDown)
+    {
+        MSGDUMP_PRINTF("%p\t%sWM_SYSKEYDOWN\tnVirtKey:%lX cRepeat:%u ScanCode:%02x fExtended:%u fAltDown:%u fRepeat:%u fUp:%u [wParam:%08lX lParam:%08lX]\n",
+                      hwnd, MSGDUMP_PREFIX, vk, cRepeat, ScanCode,
+                      !!(flags & KF_EXTENDED), !!(flags & KF_ALTDOWN), !!(flags & KF_REPEAT), !!(flags & KF_UP),
+                      wParam, lParam);
+    }
+    else
+    {
+        MSGDUMP_PRINTF("%p\t%sWM_SYSKEYUP\tnVirtKey:%lX cRepeat:%u ScanCode:%02x fExtended:%u fAltDown:%u fRepeat:%u fUp:%u [wParam:%08lX lParam:%08lX]\n",
+                      hwnd, MSGDUMP_PREFIX, vk, cRepeat, ScanCode,
+                      !!(flags & KF_EXTENDED), !!(flags & KF_ALTDOWN), !!(flags & KF_REPEAT), !!(flags & KF_UP),
+                      wParam, lParam);
+    }
+}
+
+static __inline void MSGDUMP_API
+MD_OnSysChar(HWND hwnd, WPARAM wParam, LPARAM lParam)
+{
+    WCHAR ch = (WCHAR)wParam;
+    UINT cRepeat = (UINT)LOWORD(lParam);
+    USHORT flags = HIWORD(lParam);
+    UCHAR ScanCode = flags & 0xFF;
+    MSGDUMP_PRINTF("%p\t%sWM_SYSCHAR\tchChar:'%04x' (%u) cRepeat:%u ScanCode:%02x fExtended:%u fAltDown:%u fRepeat:%u fUp:%u [wParam:%08lX lParam:%08lX]\n",
+                   hwnd, MSGDUMP_PREFIX, ch, ch, cRepeat, ScanCode,
+                   !!(flags & KF_EXTENDED), !!(flags & KF_ALTDOWN), !!(flags & KF_REPEAT), !!(flags & KF_UP),
+                   wParam, lParam);
+}
+
+static __inline void MSGDUMP_API
+MD_OnSysDeadChar(HWND hwnd, WPARAM wParam, LPARAM lParam)
+{
+    WCHAR ch = (WCHAR)wParam;
+    UINT cRepeat = (UINT)LOWORD(lParam);
+    USHORT flags = HIWORD(lParam);
+    UCHAR ScanCode = flags & 0xFF;
+    MSGDUMP_PRINTF("%p\t%sWM_SYSDEADCHAR\tchChar:'%04x' (%u) cRepeat:%u ScanCode:%02x fExtended:%u fAltDown:%u fRepeat:%u fUp:%u [wParam:%08lX lParam:%08lX]\n",
+                   hwnd, MSGDUMP_PREFIX, ch, ch, cRepeat, ScanCode,
+                   !!(flags & KF_EXTENDED), !!(flags & KF_ALTDOWN), !!(flags & KF_REPEAT), !!(flags & KF_UP),
+                   wParam, lParam);
+}
+
+static __inline LRESULT MSGDUMP_API
+MD_msgdump(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
+{
+    switch (uMsg)
+    {
+        case WM_KEYDOWN:     MD_OnKey(hwnd, TRUE, wParam, lParam);      break;
+        case WM_KEYUP:       MD_OnKey(hwnd, FALSE, wParam, lParam);     break;
+        case WM_CHAR:        MD_OnChar(hwnd, wParam, lParam);           break;
+        case WM_DEADCHAR:    MD_OnDeadChar(hwnd, wParam, lParam);       break;
+        case WM_SYSKEYDOWN:  MD_OnSysKey(hwnd, TRUE, wParam, lParam);   break;
+        case WM_SYSKEYUP:    MD_OnSysKey(hwnd, FALSE, wParam, lParam);  break;
+        case WM_SYSCHAR:     MD_OnSysChar(hwnd, wParam, lParam);        break;
+        case WM_SYSDEADCHAR: MD_OnSysDeadChar(hwnd, wParam, lParam);    break;
+    }
+    return 0;
+}
+
 static LRESULT CALLBACK
 ConWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
@@ -2370,6 +2499,8 @@ ConWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
         case WM_SYSCHAR:
         case WM_SYSDEADCHAR:
         {
+            MD_msgdump(hWnd, msg, wParam, lParam);
+
             /* Detect Alt-Enter presses and switch back and forth to fullscreen mode */
             if (msg == WM_SYSKEYDOWN && (HIWORD(lParam) & KF_ALTDOWN) && wParam == VK_RETURN)
             {
@@ -2380,7 +2511,7 @@ ConWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
                 break;
             }
             /* Detect Alt-Esc/Space/Tab presses defer to DefWindowProc */
-            if ( (HIWORD(lParam) & KF_ALTDOWN) && (wParam == VK_ESCAPE || wParam == VK_SPACE || wParam == VK_TAB))
+            if ((HIWORD(lParam) & KF_ALTDOWN) && (wParam == VK_ESCAPE || wParam == VK_SPACE || wParam == VK_TAB))
             {
                 return DefWindowProcW(hWnd, msg, wParam, lParam);
             }

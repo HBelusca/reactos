@@ -69,6 +69,16 @@ VOID ConInKey(PINPUT_RECORD lpBuffer)
     do
     {
         ReadConsoleInput(hInput, lpBuffer, 1, &dwRead);
+#if DBG
+        if (lpBuffer->EventType == KEY_EVENT)
+        {
+            PKEY_EVENT_RECORD kr = &lpBuffer->Event.KeyEvent;
+            DbgPrint("KeyDown: %lu, RepeatCount: %u, CtrlKeyState: 0x%08lx, VirtKeyCode: 0x%04x, VirtScanCode: 0x%04x, UChar: 0x%04x (%u) L'%C', AChar: 0x%02x (%u) '%c'\n",
+                kr->bKeyDown, kr->wRepeatCount, kr->dwControlKeyState, kr->wVirtualKeyCode, kr->wVirtualScanCode,
+                (unsigned short)kr->uChar.UnicodeChar, (unsigned short)kr->uChar.UnicodeChar, (kr->uChar.UnicodeChar > 0) ? kr->uChar.UnicodeChar : L'.',
+                (unsigned char)kr->uChar.AsciiChar, (unsigned char)kr->uChar.AsciiChar, (kr->uChar.AsciiChar > 0) ? kr->uChar.AsciiChar : '.');
+        }
+#endif
         if (lpBuffer->EventType == KEY_EVENT &&
             lpBuffer->Event.KeyEvent.bKeyDown)
         {

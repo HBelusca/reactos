@@ -53,7 +53,47 @@ ConioGetShiftState(PBYTE KeyState, LPARAM lParam)
     if (HIWORD(lParam) & KF_EXTENDED)
         ssOut |= ENHANCED_KEY;
 
+    /* Remember if the key was emitted as part of a Alt+Numpad sequence
+     * and requires to be converted from input OEM code page to Unicode */
+    ssOut |= (lParam & ALTNUMPAD_BIT);
+
     return ssOut;
+}
+
+#if !defined(KEY_TOGGLED) || !defined(KEY_PRESSED)
+#define KEY_TOGGLED 0x0001
+#define KEY_PRESSED 0x8000
+#endif
+static DWORD
+TESTConioGetKeyState(LPARAM lParam)
+{
+    DWORD dwControlKeyState = 0;
+
+    if (GetKeyState(VK_RMENU) & KEY_PRESSED)
+        dwControlKeyState |= RIGHT_ALT_PRESSED;
+    if (GetKeyState(VK_LMENU) & KEY_PRESSED)
+        dwControlKeyState |= LEFT_ALT_PRESSED;
+    if (GetKeyState(VK_RCONTROL) & KEY_PRESSED)
+        dwControlKeyState |= RIGHT_CTRL_PRESSED;
+    if (GetKeyState(VK_LCONTROL) & KEY_PRESSED)
+        dwControlKeyState |= LEFT_CTRL_PRESSED;
+    if (GetKeyState(VK_SHIFT) & KEY_PRESSED)
+        dwControlKeyState |= SHIFT_PRESSED;
+    if (GetKeyState(VK_NUMLOCK) & KEY_TOGGLED)
+        dwControlKeyState |= NUMLOCK_ON;
+    if (GetKeyState(VK_SCROLL) & KEY_TOGGLED)
+        dwControlKeyState |= SCROLLLOCK_ON;
+    if (GetKeyState(VK_CAPITAL) & KEY_TOGGLED)
+        dwControlKeyState |= CAPSLOCK_ON;
+    /* See WM_CHAR MSDN documentation for instance */
+    if (HIWORD(lParam) & KF_EXTENDED)
+        dwControlKeyState |= ENHANCED_KEY;
+
+    /* Remember if the key was emitted as part of a Alt+Numpad sequence
+     * and requires to be converted from input OEM code page to Unicode */
+    dwControlKeyState |= (lParam & ALTNUMPAD_BIT);
+
+    return dwControlKeyState;
 }
 
 VOID NTAPI
@@ -68,10 +108,9 @@ ConioProcessKey(PCONSRV_CONSOLE Console, MSG* msg)
     WCHAR UnicodeChar;
     UINT VirtualKeyCode;
     UINT VirtualScanCode;
-    BOOL Down;
-    BOOLEAN Fake;          // Synthesized, not a real event
-    BOOLEAN NotChar;       // Message should not be used to return a character
-
+    BOOL KeyDown;
+    BOOLEAN Fake;    // Synthesized, not a real event
+    BOOLEAN IsCharMsg, NotChar; // Message should not be used to return a character
     INPUT_RECORD er;
 
     if (Console == NULL)
@@ -81,43 +120,70 @@ ConioProcessKey(PCONSRV_CONSOLE Console, MSG* msg)
     }
 
     VirtualScanCode = HIWORD(msg->lParam) & 0xFF;
-    Down = msg->message == WM_KEYDOWN || msg->message == WM_CHAR ||
-           msg->message == WM_SYSKEYDOWN || msg->message == WM_SYSCHAR;
+    KeyDown = !(HIWORD(msg->lParam) & KF_UP);
+    IsCharMsg = (msg->message == WM_CHAR || msg->message == WM_SYSCHAR);
 
+    /* Sanity checks for Win32k info */
+    if (msg->message == WM_KEYDOWN || msg->message == WM_SYSKEYDOWN)
+    {
+        ASSERT((msg->message == WM_KEYDOWN || msg->message == WM_SYSKEYDOWN) && KeyDown);
+    }
+    if (msg->message == WM_KEYUP || msg->message == WM_SYSKEYUP)
+    {
+        ASSERT((msg->message == WM_KEYUP || msg->message == WM_SYSKEYUP) && !KeyDown);
+        // ASSERT((msg->message == WM_KEYUP || msg->message == WM_SYSKEYUP) && (HIWORD(msg->lParam) & KF_REPEAT));
+        ASSERT((msg->message == WM_KEYUP || msg->message == WM_SYSKEYUP) && (LOWORD(msg->lParam) == 1));
+    }
+    if (msg->message == WM_KEYDOWN || msg->message == WM_KEYUP)
+    {
+        ASSERT((msg->message == WM_KEYDOWN || msg->message == WM_KEYUP) && !(HIWORD(msg->lParam) & KF_ALTDOWN));
+    }
+
+//__debugbreak();
     GetKeyboardState(KeyState);
     ShiftState = ConioGetShiftState(KeyState, msg->lParam);
+    {
+    DWORD dwKeyState = TESTConioGetKeyState(msg->lParam);
+    if (ShiftState != dwKeyState)
+        DPRINT1("**** CONSRV!%s(): Discrepancy ShiftState: 0x%08lx, dwKeyState: 0x%08lx ****\n",
+                ShiftState, dwKeyState);
+    }
 
-    if (msg->message == WM_CHAR || msg->message == WM_SYSCHAR)
+    if (IsCharMsg) // || (msg->message == WM_DEADCHAR || msg->message == WM_SYSDEADCHAR)
     {
         VirtualKeyCode = LastVirtualKey;
         UnicodeChar = msg->wParam;
     }
     else
     {
-        WCHAR Chars[2];
-        INT RetChars = 0;
+        //WCHAR Chars[2];
+        //INT RetChars = 0;
 
         VirtualKeyCode = msg->wParam;
+#if 0
         RetChars = ToUnicodeEx(VirtualKeyCode,
                                VirtualScanCode,
                                KeyState,
                                Chars,
-                               2,
+                               ARRAYSIZE(Chars),
                                0,
                                NULL);
         UnicodeChar = (RetChars == 1 ? Chars[0] : 0);
+#else
+        UnicodeChar = 0;
+#endif
     }
 
     Fake = UnicodeChar &&
             (msg->message != WM_CHAR && msg->message != WM_SYSCHAR &&
              msg->message != WM_KEYUP && msg->message != WM_SYSKEYUP);
-    NotChar = (msg->message != WM_CHAR && msg->message != WM_SYSCHAR);
+    NotChar = !IsCharMsg;
     if (NotChar) LastVirtualKey = msg->wParam;
 
-    DPRINT("CONSRV: %s %s %s %s %02x %02x '%lc' %04x\n",
-           Down ? "down" : "up  ",
-           (msg->message == WM_CHAR || msg->message == WM_SYSCHAR) ?
-           "char" : "key ",
+    DPRINT1("CONSRV: %08lx %s %s %s %s %02x %04x '%lc' %08x\n",
+           msg->message,
+           KeyDown ? "down" : "up  ",
+           IsCharMsg ? "char" : "key ",
            Fake ? "fake" : "real",
            NotChar ? "notc" : "char",
            VirtualScanCode,
@@ -135,7 +201,7 @@ ConioProcessKey(PCONSRV_CONSOLE Console, MSG* msg)
     if ( (ShiftState & (RIGHT_ALT_PRESSED | LEFT_ALT_PRESSED)) != 0 &&
          (VirtualKeyCode == VK_UP || VirtualKeyCode == VK_DOWN) )
     {
-        if (!Down) return;
+        if (!KeyDown) return;
 
         /* Scroll up or down */
         if (VirtualKeyCode == VK_UP)
@@ -167,14 +233,28 @@ ConioProcessKey(PCONSRV_CONSOLE Console, MSG* msg)
 
     /* Send the key press to the console driver */
 
+#ifndef FAKE_KEYSTROKE // FIXME: <ndk/kbd.h>
+#define FAKE_KEYSTROKE  0x02000000
+#endif
+
+    // TODO: Check with https://github.com/microsoft/terminal/pull/15753/files
     er.EventType                        = KEY_EVENT;
-    er.Event.KeyEvent.bKeyDown          = Down;
-    er.Event.KeyEvent.wRepeatCount      = 1;
+    er.Event.KeyEvent.bKeyDown          = KeyDown;
+    er.Event.KeyEvent.wRepeatCount      = LOWORD(msg->lParam);
     er.Event.KeyEvent.wVirtualKeyCode   = VirtualKeyCode;
-    er.Event.KeyEvent.wVirtualScanCode  = VirtualScanCode;
-    er.Event.KeyEvent.uChar.UnicodeChar = UnicodeChar;
+    er.Event.KeyEvent.wVirtualScanCode  = (msg->lParam & FAKE_KEYSTROKE) ? 0 : VirtualScanCode; // VirtualScanCode; // TODO: Zero if it's a fake character.
+    er.Event.KeyEvent.uChar.UnicodeChar = NotChar ? 0 : UnicodeChar; // UnicodeChar; // TODO: No character if !WM_CHAR && !WM_SYSCHAR
     er.Event.KeyEvent.dwControlKeyState = ShiftState;
 
+#if DBG
+    {
+    PKEY_EVENT_RECORD kr = &er.Event.KeyEvent;
+    DbgPrint("CONSRV KEY_EVENT: KeyDown: %lu, RepeatCount: %u, CtrlKeyState: 0x%08lx, VirtKeyCode: 0x%04x, VirtScanCode: 0x%04x, UChar: 0x%04x (%u) L'%C', AChar: 0x%02x (%u) '%c'\n",
+        kr->bKeyDown, kr->wRepeatCount, kr->dwControlKeyState, kr->wVirtualKeyCode, kr->wVirtualScanCode,
+        (unsigned short)kr->uChar.UnicodeChar, (unsigned short)kr->uChar.UnicodeChar, (kr->uChar.UnicodeChar > 0) ? kr->uChar.UnicodeChar : L'.',
+        (unsigned char)kr->uChar.AsciiChar, (unsigned char)kr->uChar.AsciiChar, (kr->uChar.AsciiChar > 0) ? kr->uChar.AsciiChar : '.');
+    }
+#endif
     ConioProcessInputEvent(Console, &er);
 }
 

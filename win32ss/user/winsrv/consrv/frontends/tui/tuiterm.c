@@ -317,12 +317,14 @@ TuiConsoleWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 
     switch (msg)
     {
-        case WM_CHAR:
-        case WM_SYSCHAR:
         case WM_KEYDOWN:
-        case WM_SYSKEYDOWN:
         case WM_KEYUP:
+        case WM_CHAR:
+        case WM_DEADCHAR:
+        case WM_SYSKEYDOWN:
         case WM_SYSKEYUP:
+        case WM_SYSCHAR:
+        case WM_SYSDEADCHAR:
         {
 #if 0
             if ((HIWORD(lParam) & KF_ALTDOWN) && wParam == VK_TAB)

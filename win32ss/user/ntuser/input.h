@@ -51,9 +51,12 @@ extern PATTACHINFO gpai;
 #define KS_DOWN_BIT      0x80
 #define KS_LOCK_BIT      0x01
 /* Scan Codes */
-#define SC_KEY_UP        0x8000
+#define SC_KEY_UP        0x8000 // KBDBREAK
 /* lParam bits */
 #define LP_DO_NOT_CARE_BIT (1<<25) // For GetKeyNameText
+// FIXME: Use DONTCARE_BIT/FAKE_KEYSTROKE
+// See https://github.com/reactos/reactos/commit/d118a53f821c201c236184fa3d80114129cdad03
+// and https://github.com/reactos/reactos/commit/bb162a6c86e8443de0ce09499b64ee64d4302675
 
 /* General */
 CODE_SEG("INIT") NTSTATUS NTAPI InitInputImpl(VOID);

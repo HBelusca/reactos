@@ -9,6 +9,7 @@
 
 #include <win32k.h>
 DBG_DEFAULT_CHANNEL(UserKbd);
+#define TRACE2 ERR
 
 BYTE gafAsyncKeyState[256 * 2 / 8]; // 2 bits per key
 static BYTE gafAsyncKeyStateRecentDown[256 / 8]; // 1 bit per key
@@ -34,6 +35,9 @@ static enum _ALTNUM_STATE
 
 static ULONG gAltNumPadValue = 0;
 BOOL gbEnableHexNumpad = FALSE;
+
+/**/static enum _ALTNUM_STATE gPrevAltNumPadState = ALTNUM_INACTIVE;
+/**/static ULONG gPrevAltNumPadValue = 0;/**/
 
 /* FUNCTIONS *****************************************************************/
 
@@ -327,19 +331,97 @@ IntGetModBits(PKBDTABLES pKbdTbl, PBYTE pKeyState)
     return dwModBits;
 }
 
-/*
- * IntTranslateChar
+static BOOL
+IntIsAltNumpadKey(_In_ WORD wVk)
+{
+    /* Check if we have a "Numpad" key while in Alt+Numpad mode */
+    switch (gAltNumPadState)
+    {
+        case ALTNUM_OEM: case ALTNUM_ACP:
+        {
+            /* Check if it is a numpad digit */
+            if (wVk >= VK_NUMPAD0 && wVk <= VK_NUMPAD9)
+                return TRUE;
+            // else if (wVk >= '0' && wVk <= '9')
+            //     return TRUE;
+            break;
+        }
+        case ALTNUM_HEX_ACP: case ALTNUM_HEX_UTF:
+        {
+            /* Check if it represents a valid hexadecimal digit */
+            if (wVk >= VK_NUMPAD0 && wVk <= VK_NUMPAD9)
+                return TRUE;
+            else if (wVk >= '0' && wVk <= '9')
+                return TRUE;
+            else if (wVk >= 'A' && wVk <= 'F')
+                return TRUE;
+            else if (/*gbEnableHexNumpad &&*/ (wVk == VK_DECIMAL)) // || (wVk == VK_OEM_PERIOD)
+                return TRUE; // ALTNUM_HEX_ACP;
+            else if (/*gbEnableHexNumpad &&*/ (wVk == VK_ADD)) // || (wVk == VK_OEM_PLUS)
+                return TRUE; // ALTNUM_HEX_UTF;
+            break;
+        }
+        default:
+            break;
+    }
+    return FALSE;
+}
+
+// FIXME
+static BOOL
+IntTranslateAltNumpad(
+    _Out_ PWCHAR pwcTranslatedChar,
+    _Out_ LPARAM* plParamExtraFlags,
+    _In_ WORD wVk,
+    _In_ BOOL bIsDown);
+
+/**
+ * @brief   Translates a virtual key to a UTF-16 character.
  *
- * Translates virtual key to character
- */
+ * @param[in]   wVirtKey
+ * The virtual key to translate.
+ *
+ * @param[in]   wScanCode
+ * If provided, the hardware scan code of the key to be translated.
+ * The high-order bit of this value is set if the key is up.
+ * It is only used for deducing extra state for the key.
+ *
+ * @param[in]   pKeyState
+ * Optional keyboard state bytes array.
+ *
+ * @param[out]  pbDead
+ * On output, set to TRUE if the virtual key specifies a dead key, or FALSE if not.
+ *
+ * @param[out]  pbLigature
+ * On output, set to TRUE if the virtual key specifies a ligature, or FALSE if not.
+ *
+ * @param[out]  pwcTranslatedChar
+ * Pointer to a WCHAR that receives the translated UTF-16 character.
+ *
+ * @param[out]  plParamExtraFlags
+ * Pointer to an LPARAM that receives any deduced extra flags, to be used
+ * by IntTranslateKbdMessage(), indirectly passed through IntToUnicodeEx().
+ *
+ * @param[in]   wFlags
+ * Flags modifying the function behaviour. It corresponds to the wFlags parameter
+ * of the TranslateMessageEx(), ToUnicode(), and ToUnicodeEx() functions.
+ * See the TM_* flags in undocuser.h.
+ *
+ * @param[in]   pKbdTbl
+ * Pointer to keyboard layout tables.
+ **/
 static
 BOOL
-IntTranslateChar(WORD wVirtKey,
-                 PBYTE pKeyState,
-                 PBOOL pbDead,
-                 PBOOL pbLigature,
-                 PWCHAR pwcTranslatedChar,
-                 PKBDTABLES pKbdTbl)
+IntTranslateChar(
+    _In_ WORD wVirtKey,
+    _In_opt_ WORD wScanCode,
+    _In_opt_ PBYTE pKeyState,
+    _Out_ PBOOL pbDead,
+    _Out_ PBOOL pbLigature,
+    _Out_ PWCHAR pwcTranslatedChar,
+    _Out_ LPARAM* plParamExtraFlags,
+    _In_ UINT wFlags,
+    _In_ PKBDTABLES pKbdTbl)
 {
     PVK_TO_WCHAR_TABLE pVkToVchTbl;
     PVK_TO_WCHARS10 pVkToVch;
@@ -352,15 +434,61 @@ IntTranslateChar(WORD wVirtKey,
     bAltGr = pKeyState && (pKbdTbl->fLocaleFlags & KLLF_ALTGR) && IS_KEY_DOWN(pKeyState, VK_RMENU);
     wCaplokAttr = bAltGr ? CAPLOKALTGR : CAPLOK;
 
-    TRACE("TryToTranslate: %04x %x\n", wVirtKey, dwModBits);
+    TRACE2("IntTranslateChar: %04x %x\n", wVirtKey, dwModBits);
 
-    /* If ALT without CTRL has ben used, remove ALT flag */
+    TRACE2("In IntTranslateChar, gAltNumPadState: %lu, gAltNumPadValue: %lu\n",
+          gAltNumPadState, gAltNumPadValue);
+
+    *plParamExtraFlags = (wScanCode & KBDBREAK) << 16; // NOTE: KBDBREAK == KF_UP
+
+// TODO:
+// - If we are handling Alt+Numpad (whatever mode) and we have a numpad press,
+//   don't translate the key.
+// - If we are handling Alt+Numpad in hexmode and we have a 0-9 or A-F press,
+//   don't translate the key.
+    if (IntIsAltNumpadKey(wVirtKey))
+        return FALSE;
+
+    /* Check whether we translate an Alt+Numpad key on ALT key release
+     * (we do this whatever the TM_POSTCHARBREAKS bit is set or not) */
+    if ((wScanCode & KBDBREAK) && (wVirtKey == VK_MENU))
+    {
+ERR("IntTranslateChar: Calling IntTranslateAltNumpad\n");
+        if (IntTranslateAltNumpad(pwcTranslatedChar, plParamExtraFlags,
+                                  wVirtKey, !(wScanCode & KBDBREAK)))
+        {
+            *pbDead = FALSE;
+            *pbLigature = FALSE;
+            return (*pwcTranslatedChar ? TRUE : FALSE);
+        }
+        // else, regular ALT break.
+    }
+
+    /* Don't translate key breaks (key up), unless TM_POSTCHARBREAKS is set */
+    if ((wScanCode & KBDBREAK) && !(wFlags & TM_POSTCHARBREAKS))
+        return FALSE;
+
+    /* If set, Alt+Numpad combinations are not handled */
+    if (!(wScanCode & KBDBREAK) && (wFlags & TM_MENUMODE))
+    {
+ERR("IntTranslateChar: resetting AltNumpad state\n");
+        /* Reset the Alt+Numpad state */ // FIXME ??
+        gAltNumPadState = ALTNUM_INACTIVE;
+        gAltNumPadValue = 0;
+    }
+
+    // NOTE: If the actual wScanCode is required below in the future,
+    // filter out any flags in it:
+    // wScanCode &= 0xFF;
+
+    /* If ALT without CTRL has been used, remove ALT flag */
     if ((dwModBits & (KBDALT|KBDCTRL)) == KBDALT)
         dwModBits &= ~KBDALT;
 
     if (dwModBits > pKbdTbl->pCharModifiers->wMaxModBits)
     {
-        TRACE("dwModBits %x > wMaxModBits %x\n", dwModBits, pKbdTbl->pCharModifiers->wMaxModBits);
+        TRACE("dwModBits %x > wMaxModBits %x\n",
+              dwModBits, pKbdTbl->pCharModifiers->wMaxModBits);
         return FALSE;
     }
 
@@ -446,13 +574,15 @@ IntTranslateChar(WORD wVirtKey,
  */
 static
 int APIENTRY
-IntToUnicodeEx(UINT wVirtKey,
-               UINT wScanCode,
-               PBYTE pKeyState,
-               LPWSTR pwszBuff,
-               int cchBuff,
-               UINT wFlags,
-               PKBDTABLES pKbdTbl)
+IntToUnicodeEx(
+    _In_ UINT wVirtKey,
+    _In_ UINT wScanCode,
+    _In_ PBYTE pKeyState,
+    _Out_ LPARAM* plParamExtraFlags,
+    _Out_writes_(cchBuff) LPWSTR pwszBuff,
+    _In_ int cchBuff,
+    _In_ UINT wFlags,
+    _In_ PKBDTABLES pKbdTbl)
 {
     WCHAR wchTranslatedChar;
     BOOL bDead, bLigature;
@@ -462,10 +592,13 @@ IntToUnicodeEx(UINT wVirtKey,
     ASSERT(pKbdTbl);
 
     if (!IntTranslateChar(wVirtKey,
+                          wScanCode,
                           pKeyState,
                           &bDead,
                           &bLigature,
                           &wchTranslatedChar,
+                          plParamExtraFlags,
+                          wFlags,
                           pKbdTbl))
     {
         return 0;
@@ -623,14 +756,18 @@ IntVkToChar(WORD wVk, PKBDTABLES pKbdTbl)
 {
     WCHAR wch;
     BOOL bDead, bLigature;
+    LPARAM lfDummy;
 
     ASSERT(pKbdTbl);
 
     if (IntTranslateChar(wVk,
+                         0,
                          NULL,
                          &bDead,
                          &bLigature,
                          &wch,
+                         &lfDummy,
+                         0,
                          pKbdTbl))
     {
         return wch;
@@ -720,7 +857,7 @@ co_CallLowLevelKeyboardHook(WORD wVk, WORD wScanCode, DWORD dwFlags, BOOL bInjec
     KbdHookData.time = dwTime;
     KbdHookData.dwExtraInfo = dwExtraInfo;
 
-    /* Note: it doesnt support WM_SYSKEYUP */
+    /* Note: it doesn't support WM_SYSKEYUP */
     if (dwFlags & KEYEVENTF_KEYUP)
         uMsg = WM_KEYUP;
     else if (IS_KEY_DOWN(gafAsyncKeyState, VK_MENU) && !IS_KEY_DOWN(gafAsyncKeyState, VK_CONTROL))
@@ -905,6 +1042,10 @@ IntCheckLanguageToggle(
  * The virtual key code of the key being input, in its "simplified"
  * shift-less version, as given by IntSimplifyVk().
  *
+ * @param[in]   wScanCode
+ * Keyboard scan code corresponding to the virtual key.
+ * (HACK for the WM_CHAR message sent by the function.)
+ *
  * @param[in]   bIsDown
  * TRUE if the current key is being pressed; FALSE if it is released.
  *
@@ -915,6 +1056,7 @@ IntCheckLanguageToggle(
 static BOOL
 IntHandleAltNumpad(
     _In_ WORD wVk,
+    _In_ WORD wScanCode,
     _In_ BOOL bIsDown,
     _In_ DWORD dwTime /*,
     _In_ PUSER_MESSAGE_QUEUE pFocusQueue */)
@@ -923,7 +1065,7 @@ IntHandleAltNumpad(
         IS_KEY_DOWN(gafAsyncKeyState, VK_MENU) &&
         !IS_KEY_DOWN(gafAsyncKeyState, VK_CONTROL))
     {
-        TRACE("VK_MENU && !VK_CONTROL - wVk: 0x%04x\n", wVk);
+        TRACE2("VK_MENU && !VK_CONTROL - wVk: 0x%04x\n", wVk);
 
         /* Initialize the Alt+Numpad state if necessary */
         if (gAltNumPadState == ALTNUM_INACTIVE)
@@ -936,6 +1078,9 @@ IntHandleAltNumpad(
                 gAltNumPadState = (wVk == VK_NUMPAD0) ? ALTNUM_ACP : ALTNUM_OEM;
             else
                 return FALSE; /* Unhandled, do regular key processing */
+
+            /* Reset the stashed Alt+Numpad value */
+            gAltNumPadValue = 0;
         }
 
         /* Check the incoming key */
@@ -987,19 +1132,33 @@ IntHandleAltNumpad(
             gAltNumPadValue = 0;
         }
     }
-    TRACE("gAltNumPadState: %lu, gAltNumPadValue: %lu\n",
+    TRACE2("gAltNumPadState: %lu, gAltNumPadValue: %lu\n",
           gAltNumPadState, gAltNumPadValue);
 
     /* Check for the end of an Alt+Numpad sequence, triggered by the ALT key release */
     if ((gAltNumPadState != ALTNUM_INACTIVE) && !bIsDown && (wVk == VK_MENU))
     {
-        PUSER_MESSAGE_QUEUE pFocusQueue = IntGetFocusMessageQueue();
+        // PUSER_MESSAGE_QUEUE pFocusQueue = IntGetFocusMessageQueue();
+        // PTHREADINFO pti;
 
-        TRACE("End of Alt+Numpad\n");
-        if (gAltNumPadValue != 0 && pFocusQueue && pFocusQueue->ptiKeyboard)
+        TRACE2("End of Alt+Numpad\n");
+#if 0
+        if (gAltNumPadValue != 0 && pFocusQueue /*&& pFocusQueue->ptiKeyboard*/)
         {
+            PWND pWnd;
             NTSTATUS Status;
             WCHAR wchUnicodeChar;
+            LPARAM lCharFlags = 0;
+
+            pWnd = pFocusQueue->spwndFocus;
+            if (!pWnd /*&& pFocusQueue->spwndActive*/)
+                pWnd = pFocusQueue->spwndActive;
+            //if (!pWnd)
+            //    return;
+
+            pti = pFocusQueue->ptiKeyboard;
+            if (pWnd)
+                pti = pWnd->head.pti;
 
             /* Convert the input codepoint value to UTF-16 */
             if (gAltNumPadState == ALTNUM_HEX_UTF)
@@ -1011,6 +1170,22 @@ IntHandleAltNumpad(
                 // valid values, generating two UTF-16 code units if necessary
                 // so as to support the other Unicode planes.
                 // See https://en.wikipedia.org/wiki/UTF-16#Description
+                wchUnicodeChar = (WCHAR)(gAltNumPadValue & 0xFFFF);
+                Status = STATUS_SUCCESS;
+            }
+            else if ((gAltNumPadState == ALTNUM_OEM) && pWnd &&
+                     ((pWnd->head.pti->TIF_flags & TIF_CSRSSTHREAD) &&
+                      (pWnd->pcls->atomClassName == gaGuiConsoleWndClass)))
+            {
+                /*
+                 * Directly forward the raw OEM character value with the
+                 * ALTNUMPAD_BIT set to the console for Unicode conversion,
+                 * because we do not know its active OEM code page.
+                 * For more details, see:
+                 * https://github.com/microsoft/terminal/blob/e20e1f7bf92b61580baea69483a74a7f4578a586/src/host/stream.cpp#L170
+                 */
+ERR("Send OEM key to Console\n");
+                lCharFlags |= ALTNUMPAD_BIT;
                 wchUnicodeChar = (WCHAR)(gAltNumPadValue & 0xFFFF);
                 Status = STATUS_SUCCESS;
             }
@@ -1031,12 +1206,6 @@ IntHandleAltNumpad(
                 RtlGetDefaultCodePage(&AnsiCP, &OemCP);
                 if (gAltNumPadState == ALTNUM_OEM)
                 {
-                    // TODO: Handle console where we do not know its active
-                    // OEM codepage. In this case we need to directly send
-                    // the raw OEM numpad value, OR'ed with ALTNUMPAD_BIT.
-                    // For more details, see:
-                    // https://github.com/microsoft/terminal/blob/e20e1f7bf92b61580baea69483a74a7f4578a586/src/host/stream.cpp#L170
-
                     /* Use the current OEM codepage -> Unicode function */
                     wCodePage = OemCP;
                     pRtlCPToUnicodeN = RtlOemToUnicodeN;
@@ -1078,17 +1247,41 @@ IntHandleAltNumpad(
             /* Post the Unicode character to the focused message queue if conversion succeeded */
             if (NT_SUCCESS(Status))
             {
+                // FIXME: This should be done by IntTranslateKbdMessage/IntTranslateChar,
+                // as part of TranslateMessage.
                 MSG msgChar;
-                msgChar.hwnd = pFocusQueue->spwndFocus ? UserHMGetHandle(pFocusQueue->spwndFocus) : NULL;
+                msgChar.hwnd = pWnd ? UserHMGetHandle(pWnd) : NULL;
                 msgChar.message = WM_CHAR;
                 msgChar.wParam = wchUnicodeChar;
-                msgChar.lParam = 1;
+
+                // FIXME: See also the 'if (!bPacket)' case in ProcessKeyEvent.
+                msgChar.lParam = MAKELPARAM(1, wScanCode) | lCharFlags;
+                //if (bExt)
+                //    msgChar.lParam |= KF_EXTENDED << 16;
+                if (IS_KEY_DOWN(gafAsyncKeyState, VK_MENU))
+                    msgChar.lParam |= KF_ALTDOWN << 16;
+                //if (bWasSimpleDown)
+                //    msgChar.lParam |= KF_REPEAT << 16;
+                if (!bIsDown)
+                    msgChar.lParam |= KF_UP << 16;
+                /* FIXME: Set KF_DLGMODE and KF_MENUMODE when needed */
+                if (pFocusQueue->QF_flags & QF_DIALOGACTIVE)
+                    msgChar.lParam |= KF_DLGMODE << 16;
+                if (pFocusQueue->MenuOwner) // (pti->pMenuState && pti->pMenuState->fMenuStarted)
+                    msgChar.lParam |= KF_MENUMODE << 16;
+
                 msgChar.time = dwTime;
                 msgChar.pt = gpsi->ptCursor;
 
-                MsqPostMessage(pFocusQueue->ptiKeyboard, &msgChar, FALSE, QS_KEY, 0, 0);
+                MsqPostMessage(pti, &msgChar, FALSE, QS_KEY, 0, 0);
             }
         }
+#else
+        /* Stash the current Alt+Numpad state and value for character translation */
+        /* Keep the stashed Alt+Numpad value for character translation */
+        gPrevAltNumPadState = gAltNumPadState;
+        gPrevAltNumPadValue = gAltNumPadValue;
+#endif
 
         /* Reset the Alt+Numpad state */
         gAltNumPadState = ALTNUM_INACTIVE;
@@ -1096,6 +1289,160 @@ IntHandleAltNumpad(
     }
 
     return FALSE; /* More key processing has to be done */
+}
+
+/**
+ * @brief
+ * Translate the Alt+Numpad character being composed, on ALT key release.
+ * Invoked by IntTranslateChar().
+ *
+ * @param[in]   wVk
+ * The virtual key code of the key being input, in its "simplified"
+ * shift-less version, as given by IntSimplifyVk().
+ *
+ * @param[in]   bIsDown
+ * TRUE if the current key is being pressed; FALSE if it is released.
+ *
+ * @return
+ * TRUE if no further key processing needs to be done;
+ * FALSE if regular key processing has to be done by the caller.
+ **/
+static BOOL
+IntTranslateAltNumpad(
+    _Out_ PWCHAR pwcTranslatedChar,
+    _Out_ LPARAM* plParamExtraFlags,
+    _In_ WORD wVk,
+    _In_ BOOL bIsDown)
+{
+    BOOL bSuccess = FALSE;
+
+    *pwcTranslatedChar = UNICODE_NULL;
+    *plParamExtraFlags = 0;
+
+    /* Check for the end of an Alt+Numpad sequence, triggered by the ALT key release */
+    if (/*(gPrevAltNumPadState != ALTNUM_INACTIVE)*/ (gPrevAltNumPadValue != 0) &&
+        !bIsDown && (wVk == VK_MENU))
+    {
+        PUSER_MESSAGE_QUEUE pFocusQueue = IntGetFocusMessageQueue();
+
+        TRACE2("Translate Alt+Numpad:\n"
+               "gAltNumPadState: %lu, gAltNumPadValue: %lu\n"
+               "gPrevAltNumPadState: %lu, gPrevAltNumPadValue: %lu\n",
+               gAltNumPadState, gAltNumPadValue,
+               gPrevAltNumPadState, gPrevAltNumPadValue);
+
+        if (gPrevAltNumPadValue != 0 && pFocusQueue)
+        {
+            PWND pWnd;
+            NTSTATUS Status;
+            WCHAR wchUnicodeChar;
+            LPARAM lCharFlags = 0;
+
+            pWnd = pFocusQueue->spwndFocus;
+            if (!pWnd /*&& pFocusQueue->spwndActive*/)
+                pWnd = pFocusQueue->spwndActive;
+            //if (!pWnd)
+            //    return FALSE;
+
+            /* Convert the input codepoint value to UTF-16 */
+            if (gPrevAltNumPadState == ALTNUM_HEX_UTF)
+            {
+                /* Convert the Unicode codepoint to UTF-16 */
+                // FIXME: We currently support only the Basic Multilingual Plane
+                // (equivalent to UCS-2) and don't exclude the surrogate range
+                // (U+D800 to U+DFFF). In the future, we should handle all the
+                // valid values, generating two UTF-16 code units if necessary
+                // so as to support the other Unicode planes.
+                // See https://en.wikipedia.org/wiki/UTF-16#Description
+                wchUnicodeChar = (WCHAR)(gPrevAltNumPadValue & 0xFFFF);
+                Status = STATUS_SUCCESS;
+            }
+            else if ((gPrevAltNumPadState == ALTNUM_OEM) && pWnd &&
+                     ((pWnd->head.pti->TIF_flags & TIF_CSRSSTHREAD) &&
+                      (pWnd->pcls->atomClassName == gaGuiConsoleWndClass)))
+            {
+                /*
+                 * Directly forward the raw OEM character value with the
+                 * ALTNUMPAD_BIT set to the console for Unicode conversion,
+                 * because we do not know its active OEM code page.
+                 * For more details, see:
+                 * https://github.com/microsoft/terminal/blob/e20e1f7bf92b61580baea69483a74a7f4578a586/src/host/stream.cpp#L170
+                 */
+ERR("Send OEM key to Console\n");
+                lCharFlags |= ALTNUMPAD_BIT;
+                wchUnicodeChar = (WCHAR)(gPrevAltNumPadValue & 0xFFFF);
+                Status = STATUS_SUCCESS;
+            }
+            else
+            {
+                NTSTATUS (NTAPI* pRtlCPToUnicodeN)(
+                    _Out_writes_bytes_to_(MaxBytesInUnicodeString, *BytesInUnicodeString) PWCH UnicodeString,
+                    _In_ ULONG MaxBytesInUnicodeString,
+                    _Out_opt_ PULONG BytesInUnicodeString,
+                    _In_reads_bytes_(BytesInString) PCCH String,
+                    _In_ ULONG BytesInString);
+
+                USHORT AnsiCP, OemCP, wCodePage, mbChar;
+
+                /* Check the current codepage and select a conversion function.
+                 * NOTE: Windows WIN32K invokes the ClientCharToWchar
+                 * USER32 callback to perform the conversion. */
+                RtlGetDefaultCodePage(&AnsiCP, &OemCP);
+                if (gPrevAltNumPadState == ALTNUM_OEM)
+                {
+                    /* Use the current OEM codepage -> Unicode function */
+                    wCodePage = OemCP;
+                    pRtlCPToUnicodeN = RtlOemToUnicodeN;
+                }
+                else // if ((gPrevAltNumPadState == ALTNUM_ACP) ||
+                     //     (gPrevAltNumPadState == ALTNUM_HEX_ACP))
+                {
+                    /* Use the current ANSI codepage (ACP) MultiByte -> Unicode function */
+                    wCodePage = AnsiCP;
+                    pRtlCPToUnicodeN = RtlMultiByteToUnicodeN;
+                }
+
+                /* For CJK codepages, keep the input value on 2 bytes,
+                 * otherwise truncate it to 1 byte for legacy behaviour. */
+                if (IsCJKCodePage(wCodePage))
+                {
+                    mbChar = (USHORT)(gPrevAltNumPadValue & 0xFFFF);
+                }
+                else
+                {
+                    /*
+                     * NOTE: the input value is considered modulo 256 as it is
+                     * stored in a 1-byte CHAR. Other input systems that hook and
+                     * re-implement the Alt+Numpad system (e.g. RichEdit, ...)
+                     * store instead the value in a 2-byte WORD, i.e. consider
+                     * the value modulo 65536.
+                     * See: https://devblogs.microsoft.com/oldnewthing/20240702-00/?p=109951
+                     */
+                    mbChar = (USHORT)(gPrevAltNumPadValue & 0xFF);
+                }
+
+                Status = pRtlCPToUnicodeN(&wchUnicodeChar,
+                                          sizeof(wchUnicodeChar),
+                                          NULL,
+                                          (PCCH)&mbChar,
+                                          sizeof(mbChar));
+            }
+
+            /* Return the translated Unicode character if conversion succeeded */
+            if (NT_SUCCESS(Status))
+            {
+                *pwcTranslatedChar = wchUnicodeChar;
+                *plParamExtraFlags = lCharFlags;
+                bSuccess = TRUE;
+            }
+        }
+
+        /* Reset the Alt+Numpad stashed state */
+        gPrevAltNumPadState = ALTNUM_INACTIVE;
+        gPrevAltNumPadValue = 0;
+    }
+
+    return bSuccess;
 }
 
 /*
@@ -1133,8 +1480,8 @@ ProcessKeyEvent(WORD wVk, WORD wScanCode, DWORD dwFlags, BOOL bInjected, DWORD d
     }
 
     /* Handle Alt+Numpad character composition */
-    if (IntHandleAltNumpad(wSimpleVk, bIsDown, dwTime))
-        return TRUE;
+    if (IntHandleAltNumpad(wSimpleVk, wScanCode, bIsDown, dwTime))
+        NOTHING; // return TRUE;
 
     bWasSimpleDown = IS_KEY_DOWN(gafAsyncKeyState, wSimpleVk);
 
@@ -1285,11 +1632,11 @@ ProcessKeyEvent(WORD wVk, WORD wScanCode, DWORD dwFlags, BOOL bInjected, DWORD d
         Msg.time = dwTime;
         Msg.pt = gpsi->ptCursor;
 
-        if ( Msg.message == WM_KEYDOWN || Msg.message == WM_SYSKEYDOWN )
+        if (Msg.message == WM_KEYDOWN || Msg.message == WM_SYSKEYDOWN)
         {
-           if ( (Msg.wParam == VK_SHIFT ||
-                 Msg.wParam == VK_CONTROL ||
-                 Msg.wParam == VK_MENU ) &&
+           if ((Msg.wParam == VK_SHIFT ||
+                Msg.wParam == VK_CONTROL ||
+                Msg.wParam == VK_MENU) &&
                !IS_KEY_DOWN(gafAsyncKeyState, Msg.wParam))
            {
               ERR("Set last input\n");
@@ -1311,19 +1658,17 @@ ProcessKeyEvent(WORD wVk, WORD wScanCode, DWORD dwFlags, BOOL bInjected, DWORD d
             /* FIXME: Set KF_DLGMODE and KF_MENUMODE when needed */
             if (pFocusQueue->QF_flags & QF_DIALOGACTIVE)
                 Msg.lParam |= KF_DLGMODE << 16;
-            if (pFocusQueue->MenuOwner) // pti->pMenuState->fMenuStarted
+            if (pFocusQueue->MenuOwner) // (pti->pMenuState && pti->pMenuState->fMenuStarted)
                 Msg.lParam |= KF_MENUMODE << 16;
         }
 
-        // Post mouse move before posting key buttons, to keep it syned.
+        // Post mouse move before posting key buttons, to keep it synced.
         if (pFocusQueue->QF_flags & QF_MOUSEMOVED)
-        {
-           IntCoalesceMouseMove(pti);
-        }
+            IntCoalesceMouseMove(pti);
 
         /* Post a keyboard message */
         TRACE("Posting keyboard msg %u wParam 0x%x lParam 0x%x\n", Msg.message, Msg.wParam, Msg.lParam);
-        if (!Wnd) {ERR("Window is NULL\n");}
+        if (!Wnd) ERR("Window is NULL\n");
         MsqPostMessage(pti, &Msg, TRUE, QS_KEY, 0, dwExtraInfo);
     }
     return TRUE;
@@ -1391,9 +1736,7 @@ UserSendKeyboardInput(KEYBDINPUT *pKbdInput, BOOL bInjected)
     if (pKbdInput->time)
         dwTime = pKbdInput->time;
     else
-    {
         dwTime = EngGetTickCount32();
-    }
 
     if (wVk == VK_RMENU && (pKbdTbl->fLocaleFlags & KLLF_ALTGR))
     {
@@ -1489,32 +1832,36 @@ UserProcessKeyboardInput(
     }
 }
 
-/*
- * IntTranslateKbdMessage
- *
- * Addes WM_(SYS)CHAR messages to message queue if message
- * describes key which produce character.
- */
+/**
+ * @brief
+ * Generates WM_(SYS)CHAR messages in the message queue if the
+ * key-up/down message describes a key which produce character(s).
+ **/
 BOOL FASTCALL
-IntTranslateKbdMessage(LPMSG lpMsg,
-                       UINT flags)
+IntTranslateKbdMessage(
+    LPMSG lpMsg,
+    UINT flags)
 {
     PTHREADINFO pti;
     INT cch = 0, i;
-    WCHAR wch[3] = { 0 };
+    LPARAM msgLParam;
+    WCHAR wch[3] = { 0 }; // FIXME: May have to be enlarged for high plane Unicode characters.
     MSG NewMsg = { 0 };
     PKBDTABLES pKbdTbl;
+    BOOL bSysKey = FALSE;
     BOOL bResult = FALSE;
 
-    switch(lpMsg->message)
+    switch (lpMsg->message)
     {
-       case WM_KEYDOWN:
-       case WM_KEYUP:
-       case WM_SYSKEYDOWN:
-       case WM_SYSKEYUP:
-          break;
-       default:
-          return FALSE;
+        case WM_SYSKEYDOWN:
+        case WM_SYSKEYUP:
+            bSysKey = TRUE;
+            __fallthrough;
+        case WM_KEYDOWN:
+        case WM_KEYUP:
+            break;
+        default:
+            return FALSE;
     }
 
     pti = PsGetCurrentThreadWin32Thread();
@@ -1535,62 +1882,94 @@ IntTranslateKbdMessage(LPMSG lpMsg,
         }
     }
     else
-       pKbdTbl = pti->KeyboardLayout->spkf->pKbdTbl;
+    {
+        pKbdTbl = pti->KeyboardLayout->spkf->pKbdTbl;
+    }
     if (!pKbdTbl)
         return FALSE;
 
-    if (lpMsg->message != WM_KEYDOWN && lpMsg->message != WM_SYSKEYDOWN)
-        return FALSE;
+    // FIXME: Disabled because wrong (i.e. we _should_ support the UP messages).
+    // See:
+    // https://github.com/reactos/reactos/commit/3f52e9d7281867283a71a88451c30885dfde3f9b
+    // Wine has this as well, but it's wrong, Windows does translate WM_*KEYUP messages.
+    //if (lpMsg->message != WM_KEYDOWN && lpMsg->message != WM_SYSKEYDOWN)
+    //    return FALSE;
 
     /* Init pt, hwnd and time msg fields */
     NewMsg.pt = gpsi->ptCursor;
     NewMsg.hwnd = lpMsg->hwnd;
     NewMsg.time = EngGetTickCount32();
 
-    TRACE("Enter IntTranslateKbdMessage msg %s, vk %x\n",
-        lpMsg->message == WM_SYSKEYDOWN ? "WM_SYSKEYDOWN" : "WM_KEYDOWN", lpMsg->wParam);
+    TRACE("Enter IntTranslateKbdMessage msg 0x%x, vk 0x%x\n", lpMsg->message, lpMsg->wParam);
 
     if (lpMsg->wParam == VK_PACKET)
     {
-        NewMsg.message = (lpMsg->message == WM_KEYDOWN) ? WM_CHAR : WM_SYSCHAR;
+__debugbreak();
+        NewMsg.message = (bSysKey ? WM_SYSCHAR : WM_CHAR);
         NewMsg.wParam = HIWORD(lpMsg->lParam);
         NewMsg.lParam = LOWORD(lpMsg->lParam);
         MsqPostMessage(pti, &NewMsg, FALSE, QS_KEY, 0, 0);
         return TRUE;
     }
 
+    if (pti->MessageQueue->MenuOwner) // (pti->pMenuState && pti->pMenuState->fMenuStarted)
+        flags |= TM_MENUMODE;
+    // else, should we remove it in case the caller set it? flags &= ~TM_MENUMODE;
+
+ERR("IntTranslateKbdMessage msg 0x%x, vk 0x%x scancode 0x%x\n", lpMsg->message, lpMsg->wParam, HIWORD(lpMsg->lParam));
     cch = IntToUnicodeEx(lpMsg->wParam,
-                         HIWORD(lpMsg->lParam) & 0xFF,
+                         HIWORD(lpMsg->lParam),
                          pti->MessageQueue->afKeyState,
+                         &msgLParam,
                          wch,
                          sizeof(wch) / sizeof(wch[0]),
-                         0,
+                         flags,
                          pKbdTbl);
 
-    if (cch)
+    // TODO: Consistently handle TM_POSTCHARBREAKS, see:
+    // https://github.com/microsoft/terminal/blob/e05a5fb6d8ff492cf9c49761bad70363e8515c5e/src/interactivity/win32/ConsoleControl.hpp#L21
+    if (cch == 0)
     {
-        if (cch > 0) /* Normal characters */
-            NewMsg.message = (lpMsg->message == WM_KEYDOWN) ? WM_CHAR : WM_SYSCHAR;
-        else /* Dead character */
-        {
-            cch = -cch;
-            NewMsg.message =
-                (lpMsg->message == WM_KEYDOWN) ? WM_DEADCHAR : WM_SYSDEADCHAR;
-        }
-        NewMsg.lParam = lpMsg->lParam;
-
-        /* Send all characters */
-        for (i = 0; i < cch; ++i)
-        {
-            TRACE("Msg: %x '%lc' (%04x) %08x\n", NewMsg.message, wch[i], wch[i], NewMsg.lParam);
-            NewMsg.wParam = wch[i];
-            MsqPostMessage(pti, &NewMsg, FALSE, QS_KEY, 0, 0);
-        }
-        bResult = TRUE;
+        /*
+         * No message translated and WM_*CHAR posted. Return FALSE if
+         * bit 1 (TM_POSTCHARBREAKS flag) is set, or TRUE otherwise, see:
+         * https://learn.microsoft.com/en-us/windows/win32/winmsg/translatemessageex#flags-in
+         */
+        bResult = !(flags & TM_POSTCHARBREAKS);
+        goto Quit;
     }
 
-    TRACE("Leave IntTranslateKbdMessage ret %d, cch %d, msg %x, wch %x\n",
-        bResult, cch, NewMsg.message, NewMsg.wParam);
+    if (cch > 0) /* Normal characters */
+    {
+        NewMsg.message = (bSysKey ? WM_SYSCHAR : WM_CHAR);
+    }
+    else /* Dead character */
+    {
+        cch = -cch;
+        NewMsg.message = (bSysKey ? WM_SYSDEADCHAR : WM_DEADCHAR);
+    }
+
+    /* Prepare the message lParam */
+    msgLParam |= lpMsg->lParam;
+    /* Ensure the up/down flag is correctly set */
+    if (!(msgLParam & (KF_UP << 16)))
+        msgLParam &= ~(KF_UP << 16);
+
+    /* Send all characters */
+    for (i = 0; i < cch; ++i)
+    {
+        TRACE("Msg: 0x%x '%lc' (%04x) %08x\n", NewMsg.message, wch[i], wch[i], lpMsg->lParam);
+        NewMsg.wParam = wch[i];
+        /* In case multi character messages are generated, all except the
+         * last one are tagged as "fake" keystrokes (DONTCARE_BIT set). */
+        NewMsg.lParam = msgLParam | ((i < cch-1) ? FAKE_KEYSTROKE : 0);
+        MsqPostMessage(pti, &NewMsg, FALSE, QS_KEY, 0, 0);
+    }
+    bResult = TRUE;
+
+Quit:
+    TRACE("Leave IntTranslateKbdMessage ret %u, msg 0x%x, cch %u, wch 0x%x\n",
+          bResult, NewMsg.message, cch, NewMsg.wParam);
     return bResult;
 }
 
@@ -1715,14 +2094,18 @@ NtUserToUnicodeEx(
     PKL pKl = NULL;
     NTSTATUS Status = STATUS_SUCCESS;
 
-    TRACE("Enter NtUserSetKeyboardState\n");
+    TRACE("Enter NtUserToUnicodeEx\n");
 
-    /* Return 0 if SC_KEY_UP bit is set */
-    if (wScanCode & SC_KEY_UP || wVirtKey >= 0x100)
-    {
-        ERR("Invalid parameter\n");
-        return 0;
-    }
+    // TODO: Remove this code; this is implicitly handled by IntToUnicodeEx.
+    // See https://github.com/reactos/reactos/commit/428dff1a79ed6a592bd486c77e4110c0949d3188
+    // and https://github.com/reactos/reactos/commit/1dbbf02a7e30d9bcb797a30157e93483951f4840
+    // Also, remove SC_KEY_UP from input.h
+    // /* Return 0 if SC_KEY_UP bit is set */
+    // if (wScanCode & SC_KEY_UP || wVirtKey >= 0x100)
+    // {
+    //     ERR("Invalid parameter\n");
+    //     return 0;
+    // }
 
     _SEH2_TRY
     {
@@ -1765,14 +2148,15 @@ NtUserToUnicodeEx(
 
     if (pKl)
     {
+        LPARAM lfDummy;
         iRet = IntToUnicodeEx(wVirtKey,
-                            wScanCode,
-                            afKeyState,
-                            pwszBuff,
-                            cchBuff,
-                            wFlags,
-                            pKl->spkf->pKbdTbl);
-
+                              wScanCode,
+                              afKeyState,
+                              &lfDummy,
+                              pwszBuff,
+                              cchBuff,
+                              wFlags,
+                              pKl->spkf->pKbdTbl);
         if (iRet)
         {
             Status = MmCopyToCaller(pwszBuffUnsafe, pwszBuff, cchBuff * sizeof(WCHAR));
@@ -1793,7 +2177,7 @@ NtUserToUnicodeEx(
     }
 
     UserLeave();
-    TRACE("Leave NtUserSetKeyboardState, ret=%i\n", iRet);
+    TRACE("Leave NtUserToUnicodeEx, ret=%i\n", iRet);
     return iRet;
 }
 

@@ -2509,7 +2509,7 @@ NtUserTranslateMessage(LPMSG lpMsg, UINT flags)
     pWnd = UserGetWindowObject(SafeMsg.hwnd);
     if (pWnd) // Must have a window!
     {
-       Ret = IntTranslateKbdMessage(&SafeMsg, flags);
+        Ret = IntTranslateKbdMessage(&SafeMsg, flags);
     }
     else
     {

@@ -33,13 +33,13 @@
  *  If they are the same, the function fails, and GetLastError returns
  *  ERROR_INVALID_PARAMETER."
  */
-#define ConsoleInputUnicodeCharToAnsiChar(Console, dChar, sWChar) \
+#define ConsoleInputUnicodeToAnsiChar(Console, dChar, sWChar) \
 do { \
     ASSERT((ULONG_PTR)(dChar) != (ULONG_PTR)(sWChar)); \
     WideCharToMultiByte((Console)->InputCodePage, 0, (sWChar), 1, (dChar), 1, NULL, NULL); \
 } while (0)
 
-#define ConsoleInputAnsiCharToUnicodeChar(Console, dWChar, sChar) \
+#define ConsoleInputAnsiToUnicodeChar(Console, dWChar, sChar) \
 do { \
     ASSERT((ULONG_PTR)(dWChar) != (ULONG_PTR)(sChar)); \
     MultiByteToWideChar((Console)->InputCodePage, 0, (sChar), 1, (dWChar), 1); \
@@ -56,9 +56,9 @@ ConioInputEventToAnsi(PCONSOLE Console, PINPUT_RECORD InputEvent)
     {
         WCHAR UnicodeChar = InputEvent->Event.KeyEvent.uChar.UnicodeChar;
         InputEvent->Event.KeyEvent.uChar.UnicodeChar = 0;
-        ConsoleInputUnicodeCharToAnsiChar(Console,
-                                          &InputEvent->Event.KeyEvent.uChar.AsciiChar,
-                                          &UnicodeChar);
+        ConsoleInputUnicodeToAnsiChar(Console,
+                                      &InputEvent->Event.KeyEvent.uChar.AsciiChar,
+                                      &UnicodeChar);
     }
 }
 
@@ -69,9 +69,9 @@ ConioInputEventToUnicode(PCONSOLE Console, PINPUT_RECORD InputEvent)
     {
         CHAR AsciiChar = InputEvent->Event.KeyEvent.uChar.AsciiChar;
         InputEvent->Event.KeyEvent.uChar.AsciiChar = 0;
-        ConsoleInputAnsiCharToUnicodeChar(Console,
-                                          &InputEvent->Event.KeyEvent.uChar.UnicodeChar,
-                                          &AsciiChar);
+        ConsoleInputAnsiToUnicodeChar(Console,
+                                      &InputEvent->Event.KeyEvent.uChar.UnicodeChar,
+                                      &AsciiChar);
     }
 }
 
@@ -293,6 +293,78 @@ ConSrvTermDeinitTerminal(IN OUT PTERMINAL This)
 
 /************ Line discipline ***************/
 
+static ConsoleInput*
+UnqueueInputGetKey(
+    _In_ PCONSRV_CONSOLE Console,
+    _Inout_ PCONSOLE_INPUT_BUFFER InputBuffer)
+{
+    ConsoleInput* Input = NULL;
+    PLIST_ENTRY CurrentEntry;
+
+    while (!IsListEmpty(&InputBuffer->InputEvents))
+    {
+        /* Remove an input event from the queue */
+        _InterlockedDecrement((PLONG)&InputBuffer->NumberOfEvents);
+        CurrentEntry = RemoveHeadList(&InputBuffer->InputEvents);
+        Input = CONTAINING_RECORD(CurrentEntry, ConsoleInput, ListEntry);
+
+        if (IsListEmpty(&InputBuffer->InputEvents))
+            NtClearEvent(InputBuffer->ActiveEvent);
+
+        /* Get rid of non-key events */
+        if (Input->InputEvent.EventType != KEY_EVENT)
+        {
+            ConsoleFreeHeap(Input);
+            Input = NULL;
+        }
+    }
+
+    if (Input)
+    {
+        PKEY_EVENT_RECORD KeyEvent = &Input->InputEvent.Event.KeyEvent;
+        ASSERT(Input->InputEvent.EventType == KEY_EVENT);
+
+        /* Convert Alt+Numpad character sequences, generated on *RELEASE* of the ALT key */
+        if (!KeyEvent->bKeyDown && (KeyEvent->wVirtualKeyCode == VK_MENU))
+        {
+            /* Check whether OEM to Unicode conversion is required */
+            if (KeyEvent->dwControlKeyState & ALTNUMPAD_BIT)
+            {
+                /* The "UnicodeChar" might specify a double-byte character;
+                 * handle it as such if the input code page is CJK.
+                 * Proper validation will be done during conversion. */
+                CHAR mbChars[2];
+                if (IsCJKCodePage(Console->InputCodePage) && HIBYTE(KeyEvent->uChar.UnicodeChar))
+                {
+                    /* Interpret the value as the numerical representation
+                     * of a DBCS character: its HIBYTE is the leading byte,
+                     * to be stored first; its LOBYTE is the trailing byte,
+                     * to be stored last. */
+                    mbChars[0] = HIBYTE(KeyEvent->uChar.UnicodeChar);
+                    mbChars[1] = LOBYTE(KeyEvent->uChar.UnicodeChar);
+                }
+                else
+                {
+                    /* Consider the value only as a 8-bit OEM character */
+                    mbChars[0] = LOBYTE(KeyEvent->uChar.UnicodeChar);
+                    mbChars[1] = 0; // Only the low byte is kept.
+                }
+
+                /* Not fully equivalent to ConsoleInputAnsiToUnicodeChar()
+                 * as we give a whole CHAR[2] as input */
+                MultiByteToWideChar(Console->InputCodePage, 0,
+                                    mbChars, (mbChars[1] ? 2 : 1),
+                                    &KeyEvent->uChar.UnicodeChar, 1);
+            }
+
+            /* Convert to key-down so that ConSrvTermReadStream() can pick it up */
+            KeyEvent->bKeyDown = TRUE;
+        }
+    }
+
+    return Input;
+}
+
 static NTSTATUS NTAPI
 ConSrvTermReadStream(IN OUT PTERMINAL This,
                      IN BOOLEAN Unicode,
@@ -311,8 +383,7 @@ ConSrvTermReadStream(IN OUT PTERMINAL This,
     // STATUS_PENDING : Wait if more to read ; STATUS_SUCCESS : Don't wait.
     NTSTATUS Status = STATUS_PENDING;
 
-    PLIST_ENTRY CurrentEntry;
-    ConsoleInput *Input;
+    ConsoleInput* Input;
     ULONG i = 0;
 
     /* Validity checks */
@@ -359,20 +430,16 @@ ConSrvTermReadStream(IN OUT PTERMINAL This,
         }
 
         /* If we don't have a complete line yet, process the pending input */
-        while (!Console->LineComplete && !IsListEmpty(&InputBuffer->InputEvents))
+        while (!Console->LineComplete)
         {
-            /* Remove an input event from the queue */
-            _InterlockedDecrement((PLONG)&InputBuffer->NumberOfEvents);
-            CurrentEntry = RemoveHeadList(&InputBuffer->InputEvents);
-            if (IsListEmpty(&InputBuffer->InputEvents))
-            {
-                NtClearEvent(InputBuffer->ActiveEvent);
-            }
-            Input = CONTAINING_RECORD(CurrentEntry, ConsoleInput, ListEntry);
+            /* Dequeue input events and retrieve the next key event */
+            Input = UnqueueInputGetKey(Console, InputBuffer);
+            if (!Input)
+                break;
+            ASSERT(Input->InputEvent.EventType == KEY_EVENT);
 
             /* Only pay attention to key down */
-            if (Input->InputEvent.EventType == KEY_EVENT &&
-                Input->InputEvent.Event.KeyEvent.bKeyDown)
+            if (Input->InputEvent.Event.KeyEvent.bKeyDown)
             {
                 LineInputKeyDown(Console, ExeName,
                                  &Input->InputEvent.Event.KeyEvent);
@@ -396,13 +463,9 @@ ConSrvTermReadStream(IN OUT PTERMINAL This,
                 WCHAR Char = Console->LineBuffer[Console->LinePos++];
 
                 if (Unicode)
-                {
                     ((PWCHAR)Buffer)[i] = Char;
-                }
                 else
-                {
-                    ConsoleInputUnicodeCharToAnsiChar(Console, &((PCHAR)Buffer)[i], &Char);
-                }
+                    ConsoleInputUnicodeToAnsiChar(Console, &((PCHAR)Buffer)[i], &Char);
                 ++i;
             }
 
@@ -424,32 +487,24 @@ ConSrvTermReadStream(IN OUT PTERMINAL This,
         /* RAW mode */
 
         /* Character input */
-        while (i < NumCharsToRead && !IsListEmpty(&InputBuffer->InputEvents))
+        while (i < NumCharsToRead)
         {
-            /* Remove an input event from the queue */
-            _InterlockedDecrement((PLONG)&InputBuffer->NumberOfEvents);
-            CurrentEntry = RemoveHeadList(&InputBuffer->InputEvents);
-            if (IsListEmpty(&InputBuffer->InputEvents))
-            {
-                NtClearEvent(InputBuffer->ActiveEvent);
-            }
-            Input = CONTAINING_RECORD(CurrentEntry, ConsoleInput, ListEntry);
+            /* Dequeue input events and retrieve the next key event */
+            Input = UnqueueInputGetKey(Console, InputBuffer);
+            if (!Input)
+                break;
+            ASSERT(Input->InputEvent.EventType == KEY_EVENT);
 
             /* Only pay attention to valid characters, on key down */
-            if (Input->InputEvent.EventType == KEY_EVENT  &&
-                Input->InputEvent.Event.KeyEvent.bKeyDown &&
+            if (Input->InputEvent.Event.KeyEvent.bKeyDown &&
                 Input->InputEvent.Event.KeyEvent.uChar.UnicodeChar != L'\0')
             {
                 WCHAR Char = Input->InputEvent.Event.KeyEvent.uChar.UnicodeChar;
 
                 if (Unicode)
-                {
                     ((PWCHAR)Buffer)[i] = Char;
-                }
                 else
-                {
-                    ConsoleInputUnicodeCharToAnsiChar(Console, &((PCHAR)Buffer)[i], &Char);
-                }
+                    ConsoleInputUnicodeToAnsiChar(Console, &((PCHAR)Buffer)[i], &Char);
                 ++i;
 
                 /* Did read something */

@@ -230,9 +230,9 @@ UserGetKeyState(DWORD dwKey)
    if (dwKey < 0x100)
    {
        if (IS_KEY_DOWN(MessageQueue->afKeyState, dwKey))
-           dwRet |= 0xFF80; // If down, windows returns 0xFF80.
+           dwRet |= 0xFF00 | KS_DOWN_BIT; // If down, windows returns 0xFF80.
        if (IS_KEY_LOCKED(MessageQueue->afKeyState, dwKey))
-           dwRet |= 0x1;
+           dwRet |= KS_LOCK_BIT;
    }
    else
    {

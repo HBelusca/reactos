@@ -4229,8 +4229,8 @@ NtUserQueryWindow(HWND hWnd, DWORD Index)
    {
       case QUERY_WINDOW_UNIQUE_PROCESS_ID:
       {
-         if ( (pWnd->head.pti->TIF_flags & TIF_CSRSSTHREAD) &&
-              (pWnd->pcls->atomClassName == gaGuiConsoleWndClass) )
+         if ((pWnd->head.pti->TIF_flags & TIF_CSRSSTHREAD) &&
+             (pWnd->pcls->atomClassName == gaGuiConsoleWndClass))
          {
             // IntGetWindowLong(offset == GWLP_CONSOLE_LEADER_PID)
             Result = (DWORD_PTR)(*((LONG_PTR*)((PCHAR)(pWnd + 1) + GWLP_CONSOLE_LEADER_PID)));
@@ -4244,8 +4244,8 @@ NtUserQueryWindow(HWND hWnd, DWORD Index)
 
       case QUERY_WINDOW_UNIQUE_THREAD_ID:
       {
-         if ( (pWnd->head.pti->TIF_flags & TIF_CSRSSTHREAD) &&
-              (pWnd->pcls->atomClassName == gaGuiConsoleWndClass) )
+         if ((pWnd->head.pti->TIF_flags & TIF_CSRSSTHREAD) &&
+             (pWnd->pcls->atomClassName == gaGuiConsoleWndClass))
          {
             // IntGetWindowLong(offset == GWLP_CONSOLE_LEADER_TID)
             Result = (DWORD_PTR)(*((LONG_PTR*)((PCHAR)(pWnd + 1) + GWLP_CONSOLE_LEADER_TID)));
