@@ -808,15 +808,20 @@ FindSupportedSystemPartition(
     _In_opt_ PDISKENTRY AlternativeDisk,
     _In_opt_ PPARTENTRY AlternativePart)
 {
+    PLIST_ENTRY ListEntry;
     PDISKENTRY DiskEntry;
     PPARTENTRY PartEntry;
     PPARTENTRY ActivePartition;
     PPARTENTRY CandidatePartition = NULL;
     PVOLINFO VolInfo;
 
-    /* Check for empty disk list; if so, no system partition! */
+    /* Check for empty disk list */
     if (IsListEmpty(&List->DiskListHead))
+    {
+        /* No system partition! */
+        ASSERT(List->SystemPartition == NULL);
         goto NoSystemPartition;
+    }
 
     /* Adjust the optional alternative disk if needed */
     if (!AlternativeDisk && AlternativePart)
@@ -829,24 +834,6 @@ FindSupportedSystemPartition(
     /* Ensure that the alternative disk is in the list */
     if (AlternativeDisk)
         ASSERT(AlternativeDisk->PartList == List);
-
-//
-// Step 0 : Installation on Fixed vs. Removable disk
-//
-
-    /*
-     * If we install on a removable disk, use the
-     * install partition as the system partition.
-     */
-    if (AlternativeDisk->MediaType != FixedMedia)
-    // i.e. (AlternativeDisk->MediaType == RemovableMedia)
-    {
-        if (!AlternativePart)
-            goto NoSystemPartition;
-        CandidatePartition = AlternativePart;
-        goto UseAlternativePartition;
-    }
-
 
 //
 // Step 1 : Check the system disk.
@@ -904,10 +891,12 @@ FindSupportedSystemPartition(
          * existing suitable partitions. We must be sure that the minimal
          * size is fine.
          */
-        PartEntry = NULL;
-        while ((PartEntry = GetAdjPartition(&DiskEntry->PrimaryPartListHead, PartEntry, TRUE)))
+        for (ListEntry = DiskEntry->PrimaryPartListHead.Flink;
+             ListEntry != &DiskEntry->PrimaryPartListHead;
+             ListEntry = ListEntry->Flink)
         {
-            ASSERT(!PartEntry->LogicalPartition);
+            /* Retrieve the partition */
+            PartEntry = CONTAINING_RECORD(ListEntry, PARTENTRY, ListEntry);
 
             /* Skip the current active partition */
             if (PartEntry == ActivePartition)
@@ -923,24 +912,48 @@ FindSupportedSystemPartition(
                 goto UseAlternativePartition;
             }
 
-            /* Check if the entry is unpartitioned and remember it for later */
-            if (!PartEntry->IsPartitioned && !SuitableEmptySpace)
+            /* Check if the partition is partitioned and used */
+            if (!PartEntry->IsPartitioned)
             {
-                // TODO: Check for minimal size?
-                SuitableEmptySpace = PartEntry;
+                // TODO: Check for minimal size!!
+                CandidatePartition = PartEntry;
+                goto UseAlternativePartition;
             }
         }
 
         /*
-         * Still nothing, look whether we have found some free space that
-         * we can use for the new system partition, see the loop above.
-         * We must be sure that the partition can be created, and that its
-         * minimal size is fine.
+         * Still nothing, look whether there is some free space that we can use
+         * for the new system partition. We must be sure that the total number
+         * of partition is less than the maximum allowed, and that the minimal
+         * size is fine.
          */
-        if (PartitionCreationChecks(SuitableEmptySpace) == ERROR_SUCCESS)
+//
+// TODO: Fix the handling of system partition being created in unpartitioned space!!
+// --> When to partition it? etc...
+//
+        if (GetPrimaryPartitionCount(DiskEntry) < 4)
         {
-            CandidatePartition = SuitableEmptySpace;
-            goto UseAlternativePartition;
+            for (ListEntry = DiskEntry->PrimaryPartListHead.Flink;
+                 ListEntry != &DiskEntry->PrimaryPartListHead;
+                 ListEntry = ListEntry->Flink)
+            {
+                /* Retrieve the partition */
+                PartEntry = CONTAINING_RECORD(ListEntry, PARTENTRY, ListEntry);
+
+                /* Skip the current active partition */
+                if (PartEntry == ActivePartition)
+                    continue;
+
+                /* Check for unpartitioned space */
+                if (!PartEntry->IsPartitioned)
+                {
+                    ASSERT(PartEntry->PartitionType == PARTITION_ENTRY_UNUSED);
+
+                    // TODO: Check for minimal size!!
+                    CandidatePartition = PartEntry;
+                    goto UseAlternativePartition;
+                }
+            }
         }
     }
 
@@ -1021,15 +1034,19 @@ UseAlternativeDisk:
      * The disk is not new, check if any partition is initialized;
      * if not, the first one becomes the system partition.
      */
-    PartEntry = NULL;
-    while ((PartEntry = GetAdjPartition(&DiskEntry->PrimaryPartListHead, PartEntry, TRUE)))
+    for (ListEntry = DiskEntry->PrimaryPartListHead.Flink;
+         ListEntry != &DiskEntry->PrimaryPartListHead;
+         ListEntry = ListEntry->Flink)
     {
+        /* Retrieve the partition */
+        PartEntry = CONTAINING_RECORD(ListEntry, PARTENTRY, ListEntry);
+
         /* Check if the partition is partitioned and is used */
         // !IsContainerPartition(PartEntry->PartitionType);
         if (PartEntry->IsPartitioned || PartEntry->IsSystemPartition)
             break;
     }
-    if (!PartEntry)
+    if (ListEntry == &DiskEntry->PrimaryPartListHead)
     {
         /*
          * OK we haven't encountered any used and active partition,
