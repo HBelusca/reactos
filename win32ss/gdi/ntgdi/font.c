@@ -507,7 +507,7 @@ NtGdiAddFontResourceW(
 
         if (!IntCheckFontPathNames(pwcFiles, cFiles, cwc))
             return 0;
- 
+
         RtlCopyMemory(SafeFileName.Buffer, pwcFiles, SafeFileName.Length);
     }
     _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
@@ -1326,6 +1326,7 @@ NtGdiGetCharWidthW(
     BOOL ret = FALSE;
     PVOID pTmpBuffer = NULL;
     PWCHAR pSafePwc = NULL;
+    SIZE_T cbWidths;
     NTSTATUS Status;
     WCHAR StackPwc[40];
     INT StackBuffer[40];
@@ -1335,23 +1336,25 @@ NtGdiGetCharWidthW(
 
     if (UnSafepwc)
     {
+        SIZE_T chSize = Count * sizeof(WCHAR); // pwcSize
         if (Count <= _countof(StackPwc))
             pSafePwc = StackPwc;
         else
-            pSafePwc = ExAllocatePoolWithTag(PagedPool, Count * sizeof(WCHAR), GDITAG_TEXT);
+            pSafePwc = ExAllocatePoolWithTag(PagedPool, chSize, GDITAG_TEXT);
 
         if (!pSafePwc)
             return FALSE;
 
-        Status = MmCopyFromCaller(pSafePwc, UnSafepwc, Count * sizeof(WCHAR));
+        Status = MmCopyFromCaller(pSafePwc, UnSafepwc, chSize);
         if (!NT_SUCCESS(Status))
             goto Cleanup;
     }
 
+    cbWidths = Count * sizeof(INT);
     if (Count <= _countof(StackBuffer))
         pTmpBuffer = StackBuffer;
     else
-        pTmpBuffer = ExAllocatePoolWithTag(PagedPool, Count * sizeof(INT), GDITAG_TEXT);
+        pTmpBuffer = ExAllocatePoolWithTag(PagedPool, cbWidths, GDITAG_TEXT);
 
     if (!pTmpBuffer)
         goto Cleanup;
@@ -1359,7 +1362,7 @@ NtGdiGetCharWidthW(
     ret = GreGetCharWidthW(hDC, FirstChar, Count, pSafePwc, fl, pTmpBuffer);
     if (ret)
     {
-        Status = MmCopyToCaller(Buffer, pTmpBuffer, Count * sizeof(INT));
+        Status = MmCopyToCaller(Buffer, pTmpBuffer, cbWidths);
         ret = NT_SUCCESS(Status);
     }
 
@@ -1384,7 +1387,7 @@ NtGdiGetCharABCWidthsW(
     BOOL ret = FALSE;
     PVOID SafeBuff = NULL;
     PWCHAR Safepwch = NULL;
-    ULONG cbABCs;
+    SIZE_T cbABCs;
     NTSTATUS Status;
     WCHAR Stackpwch[28];
     ABC StackABCs[28];
@@ -1394,16 +1397,16 @@ NtGdiGetCharABCWidthsW(
 
     if (UnSafepwch)
     {
-        UINT pwchSize = Count * sizeof(WCHAR);
+        SIZE_T chSize = Count * sizeof(WCHAR); // pwchSize
         if (Count <= _countof(Stackpwch))
             Safepwch = Stackpwch;
         else
-            Safepwch = ExAllocatePoolWithTag(PagedPool, pwchSize, GDITAG_TEXT);
+            Safepwch = ExAllocatePoolWithTag(PagedPool, chSize, GDITAG_TEXT);
 
         if (!Safepwch)
             return FALSE;
 
-        Status = MmCopyFromCaller(Safepwch, UnSafepwch, pwchSize);
+        Status = MmCopyFromCaller(Safepwch, UnSafepwch, chSize);
         if (!NT_SUCCESS(Status))
             goto Cleanup;
     }
