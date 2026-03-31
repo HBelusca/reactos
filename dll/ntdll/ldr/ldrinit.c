@@ -520,15 +520,15 @@ LdrpInitializeThread(IN PCONTEXT Context)
 
     DPRINT("LdrpInitializeThread() called for %wZ (%p/%p)\n",
             &LdrpImageEntry->BaseDllName,
-            NtCurrentTeb()->RealClientId.UniqueProcess,
-            NtCurrentTeb()->RealClientId.UniqueThread);
+            Teb->RealClientId.UniqueProcess,
+            Teb->RealClientId.UniqueThread);
 
     /* Acquire the loader Lock */
     RtlEnterCriticalSection(&LdrpLoaderLock);
 
     /* Allocate an Activation Context Stack */
-    DPRINT("ActivationContextStack %p\n", NtCurrentTeb()->ActivationContextStackPointer);
-    Status = RtlAllocateActivationContextStack(&NtCurrentTeb()->ActivationContextStackPointer);
+    DPRINT("ActivationContextStack %p\n", Teb->ActivationContextStackPointer);
+    Status = RtlAllocateActivationContextStack(&Teb->ActivationContextStackPointer);
     if (!NT_SUCCESS(Status))
     {
         DPRINT1("Warning: Unable to allocate ActivationContextStack\n");
@@ -543,13 +543,12 @@ LdrpInitializeThread(IN PCONTEXT Context)
     /* Add thread to active TEB list */
     ListHead = &LdrpActiveTebList;
     TebEntry = RtlAllocateHeap(RtlGetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(*TebEntry));
-    TebEntry->Teb = NtCurrentTeb();
+    TebEntry->Teb = Teb;
     InsertTailList(&LdrpActiveTebList, &TebEntry->TebLinks);
 
     /* Start at the beginning */
     ListHead = &Peb->Ldr->InMemoryOrderModuleList;
-    NextEntry = ListHead->Flink;
-    while (NextEntry != ListHead)
+    for (NextEntry = ListHead->Flink; NextEntry != ListHead; NextEntry = NextEntry->Flink)
     {
         /* Get the current entry */
         LdrEntry = CONTAINING_RECORD(NextEntry, LDR_DATA_TABLE_ENTRY, InMemoryOrderLinks);
@@ -596,8 +595,8 @@ LdrpInitializeThread(IN PCONTEXT Context)
                             /* Call the Entrypoint */
                             DPRINT("%wZ - Calling entry point at %p for thread attaching, %p/%p\n",
                                    &LdrEntry->BaseDllName, LdrEntry->EntryPoint,
-                                   NtCurrentTeb()->RealClientId.UniqueProcess,
-                                   NtCurrentTeb()->RealClientId.UniqueThread);
+                                   Teb->RealClientId.UniqueProcess,
+                                   Teb->RealClientId.UniqueThread);
                             LdrpCallInitRoutine(LdrEntry->EntryPoint,
                                                 LdrEntry->DllBase,
                                                 DLL_THREAD_ATTACH,
@@ -616,9 +615,6 @@ LdrpInitializeThread(IN PCONTEXT Context)
                 }
             }
         }
-
-        /* Next entry */
-        NextEntry = NextEntry->Flink;
     }
 
     /* Check for TLS */
@@ -1509,11 +1505,10 @@ LdrpFreeTls(VOID)
 
     /* Loop through it */
     ListHead = &LdrpTlsList;
-    NextEntry = ListHead->Flink;
-    while (NextEntry != ListHead)
+    while (!IsListEmpty(ListHead))
     {
+        NextEntry = RemoveHeadList(ListHead);
         TlsData = CONTAINING_RECORD(NextEntry, LDRP_TLS_DATA, TlsLinks);
-        NextEntry = NextEntry->Flink;
 
         /* Free each entry */
         if (TlsVector[TlsData->TlsDirectory.Characteristics])
@@ -1533,13 +1528,12 @@ LdrpFreeTls(VOID)
     {
         /* Loop through it */
         ListHead = (PLIST_ENTRY)Teb->SystemReserved1.OldTlsVectorList;
-        NextEntry = ListHead->Flink;
-        while (NextEntry != ListHead)
+        while (!IsListEmpty(ListHead))
         {
+            NextEntry = RemoveHeadList(ListHead);
             OldTlsVectorDataEntry = CONTAINING_RECORD(NextEntry,
                                                       LDRP_OLD_TLS_VECTOR_ENTRY,
                                                       TlsVectorLinks);
-            NextEntry = NextEntry->Flink;
 
             /* Free each old TLS vector and the entry itself */
             RtlFreeHeap(RtlGetProcessHeap(), 0, OldTlsVectorDataEntry->OldTlsVector);
@@ -1910,6 +1904,7 @@ LdrpInitializeProcess(IN PCONTEXT Context,
     //ULONG DebugHeapOnly;
     UNICODE_STRING CommandLine, NtSystemRoot, ImagePathName, FullPath, ImageFileName, KnownDllString;
     PPEB Peb = NtCurrentPeb();
+    PTEB Teb = NtCurrentTeb();
     BOOLEAN IsDotNetImage = FALSE;
     BOOLEAN FreeCurDir = FALSE;
     //HANDLE CompatKey;
@@ -1924,7 +1919,6 @@ LdrpInitializeProcess(IN PCONTEXT Context,
     NTSTATUS Status, ImportStatus;
     NLSTABLEINFO NlsTable;
     PIMAGE_LOAD_CONFIG_DIRECTORY LoadConfig;
-    PTEB Teb = NtCurrentTeb();
     PLIST_ENTRY ListHead;
     PLIST_ENTRY NextEntry;
     ULONG i;
@@ -2539,12 +2533,10 @@ LdrpInitializeProcess(IN PCONTEXT Context,
 
     /* Lock the DLLs */
     ListHead = &Peb->Ldr->InLoadOrderModuleList;
-    NextEntry = ListHead->Flink;
-    while (ListHead != NextEntry)
+    for (NextEntry = ListHead->Flink; ListHead != NextEntry; NextEntry = NextEntry->Flink)
     {
         NtLdrEntry = CONTAINING_RECORD(NextEntry, LDR_DATA_TABLE_ENTRY, InLoadOrderLinks);
         NtLdrEntry->LoadCount = -1;
-        NextEntry = NextEntry->Flink;
     }
 
     /* Phase 0 is done */
@@ -2721,8 +2713,8 @@ LdrpInit(PCONTEXT Context,
     PPEB Peb = NtCurrentPeb();
 
     DPRINT("LdrpInit() %p/%p\n",
-        NtCurrentTeb()->RealClientId.UniqueProcess,
-        NtCurrentTeb()->RealClientId.UniqueThread);
+           Teb->RealClientId.UniqueProcess,
+           Teb->RealClientId.UniqueThread);
 
 #ifdef _WIN64
     /* Set the SList header usage */
@@ -2737,7 +2729,7 @@ LdrpInit(PCONTEXT Context,
                                       Teb->NtTib.StackLimit,
                                       MemoryBasicInformation,
                                       &MemoryBasicInfo,
-                                      sizeof(MEMORY_BASIC_INFORMATION),
+                                      sizeof(MemoryBasicInfo),
                                       NULL);
         if (!NT_SUCCESS(Status))
         {
@@ -2753,8 +2745,7 @@ LdrpInit(PCONTEXT Context,
 
     /* Now check if the process is already being initialized */
     while (_InterlockedCompareExchange(&LdrpProcessInitialized,
-                                      1,
-                                      0) == 1)
+                                       1, 0) == 1)
     {
         /* Set the timeout to 30 milliseconds */
         Timeout.QuadPart = Int32x32To64(30, -10000);
@@ -2811,7 +2802,7 @@ LdrpInit(PCONTEXT Context,
     else
     {
         /* Loader data is there... is this a fork() ? */
-        if(Peb->InheritedAddressSpace)
+        if (Peb->InheritedAddressSpace)
         {
             /* Handle the fork() */
             //LoaderStatus = LdrpForkProcess();

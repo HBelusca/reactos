@@ -19,8 +19,7 @@ ULONG ExtantTlsEntryCount = 0;
 
 DWORD WINAPI
 AuxThread0Proc(
-  _In_ LPVOID pParameter
-)
+    _In_ PVOID pParameter)
 {
     PVOID* TlsVector;
     PTEB Teb = NtCurrentTeb();
@@ -38,8 +37,7 @@ AuxThread0Proc(
 
 DWORD WINAPI
 AuxThread1Proc(
-  _In_ LPVOID pParameter
-)
+    _In_ PVOID pParameter)
 {
     PVOID* TlsVector;
     PTEB Teb = NtCurrentTeb();
@@ -58,7 +56,7 @@ START_TEST(implicit_tls)
     BOOL IsSuccess;
     DWORD Length;
     HANDLE AuxThread0, AuxThread1;
-    int i;
+    UINT i;
     PTEB Teb = NtCurrentTeb();
     ULONG TlsIdx0Value;
     ULONG TlsIdx0ValueAfter;
@@ -80,9 +78,9 @@ START_TEST(implicit_tls)
 
     TlsVector = Teb->ThreadLocalStoragePointer;
     PULONG_PTR ModuleHandle = TlsVector[0];
-    #if defined(_MSC_VER)
-    #pragma warning( disable : 4311)
-    #endif
+#if defined(_MSC_VER)
+#pragma warning( disable : 4311)
+#endif
     *ModuleHandle = (ULONG)GetModuleHandleA(NULL) + 3;
 
     TlsIdx0Value = *(PULONG)TlsVector[0];
@@ -103,7 +101,7 @@ START_TEST(implicit_tls)
         if (i == TLS_VECTOR_MAX_SIZE / 2)
         {
             AuxThread1 = CreateThread(NULL, 0, AuxThread1Proc, NULL, 0, NULL);
-		    ok(AuxThread1 != NULL, "CreateThread failed with %lu\n", GetLastError());
+            ok(AuxThread1 != NULL, "CreateThread failed with %lu\n", GetLastError());
         }
     }
 

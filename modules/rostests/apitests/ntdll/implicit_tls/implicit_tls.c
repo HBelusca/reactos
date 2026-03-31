@@ -15,7 +15,7 @@
 #if defined(_MSC_VER)
 #define _CRTALLOC(x) __declspec(allocate(x))
 #elif defined(__GNUC__)
-#define _CRTALLOC(x) __attribute__ ((section (x) ))
+#define _CRTALLOC(x) __attribute__((section(x)))
 #else
 #error Your compiler is not supported.
 #endif
@@ -41,25 +41,26 @@ _CRTALLOC(".tls$ZZZ") char _tls_end = 0;
 ULONG _tls_index = 0;
 
 _CRTALLOC(".rdata$T") const IMAGE_TLS_DIRECTORY _tls_used = {
-  (ULONG_PTR) &_tls_start, (ULONG_PTR) &_tls_end + 3,
-  (ULONG_PTR) &_tls_index, (ULONG_PTR) 0,
-  (ULONG) 0, (ULONG) 0
+  (ULONG_PTR)&_tls_start, (ULONG_PTR)&_tls_end + 3,
+  (ULONG_PTR)&_tls_index, (ULONG_PTR)0,
+  (ULONG)0, (ULONG)0
 };
 
 BOOL WINAPI
-DllMain(IN HINSTANCE hDllHandle,
-        IN DWORD dwReason,
-        IN LPVOID lpvReserved)
+DllMain(
+    _In_ HINSTANCE hDllHandle,
+    _In_ DWORD dwReason,
+    _In_ PVOID pvReserved)
 {
     PTEB Teb = NtCurrentTeb();
     PVOID* TlsVector = Teb->ThreadLocalStoragePointer;
     PULONG_PTR ModuleHandle = (PULONG_PTR)TlsVector[_tls_index];
     if (dwReason == DLL_PROCESS_ATTACH)
     {
-        #if defined(_MSC_VER)
-        #pragma warning( disable : 4311)
-        #endif
+#if defined(_MSC_VER)
+#pragma warning( disable : 4311)
+#endif
         *ModuleHandle = (ULONG_PTR)GetModuleHandleA(NULL) + 1;
-	}
+    }
     return TRUE;
 }
