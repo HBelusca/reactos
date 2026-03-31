@@ -1,8 +1,6 @@
 
 add_definitions(-D_NTSYSTEM_)
 
-list(APPEND SOURCE
-    arbiter.c)
-
-add_library(arbiter ${SOURCE})
+add_library(arbiter STATIC arbiter.c)
 add_dependencies(arbiter bugcodes xdk)
+target_include_directories(arbiter INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})

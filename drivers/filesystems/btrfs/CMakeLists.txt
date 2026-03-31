@@ -1,6 +1,5 @@
 
 include_directories(${REACTOS_SOURCE_DIR}/sdk/include/reactos/drivers
-                    ${REACTOS_SOURCE_DIR}/sdk/include/reactos/libs/zlib
                     inc)
 
 set(ZSTD_SRC_FILES

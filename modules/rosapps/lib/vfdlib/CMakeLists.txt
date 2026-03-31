@@ -27,8 +27,7 @@ add_library(vfd MODULE
     vfdlib.rc
     ${CMAKE_CURRENT_BINARY_DIR}/vfd.def)
 
-include_directories(${REACTOS_SOURCE_DIR}/modules/rosapps/include/vfd
-                    ${REACTOS_SOURCE_DIR}/sdk/include/reactos/libs/zlib)
+include_directories(${REACTOS_SOURCE_DIR}/modules/rosapps/include/vfd)
 set_module_type(vfd win32dll ENTRYPOINT DllMain 12)
 target_link_libraries(vfd zlib_solo uuid cppstl)
 set_target_cpp_properties(vfd WITH_EXCEPTIONS)

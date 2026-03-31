@@ -2,9 +2,8 @@
 remove_definitions(-D_WIN32_WINNT=0x502)
 add_definitions(-D_WIN32_WINNT=0x600)
 
-include_directories(
-    ${REACTOS_SOURCE_DIR}/sdk/include/reactos/libs/zlib
-    ${REACTOS_SOURCE_DIR}/sdk/lib/3rdparty/zlib/contrib)
+#include_directories(
+#    ${REACTOS_SOURCE_DIR}/sdk/lib/3rdparty/zlib/contrib)
 
 spec2def(zipfldr.dll zipfldr.spec ADD_IMPORTLIB)
 

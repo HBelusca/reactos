@@ -8,7 +8,8 @@ add_definitions(
 
 include_directories(
     ${REACTOS_SOURCE_DIR}/sdk/include/reactos/libs/libjpeg
-    ${REACTOS_SOURCE_DIR}/sdk/include/reactos/libs/zlib)
+    ##${REACTOS_SOURCE_DIR}/sdk/include/reactos/libs/zlib
+    )
 
 spec2def(libjpeg.dll libjpeg.spec ADD_IMPORTLIB)
 

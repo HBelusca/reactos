@@ -6,7 +6,6 @@ include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}/../lib
 #    ${REACTOS_SOURCE_DIR}/base/setup/lib
     ${REACTOS_SOURCE_DIR}/sdk/lib/inflib
-    ${REACTOS_SOURCE_DIR}/sdk/include/reactos/libs/zlib
     ${REACTOS_SOURCE_DIR}/sdk/include/reactos/drivers)
 
 list(APPEND SOURCE

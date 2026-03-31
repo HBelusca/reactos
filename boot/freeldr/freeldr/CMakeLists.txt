@@ -19,7 +19,6 @@ endif()
 include_directories(BEFORE include)
 include_directories(
     ${REACTOS_SOURCE_DIR}/ntoskrnl/include
-    ${REACTOS_SOURCE_DIR}/sdk/lib/cmlib
     ${REACTOS_SOURCE_DIR}/sdk/include/reactos/libs
     ${REACTOS_SOURCE_DIR}/sdk/include/reactos/elf)
 

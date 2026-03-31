@@ -6,7 +6,8 @@ add_definitions(
 include_directories(
     include
     ${REACTOS_SOURCE_DIR}/ntoskrnl/include
-    ${REACTOS_SOURCE_DIR}/sdk/include/reactos/libs/fast486)
+    ## ${REACTOS_SOURCE_DIR}/sdk/include/reactos/libs/fast486
+    )
 
 function(add_hal _halname)
     cmake_parse_arguments(_haldata "" "" "SOURCES;COMPONENTS" ${ARGN})

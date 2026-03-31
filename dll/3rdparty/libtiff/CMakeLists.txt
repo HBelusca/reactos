@@ -6,8 +6,7 @@ add_definitions(
     -DTIF_PLATFORM_CONSOLE)
 
 include_directories(
-    ${REACTOS_SOURCE_DIR}/sdk/include/reactos/libs/libtiff
-    ${REACTOS_SOURCE_DIR}/sdk/include/reactos/libs/zlib)
+    ${REACTOS_SOURCE_DIR}/sdk/include/reactos/libs/libtiff)
 
 spec2def(libtiff.dll libtiff.spec ADD_IMPORTLIB)
 
