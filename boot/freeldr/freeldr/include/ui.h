@@ -45,6 +45,7 @@ extern BOOLEAN UiCenterMenu;            // Whether to use a centered or left-ali
 extern BOOLEAN UiUseSpecialEffects;     // Whether to use fade effects
 
 extern CHAR UiTitleBoxTitleText[260];   // Title box's title text
+extern PCSTR UiCurrentTitleBoxTitle;
 extern CHAR UiTimeText[260];
 
 extern const PCSTR UiMonthNames[12];
@@ -53,6 +54,11 @@ extern const PCSTR UiMonthNames[12];
 
 BOOLEAN    UiInitialize(BOOLEAN ShowUi);                                // Initialize User-Interface
 VOID    UiUnInitialize(PCSTR BootText);                        // Un-initialize User-Interface
+
+VOID
+UiSetTitle(
+    _In_opt_ PCSTR Title);
+
 VOID    UiDrawBackdrop(ULONG DrawHeight);                      // Fills the entire screen with a backdrop
 VOID    UiFillArea(ULONG Left, ULONG Top, ULONG Right, ULONG Bottom, CHAR FillChar, UCHAR Attr /* Color Attributes */);    // Fills the area specified with FillChar and Attr
 VOID    UiDrawShadow(ULONG Left, ULONG Top, ULONG Right, ULONG Bottom);    // Draws a shadow on the bottom and right sides of the area specified
@@ -106,8 +112,12 @@ UiMessageBoxCritical(
 ULONG
 UiGetScreenHeight(VOID);
 
+ULONG
+UiGetScreenWidth(VOID);
+
 UCHAR
-UiGetMenuBgColor(VOID);
+UiGetColorStyle(
+    _In_ PCSTR ColorStyle);
 
 /* Loading Progress-Bar Functions ********************************************/
 

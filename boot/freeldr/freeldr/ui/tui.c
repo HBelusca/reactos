@@ -312,10 +312,13 @@ VOID TuiDrawBackdrop(ULONG DrawHeight)
                 ATTR(UiTitleBoxFgColor, UiTitleBoxBgColor));
 
     /* Draw title text */
-    TuiDrawText((UiScreenWidth - (ULONG)strlen(UiTitleBoxTitleText)) / 2,
-                2,
-                UiTitleBoxTitleText,
-                ATTR(UiTitleBoxFgColor, UiTitleBoxBgColor));
+    if (UiCurrentTitleBoxTitle && *UiCurrentTitleBoxTitle)
+    {
+        TuiDrawText((UiScreenWidth - (ULONG)strlen(UiCurrentTitleBoxTitle)) / 2,
+                    2,
+                    UiCurrentTitleBoxTitle,
+                    ATTR(UiTitleBoxFgColor, UiTitleBoxBgColor));
+    }
 
     /* Update the date & time */
     TuiUpdateDateTime();

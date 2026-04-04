@@ -78,6 +78,14 @@ VOID MiniTuiDrawBackdrop(ULONG DrawHeight)
                 UiBackdropFillStyle,
                 ATTR(UiBackdropFgColor, UiBackdropBgColor));
 
+    /* Draw title text */
+    if (UiCurrentTitleBoxTitle && *UiCurrentTitleBoxTitle)
+    {
+        TuiDrawText(0, 1,
+                    UiCurrentTitleBoxTitle,
+                    ATTR(UiTitleBoxFgColor, UiTitleBoxBgColor));
+    }
+
     /* Update the screen buffer */
     VideoCopyOffScreenBufferToVRAM();
 }
@@ -207,9 +215,6 @@ MiniTuiDrawMenu(
     _In_ PUI_MENU_INFO MenuInfo)
 {
     ULONG i;
-
-    /* Draw the backdrop */
-    UiDrawBackdrop(UiGetScreenHeight());
 
     /* No GUI status bar text, just minimal text. Show the menu header. */
     if (MenuInfo->MenuHeader)

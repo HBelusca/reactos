@@ -200,10 +200,6 @@ TuiDrawMenu(
 {
     ULONG i;
 
-    // FIXME: Theme-specific
-    /* Draw the backdrop */
-    UiDrawBackdrop(UiGetScreenHeight());
-
     /* Draw the menu box */
     TuiDrawMenuBox(MenuInfo);
 

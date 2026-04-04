@@ -45,6 +45,7 @@ BOOLEAN UiCenterMenu;           // Whether to use a centered or left-aligned men
 BOOLEAN UiUseSpecialEffects;    // Whether to use fade effects
 
 CHAR UiTitleBoxTitleText[260] = "Boot Menu";    // Title box's title text
+PCSTR UiCurrentTitleBoxTitle = UiTitleBoxTitleText;
 CHAR UiTimeText[260] = "[Time Remaining: %d]";
 
 const PCSTR UiMonthNames[12] = { "January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December" };
@@ -228,6 +229,16 @@ VOID UiUnInitialize(PCSTR BootText)
     UiInfoBox(BootText);
 
     UiVtbl.UnInitialize();
+}
+
+VOID
+UiSetTitle(
+    _In_opt_ PCSTR Title)
+{
+    if (!Title)
+        UiCurrentTitleBoxTitle = UiTitleBoxTitleText;
+    else
+        UiCurrentTitleBoxTitle = Title;
 }
 
 VOID UiDrawBackdrop(ULONG DrawHeight)
@@ -657,10 +668,48 @@ UiGetScreenHeight(VOID)
     return UiScreenHeight;
 }
 
-UCHAR
-UiGetMenuBgColor(VOID)
+ULONG
+UiGetScreenWidth(VOID)
 {
-    return UiMenuBgColor;
+    return UiScreenWidth;
+}
+
+UCHAR
+UiGetColorStyle(
+    _In_ PCSTR ColorStyle)
+{
+    static const struct
+    {
+        PCSTR SettingName;
+        PUCHAR SettingVar;
+    } Settings[] =
+    {
+        {"BackdropColor"      , &UiBackdropBgColor    },
+        {"BackdropTextColor"  , &UiBackdropFgColor    },
+        {"StatusBarColor"     , &UiStatusBarBgColor   },
+        {"StatusBarTextColor" , &UiStatusBarFgColor   },
+        {"TitleBoxColor"      , &UiTitleBoxBgColor    },
+        {"TitleBoxTextColor"  , &UiTitleBoxFgColor    },
+        {"MessageBoxColor"    , &UiMessageBoxBgColor  },
+        {"MessageBoxTextColor", &UiMessageBoxFgColor  },
+        {"MenuColor"          , &UiMenuBgColor        },
+        {"MenuTextColor"      , &UiMenuFgColor        },
+        {"TextColor"          , &UiTextColor          },
+        {"SelectedColor"      , &UiSelectedTextBgColor},
+        {"SelectedTextColor"  , &UiSelectedTextColor  },
+        {"EditBoxColor"       , &UiEditBoxBgColor     },
+        {"EditBoxTextColor"   , &UiEditBoxTextColor   },
+        ////
+        {"BackdropFillStyle", &UiBackdropFillStyle},
+    };
+    ULONG i;
+
+    for (i = 0; i < RTL_NUMBER_OF(Settings); ++i)
+    {
+        if (_stricmp(ColorStyle, Settings[i].SettingName) == 0)
+            return *(Settings[i].SettingVar);
+    }
+    return 0;
 }
 
 /* EOF */

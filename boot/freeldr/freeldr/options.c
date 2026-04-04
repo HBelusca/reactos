@@ -55,9 +55,17 @@ FreeLdrSetupMenu(
 {
     ULONG SelectedMenuItem = 0;
 
+    UiSetTitle(VERSION);
 doMenu:
+    ///* Redraw the backdrop, but don't overwrite boot options */
     /* Clear the backdrop */
-    UiDrawBackdrop(UiGetScreenHeight());
+    UiDrawBackdrop(UiGetScreenHeight() /*- 2*/);
+
+#if 0
+    UiDrawText(0, 0, VERSION,
+               /*ATTR(UiTextColor, COLOR_BLACK)*/
+               ATTR(UiGetColorStyle("TextColor"), UiGetColorStyle("MenuColor"))); // "BackdropColor"
+#endif
 
     if (!UiDisplayMenu(VERSION " Setup and Configuration",
                        OperatingSystem ? NULL : "Press ESC to reboot.",
@@ -69,6 +77,7 @@ doMenu:
                        NULL, NULL))
     {
         /* The user pressed ESC */
+        UiSetTitle(NULL);
         return;
     }
 
@@ -115,6 +124,14 @@ VOID
 DisplayBootTimeOptions(
     _In_ OperatingSystemItem* OperatingSystem)
 {
+    /* Clear the text area */
+    UiFillArea(0, UiGetScreenHeight() - 2,
+               UiGetScreenWidth() - 1,
+               UiGetScreenHeight() - 2,
+               UiGetColorStyle("BackdropFillStyle"),
+               ATTR(UiGetColorStyle("BackdropTextColor"),
+                    UiGetColorStyle("BackdropColor")));
+
     if (!OperatingSystem->AdvBootOptsDesc[0])
         return;
 
@@ -122,5 +139,5 @@ DisplayBootTimeOptions(
     UiDrawText(0,
                UiGetScreenHeight() - 2,
                OperatingSystem->AdvBootOptsDesc,
-               ATTR(COLOR_LIGHTBLUE, UiGetMenuBgColor()));
+               ATTR(COLOR_LIGHTBLUE, UiGetColorStyle("MenuColor")));
 }

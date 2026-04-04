@@ -134,9 +134,25 @@ MenuNTOptions(
     _Inout_ OperatingSystemItem* OperatingSystem)
 {
     ULONG SelectedMenuItem;
+    CHAR MenuTitle[] = "Advanced options for: ";
 
-    /* Redraw the backdrop, but don't overwrite boot options */
-    UiDrawBackdrop(UiGetScreenHeight() - 2);
+    ///* Redraw the backdrop, but don't overwrite boot options */
+    UiSetTitle(OperatingSystem->LoadIdentifier); // "Advanced Options"
+    /* Clear the backdrop */
+    UiDrawBackdrop(UiGetScreenHeight() /*- 2*/);
+
+#if 0
+    CHAR MenuTitle[260];
+    RtlStringCbPrintfA(MenuTitle, sizeof(MenuTitle),
+                       "Advanced options for: %s",
+                       OperatingSystem->LoadIdentifier);
+#endif
+    UiDrawText(0, 1, MenuTitle,
+               ATTR(UiGetColorStyle("TextColor"), UiGetColorStyle("MenuColor")));
+               // ATTR(UiTextColor, COLOR_BLACK); UiMenuBgColor
+    UiDrawText(0, strlen(MenuTitle), OperatingSystem->LoadIdentifier,
+               ATTR(UiGetColorStyle("TitleBoxTextColor"), UiGetColorStyle("TitleBoxColor")));
+
     DisplayBootTimeOptions(OperatingSystem);
 
     if (!UiDisplayMenu("Please select an option:",
@@ -150,6 +166,7 @@ MenuNTOptions(
                        NULL, NULL))
     {
         /* The user pressed ESC */
+        UiSetTitle(NULL);
         return;
     }
 
@@ -202,6 +219,7 @@ MenuNTOptions(
             break;
 #endif
     }
+    UiSetTitle(NULL);
 
     /* Update the human-readable boot-option description string */
     GetBootOptionsDescription(OperatingSystem->AdvBootOptsDesc,
