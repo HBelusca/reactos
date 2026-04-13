@@ -147,7 +147,19 @@ DiskGetBootPartitionEntry(
         }
         case PARTITION_STYLE_RAW:
         {
-            FIXME("DiskGetBootPartitionEntry() unimplemented for RAW\n");
+            PARTITION_INFORMATION TempPartitionEntry;
+            if (!PartitionEntry)
+                PartitionEntry = &TempPartitionEntry;
+
+            /* Consider the whole disk to be bootable */
+            if (DiskGetPartitionEntry(DriveNumber,
+                                      512, // Geometry.BytesPerSector
+                                      0,
+                                      PartitionEntry))
+            {
+                *BootPartition = 0;
+                return TRUE;
+            }
             return FALSE;
         }
         case PARTITION_STYLE_BRFR:
@@ -213,8 +225,25 @@ DiskGetPartitionEntry(
         }
         case PARTITION_STYLE_RAW:
         {
-            FIXME("DiskGetPartitionEntry() unimplemented for RAW\n");
-            return FALSE;
+            GEOMETRY Geometry;
+
+            if (PartitionNumber != 0)
+                return FALSE;
+
+            ERR("DiskGetPartitionEntry() returning whole-disk partition\n");
+            if (!MachDiskGetDriveGeometry(DriveNumber, &Geometry))
+                return FALSE;
+
+            /* Represent the whole disk */
+            PartitionEntry->StartingOffset.QuadPart  = 0ULL;
+            PartitionEntry->PartitionLength.QuadPart = (Geometry.Sectors * Geometry.BytesPerSector);
+            PartitionEntry->HiddenSectors = 0;
+            PartitionEntry->PartitionNumber = PartitionNumber;
+            PartitionEntry->PartitionType = PARTITION_FAT_16;
+            PartitionEntry->BootIndicator = TRUE;
+            PartitionEntry->RecognizedPartition = TRUE;
+            PartitionEntry->RewritePartition = FALSE;
+            return TRUE;
         }
         case PARTITION_STYLE_BRFR:
         {
