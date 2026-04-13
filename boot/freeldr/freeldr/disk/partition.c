@@ -62,6 +62,61 @@ DiskReadBootRecord(
 #include "part_gpt.c"
 #include "part_brfr.c"
 
+typedef struct _BOOT_SECTOR_INFO
+{
+    UCHAR JumpByte[1];
+    UCHAR Ignore1[2];
+    UCHAR OemData[8];
+    UCHAR BytesPerSector[2];
+    UCHAR Ignore2[6];
+    UCHAR NumberOfSectors[2];
+    UCHAR MediaByte[1];
+    UCHAR Ignore3[2];
+    UCHAR SectorsPerTrack[2];
+    UCHAR NumberOfHeads[2];
+} BOOT_SECTOR_INFO, *PBOOT_SECTOR_INFO;
+
+/**
+ * @brief
+ * Detects whether a device without a partition table is a "super-floppy",
+ * i.e. is non-partitioned, has an 0xaa55 signature on it and has a recognized
+ * BIOS Parameter Block (BPB).
+ **/
+static
+BOOLEAN
+DiskIsSuperFloppy(
+    _In_ PMASTER_BOOT_RECORD BootRecord)
+{
+    BOOLEAN MbrFound = (BootRecord->MasterBootRecordMagic == 0xaa55);
+    BOOLEAN IsSuperFloppy = FALSE;
+
+    if (//(DeviceType == RemovableMedia) &&
+        /*(j == 0) &&*/ MbrFound /*&& IsEmpty*/)
+    {
+        PBOOT_SECTOR_INFO BootSectorInfo = (PBOOT_SECTOR_INFO)Buffer;
+
+        /* Read the jump bytes to detect super-floppy */
+        if ((BootSectorInfo->JumpByte[0] == 0xeb) ||
+            (BootSectorInfo->JumpByte[0] == 0xe9))
+        {
+            /* Super floppies don't have typical MBRs, so skip them */
+            ERR("Jump byte %#x found along with empty partition table - disk is a super floppy and has no valid MBR\n",
+                BootSectorInfo->JumpByte);
+            IsSuperFloppy = TRUE;
+        }
+    }
+
+    if (IsSuperFloppy)
+    {
+        /* Print out debugging information */
+        DPRINT1("Drive %#p has no valid MBR. Make it into a super-floppy\n",
+                BootRecord /*DriveNumber*/);
+        DPRINT1("Drive has %I64d sectors and is %#016I64x bytes large\n",
+                EndSector, DiskGeometryEx.DiskSize);
+    }
+    return IsSuperFloppy;
+}
+
 VOID
 DiskDetectPartitionType(
     _In_ UCHAR DriveNumber)
