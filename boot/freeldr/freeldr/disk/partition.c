@@ -62,8 +62,12 @@ DiskReadBootRecord(
 #include "part_gpt.c"
 #include "part_brfr.c"
 
-VOID
-DiskDetectPartitionType(
+/**
+ * @brief
+ * Detects the partitioning scheme used on the specified device.
+ **/
+static PARTITION_STYLE
+DiskDetectPartitionTypeEx(
     _In_ UCHAR DriveNumber)
 {
     MASTER_BOOT_RECORD MasterBootRecord;
@@ -71,14 +75,13 @@ DiskDetectPartitionType(
     /* Probe for Master Boot Record */
     if (DiskReadBootRecord(DriveNumber, 0, &MasterBootRecord))
     {
+        PARTITION_STYLE PartitionStyle = PARTITION_STYLE_MBR;
 #if 0
         ULONG Index, PartitionCount = 0;
         BOOLEAN GPTProtect = FALSE;
 #else
         GPT_TABLE_HEADER GptHeader;
 #endif
-
-        DiskPartitionType[DriveNumber] = PARTITION_STYLE_MBR;
 
 #if 0
         /* Check for GUID Partition Table */
@@ -99,23 +102,84 @@ DiskDetectPartitionType(
         if (DiskReadGptHeader(DriveNumber, &GptHeader))
 #endif
         {
-            DiskPartitionType[DriveNumber] = PARTITION_STYLE_GPT;
+            PartitionStyle = PARTITION_STYLE_GPT;
         }
-        TRACE("Drive 0x%X partition type %s\n", DriveNumber, DiskPartitionType[DriveNumber] == PARTITION_STYLE_MBR ? "MBR" : "GPT");
-        return;
+        TRACE("Drive 0x%X partition style %s\n", DriveNumber, PartitionStyle == PARTITION_STYLE_MBR ? "MBR" : "GPT");
+        return PartitionStyle;
     }
 
     /* Probe for Xbox-BRFR partitioning */
     if (DiskIsBrfr(DriveNumber))
     {
-        DiskPartitionType[DriveNumber] = PARTITION_STYLE_BRFR;
-        TRACE("Drive 0x%X partition type Xbox-BRFR\n", DriveNumber);
-        return;
+        TRACE("Drive 0x%X partition style Xbox-BRFR\n", DriveNumber);
+        return PARTITION_STYLE_BRFR;
     }
 
     /* Failed to detect partitions, assume non-partitioned disk */
-    DiskPartitionType[DriveNumber] = PARTITION_STYLE_RAW;
-    TRACE("Drive 0x%X partition type unknown\n", DriveNumber);
+    TRACE("Drive 0x%X partition style unknown\n", DriveNumber);
+    return PARTITION_STYLE_RAW;
+}
+
+// FIXME: Veneer with old interface
+VOID
+DiskDetectPartitionType(
+    _In_ UCHAR DriveNumber)
+{
+    DiskPartitionType[DriveNumber] = DiskDetectPartitionTypeEx(DriveNumber);
+}
+
+struct _PART_CTX
+{
+    UCHAR DriveNumber;
+    PARTITION_STYLE PartitionType;
+    GEOMETRY Geometry;
+    ULONG CurrentIndex;
+    ULONG DataSize;
+    PCHAR Data;
+} PART_CTX, *PPART_CTX;
+
+#define TAG_PART_CONTEXT    'xtCP'
+
+BOOLEAN
+DiskListPartitionInit(
+    _In_ UCHAR DriveNumber,
+    _In_opt_ ULONG SectorSize, // Or ptr to Geometry ?
+    _Outptr_ PPART_CTX* pContext)
+{
+    GEOMETRY Geometry;
+    ULONG ExtraSize = 0;
+    PPART_CTX Context;
+
+    if (!MachDiskGetDriveGeometry(DriveNumber, &Geometry))
+        return FALSE;
+
+    /* Cache this drive partition style */
+    DiskPartitionType[DriveNumber] = DiskDetectPartitionTypeEx(DriveNumber);
+
+    // TODO: Cache partition list in some way, or partial info.
+    if (DiskPartitionType[DriveNumber] == PARTITION_STYLE_GPT)
+        ExtraSize += sizeof(GPT_TABLE_HEADER);
+
+    Context = FrLdrTempAlloc(sizeof(*Context) + ExtraSize, TAG_PART_CONTEXT);
+    if (!Context)
+        return FALSE;
+
+    Context->DriveNumber = DriveNumber;
+    Context->Geometry = Geometry;
+    Context->DataSize = ExtraSize;
+    Context->Data = (ExtraSize ? (PCHAR)(Context + 1) : NULL);
+
+    *pContext = *Context;
+    return TRUE;
+}
+
+VOID
+DiskListPartitionFini(
+    _Inout_ PPART_CTX Context)
+{
+    if (!Context)
+        return;
+    FrLdrTempFree(Context, TAG_PART_CONTEXT);
 }
 
 // FIXME: This function is specific to BIOS-based PC platform.
@@ -167,7 +231,7 @@ DiskGetBootPartitionEntry(
         }
         default:
         {
-            ERR("Drive 0x%X partition type = %d, should not happen!\n", DriveNumber, DiskPartitionType[DriveNumber]);
+            ERR("Drive 0x%X partition style = %d, should not happen!\n", DriveNumber, DiskPartitionType[DriveNumber]);
             ASSERT(FALSE);
         }
     }
@@ -225,7 +289,7 @@ DiskGetPartitionEntry(
         }
         default:
         {
-            ERR("Drive 0x%X partition type = %d, should not happen!\n", DriveNumber, DiskPartitionType[DriveNumber]);
+            ERR("Drive 0x%X partition style = %d, should not happen!\n", DriveNumber, DiskPartitionType[DriveNumber]);
             ASSERT(FALSE);
         }
     }

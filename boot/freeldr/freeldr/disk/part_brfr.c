@@ -45,11 +45,14 @@ DiskIsBrfr(
 
 BOOLEAN
 DiskGetBrfrPartitionEntry(
-    _In_ UCHAR DriveNumber,
-    _In_ ULONG SectorSize,
+    _Inout_ PPART_CTX Context,
     _In_ ULONG PartitionNumber,
     _Out_ PPARTITION_INFORMATION PartitionEntry)
 {
+////
+    UCHAR DriveNumber = Context->DriveNumber;
+    ULONG SectorSize = Context->Geometry.BytesPerSector;
+////
     ASSERT(SectorSize >= 512);
 
     if (!DiskIsBrfr(DriveNumber))
