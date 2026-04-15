@@ -338,6 +338,11 @@ function(add_cd_file)
         if(_CD_TARGET)
             add_dependencies(livecd ${_CD_TARGET} registry_inf)
         endif()
+
+        # This also goes into the bootcd under the current build architecture directory
+        # WARNING: CMake REGEXes are always case-sensitive!
+        string(REGEX REPLACE "^reactos([\\\\/]+|$)" "${ARCH}/reactos\\1" _CD_ARCH_DESTINATION "${_CD_DESTINATION}")
+
         foreach(item ${_CD_FILE})
             if(_CD_NAME_ON_CD)
                 # rename it in the cd tree
@@ -346,6 +351,9 @@ function(add_cd_file)
                 get_filename_component(__file ${item} NAME)
             endif()
             set_property(GLOBAL APPEND PROPERTY LIVECD_FILE_LIST "${_CD_DESTINATION}/${__file}=${item}")
+
+            # This also goes into the bootcd under the current build architecture directory
+            set_property(GLOBAL APPEND PROPERTY BOOTCD_FILE_LIST "${_CD_ARCH_DESTINATION}/${__file}=${item}")
         endforeach()
     endif() #end livecd
 
@@ -429,11 +437,6 @@ endif()
     # Write the BootCD file list
     get_property(_filelist GLOBAL PROPERTY BOOTCD_FILE_LIST)
     string(REPLACE ";" "\n" _filelist "${_filelist}")
-    file(APPEND ${REACTOS_BINARY_DIR}/boot/bootcd.cmake.lst "${_filelist}")
-    unset(_filelist)
-    # Also, append the file contents list of the LiveImage to the BootCD file list
-    file(APPEND ${REACTOS_BINARY_DIR}/boot/bootcd.cmake.lst "\n")
-    file(READ ${REACTOS_BINARY_DIR}/boot/livecd.cmake.lst _filelist)
     file(APPEND ${REACTOS_BINARY_DIR}/boot/bootcd.cmake.lst "${_filelist}")
     unset(_filelist)
     file(GENERATE

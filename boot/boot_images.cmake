@@ -172,6 +172,11 @@ file(APPEND ${CMAKE_CURRENT_BINARY_DIR}/livecd.cmake.lst "reactos/TEMP=${CMAKE_C
 add_allusers_profile_dirs(${CMAKE_CURRENT_BINARY_DIR}/livecd.cmake.lst "Profiles")
 add_user_profile_dirs(${CMAKE_CURRENT_BINARY_DIR}/livecd.cmake.lst "Profiles" "Default User")
 
+# Add the same directories in the BootCD
+file(APPEND ${CMAKE_CURRENT_BINARY_DIR}/bootcd.cmake.lst "${ARCH}/reactos/TEMP=${CMAKE_CURRENT_BINARY_DIR}/empty\n")
+add_allusers_profile_dirs(${CMAKE_CURRENT_BINARY_DIR}/bootcd.cmake.lst "Profiles")
+add_user_profile_dirs(${CMAKE_CURRENT_BINARY_DIR}/bootcd.cmake.lst "Profiles" "Default User")
+
 add_custom_target(livecd
     COMMAND native-mkisofs -quiet -o ${REACTOS_BINARY_DIR}/liveimg.iso
         ${ISO_COMMON_OPTIONS} ${ISO_LAYOUT_OPTIONS}
