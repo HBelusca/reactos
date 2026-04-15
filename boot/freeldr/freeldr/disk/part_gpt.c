@@ -44,11 +44,12 @@ DiskReadGptHeader(
 
 BOOLEAN
 DiskGetGptPartitionEntry(
-    _Inout_ PPART_CTX Context,
+    _In_ UCHAR DriveNumber,
+    _In_ ULONG SectorSize, // BlockSize
     _In_ ULONG PartitionNumber,
     _Out_ PPARTITION_INFORMATION PartitionEntry)
 {
-    PGPT_TABLE_HEADER GptHeader;
+    GPT_TABLE_HEADER GptHeader;
     GPT_PARTITION_ENTRY GptEntry;
     ULONGLONG EntryLba;
     ULONG EntryOffset;
@@ -56,38 +57,24 @@ DiskGetGptPartitionEntry(
     GUID UnusedGuid = EFI_PART_TYPE_UNUSED_GUID;
     GUID SystemGuid = EFI_PART_TYPE_EFI_SYSTEM_PART_GUID;
 
-////
-    UCHAR DriveNumber = Context->DriveNumber;
-    ULONG SectorSize = Context->Geometry.BytesPerSector; // BlockSize
-////
     ASSERT(SectorSize >= 512);
 
-////
-    ASSERT(Context->DataSize == sizeof(GPT_TABLE_HEADER) && Context->Data != NULL);
-    GptHeader = (PGPT_TABLE_HEADER)Context->Data;
-    //// TEMP TEMP
-    if (!RtlEqualMemory(GptHeader->Signature, EFI_PARTITION_HEADER_SIGNATURE, 8))
-    {
-        /* Read GPT header */
-        if (!DiskReadGptHeader(DriveNumber, GptHeader))
-            return FALSE;
-    }
-    //// END TEMP
-////
+    /* Read GPT header */
+    if (!DiskReadGptHeader(DriveNumber, &GptHeader))
+        return FALSE;
 
     /* Validate partition number */
-    //if (PartitionNumber == 0 || PartitionNumber > GptHeader->NumberOfPartitionEntries)
-    if (!(1 <= PartitionNumber && PartitionNumber <= GptHeader->NumberOfPartitionEntries))
+    //if (PartitionNumber == 0 || PartitionNumber > GptHeader.NumberOfPartitionEntries)
+    if (!(1 <= PartitionNumber && PartitionNumber <= GptHeader.NumberOfPartitionEntries))
         return FALSE;
 
     /* Convert to 0-based index */
     ULONG EntryIndex = PartitionNumber - 1;
 
-    EntriesPerBlock = SectorSize / GptHeader->SizeOfPartitionEntry;
-    EntryLba = GptHeader->PartitionEntryLba + (EntryIndex / EntriesPerBlock);
-    EntryOffset = (EntryIndex % EntriesPerBlock) * GptHeader->SizeOfPartitionEntry;
+    EntriesPerBlock = SectorSize / GptHeader.SizeOfPartitionEntry;
+    EntryLba = GptHeader.PartitionEntryLba + (EntryIndex / EntriesPerBlock);
+    EntryOffset = (EntryIndex % EntriesPerBlock) * GptHeader.SizeOfPartitionEntry;
 
-// TODO: Cache this block in the context?
     /* Read the block containing the partition entry */
     if (!MachDiskReadLogicalSectors(DriveNumber, EntryLba, 1, DiskReadBuffer))
         return FALSE;
