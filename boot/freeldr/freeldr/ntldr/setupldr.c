@@ -417,7 +417,7 @@ LoadReactOSSetup(
 #elif defined(_M_MRX000)
         "MIPS\\",
 #endif
-        "reactos\\",
+        "minint\\",
     };
 
     /* Retrieve the (mandatory) boot type */
@@ -523,6 +523,7 @@ LoadReactOSSetup(
     DBG_UNREFERENCED_LOCAL_VARIABLE(BootFromFloppy);
 
     /* Open 'TXTSETUP.SIF' from any of the source paths */
+ERR("SPLDR: BootPath: '%s'\n", BootPath);
     FileName = BootPath + strlen(BootPath);
     for (i = 0;; ++i)
     {
@@ -532,14 +533,17 @@ LoadReactOSSetup(
             return ENOENT;
         }
         SystemPath = SourcePaths[i];
+ERR("  Testing source: '%s'\n", SystemPath);
 
         /* Adjust the tentative BootPath */
         FileNameLength = (ULONG)(sizeof(BootPath) - (FileName - BootPath)*sizeof(CHAR));
         RtlStringCbCopyA(FileName, FileNameLength, SystemPath);
+ERR("  --> Test BootPath: '%s'\n", BootPath);
 
         /* Try to open TXTSETUP.SIF from this BootPath */
         RtlStringCbCopyA(FilePath, sizeof(FilePath), BootPath);
         RtlStringCbCatA(FilePath, sizeof(FilePath), "txtsetup.sif");
+ERR("  --> Test TXTSETUP.SIF path: '%s'\n", FilePath);
         if (InfOpenFile(&InfHandle, FilePath, &ErrorLine))
         {
             /* Found and opened: TXTSETUP.SIF is in the correct BootPath */
