@@ -718,6 +718,7 @@ PrepareFileCopy(
     if (!SpInfFindFirstLine(pSetupData->SetupInf, L"Cabinets", NULL, &CabinetsContext))
     {
         /* Skip this step and return success if no cabinet file is listed */
+__debugbreak();
         return TRUE;
     }
 

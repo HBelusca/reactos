@@ -616,7 +616,9 @@ LoadSetupInf(
     //
     // Support "SetupSourceDevice" and "SetupSourcePath" in txtsetup.sif
     // See CORE-9023
-    // Support for that should also be added in setupldr.
+    // Support for that should also be added in setupldr. <--- hbelusca: NO, it's not in SETUPLDR!!
+    // But: in windows setup, SetupSourceDevice is optional; SetupSourcePath consideration is done
+    // after SetupSourceDevice and independently of it, and should always be present.
     //
 
     /* Update the Setup Source paths */
