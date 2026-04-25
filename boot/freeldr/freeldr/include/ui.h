@@ -207,6 +207,20 @@ VOID    UiFadeOut(VOID);                                        // Fades the scr
 
 /* Menu Functions ************************************************************/
 
+#if 0
+typedef BOOLEAN (*PMENUITEM_ISVALID)(_In_opt_ PVOID Context);
+typedef struct _UI_MENU_ITEMS
+{
+    PCSTR Item;
+    ULONG_PTR pItemData;
+    PMENUITEM_ISVALID IsValid;
+    struct {
+        BOOLEAN IsValid   :1;
+        BOOLEAN IsDefault :1;
+    } State;
+} UI_MENU_ITEMS;
+#endif
+
 typedef struct tagUI_MENU_INFO
 {
     PCSTR   MenuHeader;
