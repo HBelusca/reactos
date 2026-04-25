@@ -28,6 +28,7 @@ typedef enum _ADVOPTS_ACTION
     ActionVGAMode,
     ActionLKGConfig,
     ActionDebugMode,
+    ActionDisableAutoRestart,
 #if DBG && defined(_M_IX86) // x86 *ONLY*: HAL/Kernel auto-detection override
     ActionBootAcpiApic,
     ActionBootAcpiSmp,
@@ -51,6 +52,9 @@ static ADVBOOT_OPTIONS AdvBootOptions[] = // OptionsMenuList
     {ActionSafeBoot,            "Safe Mode"},
     {ActionSafeBootNetwork,     "Safe Mode with Networking"},
     {ActionSafeBootAltShell,    "Safe Mode with Command Prompt"},
+    // See https://betawiki.net/wiki/Windows_2000_build_1738
+    // and https://blueosmuseum.com/nt5/nt5-1738.php , https://blueosmuseum.com/nt5/nt5-1762.php
+    // {ActionSafeBootStepByStep,  "Step-by-Step Confirmation Mode"},
 
     {ActionSeparator, NULL},
 
@@ -59,6 +63,7 @@ static ADVBOOT_OPTIONS AdvBootOptions[] = // OptionsMenuList
     {ActionLKGConfig,           "Last Known Good Configuration"},
     {ActionSafeBootDSRepair,    "Directory Services Restore Mode"}, // "(ReactOS domain controllers only)"
     {ActionDebugMode,           "Debugging Mode"},
+    {ActionDisableAutoRestart,  "Disable automatic restart on system failure"},
 
 #if DBG && defined(_M_IX86)
     /* For x86 *ONLY*, allow the user to override HAL/Kernel auto-detection.
@@ -239,6 +244,9 @@ doMenu:
             break;
         case ActionDebugMode:
             BootFlags |= BOOT_DEBUGGING;
+            break;
+        case ActionDisableAutoRestart:
+            DbgPrint("Disable Auto-Restart is not yet supported!\n");
             break;
 #if DBG && defined(_M_IX86) // x86 *ONLY*: HAL/Kernel auto-detection override
         case ActionBootAcpiApic:
