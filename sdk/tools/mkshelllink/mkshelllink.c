@@ -94,8 +94,35 @@ DEFINE_GUID2(CLSID_MyComputer,0x20D04FE0,0x3AEA,0x1069,0xA2,0xD8,0x08,0x00,0x2B,
 #define SLDF_HAS_ARGS           0x00000020
 #define SLDF_HAS_ICONLOCATION   0x00000040
 #define SLDF_UNICODE            0x00000080
+#define SLDF_FORCE_NO_LINKINFO  0x00000100
 #define SLDF_HAS_EXP_SZ         0x00000200
+// #define SLDF_RUN_IN_SEPARATE    0x00000400
+// #if (NTDDI_VERSION < NTDDI_LONGHORN)
+// #define SLDF_HAS_LOGO3ID        0x00000800
+// #endif
+// #define SLDF_HAS_DARWINID       0x00001000
+// #define SLDF_RUNAS_USER         0x00002000
 #define SLDF_HAS_EXP_ICON_SZ    0x00004000
+#define SLDF_NO_PIDL_ALIAS      0x00008000
+// #define SLDF_FORCE_UNCNAME      0x00010000
+// #define SLDF_RUN_WITH_SHIMLAYER 0x00020000
+
+//#if (NTDDI_VERSION >= NTDDI_LONGHORN)
+#define SLDF_FORCE_NO_LINKTRACK                     0x00040000
+#define SLDF_ENABLE_TARGET_METADATA                 0x00080000
+#define SLDF_DISABLE_LINK_PATH_TRACKING             0x00100000
+#define SLDF_DISABLE_KNOWNFOLDER_RELATIVE_TRACKING  0x00200000
+//#if (NTDDI_VERSION >= NTDDI_WIN7)
+#define SLDF_NO_KF_ALIAS                        0x00400000
+#define SLDF_ALLOW_LINK_TO_LINK                 0x00800000
+#define SLDF_UNALIAS_ON_SAVE                    0x01000000
+#define SLDF_PREFER_ENVIRONMENT_PATH            0x02000000
+#define SLDF_KEEP_LOCAL_IDLIST_FOR_UNC_TARGET   0x04000000
+//#if (NTDDI_VERSION >= NTDDI_WIN8)
+#define SLDF_PERSIST_VOLUME_ID_RELATIVE         0x08000000
+//#endif
+//#endif
+//#endif
 
 #define LINK_ID_LIST            SLDF_HAS_ID_LIST
 #define LINK_FILE               SLDF_HAS_LINK_INFO
@@ -558,7 +585,11 @@ int main(int argc, const char *argv[])
     memset(&Header, 0, sizeof(Header));
     Header.Size = sizeof(Header);
     Header.Guid = CLSID_ShellLink;
-    Header.Flags = LINK_ID_LIST;
+    Header.Flags = LINK_ID_LIST | // LINK_RELATIVE_PATH
+                   /* See https://devblogs.microsoft.com/oldnewthing/20110816-00/?p=9893 */
+                   SLDF_FORCE_NO_LINKINFO | SLDF_FORCE_NO_LINKTRACK | 0;
+                   // SLDF_DISABLE_LINK_PATH_TRACKING | SLDF_DISABLE_KNOWNFOLDER_RELATIVE_TRACKING |
+                   // SLDF_PREFER_ENVIRONMENT_PATH;
     if (bUnicode)
         Header.Flags |= LINK_UNICODE;
     if (pszDescription)
