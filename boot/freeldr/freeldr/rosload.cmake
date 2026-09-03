@@ -15,6 +15,11 @@ list(APPEND ROSLOAD_SOURCE
     miscboot.c
     options.c
     oslist.c
+    ####
+    arch/i386/halstub.c
+    arch/i386/ntoskrnl.c
+    disk/scsiport.c
+    ####
     lib/rtl/libsupp.c
     ${REACTOS_SOURCE_DIR}/ntoskrnl/config/cmboot.c
     ${REACTOS_SOURCE_DIR}/ntoskrnl/ke/config.c
