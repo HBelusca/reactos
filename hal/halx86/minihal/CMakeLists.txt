@@ -29,10 +29,10 @@ endif()
 
 if(ARCH STREQUAL "i386")
     list(APPEND MINI_HAL_SOURCE
-        ../generic/portio.c ## TODO INVESTIGATE: Was removed in commit 029e53ddb5
+        #../generic/portio.c ## TODO INVESTIGATE: Was removed in commit 029e53ddb5
         ../pic/pic.c)
-    list(APPEND MINI_HAL_ASM_SOURCE
-        ${REACTOS_SOURCE_DIR}/ntoskrnl/ex/i386/ioport.S)
+    #list(APPEND MINI_HAL_ASM_SOURCE
+    #    ${REACTOS_SOURCE_DIR}/ntoskrnl/ex/i386/ioport.S)
 
     if(SARCH STREQUAL "xbox")
         list(APPEND MINI_HAL_SOURCE
