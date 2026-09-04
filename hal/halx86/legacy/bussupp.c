@@ -43,9 +43,7 @@ HalpAllocateBusHandler(IN INTERFACE_TYPE InterfaceType,
                           NULL,
                           &Bus);
     if (!Bus)
-    {
         return NULL;
-    }
 
     /* Check for a valid interface */
     if (InterfaceType != InterfaceTypeUndefined)
@@ -77,7 +75,8 @@ HalpRegisterInternalBusHandlers(VOID)
     PBUS_HANDLER Bus;
 
     /* Only do processor 1 */
-    if (KeGetCurrentPrcb()->Number) return;
+    if (KeGetCurrentPrcb()->Number)
+        return;
 
     /* Register root support */
     HalpInitBusHandler();
@@ -315,12 +314,14 @@ HalpIsValidPCIDevice(IN PBUS_HANDLER BusHandler,
         if (Address & PCI_ADDRESS_IO_SPACE)
         {
             /* Highest I/O port is 65535 */
-            if (Address > 0xFFFF) return FALSE;
+            if (Address > 0xFFFF)
+                return FALSE;
         }
         else
         {
             /* MMIO should be higher than 0x80000 */
-            if ((Address > 0xF) && (Address < 0x80000)) return FALSE;
+            if ((Address > 0xF) && (Address < 0x80000))
+                return FALSE;
         }
 
         /* Is this a 64-bit address? */
@@ -364,7 +365,8 @@ HalpGetChipHacks(IN USHORT VendorId,
 
     /* Open the key */
     Status = ZwOpenKey(&KeyHandle, KEY_READ, &ObjectAttributes);
-    if (!NT_SUCCESS(Status)) return Status;
+    if (!NT_SUCCESS(Status))
+        return Status;
 
     /* Query value */
     _swprintf(Buffer, L"%04X%04X", VendorId, DeviceId);
@@ -412,14 +414,16 @@ HalpIsRecognizedCard(IN PPCI_REGISTRY_INFO_INTERNAL PciRegistryInfo,
 
     /* How many PCI Cards that we know about? */
     ElementCount = PciRegistryInfo->ElementCount;
-    if (!ElementCount) return FALSE;
+    if (!ElementCount)
+        return FALSE;
 
     /* Loop all descriptors */
     CardDescriptor = &PciRegistryInfo->CardList[0];
     for (i = 0; i < ElementCount; i++, CardDescriptor++)
     {
         /* Check for flag match */
-        if (CardDescriptor->Flags != Flags) continue;
+        if (CardDescriptor->Flags != Flags)
+            continue;
 
         /* Check for VID-PID match */
         if ((CardDescriptor->VendorID != PciData->VendorID) ||
@@ -442,13 +446,13 @@ HalpIsRecognizedCard(IN PPCI_REGISTRY_INFO_INTERNAL PciRegistryInfo,
         {
             /* CardBUS Bridge */
             case PCI_CARDBUS_BRIDGE_TYPE:
-
                 /* This means the real device header is in the device-specific data */
                 PciData = (PPCI_COMMON_CONFIG)PciData->DeviceSpecific;
+                __fallthrough;
 
             /* Normal PCI device */
             case PCI_DEVICE_TYPE:
-
+            {
                 /* Check for subvendor match, if requested */
                 if ((CardDescriptor->Flags & HALP_CHECK_CARD_SUBVENDOR_ID) &&
                     (CardDescriptor->SubsystemVendorID != PciData->u.type0.SubVendorID))
@@ -467,11 +471,11 @@ HalpIsRecognizedCard(IN PPCI_REGISTRY_INFO_INTERNAL PciRegistryInfo,
 
                 /* You made it! */
                 return TRUE;
+            }
 
             /* PCI Bridge -- don't bother */
             case PCI_BRIDGE_TYPE:
             default:
-
                 /* Recognize it */
                 return TRUE;
         }
@@ -495,7 +499,8 @@ HalpIsIdeDevice(IN PPCI_COMMON_CONFIG PciData)
     }
 
     /* Symphony 82C101 */
-    if (PciData->VendorID == 0x1C1C) return TRUE;
+    if (PciData->VendorID == 0x1C1C)
+        return TRUE;
 
     /* ALi MS4803 or M5219 */
     if ((PciData->VendorID == 0x10B9) &&
@@ -505,13 +510,16 @@ HalpIsIdeDevice(IN PPCI_COMMON_CONFIG PciData)
     }
 
     /* Appian Technology */
-    if ((PciData->VendorID == 0x1097) && (PciData->DeviceID == 0x38)) return TRUE;
+    if ((PciData->VendorID == 0x1097) && (PciData->DeviceID == 0x38))
+        return TRUE;
 
     /* Compaq Triflex Dual EIDE Controller */
-    if ((PciData->VendorID == 0xE11) && (PciData->DeviceID == 0xAE33)) return TRUE;
+    if ((PciData->VendorID == 0xE11) && (PciData->DeviceID == 0xAE33))
+        return TRUE;
 
     /* Micron PC Tech RZ1000 */
-    if ((PciData->VendorID == 0x1042) && (PciData->DeviceID == 0x1000)) return TRUE;
+    if ((PciData->VendorID == 0x1042) && (PciData->DeviceID == 0x1000))
+        return TRUE;
 
     /* SiS 85C601 or 5513 [IDE] */
     if ((PciData->VendorID == 0x1039) &&
@@ -528,7 +536,8 @@ HalpIsIdeDevice(IN PPCI_COMMON_CONFIG PciData)
     }
 
     /* UMC UM8673F */
-    if ((PciData->VendorID == 0x1060) && (PciData->DeviceID == 0x101)) return TRUE;
+    if ((PciData->VendorID == 0x1060) && (PciData->DeviceID == 0x101))
+        return TRUE;
 
     /* You've survived */
     return FALSE;
@@ -587,10 +596,12 @@ HalpGetPciBridgeConfig(IN ULONG PciType,
                                   PCI_COMMON_HDR_LENGTH);
 
                 /* Skip if this is an invalid function */
-                if (PciData->VendorID == PCI_INVALID_VENDORID) continue;
+                if (PciData->VendorID == PCI_INVALID_VENDORID)
+                    continue;
 
                 /* Make sure that this is a PCI bridge or a cardbus bridge */
-                if (!HalpIsBridgeDevice(PciData)) continue;
+                if (!HalpIsBridgeDevice(PciData))
+                    continue;
 
                 /* Not supported */
                 if (!WarningsGiven[2]++)
@@ -673,24 +684,17 @@ CODE_SEG("INIT")
 static VOID
 ShowSize(IN ULONG x)
 {
-    if (!x) return;
+    if (!x)
+        return;
     DbgPrint(" [size=");
     if (x < 1024)
-    {
         DbgPrint("%d", (int) x);
-    }
     else if (x < 1048576)
-    {
         DbgPrint("%dK", (int)(x / 1024));
-    }
     else if (x < 0x80000000)
-    {
         DbgPrint("%dM", (int)(x / 1048576));
-    }
     else
-    {
         DbgPrint("%d", x);
-    }
     DbgPrint("]");
 }
 
@@ -949,7 +953,8 @@ HalpInitializePciBus(VOID)
 
     /* Query registry information */
     PciRegistryInfo = HalpQueryPciRegistryInfo();
-    if (!PciRegistryInfo) return;
+    if (!PciRegistryInfo)
+        return;
 
     /* Initialize the PCI configuration lock */
     KeInitializeSpinLock(&HalpPCIConfigLock);
@@ -970,18 +975,22 @@ HalpInitializePciBus(VOID)
             /* Try to setup a Type 2 PCI slot */
             PciType = 2;
             BusHandler = HalpAllocateAndInitPciBusHandler(2, 0, TRUE);
-            if (!BusHandler) break;
+            if (!BusHandler)
+                break;
 
             /* Now check if it's valid */
-            if (HalpIsValidPCIDevice(BusHandler, PciSlot)) break;
+            if (HalpIsValidPCIDevice(BusHandler, PciSlot))
+                break;
 
             /* Heh, the BIOS lied... try Type 1 */
             PciType = 1;
             BusHandler = HalpAllocateAndInitPciBusHandler(1, 0, TRUE);
-            if (!BusHandler) break;
+            if (!BusHandler)
+                break;
 
             /* Now check if it's valid */
-            if (HalpIsValidPCIDevice(BusHandler, PciSlot)) break;
+            if (HalpIsValidPCIDevice(BusHandler, PciSlot))
+                break;
 
             /* Keep trying */
             PciType = 2;
@@ -1036,7 +1045,8 @@ HalpInitializePciBus(VOID)
                                   PCI_COMMON_HDR_LENGTH);
 
                 /* Skip if this is an invalid function */
-                if (PciData->VendorID == PCI_INVALID_VENDORID) continue;
+                if (PciData->VendorID == PCI_INVALID_VENDORID)
+                    continue;
 
                 /* Print out the entry */
                 HalpDebugPciDumpBus(BusHandler, PciSlot, i, j, k, PciData);
@@ -1215,12 +1225,15 @@ HalpAssignSlotResources(IN PUNICODE_STRING RegistryPath,
 {
     PBUS_HANDLER Handler;
     NTSTATUS Status;
+
     PAGED_CODE();
+
     DPRINT1("Slot assignment for %d on bus %u\n", BusType, BusNumber);
 
     /* Find the handler */
     Handler = HalReferenceHandlerForBus(BusType, BusNumber);
-    if (!Handler) return STATUS_NOT_FOUND;
+    if (!Handler)
+        return STATUS_NOT_FOUND;
 
     /* Do the assignment */
     Status = Handler->AssignSlotResources(Handler,
@@ -1367,7 +1380,8 @@ HalAdjustResourceList(IN PIO_RESOURCE_REQUIREMENTS_LIST *ResourceList)
     /* Find the handler */
     Handler = HalReferenceHandlerForBus((*ResourceList)->InterfaceType,
                                         (*ResourceList)->BusNumber);
-    if (!Handler) return STATUS_SUCCESS;
+    if (!Handler)
+        return STATUS_SUCCESS;
 
     /* Do the assignment */
     Status = Handler->AdjustResourceList(Handler,
@@ -1462,7 +1476,8 @@ HalGetBusDataByOffset(IN BUS_DATA_TYPE BusDataType,
 
     /* Find the handler */
     Handler = HaliReferenceHandlerForConfigSpace(BusDataType, BusNumber);
-    if (!Handler) return 0;
+    if (!Handler)
+        return 0;
 
     /* Do the assignment */
     Status = Handler->GetBusData(Handler,
@@ -1500,7 +1515,8 @@ HalGetInterruptVector(IN INTERFACE_TYPE InterfaceType,
 
     /* Find the handler */
     Handler = HalReferenceHandlerForBus(InterfaceType, BusNumber);
-    if (!Handler) return 0;
+    if (!Handler)
+        return 0;
 
     /* Do the assignment */
     Vector = Handler->GetInterruptVector(Handler,
@@ -1561,7 +1577,8 @@ HalSetBusDataByOffset(IN BUS_DATA_TYPE BusDataType,
 
     /* Find the handler */
     Handler = HaliReferenceHandlerForConfigSpace(BusDataType, BusNumber);
-    if (!Handler) return 0;
+    if (!Handler)
+        return 0;
 
     /* Do the assignment */
     Status = Handler->SetBusData(Handler,
@@ -1588,7 +1605,7 @@ HalTranslateBusAddress(IN INTERFACE_TYPE InterfaceType,
                        IN OUT PULONG AddressSpace,
                        OUT PPHYSICAL_ADDRESS TranslatedAddress)
 {
-    /* Look as the bus type */
+    /* Look at the bus type */
     if (InterfaceType == PCIBus)
     {
         /* Call the PCI registered function */

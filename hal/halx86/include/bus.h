@@ -1,14 +1,14 @@
 #pragma once
 
-#define PCI_ADDRESS_MEMORY_SPACE            0x00000000
+#define PCI_ADDRESS_MEMORY_SPACE    0x00000000
 
 //
 // Helper Macros
 //
-#define PASTE2(x,y)                                                     x ## y
-#define POINTER_TO_(x)                                                  PASTE2(P,x)
-#define READ_FROM(x)                                                    PASTE2(READ_PORT_, x)
-#define WRITE_TO(x)                                                     PASTE2(WRITE_PORT_, x)
+#define PASTE2(x,y)                 x ## y
+#define POINTER_TO_(x)              PASTE2(P,x)
+#define READ_FROM(x)                PASTE2(READ_PORT_, x)
+#define WRITE_TO(x)                 PASTE2(WRITE_PORT_, x)
 
 //
 // Declares a PCI Register Read/Write Routine
@@ -44,7 +44,7 @@
 #define TYPE1_READ(x, y)                                                \
     TYPE1_START(x, y)                                                   \
     *((POINTER_TO_(y))Buffer) =                                         \
-    READ_FROM(y)((POINTER_TO_(y))(ULONG_PTR)(BusData->Config.Type1.Data + i));     \
+    READ_FROM(y)((POINTER_TO_(y))(ULONG_PTR)(BusData->Config.Type1.Data + i)); \
     TYPE1_END(y)
 
 //
@@ -52,7 +52,7 @@
 //
 #define TYPE1_WRITE(x, y)                                               \
     TYPE1_START(x, y)                                                   \
-    WRITE_TO(y)((POINTER_TO_(y))(ULONG_PTR)(BusData->Config.Type1.Data + i),       \
+    WRITE_TO(y)((POINTER_TO_(y))(ULONG_PTR)(BusData->Config.Type1.Data + i), \
                 *((POINTER_TO_(y))Buffer));                             \
     TYPE1_END(y)
 
@@ -70,7 +70,7 @@
 #define TYPE2_READ(x, y)                                                \
     TYPE2_START(x, y)                                                   \
     *((POINTER_TO_(y))Buffer) =                                         \
-        READ_FROM(y)((POINTER_TO_(y))(ULONG_PTR)PciCfg->u.AsUSHORT);        \
+        READ_FROM(y)((POINTER_TO_(y))(ULONG_PTR)PciCfg->u.AsUSHORT);    \
     TYPE2_END(y)
 
 //
@@ -78,7 +78,7 @@
 //
 #define TYPE2_WRITE(x, y)                                               \
     TYPE2_START(x, y)                                                   \
-    WRITE_TO(y)((POINTER_TO_(y))(ULONG_PTR)PciCfg->u.AsUSHORT,              \
+    WRITE_TO(y)((POINTER_TO_(y))(ULONG_PTR)PciCfg->u.AsUSHORT,          \
                 *((POINTER_TO_(y))Buffer));                             \
     TYPE2_END(y)
 
