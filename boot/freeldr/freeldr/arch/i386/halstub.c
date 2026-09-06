@@ -1,14 +1,13 @@
 /*
- * PROJECT:         ReactOS Kernel
- * LICENSE:         GPL - See COPYING in the top level directory
- * FILE:            boot/freeldr/freeldr/arch/i386/halstub.c
- * PURPOSE:         I/O Stub HAL Routines
- * PROGRAMMERS:     Alex Ionescu (alex.ionescu@reactos.org)
+ * PROJECT:     FreeLoader
+ * LICENSE:     GPL-2.0-or-later (https://spdx.org/licenses/GPL-2.0-or-later)
+ * PURPOSE:     I/O Stub HAL Routines for the MINIHAL library
+ * COPYRIGHT:   Copyright 2010 Hervé Poussineau <hpoussin@reactos.org>
  */
 
 /* INCLUDES ******************************************************************/
 
-#include <ntoskrnl.h>
+#include "ntoskrnl.h"
 
 /* FUNCTIONS *****************************************************************/
 

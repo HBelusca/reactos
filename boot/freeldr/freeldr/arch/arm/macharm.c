@@ -9,7 +9,7 @@
 /* INCLUDES *******************************************************************/
 
 #include <freeldr.h>
-#include <internal/arm/intrin_i.h>
+#include <../../ntoskrnl/include/internal/arm/intrin_i.h>
 
 /* GLOBALS ********************************************************************/
 

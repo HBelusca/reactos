@@ -1,15 +1,14 @@
 /*
- * PROJECT:         ReactOS Kernel
- * LICENSE:         GPL - See COPYING in the top level directory
- * FILE:            boot/freeldr/freeldr/arch/i386/ntoskrnl.c
- * PURPOSE:         NTOS glue routines for the MINIHAL library
- * PROGRAMMERS:     Hervé Poussineau  <hpoussin@reactos.org>
+ * PROJECT:     FreeLoader
+ * LICENSE:     GPL-2.0-or-later (https://spdx.org/licenses/GPL-2.0-or-later)
+ * PURPOSE:     NTOS glue routines for the MINIHAL library
+ * COPYRIGHT:   Copyright 2010 Hervé Poussineau <hpoussin@reactos.org>
  */
 
 /* INCLUDES ******************************************************************/
 
 #include <freeldr.h>
-#include <ntoskrnl.h>
+#include "ntoskrnl.h"
 
 #ifndef UNIMPLEMENTED
 #define UNIMPLEMENTED ASSERT(FALSE)

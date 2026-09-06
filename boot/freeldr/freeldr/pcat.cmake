@@ -176,10 +176,8 @@ set(PCH_SOURCE
 
 add_pch(freeldr_common include/freeldr.h PCH_SOURCE)
 add_dependencies(freeldr_common bugcodes asm xdk)
-
-## GCC builds need this extra thing for some reason...
-if(ARCH STREQUAL "i386" AND NOT MSVC)
-    target_link_libraries(freeldr_common mini_hal)
+if(ARCH STREQUAL "i386")
+    target_link_libraries(freeldr_common INTERFACE mini_hal)
 endif()
 
 add_asm_files(freeldr_base_asm ${PCATLDR_BASE_ASM_SOURCE})
@@ -220,9 +218,6 @@ set_subsystem(freeldr_pe native)
 set_entrypoint(freeldr_pe RealEntryPoint)
 
 target_link_libraries(freeldr_pe freeldr_common cportlib libcntpr blrtl)
-if(ARCH STREQUAL "i386")
-    target_link_libraries(freeldr_pe mini_hal)
-endif()
 
 # dynamic analysis switches
 if(STACK_PROTECTOR)
