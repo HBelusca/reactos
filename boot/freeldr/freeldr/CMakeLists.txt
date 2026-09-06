@@ -18,7 +18,7 @@ endif()
 
 include_directories(BEFORE include)
 
-add_definitions(-D_NTHAL_ -D_BLDR_ -D_NTSYSTEM_)
+add_definitions(-D_BLDR_ -D_NTSYSTEM_)
 
 list(APPEND FREELDR_ARC_SOURCE
     arcname.c
