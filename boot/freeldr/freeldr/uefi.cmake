@@ -48,8 +48,7 @@ list(APPEND UEFILDR_BOOTMGR_SOURCE
     ${FREELDR_BOOTMGR_SOURCE}
     custom.c
     options.c
-    oslist.c
-)
+    oslist.c)
 
 add_asm_files(uefifreeldr_common_asm ${FREELDR_COMMON_ASM_SOURCE} ${UEFILDR_COMMON_ASM_SOURCE})
 
@@ -100,10 +99,8 @@ set(PCH_SOURCE
 
 add_pch(uefifreeldr_common include/arch/uefi/uefildr.h PCH_SOURCE)
 add_dependencies(uefifreeldr_common bugcodes asm xdk)
-
-## GCC builds need this extra thing for some reason...
-if(ARCH STREQUAL "i386" AND NOT MSVC)
-    target_link_libraries(uefifreeldr_common mini_hal)
+if(ARCH STREQUAL "i386")
+    target_link_libraries(uefifreeldr_common INTERFACE mini_hal)
 endif()
 
 
@@ -158,9 +155,6 @@ endif()
 set_entrypoint(uefildr EfiEntry)
 
 target_link_libraries(uefildr uefifreeldr_common cportlib blcmlib blrtl libcntpr)
-if(ARCH STREQUAL "i386")
-    target_link_libraries(uefildr mini_hal)
-endif()
 
 # dynamic analysis switches
 if(STACK_PROTECTOR)
