@@ -32,8 +32,6 @@ list(APPEND ROSLOAD_SOURCE
 if(ARCH STREQUAL "i386")
 
     list(APPEND ROSLOAD_SOURCE
-        arch/i386/halstub.c
-        arch/i386/ntoskrnl.c
         disk/scsiport.c
         ntldr/arch/i386/winldr.c)
 
@@ -80,10 +78,6 @@ set_subsystem(rosload native)
 set_entrypoint(rosload RunLoader)
 
 target_link_libraries(rosload blcmlib blrtl libcntpr)
-if(ARCH STREQUAL "i386")
-    target_link_libraries(rosload mini_hal)
-endif()
-
 add_importlibs(rosload freeldr)
 
 # dynamic analysis switches

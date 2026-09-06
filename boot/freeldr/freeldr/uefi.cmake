@@ -101,9 +101,7 @@ set(PCH_SOURCE
 
 add_pch(uefifreeldr_common include/arch/uefi/uefildr.h PCH_SOURCE)
 add_dependencies(uefifreeldr_common bugcodes asm xdk)
-if(ARCH STREQUAL "i386")
-    target_link_libraries(uefifreeldr_common INTERFACE mini_hal)
-endif()
+target_link_libraries(uefifreeldr_common INTERFACE mini_hal)
 
 
 spec2def(uefildr.exe freeldr.spec)
