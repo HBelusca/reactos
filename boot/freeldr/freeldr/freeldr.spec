@@ -130,3 +130,12 @@
 @ stdcall ExFreePool(ptr)
 @ stdcall ExFreePoolWithTag(ptr long)
 @ cdecl MmSetMemoryType()
+
+# HAL/Ke
+@ stdcall -arch=i386 KeStallExecutionProcessor(long)
+@ extern -arch=i386 HalDispatchTable
+@ stdcall -arch=i386 HalAssignSlotResources(ptr ptr ptr ptr long long long ptr)
+@ stdcall -arch=i386 HalGetBusDataByOffset(long long long ptr long long)
+@ stdcall -arch=i386 HalTranslateBusAddress(long long long long ptr ptr)
+@ stdcall -arch=i386 HalpInitializePciStubs() ## FIXME: Temporary
+@ stdcall -arch=i386 HalpInitBusHandler() ## FIXME: Temporary

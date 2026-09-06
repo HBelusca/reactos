@@ -8,7 +8,12 @@
 
 /* INCLUDES *******************************************************************/
 
+#undef _NTSYSTEM_ // HACK for making ntddk.h define exported HalDispatchTable
 #include <freeldr.h>
+
+//#undef HALDISPATCH
+//extern  FLDRAPI PHAL_DISPATCH HalDispatchTable;
+//#define HALDISPATCH HalDispatchTable
 
 #include <debug.h>
 DBG_DEFAULT_CHANNEL(SCSIPORT);

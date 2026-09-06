@@ -176,9 +176,7 @@ set(PCH_SOURCE
 
 add_pch(freeldr_common include/freeldr.h PCH_SOURCE)
 add_dependencies(freeldr_common bugcodes asm xdk)
-if(ARCH STREQUAL "i386")
-    target_link_libraries(freeldr_common INTERFACE mini_hal)
-endif()
+target_link_libraries(freeldr_common INTERFACE mini_hal)
 
 add_asm_files(freeldr_base_asm ${PCATLDR_BASE_ASM_SOURCE})
 
