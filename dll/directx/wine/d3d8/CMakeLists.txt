@@ -25,6 +25,7 @@ add_library(d3d8 MODULE
     ${PCH_SKIP_SOURCE}
     version.rc
     ${CMAKE_CURRENT_BINARY_DIR}/d3d8.def)
+add_pch(d3d8 precomp.h "${PCH_SKIP_SOURCE}")
 
 if(MSVC)
     # Disable C5286: implicit conversion from enum type 'x' to enum type 'y';
@@ -34,6 +35,5 @@ endif()
 set_module_type(d3d8 win32dll UNICODE)
 target_link_libraries(d3d8 uuid wine)
 add_importlibs(d3d8 d3dwine msvcrt kernel32 ntdll)
-add_pch(d3d8 precomp.h "${PCH_SKIP_SOURCE}")
 add_cd_file(TARGET d3d8 DESTINATION reactos/system32 FOR all)
 set_wine_module_FIXME(d3d8) # CORE-5743: No CONST_VTABLE

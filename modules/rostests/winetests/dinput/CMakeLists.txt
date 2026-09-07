@@ -14,9 +14,9 @@ list(APPEND PCH_SKIP_SOURCE
 add_executable(dinput_winetest
     ${SOURCE}
     ${PCH_SKIP_SOURCE})
+add_pch(dinput_winetest precomp.h "${PCH_SKIP_SOURCE}")
 
 target_link_libraries(dinput_winetest dinput_data_formats)
 set_module_type(dinput_winetest win32cui)
 add_importlibs(dinput_winetest dinput ole32 user32 msvcrt kernel32)
-add_pch(dinput_winetest precomp.h "${PCH_SKIP_SOURCE}")
 add_rostests_file(TARGET dinput_winetest)

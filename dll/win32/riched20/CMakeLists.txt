@@ -32,6 +32,7 @@ add_library(riched20 MODULE
     ${SOURCE}
     version.rc
     ${CMAKE_CURRENT_BINARY_DIR}/riched20.def)
+add_pch(riched20 precomp.h SOURCE)
 
 if(MSVC AND ARCH STREQUAL "i386")
     # MSVC doesn't support __thiscall in C code
@@ -43,6 +44,5 @@ add_dependencies(riched20 stdole2)
 set_module_type(riched20 win32dll)
 target_link_libraries(riched20 wine uuid oldnames)
 add_importlibs(riched20 ole32 oleaut32 usp10 imm32 user32 gdi32 msvcrt kernel32 ntdll)
-add_pch(riched20 precomp.h SOURCE)
 add_cd_file(TARGET riched20 DESTINATION reactos/system32 FOR all)
 set_wine_module_FIXME(riched20) # CORE-5743: No ARRAY_SIZE and CONST_VTABLE

@@ -19,9 +19,9 @@ add_library(fmifs MODULE
     ${PCH_SKIP_SOURCE}
     fmifs.rc
     ${CMAKE_CURRENT_BINARY_DIR}/fmifs.def)
+add_pch(fmifs precomp.h "${PCH_SKIP_SOURCE}")
 
 set_module_type(fmifs win32dll UNICODE ENTRYPOINT InitializeFmIfs 12)
 add_importlibs(fmifs kernel32 ntdll)
-add_pch(fmifs precomp.h "${PCH_SKIP_SOURCE}")
 add_dependencies(fmifs psdk)
 add_cd_file(TARGET fmifs DESTINATION reactos/system32 FOR all)

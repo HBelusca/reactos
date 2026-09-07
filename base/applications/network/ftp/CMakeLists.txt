@@ -10,12 +10,12 @@ list(APPEND SOURCE
     precomp.h)
 
 add_executable(ftp ${SOURCE} ftp.rc)
-target_compile_definitions(ftp PRIVATE lint)
-
+add_pch(ftp precomp.h SOURCE)
 set_module_type(ftp win32cui)
+
+target_compile_definitions(ftp PRIVATE lint)
 target_link_libraries(ftp oldnames ${PSEH_LIB})
 add_importlibs(ftp ws2_32 iphlpapi msvcrt kernel32)
-add_pch(ftp precomp.h SOURCE)
 
 if(MSVC)
     add_importlibs(ftp ntdll)

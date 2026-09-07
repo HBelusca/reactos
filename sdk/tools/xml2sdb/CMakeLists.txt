@@ -1,6 +1,10 @@
 
 add_definitions(-DSDBWRITE_HOSTTOOL=1)
 
+include_directories(
+    ${REACTOS_SOURCE_DIR}/dll/appcompat/apphelp
+    ${REACTOS_SOURCE_DIR}/sdk/include/reactos/appcompat)
+
 list(APPEND SOURCE
     main.cpp
     tinyxml2.cpp
@@ -9,9 +13,6 @@ list(APPEND SOURCE
     ${REACTOS_SOURCE_DIR}/dll/appcompat/apphelp/sdbwrite.c
     ${REACTOS_SOURCE_DIR}/dll/appcompat/apphelp/sdbstringtable.c)
 
-include_directories(
-    ${REACTOS_SOURCE_DIR}/dll/appcompat/apphelp
-    ${REACTOS_SOURCE_DIR}/sdk/include/reactos/appcompat)
 add_host_tool(xml2sdb ${SOURCE})
 target_link_libraries(xml2sdb PRIVATE host_includes)
 

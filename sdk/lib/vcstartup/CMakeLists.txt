@@ -58,4 +58,4 @@ list(APPEND VCSTARTUP_SOURCES
 # Startup library (linked into executables, linking to ucrtbase)
 add_library(vcstartup ${VCSTARTUP_SOURCES})
 target_link_libraries(vcstartup ${PSEH_LIB} libkernel32)
-target_include_directories(vcstartup PRIVATE  $<TARGET_PROPERTY:vcruntime,INTERFACE_INCLUDE_DIRECTORIES>)
+target_include_directories(vcstartup PRIVATE $<TARGET_PROPERTY:vcruntime,INTERFACE_INCLUDE_DIRECTORIES>)

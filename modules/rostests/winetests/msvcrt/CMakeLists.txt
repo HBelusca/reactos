@@ -21,6 +21,7 @@ list(APPEND PCH_SKIP_SOURCE
 add_executable(msvcrt_winetest
     ${SOURCE}
     ${PCH_SKIP_SOURCE})
+add_pch(msvcrt_winetest precomp.h "${PCH_SKIP_SOURCE}")
 
 target_compile_definitions(msvcrt_winetest PRIVATE
     WINETEST_USE_DBGSTR_LONGLONG
@@ -47,5 +48,4 @@ set_module_type(msvcrt_winetest win32cui)
 add_importlibs(msvcrt_winetest advapi32 msvcrt kernel32 ntdll)
 target_link_libraries(msvcrt_winetest oldnames)
 
-add_pch(msvcrt_winetest precomp.h "${PCH_SKIP_SOURCE}")
 add_rostests_file(TARGET msvcrt_winetest)

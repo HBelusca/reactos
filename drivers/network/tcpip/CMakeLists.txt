@@ -37,6 +37,7 @@ add_library(tcpip MODULE
     ${SOURCE}
     tcpip.rc
     ${CMAKE_CURRENT_BINARY_DIR}/tcpip.def)
+add_pch(tcpip include/lwip/precomp.h SOURCE)
 
 target_include_directories(tcpip BEFORE
     PRIVATE ${LWIP_INCLUDE_DIRS}
@@ -45,5 +46,4 @@ target_include_directories(tcpip BEFORE
 target_link_libraries(tcpip ip ${PSEH_LIB})
 set_module_type(tcpip kernelmodedriver)
 add_importlibs(tcpip ndis ntoskrnl hal)
-add_pch(tcpip include/lwip/precomp.h SOURCE)
 add_cd_file(TARGET tcpip DESTINATION reactos/system32/drivers FOR all)

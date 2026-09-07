@@ -36,8 +36,8 @@ list(APPEND SOURCE
     fatprocs.h)
 
 add_library(fastfat MODULE ${SOURCE} fastfat.rc)
+add_pch(fastfat fatprocs.h SOURCE)
 set_module_type(fastfat kernelmodedriver)
 target_link_libraries(fastfat ${PSEH_LIB} memcmp)
 add_importlibs(fastfat ntoskrnl hal)
-add_pch(fastfat fatprocs.h SOURCE)
 add_cd_file(TARGET fastfat DESTINATION reactos/system32/drivers NO_CAB FOR all)

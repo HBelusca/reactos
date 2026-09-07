@@ -29,6 +29,8 @@ add_executable(ntkrnlmp
     ${NTKRNLMP_PCH_SKIP_SOURCE}
     ${REACTOS_SOURCE_DIR}/ntoskrnl/ntoskrnl.rc
     ${CMAKE_CURRENT_BINARY_DIR}/ntkrnlmp.def)
+add_pch(ntkrnlmp ${REACTOS_SOURCE_DIR}/ntoskrnl/include/ntoskrnl.h "${NTKRNLMP_PCH_SKIP_SOURCE}")
+
 set_module_type(ntkrnlmp kernel)
 target_compile_definitions(ntkrnlmp PRIVATE CONFIG_SMP)
 
@@ -39,6 +41,5 @@ endif()
 
 target_link_libraries(ntkrnlmp ntoskrnl_vista cportlib csq ${PSEH_LIB} arbiter cmlib ntlsalib rtl rtl_vista ${ROSSYM_LIB} libcntpr setjmp wdmguid poguid ioevent)
 add_importlibs(ntkrnlmp hal kdcom bootvid)
-add_pch(ntkrnlmp ${REACTOS_SOURCE_DIR}/ntoskrnl/include/ntoskrnl.h "${NTKRNLMP_PCH_SKIP_SOURCE}")
 add_dependencies(ntkrnlmp psdk asm)
 add_cd_file(TARGET ntkrnlmp DESTINATION reactos/system32 NO_CAB FOR all)

@@ -1,3 +1,6 @@
+
+include_directories(${REACTOS_SOURCE_DIR}/modules/rosapps/include/vfd)
+
 list(APPEND SOURCE
     vfddbg.c
     vfddev.c
@@ -10,7 +13,6 @@ list(APPEND SOURCE
     vfdpnp.c
     vfdrdwr.c)
 
-include_directories(${REACTOS_SOURCE_DIR}/modules/rosapps/include/vfd)
 add_library(vfddrv MODULE ${SOURCE} vfddrv.rc)
 set_module_type(vfddrv kernelmodedriver)
 add_importlibs(vfddrv ntoskrnl hal)

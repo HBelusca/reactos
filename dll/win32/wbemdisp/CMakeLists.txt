@@ -23,11 +23,11 @@ add_library(wbemdisp MODULE
     ${PCH_SKIP_SOURCE}
     wbemdisp.rc
     ${CMAKE_CURRENT_BINARY_DIR}/wbemdisp.def)
+add_pch(wbemdisp precomp.h "${PCH_SKIP_SOURCE}")
 
 set_module_type(wbemdisp win32dll)
 target_link_libraries(wbemdisp uuid wine oldnames)
 add_dependencies(wbemdisp stdole2 wbemdisp_idlheader)
 add_importlibs(wbemdisp oleaut32 ole32 msvcrt kernel32 ntdll)
-add_pch(wbemdisp precomp.h "${PCH_SKIP_SOURCE}")
 add_cd_file(TARGET wbemdisp DESTINATION reactos/system32/wbem FOR all)
 set_wine_module_FIXME(wbemdisp) # CORE-5743: No ARRAY_SIZE and CONST_VTABLE

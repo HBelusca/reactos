@@ -70,6 +70,7 @@ add_library(msi MODULE
     ${PCH_SKIP_SOURCE}
     msi.rc
     ${CMAKE_CURRENT_BINARY_DIR}/msi.def)
+add_pch(msi precomp.h "${PCH_SKIP_SOURCE}")
 
 if(MSVC)
     # Disable warning C4090: 'function': different 'const' qualifiers
@@ -95,5 +96,4 @@ add_importlibs(msi advapi32 advapi32_vista cabinet comctl32 gdi32 ole32 oleaut32
     kernel32
     ntdll)
 
-add_pch(msi precomp.h "${PCH_SKIP_SOURCE}")
 add_cd_file(TARGET msi DESTINATION reactos/system32 FOR all)

@@ -6,9 +6,9 @@ list(APPEND KERNEL32_DRV_SOURCE
     kernel32_drv.c)
 
 add_library(kernel32_drv MODULE ${KERNEL32_DRV_SOURCE})
+#add_pch(kernel32_drv ../include/kmt_test.h)
 set_module_type(kernel32_drv kernelmodedriver)
 target_link_libraries(kernel32_drv kmtest_printf ${PSEH_LIB})
 add_importlibs(kernel32_drv ntoskrnl hal)
 target_compile_definitions(kernel32_drv PRIVATE KMT_STANDALONE_DRIVER)
-#add_pch(kernel32_drv ../include/kmt_test.h)
 add_rostests_file(TARGET kernel32_drv)

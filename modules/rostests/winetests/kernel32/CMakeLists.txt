@@ -62,6 +62,7 @@ add_executable(kernel32_winetest
     ${SOURCE}
     ${PCH_SKIP_SOURCE}
     resource.rc)
+add_pch(kernel32_winetest precomp.h "${PCH_SKIP_SOURCE}")
 
 # CMake 3.9 and higher requires to specify this dependency manually
 # see https://gitlab.kitware.com/cmake/cmake/issues/19933
@@ -72,6 +73,12 @@ if (MSVC_IDE)
     target_include_directories(kernel32_winetest PRIVATE
         $<$<COMPILE_LANGUAGE:RC>:$<TARGET_FILE_DIR:kernel32_winetest_dummy>>)
 endif()
+
+target_compile_definitions(kernel32_winetest PRIVATE 
+    WINETEST_USE_DBGSTR_LONGLONG
+    __WINESRC__
+    strncasecmp=_strnicmp
+    strcasecmp=_stricmp)
 
 if (MSVC)
     # error C4101: unreferenced local variable
@@ -100,10 +107,4 @@ endif()
 set_module_type(kernel32_winetest win32cui)
 target_link_libraries(kernel32_winetest pseh oldnames)
 add_importlibs(kernel32_winetest user32 advapi32 msvcrt kernel32 ntdll)
-add_pch(kernel32_winetest precomp.h "${PCH_SKIP_SOURCE}")
 add_rostests_file(TARGET kernel32_winetest)
-target_compile_definitions(kernel32_winetest PRIVATE 
-    WINETEST_USE_DBGSTR_LONGLONG
-    __WINESRC__
-    strncasecmp=_strnicmp
-    strcasecmp=_stricmp)

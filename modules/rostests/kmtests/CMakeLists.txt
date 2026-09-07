@@ -130,12 +130,12 @@ if(ARCH STREQUAL "i386" OR ARCH STREQUAL "amd64")
 endif()
 
 add_library(kmtest_drv MODULE ${KMTEST_DRV_SOURCE})
+#add_pch(kmtest_drv include/kmt_test.h)
 set_module_type(kmtest_drv kernelmodedriver)
 target_link_libraries(kmtest_drv kmtest_printf chkstk memcmp ntoskrnl_vista ${PSEH_LIB})
 add_importlibs(kmtest_drv ntoskrnl hal)
 add_dependencies(kmtest_drv bugcodes xdk)
 target_compile_definitions(kmtest_drv PRIVATE KMT_KERNEL_MODE NTDDI_VERSION=NTDDI_WS03SP1)
-#add_pch(kmtest_drv include/kmt_test.h)
 add_rostests_file(TARGET kmtest_drv)
 
 add_library(kmtest_printf
@@ -185,11 +185,11 @@ list(APPEND KMTEST_SOURCE
     kmtest/kmtest.rc)
 
 add_executable(kmtest ${KMTEST_SOURCE})
+#add_pch(kmtest include/kmt_test.h)
 set_module_type(kmtest win32cui)
 target_link_libraries(kmtest ${PSEH_LIB})
 add_importlibs(kmtest fltlib advapi32 ws2_32 msvcrt kernel32 ntdll)
 target_compile_definitions(kmtest PRIVATE KMT_USER_MODE NTDDI_VERSION=NTDDI_WS03SP1)
-#add_pch(kmtest include/kmt_test.h)
 add_rostests_file(TARGET kmtest)
 
 #

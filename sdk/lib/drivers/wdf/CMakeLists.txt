@@ -189,9 +189,6 @@ add_library(wdf01000 SHARED ${SOURCE_SHARED} ${SOURCE_KM} wdf01000.rc)
 
 set_module_type(wdf01000 kernelmodedriver)
 
-add_cd_file(TARGET wdf01000 DESTINATION reactos/system32/drivers NO_CAB FOR all)
-add_registry_inf(wdf01000_reg.inf)
-
 target_compile_definitions(wdf01000
     PUBLIC WDF_DEVICE_NO_WDMSEC_H _WIN32_WINNT=0x603 NTDDI_VERSION=0x06030000 # NTDDI_WINBLUE
     PRIVATE FX_CORE_MODE=1 FX_CORE_KERNEL_MODE=1
@@ -225,3 +222,6 @@ if(CMAKE_C_COMPILER_ID STREQUAL "GNU" OR CMAKE_C_COMPILER_ID STREQUAL "Clang")
         PRIVATE -Wno-write-strings -Wno-unknown-pragmas -Wno-switch
         PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-Wno-reorder -Wno-invalid-offsetof -Wno-delete-non-virtual-dtor -Wno-class-memaccess>)
 endif()
+
+add_cd_file(TARGET wdf01000 DESTINATION reactos/system32/drivers NO_CAB FOR all)
+add_registry_inf(wdf01000_reg.inf)

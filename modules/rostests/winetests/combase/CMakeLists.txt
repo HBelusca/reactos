@@ -15,6 +15,7 @@ add_executable(combase_winetest
     ${SOURCE}
     ${PCH_SKIP_SOURCE}
     combase.rc)
+#add_pch(combase_winetest precomp.h "${PCH_SKIP_SOURCE}")
 
 target_link_libraries(combase_winetest uuid)
 set_module_type(combase_winetest win32cui)
@@ -29,7 +30,6 @@ if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
 	target_compile_options(combase_winetest PRIVATE -Wno-format-overflow -Wno-discarded-qualifiers)
 endif()
 
-#add_pch(combase_winetest precomp.h "${PCH_SKIP_SOURCE}")
 add_rostests_file(TARGET combase_winetest)
 add_library(wine.combase.test MODULE wine.combase.test.c ${CMAKE_CURRENT_BINARY_DIR}/wine.combase.test.def)
 target_link_libraries(wine.combase.test wine)
@@ -42,7 +42,7 @@ if (MSVC_IDE)
 endif()
 
 if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
-	target_compile_options(wine.combase.test PRIVATE -Wno-discarded-qualifiers)
+    target_compile_options(wine.combase.test PRIVATE -Wno-discarded-qualifiers)
 endif()
 
 set_source_files_properties(combase.rc OBJECT_DEPENDS wine.combase.test)

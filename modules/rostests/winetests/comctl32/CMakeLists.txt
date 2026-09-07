@@ -42,6 +42,7 @@ add_executable(comctl32_winetest
     ${SOURCE}
     ${PCH_SKIP_SOURCE}
     rsrc.rc)
+add_pch(comctl32_winetest precomp.h "${PCH_SKIP_SOURCE}")
 
 if(MSVC AND ARCH STREQUAL "amd64")
     # warning C4334: '<<': result of 32-bit shift implicitly converted to 64 bits (was 64-bit shift intended?)
@@ -62,5 +63,4 @@ if(MSVC)
     add_importlibs(comctl32_winetest ntdll)
 endif()
 
-add_pch(comctl32_winetest precomp.h "${PCH_SKIP_SOURCE}")
 add_rostests_file(TARGET comctl32_winetest)

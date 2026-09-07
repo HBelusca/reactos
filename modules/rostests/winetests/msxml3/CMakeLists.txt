@@ -20,15 +20,14 @@ add_executable(msxml3_winetest
     ${SOURCE}
     ${PCH_SKIP_SOURCE}
     rsrc.rc)
+add_pch(msxml3_winetest precomp.h "${PCH_SKIP_SOURCE}")
 
 add_idl_headers(xmlparser_idlheader_test xmlparser.idl)
 add_dependencies(msxml3_winetest xmlparser_idlheader_test)
 set_module_type(msxml3_winetest win32cui)
 add_importlibs(msxml3_winetest shlwapi user32 ole32 oleaut32 msvcrt kernel32)
-
 if(MSVC)
     add_importlibs(msxml3_winetest ntdll)
 endif()
 
-add_pch(msxml3_winetest precomp.h "${PCH_SKIP_SOURCE}")
 add_rostests_file(TARGET msxml3_winetest)

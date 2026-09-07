@@ -1,13 +1,13 @@
 
 list(APPEND SOURCE
-	Fraginator.cpp
-	MainDialog.cpp
-	ReportDialog.cpp)
+    Fraginator.cpp
+    MainDialog.cpp
+    ReportDialog.cpp)
 
 list(APPEND UNFRAG_SOURCE
-	Unfrag.cpp
-	Defragment.cpp
-	DriveVolume.cpp)
+    Unfrag.cpp
+    Defragment.cpp
+    DriveVolume.cpp)
 
 add_executable(frag ${SOURCE} ${UNFRAG_SOURCE} Fraginator.rc)
 target_link_libraries(frag cppstl)

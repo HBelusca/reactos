@@ -61,6 +61,7 @@ add_library(comctl32 MODULE
     ${PCH_SKIP_SOURCE}
     rsrc.rc
     ${CMAKE_CURRENT_BINARY_DIR}/comctl32.def)
+add_pch(comctl32 precomp.h "${PCH_SKIP_SOURCE}")
 
 if(MSVC)
     # Disable warning C4146: unary minus operator applied to unsigned type, result still unsigned
@@ -73,7 +74,6 @@ set_module_type(comctl32 win32dll UNICODE)
 target_link_libraries(comctl32 uuid wine ${PSEH_LIB} oldnames)
 add_delay_importlibs(comctl32 winmm uxtheme)
 add_importlibs(comctl32 user32 gdi32 advapi32 usp10 imm32 msvcrt kernel32 ntdll)
-add_pch(comctl32 precomp.h "${PCH_SKIP_SOURCE}")
 add_cd_file(TARGET comctl32 DESTINATION reactos/system32 FOR all)
 
 add_cd_file(TARGET comctl32 DESTINATION reactos/winsxs/${WINARCH}_microsoft.windows.common-controls_6595b64144ccf1df_5.82.2600.2982_none_deadbeef FOR all)

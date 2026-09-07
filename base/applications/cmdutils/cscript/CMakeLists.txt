@@ -10,6 +10,7 @@ list(APPEND SOURCE
     ${wscript_folder}/precomp.h)
 
 add_executable(cscript ${SOURCE} rsrc.rc)
+add_pch(cscript ${wscript_folder}/precomp.h SOURCE)
 add_idl_headers(cscript_idlheader ihost.idl)
 add_typelib(ihost.idl)
 set_source_files_properties(rsrc.rc PROPERTIES OBJECT_DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/ihost.tlb)
@@ -18,6 +19,5 @@ set_module_type(cscript win32cui UNICODE)
 add_delay_importlibs(cscript shlwapi)
 add_importlibs(cscript shell32 oleaut32 ole32 advapi32 user32 msvcrt kernel32 ntdll)
 add_dependencies(cscript stdole2 cscript_idlheader)
-add_pch(cscript ${wscript_folder}/precomp.h SOURCE)
 add_cd_file(TARGET cscript DESTINATION reactos/system32 FOR all)
 set_wine_module_FIXME(cscript) # CORE-5743: No ARRAY_SIZE macro

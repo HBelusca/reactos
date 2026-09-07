@@ -22,10 +22,10 @@ add_library(inseng MODULE
     inseng.rc
     ${CMAKE_CURRENT_BINARY_DIR}/inseng_stubs.c
     ${CMAKE_CURRENT_BINARY_DIR}/inseng.def)
+add_pch(inseng precomp.h "${PCH_SKIP_SOURCE}")
 
 set_module_type(inseng win32dll)
 target_link_libraries(inseng uuid wine)
 add_importlibs(inseng ole32 urlmon kernel32_vista msvcrt kernel32 ntdll)
-add_pch(inseng precomp.h "${PCH_SKIP_SOURCE}")
 add_cd_file(TARGET inseng DESTINATION reactos/system32 FOR all)
 set_wine_module_FIXME(inseng) # CORE-5743: No CONST_VTABLE

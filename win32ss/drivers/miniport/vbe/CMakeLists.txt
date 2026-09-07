@@ -5,9 +5,9 @@ list(APPEND SOURCE
     vbemp.h)
 
 add_library(vgapnp MODULE ${SOURCE} vbemp.rc)
+add_pch(vgapnp vbemp.h SOURCE)
 set_module_type(vgapnp kernelmodedriver)
 add_importlibs(vgapnp videoprt)
-add_pch(vgapnp vbemp.h SOURCE)
 target_link_libraries(vgapnp libcntpr)
 
 # pc98vid takes place of vga service on PC-98 platform

@@ -30,6 +30,7 @@ add_library(vbscript MODULE
     ${PCH_SKIP_SOURCE}
     vbscript.rc
     ${CMAKE_CURRENT_BINARY_DIR}/vbscript.def)
+add_pch(vbscript precomp.h "${PCH_SKIP_SOURCE}")
 
 if(MSVC)
     # Disable warning C4267: '=': conversion from 'size_t' to 'WCHAR', possible loss of data
@@ -42,6 +43,5 @@ set_module_type(vbscript win32dll)
 target_link_libraries(vbscript uuid wine oldnames wine_dll_register wine_dll_canunload)
 add_importlibs(vbscript oleaut32 ole32 user32 msvcrt kernelbase kernel32_vista kernel32 ntdll)
 add_dependencies(vbscript vbscript_idlheader stdole2)
-add_pch(vbscript precomp.h "${PCH_SKIP_SOURCE}")
 add_cd_file(TARGET vbscript DESTINATION reactos/system32 FOR all)
 set_wine_module_FIXME(vbscript) # CORE-5743: No ARRAY_SIZE and CONST_VTABLE

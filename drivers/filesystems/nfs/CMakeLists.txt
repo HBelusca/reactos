@@ -4,8 +4,7 @@ list(APPEND SOURCE
     nfs41_driver.h
     nfs41_debug.h)
 
-include_directories(
-    ${REACTOS_SOURCE_DIR}/dll/np/nfs)
+include_directories(${REACTOS_SOURCE_DIR}/dll/np/nfs)
 
 add_definitions(-DRDBSS_TRACKER)
 

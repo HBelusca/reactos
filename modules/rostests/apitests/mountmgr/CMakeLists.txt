@@ -10,8 +10,8 @@ list(APPEND PCH_SKIP_SOURCE
 add_executable(mountmgr_apitest
     ${SOURCE}
     ${PCH_SKIP_SOURCE})
-
 add_pch(mountmgr_apitest precomp.h "${PCH_SKIP_SOURCE}")
+
 target_link_libraries(mountmgr_apitest wine ${PSEH_LIB})
 set_module_type(mountmgr_apitest win32cui)
 add_importlibs(mountmgr_apitest msvcrt kernel32 ntdll)

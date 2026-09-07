@@ -1,7 +1,7 @@
 
 PROJECT(NTOS)
 
-if (CMAKE_C_COMPILER_ID STREQUAL "GNU" OR CMAKE_C_COMPILER_ID STREQUAL "Clang")
+if(CMAKE_C_COMPILER_ID STREQUAL "GNU" OR CMAKE_C_COMPILER_ID STREQUAL "Clang")
     # Enable this again. CORE-17637
     add_compile_options(-Wunused-result)
 endif()
@@ -17,7 +17,7 @@ set(NTKRNLMP_ASM_SOURCE ${ASM_SOURCE})
 spec2def(ntoskrnl.exe ntoskrnl.spec ADD_IMPORTLIB)
 
 # Link GCC stack protector lib
-if (STACK_PROTECTOR)
+if(STACK_PROTECTOR)
     target_link_libraries(libntoskrnl INTERFACE gcc_ssp_nt)
 endif()
 
@@ -42,6 +42,8 @@ add_executable(ntoskrnl
     ${PCH_SKIP_SOURCE}
     ntoskrnl.rc
     ${CMAKE_CURRENT_BINARY_DIR}/ntoskrnl.def)
+add_pch(ntoskrnl ${REACTOS_SOURCE_DIR}/ntoskrnl/include/ntoskrnl.h "${PCH_SKIP_SOURCE}")
+
 set_module_type(ntoskrnl kernel)
 
 source_group(TREE ${REACTOS_SOURCE_DIR}/ntoskrnl PREFIX "Source Files" FILES ${NTOSKRNL_SOURCE})
@@ -53,7 +55,6 @@ if(STACK_PROTECTOR)
 endif()
 
 add_importlibs(ntoskrnl hal kdcom bootvid)
-add_pch(ntoskrnl ${REACTOS_SOURCE_DIR}/ntoskrnl/include/ntoskrnl.h "${PCH_SKIP_SOURCE}")
 add_dependencies(ntoskrnl psdk asm)
 add_cd_file(TARGET ntoskrnl DESTINATION reactos/system32 NO_CAB FOR all)
 

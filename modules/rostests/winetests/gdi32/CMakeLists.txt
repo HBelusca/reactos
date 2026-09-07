@@ -28,6 +28,7 @@ add_executable(gdi32_winetest
     ${SOURCE}
     ${PCH_SKIP_SOURCE}
     resource.rc)
+#add_pch(gdi32_winetest precomp.h "${PCH_SKIP_SOURCE}")
 
 target_compile_definitions(gdi32_winetest PRIVATE
     _USE_MATH_DEFINES
@@ -47,5 +48,4 @@ if(MSVC)
     add_importlibs(gdi32_winetest ntdll)
 endif()
 
-#add_pch(gdi32_winetest precomp.h "${PCH_SKIP_SOURCE}")
 add_rostests_file(TARGET gdi32_winetest)

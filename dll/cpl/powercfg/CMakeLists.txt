@@ -17,8 +17,8 @@ add_library(powercfg MODULE
     ${SOURCE}
     powercfg.rc
     ${CMAKE_CURRENT_BINARY_DIR}/powercfg.def)
+add_pch(powercfg powercfg.h SOURCE)
 
 set_module_type(powercfg cpl UNICODE)
 add_importlibs(powercfg shlwapi user32 powrprof comctl32 shell32 advapi32 msvcrt setupapi kernel32 ntdll)
-add_pch(powercfg powercfg.h SOURCE)
 add_cd_file(TARGET powercfg DESTINATION reactos/system32 FOR all)

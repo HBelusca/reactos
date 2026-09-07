@@ -22,6 +22,8 @@ list(APPEND SOURCE
     precomp.h)
 
 add_executable(telnet ${SOURCE} telnet.rc)
+add_pch(telnet precomp.h SOURCE)
+
 target_link_libraries(telnet cppstl)
 set_target_cpp_properties(telnet WITH_EXCEPTIONS)
 
@@ -39,5 +41,4 @@ endif()
 
 set_module_type(telnet win32cui)
 add_importlibs(telnet ws2_32 user32 msvcrt kernel32 ntdll)
-add_pch(telnet precomp.h SOURCE)
 add_cd_file(TARGET telnet DESTINATION reactos/system32 FOR all)

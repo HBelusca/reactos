@@ -45,6 +45,7 @@ add_library(shlwapi MODULE
     $<TARGET_OBJECTS:shlwapi_autocomp>
     shlwapi.rc
     ${CMAKE_CURRENT_BINARY_DIR}/shlwapi.def)
+#add_pch(shlwapi precomp.h "${PCH_SKIP_SOURCE}")
 
 if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
     # FIXME: This is some nonsense that triggers GCC 13+ warnings
@@ -74,5 +75,4 @@ if(DLL_EXPORT_VERSION LESS 0x600)
 endif()
 add_delay_importlibs(shlwapi userenv oleaut32 ole32 comctl32 comdlg32 mpr mlang urlmon shell32 winmm version)
 add_importlibs(shlwapi shcore user32 gdi32 advapi32 wininet msvcrt kernelbase kernel32 kernel32_vista ntdll)
-#add_pch(shlwapi precomp.h "${PCH_SKIP_SOURCE}")
 add_cd_file(TARGET shlwapi DESTINATION reactos/system32 FOR all)

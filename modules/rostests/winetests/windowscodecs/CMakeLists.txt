@@ -27,15 +27,14 @@ list(APPEND PCH_SKIP_SOURCE
 add_executable(windowscodecs_winetest
     ${SOURCE}
     ${PCH_SKIP_SOURCE})
+add_pch(windowscodecs_winetest precomp.h "${PCH_SKIP_SOURCE}")
 
 set_module_type(windowscodecs_winetest win32cui)
 add_importlibs(windowscodecs_winetest windowscodecs oleaut32 ole32 propsys user32 gdi32 shlwapi msvcrt kernel32)
-
 if(MSVC)
     add_importlibs(windowscodecs_winetest ntdll)
 endif()
 
 target_link_libraries(windowscodecs_winetest uuid)
 
-add_pch(windowscodecs_winetest precomp.h "${PCH_SKIP_SOURCE}")
 add_rostests_file(TARGET windowscodecs_winetest)

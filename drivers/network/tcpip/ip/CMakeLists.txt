@@ -30,6 +30,7 @@ list(APPEND SOURCE
     transport/udp/udp.c)
 
 add_library(ip OBJECT ${SOURCE} ${ip_asm})
+add_pch(ip precomp.h SOURCE)
 
 target_link_libraries(ip lwipcore)
 add_importlibs(lwipcore ntoskrnl)
@@ -37,5 +38,3 @@ add_importlibs(lwipcore ntoskrnl)
 target_include_directories(ip BEFORE
     PRIVATE ${LWIP_INCLUDE_DIRS}
     PRIVATE ${REACTOS_SOURCE_DIR}/drivers/network/tcpip/include)
-
-add_pch(ip precomp.h SOURCE)

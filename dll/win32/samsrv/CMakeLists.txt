@@ -27,9 +27,9 @@ add_library(samsrv MODULE
     ${SOURCE}
     samsrv.rc
     ${CMAKE_CURRENT_BINARY_DIR}/samsrv.def)
+add_pch(samsrv samsrv.h SOURCE)
 
 set_module_type(samsrv win32dll UNICODE)
 target_link_libraries(samsrv wine ${PSEH_LIB})
 add_importlibs(samsrv rpcrt4 advapi32 msvcrt kernel32 ntdll)
-add_pch(samsrv samsrv.h SOURCE)
 add_cd_file(TARGET samsrv DESTINATION reactos/system32 FOR all)

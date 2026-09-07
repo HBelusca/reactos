@@ -30,9 +30,9 @@ add_library(dhcpcsvc MODULE
     ${PCH_SKIP_SOURCE}
     dhcpcsvc.rc
     ${CMAKE_CURRENT_BINARY_DIR}/dhcpcsvc.def)
+add_pch(dhcpcsvc include/rosdhcp.h "${PCH_SKIP_SOURCE}")
 
 set_module_type(dhcpcsvc win32dll)
 target_link_libraries(dhcpcsvc oldnames ${PSEH_LIB})
 add_importlibs(dhcpcsvc ws2_32 rpcrt4 iphlpapi advapi32 msvcrt kernel32 ntdll)
-add_pch(dhcpcsvc include/rosdhcp.h "${PCH_SKIP_SOURCE}")
 add_cd_file(TARGET dhcpcsvc DESTINATION reactos/system32 FOR all)

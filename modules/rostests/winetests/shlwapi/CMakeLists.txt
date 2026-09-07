@@ -27,10 +27,7 @@ list(APPEND PCH_SKIP_SOURCE
 add_executable(shlwapi_winetest
     ${SOURCE}
     ${PCH_SKIP_SOURCE})
-
-target_link_libraries(shlwapi_winetest uuid)
-set_module_type(shlwapi_winetest win32cui)
-add_importlibs(shlwapi_winetest shlwapi shell32 mlang oleaut32 ole32 user32 advapi32 msvcrt kernel32)
+add_pch(shlwapi_winetest precomp.h "${PCH_SKIP_SOURCE}")
 
 if(MSVC)
     add_importlibs(shlwapi_winetest ntdll)
@@ -48,5 +45,7 @@ if(CMAKE_C_COMPILER_ID STREQUAL "GNU" OR
         -Wno-incompatible-pointer-types)
 endif()
 
-add_pch(shlwapi_winetest precomp.h "${PCH_SKIP_SOURCE}")
+target_link_libraries(shlwapi_winetest uuid)
+set_module_type(shlwapi_winetest win32cui)
+add_importlibs(shlwapi_winetest shlwapi shell32 mlang oleaut32 ole32 user32 advapi32 msvcrt kernel32)
 add_rostests_file(TARGET shlwapi_winetest)

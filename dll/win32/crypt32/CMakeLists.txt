@@ -49,6 +49,7 @@ add_library(crypt32 MODULE
     ${PCH_SKIP_SOURCE}
     crypt32.rc
     ${CMAKE_CURRENT_BINARY_DIR}/crypt32.def)
+add_pch(crypt32 precomp.h "${PCH_SKIP_SOURCE}")
 
 if(MSVC)
     target_compile_options(crypt32 PRIVATE
@@ -62,6 +63,5 @@ set_module_type(crypt32 win32dll)
 target_link_libraries(crypt32 wine ${PSEH_LIB} oldnames)
 add_delay_importlibs(crypt32 cryptnet)
 add_importlibs(crypt32 bcrypt user32 advapi32 advapi32_vista msvcrt kernel32_vista kernel32 ntdll)
-add_pch(crypt32 precomp.h "${PCH_SKIP_SOURCE}")
 add_cd_file(TARGET crypt32 DESTINATION reactos/system32 FOR all)
 set_wine_module_FIXME(crypt32) # CORE-5743: No ARRAY_SIZE macro

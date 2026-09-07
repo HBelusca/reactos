@@ -25,12 +25,12 @@ add_library(usbport MODULE
     ${PCH_SKIP_SOURCE}
     usbport.rc
     ${CMAKE_CURRENT_BINARY_DIR}/usbport.def)
+add_pch(usbport usbport.h "${PCH_SKIP_SOURCE}")
 
 target_compile_definitions(usbport
     # HACK: Disabled until USB Stack is reinvestigated.
     PRIVATE NO_KERNEL_LIST_ENTRY_CHECKS)
 
-add_pch(usbport usbport.h "${PCH_SKIP_SOURCE}")
 set_module_type(usbport kernelmodedriver)
 add_importlibs(usbport ntoskrnl hal)
 add_cd_file(TARGET usbport DESTINATION reactos/system32/drivers NO_CAB FOR all)

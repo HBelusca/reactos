@@ -4,7 +4,6 @@ add_definitions(
     -DUNICODE
     -D_UNICODE)
 
-
 list(APPEND SOURCE
     CChangeNotifyServer.cpp
     CDesktopBrowser.cpp

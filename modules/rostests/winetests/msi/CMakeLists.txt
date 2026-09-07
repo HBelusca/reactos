@@ -38,6 +38,7 @@ add_executable(msi_winetest
     ${SOURCE}
     ${PCH_SKIP_SOURCE}
     msi_winetest.rc)
+add_pch(msi_winetest precomp.h "${PCH_SKIP_SOURCE}")
 
 add_idl_headers(msi_winetest_idlheader typelib.idl)
 generate_idl_iids(typelib.idl)
@@ -60,9 +61,8 @@ if (MSVC_IDE)
     target_include_directories(msi_winetest PRIVATE $<$<COMPILE_LANGUAGE:RC>:$<TARGET_FILE_DIR:msi_custom>>)
 endif()
 
+add_dependencies(msi_winetest msi_custom msi_selfreg msi_winetest_idlheader stdole2)
 target_link_libraries(msi_winetest uuid)
 set_module_type(msi_winetest win32cui)
 add_importlibs(msi_winetest secur32 cabinet msi shell32 ole32 oleaut32 odbccp32 user32 advapi32 version msvcrt kernel32)
-add_pch(msi_winetest precomp.h "${PCH_SKIP_SOURCE}")
 add_rostests_file(TARGET msi_winetest)
-add_dependencies(msi_winetest msi_custom msi_selfreg msi_winetest_idlheader stdole2)

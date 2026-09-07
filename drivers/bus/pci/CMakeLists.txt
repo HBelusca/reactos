@@ -1,6 +1,5 @@
 
-include_directories(
-    ${REACTOS_SOURCE_DIR}/sdk/include/reactos/drivers)
+include_directories(${REACTOS_SOURCE_DIR}/sdk/include/reactos/drivers)
 
 list(APPEND SOURCE
     fdo.c
@@ -9,7 +8,7 @@ list(APPEND SOURCE
     pci.h)
 
 add_library(pci MODULE ${SOURCE} pci.rc)
+add_pch(pci pci.h SOURCE)
 set_module_type(pci kernelmodedriver)
 add_importlibs(pci ntoskrnl hal)
-add_pch(pci pci.h SOURCE)
 add_cd_file(TARGET pci DESTINATION reactos/system32/drivers NO_CAB FOR all)

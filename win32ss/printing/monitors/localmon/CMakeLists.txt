@@ -14,9 +14,9 @@ add_library(localmon MODULE
     ${SOURCE}
     localmon.rc
     ${CMAKE_CURRENT_BINARY_DIR}/localmon.def)
+add_pch(localmon precomp.h SOURCE)
 
 set_module_type(localmon win32dll UNICODE)
 target_link_libraries(localmon wine)
 add_importlibs(localmon advapi32 spoolss user32 msvcrt kernel32 ntdll)
-add_pch(localmon precomp.h SOURCE)
 add_cd_file(TARGET localmon DESTINATION reactos/system32 FOR all)

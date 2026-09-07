@@ -10,9 +10,9 @@ add_library(cryptext MODULE
     cryptext.spec
     cryptext.rc
     ${CMAKE_CURRENT_BINARY_DIR}/cryptext.def)
+add_pch(cryptext precomp.h SOURCE)
 
 set_module_type(cryptext win32dll UNICODE)
 target_link_libraries(cryptext uuid)
 add_importlibs(cryptext cryptui crypt32 user32 msvcrt kernel32 ntdll)
-add_pch(cryptext precomp.h SOURCE)
 add_cd_file(TARGET cryptext DESTINATION reactos/system32 FOR all)

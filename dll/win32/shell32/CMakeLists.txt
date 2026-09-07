@@ -123,6 +123,7 @@ add_library(shell32 MODULE
     ${PCH_SKIP_SOURCE}
     shell32.rc
     ${CMAKE_CURRENT_BINARY_DIR}/shell32.def)
+add_pch(shell32 precomp.h "${PCH_SKIP_SOURCE}")
 
 if(MSVC)
     # error C4311: 'type cast': pointer truncation from 'HANDLE' to 'INT'
@@ -144,5 +145,4 @@ endif()
 add_delay_importlibs(shell32 powrprof shdocvw devmgr winspool.drv winmm mpr uxtheme ole32 oleaut32 userenv browseui version fmifs netapi32 secur32)
 add_importlibs(shell32 advapi32 gdi32 user32 comctl32 comdlg32 shlwapi shcore msvcrt kernel32 ntdll)
 add_dependencies(shell32 stdole2) # shell32_shldisp.tlb needs stdole2.tlb
-add_pch(shell32 precomp.h "${PCH_SKIP_SOURCE}")
 add_cd_file(TARGET shell32 DESTINATION reactos/system32 FOR all)

@@ -12,8 +12,8 @@ add_library(wined3dcfg MODULE
     ${SOURCE}
     wined3dcfg.rc
     ${CMAKE_CURRENT_BINARY_DIR}/wined3dcfg.def)
+add_pch(wined3dcfg wined3dcfg.h SOURCE)
 
 set_module_type(wined3dcfg cpl UNICODE)
 add_importlibs(wined3dcfg user32 comctl32 advapi32 msvcrt kernel32)
-add_pch(wined3dcfg wined3dcfg.h SOURCE)
 add_cd_file(TARGET wined3dcfg DESTINATION reactos/system32 FOR all)

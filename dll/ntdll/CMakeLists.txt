@@ -4,8 +4,13 @@ add_subdirectory(nt_0600)
 spec2def(ntdll.dll def/ntdll.spec ADD_IMPORTLIB)
 
 # Link GCC stack protector lib
-if (STACK_PROTECTOR)
+if(STACK_PROTECTOR)
     target_link_libraries(libntdll INTERFACE gcc_ssp_nt)
+endif()
+
+# Newer VS versions link to _ftol2 / _ftoul2_legacy
+if(MSVC AND ARCH STREQUAL "i386")
+    target_link_libraries(libntdll ftol2)
 endif()
 
 add_definitions(
@@ -60,6 +65,7 @@ add_library(ntdll MODULE
     ${PCH_SKIP_SOURCE}
     def/ntdll.rc
     ${CMAKE_CURRENT_BINARY_DIR}/ntdll.def)
+add_pch(ntdll include/ntdll.h "${PCH_SKIP_SOURCE}")
 
 set_module_type(ntdll win32dll ENTRYPOINT 0)
 #############################################
@@ -72,15 +78,9 @@ if(DLL_EXPORT_VERSION GREATER_EQUAL 0x600)
     target_link_libraries(ntdll cryptlib ntdllsys_nt6)
 endif()
 
-if (STACK_PROTECTOR)
+if(STACK_PROTECTOR)
     target_link_libraries(ntdll gcc_ssp_nt)
 endif()
 
-add_pch(ntdll include/ntdll.h "${PCH_SKIP_SOURCE}")
 add_dependencies(ntdll ntstatus asm)
 add_cd_file(TARGET ntdll DESTINATION reactos/system32 NO_CAB FOR all)
-
-# Newer VS versions link to _ftol2 / _ftoul2_legacy
-if(MSVC AND ARCH STREQUAL "i386")
-    target_link_libraries(libntdll ftol2)
-endif()

@@ -2,7 +2,6 @@
 add_subdirectory(cmicontrol)
 add_subdirectory(cpl)
 
-
 # For (NT6+) WaveRT support.
 # See WAVERT define in debug.hpp.
 # remove_definitions(-D_WIN32_WINNT=0x502)
@@ -21,6 +20,7 @@ add_library(cmipci MODULE
     ${SOURCE}
     ${PCH_SKIP_SOURCE}
     cmipci.rc)
+add_pch(cmipci precomp.h "${PCH_SKIP_SOURCE}")
 
 target_link_libraries(cmipci stdunk libcntpr uuid)
 set_module_type(cmipci wdmdriver UNICODE)
@@ -34,7 +34,6 @@ if(CMAKE_C_COMPILER_ID STREQUAL "Clang")
     target_compile_options(cmipci PRIVATE -Wno-enum-constexpr-conversion)
 endif()
 
-add_pch(cmipci precomp.h "${PCH_SKIP_SOURCE}")
 add_cd_file(TARGET cmipci DESTINATION reactos/system32/drivers FOR all)
 
 if(ARCH STREQUAL "i386")

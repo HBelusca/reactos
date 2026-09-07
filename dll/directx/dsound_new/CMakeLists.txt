@@ -23,10 +23,10 @@ add_library(dsound MODULE
     ${SOURCE}
     version.rc
     ${CMAKE_CURRENT_BINARY_DIR}/dsound.def)
+add_pch(dsound precomp.h SOURCE)
 
 set_module_type(dsound win32dll)
 target_compile_definitions(dsound PRIVATE _CRT_NON_CONFORMING_SWPRINTFS)
 target_link_libraries(dsound dxguid uuid)
 add_importlibs(dsound winmm ole32 advapi32 setupapi ksuser user32 msvcrt kernel32 ntdll)
-add_pch(dsound precomp.h SOURCE)
 add_cd_file(TARGET dsound DESTINATION reactos/system32 FOR all)
