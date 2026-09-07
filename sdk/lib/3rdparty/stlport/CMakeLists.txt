@@ -39,6 +39,7 @@ add_library(stlport
     ${SOURCE}
     src/cxa.c
     src/c_locale.c)
+add_pch(stlport src/stlport_prefix.h SOURCE)
 
 if(CMAKE_C_COMPILER_ID STREQUAL "Clang")
     target_compile_options(stlport PRIVATE -Wno-missing-braces -Wno-unused-local-typedef)
@@ -61,4 +62,3 @@ target_compile_definitions(stlport INTERFACE "$<$<COMPILE_LANGUAGE:CXX>:NATIVE_C
 set_target_cpp_properties(stlport WITH_EXCEPTIONS WITH_RTTI)
 
 add_dependencies(stlport xdk)
-add_pch(stlport src/stlport_prefix.h SOURCE)

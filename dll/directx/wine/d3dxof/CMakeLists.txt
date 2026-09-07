@@ -14,10 +14,10 @@ add_library(d3dxof MODULE
     ${PCH_SKIP_SOURCE}
     version.rc
     ${CMAKE_CURRENT_BINARY_DIR}/d3dxof.def)
+add_pch(d3dxof precomp.h "${PCH_SKIP_SOURCE}")
 
 set_module_type(d3dxof win32dll)
 target_link_libraries(d3dxof dxguid uuid wine)
 add_importlibs(d3dxof msvcrt kernel32 ntdll)
-add_pch(d3dxof precomp.h "${PCH_SKIP_SOURCE}")
 add_cd_file(TARGET d3dxof DESTINATION reactos/system32 FOR all)
 set_wine_module_FIXME(d3dxof) # CORE-5743: No ARRAY_SIZE and CONST_VTABLE

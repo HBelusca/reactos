@@ -11,6 +11,7 @@ list(APPEND SOURCE
     precomp.h)
 
 add_library(fbtusb MODULE ${SOURCE} fbtusb.rc)
+add_pch(fbtusb precomp.h SOURCE)
 
 if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
     target_compile_options(fbtusb PRIVATE -Wno-unused-but-set-variable)
@@ -23,5 +24,4 @@ endif()
 
 set_module_type(fbtusb kernelmodedriver)
 add_importlibs(fbtusb ntoskrnl hal usbd)
-add_pch(fbtusb precomp.h SOURCE)
 add_cd_file(TARGET fbtusb DESTINATION reactos/system32/drivers FOR all)

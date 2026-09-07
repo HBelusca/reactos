@@ -39,6 +39,7 @@ add_library(uxtheme MODULE
     ${SOURCE}
     uxtheme.rc
     ${CMAKE_CURRENT_BINARY_DIR}/uxtheme.def)
+add_pch(uxtheme uxthemep.h SOURCE)
 
 set_module_type(uxtheme win32dll)
 target_link_libraries(uxtheme wine)
@@ -48,5 +49,4 @@ if(DLL_EXPORT_VERSION GREATER_EQUAL 0x600)
 else()
     add_importlibs(uxtheme user32 advapi32 gdi32 msvcrt kernel32 ntdll)
 endif()
-add_pch(uxtheme uxthemep.h SOURCE)
 add_cd_file(TARGET uxtheme DESTINATION reactos/system32 FOR all)

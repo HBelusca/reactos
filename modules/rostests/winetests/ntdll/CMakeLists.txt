@@ -44,8 +44,7 @@ if(MSVC AND ARCH STREQUAL "amd64")
     list(APPEND SOURCE ${ntdll_winetest_asm})
 endif()
 
-add_executable(ntdll_winetest
-    ${SOURCE})
+add_executable(ntdll_winetest ${SOURCE})
 
 target_link_libraries(ntdll_winetest pseh)
 
@@ -64,8 +63,8 @@ if(CMAKE_C_COMPILER_ID STREQUAL "GNU" OR CMAKE_C_COMPILER_ID STREQUAL "Clang")
     target_compile_options(ntdll_winetest PRIVATE "-Wno-int-conversion")
     target_compile_options(ntdll_winetest PRIVATE "-Wno-unused-variable")
 endif()
+target_compile_definitions(ntdll_winetest PRIVATE wcsnicmp=_wcsnicmp)
 
 set_module_type(ntdll_winetest win32cui)
 add_importlibs(ntdll_winetest user32 psapi ole32 advapi32 msvcrt kernel32 ntdll)
 add_rostests_file(TARGET ntdll_winetest)
-target_compile_definitions(ntdll_winetest PRIVATE wcsnicmp=_wcsnicmp)

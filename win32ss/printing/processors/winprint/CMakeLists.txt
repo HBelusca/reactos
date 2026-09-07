@@ -10,11 +10,11 @@ add_library(winprint MODULE
     ${SOURCE}
     winprint.rc
     ${CMAKE_CURRENT_BINARY_DIR}/winprint.def)
+add_pch(winprint precomp.h SOURCE)
 
 set_module_type(winprint win32dll UNICODE)
 target_link_libraries(winprint wine)
 add_importlibs(winprint spoolss msvcrt kernel32 ntdll)
-add_pch(winprint precomp.h SOURCE)
 if(ARCH STREQUAL "amd64")
     add_cd_file(TARGET winprint DESTINATION reactos/system32/spool/prtprocs/x64 FOR all)
 else()

@@ -40,6 +40,7 @@ list(APPEND SOURCE
     udffs.h)
 
 add_library(udfs MODULE ${SOURCE} udffs.rc)
+add_pch(udfs udffs.h SOURCE)
 
 target_compile_definitions(udfs PRIVATE _CRT_NON_CONFORMING_SWPRINTFS)
 
@@ -57,6 +58,5 @@ endif()
 set_module_type(udfs kernelmodedriver)
 target_link_libraries(udfs ${PSEH_LIB})
 add_importlibs(udfs ntoskrnl hal)
-add_pch(udfs udffs.h SOURCE)
 add_cd_file(TARGET udfs DESTINATION reactos/system32/drivers FOR all)
 add_registry_inf(udfs_reg.inf)

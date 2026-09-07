@@ -21,11 +21,11 @@ add_library(d3drm MODULE
     version.rc
     ${CMAKE_CURRENT_BINARY_DIR}/d3drm_stubs.c
     ${CMAKE_CURRENT_BINARY_DIR}/d3drm.def)
+add_pch(d3drm precomp.h SOURCE)
 
 set_module_type(d3drm win32dll UNICODE)
 target_link_libraries(d3drm dxguid uuid wine)
 add_importlibs(d3drm ddraw d3dxof msvcrt kernel32 ntdll)
-add_pch(d3drm precomp.h SOURCE)
 add_cd_file(TARGET d3drm DESTINATION reactos/system32 FOR all)
 set_wine_module_FIXME(d3drm) # CORE-5743: No ARRAY_SIZE and CONST_VTABLE
 

@@ -9,8 +9,8 @@ list(APPEND SOURCE
     msfs.h)
 
 add_library(msfs MODULE ${SOURCE} msfs.rc)
+add_pch(msfs msfs.h SOURCE)
 set_module_type(msfs kernelmodedriver)
 add_importlibs(msfs ntoskrnl hal)
-add_pch(msfs msfs.h SOURCE)
 add_cd_file(TARGET msfs DESTINATION reactos/system32/drivers FOR all)
 add_registry_inf(msfs_reg.inf)

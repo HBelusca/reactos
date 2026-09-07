@@ -1,5 +1,4 @@
 
-
 list(APPEND SOURCE
     cardbitmaps.cpp
     cardbutton.cpp
@@ -15,6 +14,7 @@ list(APPEND SOURCE
     cardlib.h)
 
 add_library(cardlib STATIC ${SOURCE})
+add_pch(cardlib cardlib.h SOURCE)
 target_link_libraries(cardlib PRIVATE cpprt)
 target_include_directories(cardlib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 
@@ -23,4 +23,3 @@ if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
 endif()
 
 add_dependencies(cardlib psdk)
-add_pch(cardlib cardlib.h SOURCE)

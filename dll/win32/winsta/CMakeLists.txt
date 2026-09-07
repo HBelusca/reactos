@@ -17,9 +17,9 @@ add_library(winsta MODULE
     ${SOURCE}
     winsta.rc
     ${CMAKE_CURRENT_BINARY_DIR}/winsta.def)
+add_pch(winsta winsta.h SOURCE)
 
 set_module_type(winsta win32dll)
 target_link_libraries(winsta wine)
 add_importlibs(winsta msvcrt kernel32 ntdll)
-add_pch(winsta winsta.h SOURCE)
 add_cd_file(TARGET winsta DESTINATION reactos/system32 FOR all)

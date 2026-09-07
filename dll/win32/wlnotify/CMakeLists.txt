@@ -14,9 +14,9 @@ add_library(wlnotify MODULE
     ${SOURCE}
     wlnotify.rc
     ${CMAKE_CURRENT_BINARY_DIR}/wlnotify.def)
+add_pch(wlnotify precomp.h SOURCE)
 
 set_module_type(wlnotify win32dll UNICODE ENTRYPOINT DllMain 12)
 target_link_libraries(wlnotify wine)
 add_importlibs(wlnotify advapi32 kernel32 ntdll)
-add_pch(wlnotify precomp.h SOURCE)
 add_cd_file(TARGET wlnotify DESTINATION reactos/system32 FOR all)

@@ -138,6 +138,7 @@ add_library(kernel32 MODULE
     kernel32.rc
     ${CMAKE_CURRENT_BINARY_DIR}/kernel32_stubs.c
     ${CMAKE_CURRENT_BINARY_DIR}/kernel32.def)
+add_pch(kernel32 k32.h SOURCE)
 
 set_module_type(kernel32 win32dll ENTRYPOINT DllMain 12)
 #############################################
@@ -147,6 +148,5 @@ set_subsystem(kernel32 console)
 
 target_link_libraries(kernel32 psapi_static kernel32_vista_static kernel32_shared wine chkstk ${PSEH_LIB})
 add_importlibs(kernel32 ntdll)
-add_pch(kernel32 k32.h SOURCE)
 add_dependencies(kernel32 psdk errcodes asm)
 add_cd_file(TARGET kernel32 DESTINATION reactos/system32 FOR all)

@@ -17,6 +17,7 @@ add_library(ntobjshex MODULE
     ${SOURCE}
     ntobjshex.rc
     ${CMAKE_CURRENT_BINARY_DIR}/ntobjshex.def)
+add_pch(ntobjshex precomp.h SOURCE)
 
 set_module_type(ntobjshex win32dll UNICODE)
 target_link_libraries(ntobjshex uuid wine cpprt atl_classes)
@@ -35,5 +36,4 @@ add_importlibs(ntobjshex
     kernel32
     ntdll)
 
-add_pch(ntobjshex precomp.h SOURCE)
 add_cd_file(TARGET ntobjshex DESTINATION reactos/system32 FOR all)

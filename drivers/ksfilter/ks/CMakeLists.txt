@@ -39,11 +39,11 @@ add_library(ks MODULE
     ${ks_asm}
     ks.rc
     ${CMAKE_CURRENT_BINARY_DIR}/ks.def)
+add_pch(ks precomp.h SOURCE)
 
 set_module_type(ks kernelmodedriver ENTRYPOINT 0)
 
 target_link_libraries(ks ${PSEH_LIB})
-add_pch(ks precomp.h SOURCE)
 add_importlibs(ks ntoskrnl hal)
 add_dependencies(ks psdk)
 add_cd_file(TARGET ks DESTINATION reactos/system32/drivers FOR all)

@@ -68,12 +68,12 @@ else()
         version.rc
         ${CMAKE_CURRENT_BINARY_DIR}/dbghelp_stubs.c
         ${CMAKE_CURRENT_BINARY_DIR}/dbghelp.def)
+    add_pch(dbghelp precomp.h SOURCE)
 
     set_module_type(dbghelp win32dll)
     target_link_libraries(dbghelp wine ${PSEH_LIB} oldnames)
     add_delay_importlibs(dbghelp version)
     add_importlibs(dbghelp psapi msvcrt kernel32 ntdll)
-    add_pch(dbghelp precomp.h SOURCE)
     add_cd_file(TARGET dbghelp DESTINATION reactos/system32 FOR all)
     set_wine_module_FIXME(dbghelp) # CORE-5743: No ARRAY_SIZE macro
 

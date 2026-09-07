@@ -8,6 +8,7 @@ add_library(usbohci MODULE
     ${SOURCE}
     guid.c
     usbohci.rc)
+add_pch(usbohci usbohci.h SOURCE)
 
 target_compile_definitions(usbohci
     # HACK: Disabled until USB Stack is reinvestigated.
@@ -15,5 +16,4 @@ target_compile_definitions(usbohci
 
 set_module_type(usbohci kernelmodedriver)
 add_importlibs(usbohci usbport usbd hal ntoskrnl)
-add_pch(usbohci usbohci.h SOURCE)
 add_cd_file(TARGET usbohci DESTINATION reactos/system32/drivers NO_CAB FOR all)

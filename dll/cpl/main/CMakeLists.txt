@@ -15,9 +15,9 @@ add_library(main MODULE
     ${SOURCE}
     main.rc
     ${CMAKE_CURRENT_BINARY_DIR}/main.def)
+add_pch(main main.h SOURCE)
 
 set_module_type(main cpl UNICODE)
 target_link_libraries(main uuid)
 add_importlibs(main advapi32 user32 comctl32 devmgr comdlg32 shell32 gdi32 msvcrt kernel32)
-add_pch(main main.h SOURCE)
 add_cd_file(TARGET main DESTINATION reactos/system32 FOR all)

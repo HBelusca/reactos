@@ -10,9 +10,9 @@ list(APPEND SOURCE
 add_library(condrv MODULE
     ${SOURCE}
     condrv.rc)
+add_pch(condrv condrv.h SOURCE)
 
 set_module_type(condrv kernelmodedriver)
 target_link_libraries(condrv ${PSEH_LIB})
 add_importlibs(condrv ntoskrnl hal)
-add_pch(condrv condrv.h SOURCE)
 add_cd_file(TARGET condrv DESTINATION reactos/system32/drivers NO_CAB FOR all)

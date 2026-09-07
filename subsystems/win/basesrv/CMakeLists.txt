@@ -17,6 +17,7 @@ add_library(basesrv MODULE
     ${SOURCE}
     basesrv.rc
     ${CMAKE_CURRENT_BINARY_DIR}/basesrv.def)
+add_pch(basesrv basesrv.h SOURCE)
 
 set_module_type(basesrv win32dll UNICODE ENTRYPOINT DllMain 12)
 #############################################
@@ -26,6 +27,5 @@ set_subsystem(basesrv console)
 
 target_link_libraries(basesrv ${PSEH_LIB})
 add_importlibs(basesrv csrsrv ntdll)
-add_pch(basesrv basesrv.h SOURCE)
 add_dependencies(basesrv bugcodes xdk)
 add_cd_file(TARGET basesrv DESTINATION reactos/system32 FOR all)

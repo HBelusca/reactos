@@ -14,8 +14,8 @@ add_library(hidclass MODULE
     ${PCH_SKIP_SOURCE}
     hidclass.rc
     ${CMAKE_CURRENT_BINARY_DIR}/hidclass.def)
+add_pch(hidclass precomp.h "${PCH_SKIP_SOURCE}")
 
 set_module_type(hidclass kernelmodedriver ENTRYPOINT 0)
 add_importlibs(hidclass ntoskrnl hidparse hal)
-add_pch(hidclass precomp.h "${PCH_SKIP_SOURCE}")
 add_cd_file(TARGET hidclass DESTINATION reactos/system32/drivers NO_CAB FOR all)

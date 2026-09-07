@@ -35,6 +35,7 @@ add_executable(user32_winetest
     ${SOURCE}
     ${PCH_SKIP_SOURCE}
     resource.rc)
+add_pch(user32_winetest precomp.h "${PCH_SKIP_SOURCE}")
 
 if(MSVC)
     target_compile_options(user32_winetest PRIVATE "/wd4005")
@@ -53,5 +54,4 @@ endif()
 target_compile_definitions(user32_winetest PRIVATE wcsicmp=_wcsicmp)
 set_module_type(user32_winetest win32cui)
 add_importlibs(user32_winetest user32 gdi32 advapi32 imm32 hid msvcrt kernel32 ntdll)
-add_pch(user32_winetest precomp.h "${PCH_SKIP_SOURCE}")
 add_rostests_file(TARGET user32_winetest)

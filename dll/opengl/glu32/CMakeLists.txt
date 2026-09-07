@@ -116,7 +116,7 @@ add_library(glu32 MODULE
     ${PCH_SKIP_SOURCE}
     glu32.rc
     ${CMAKE_CURRENT_BINARY_DIR}/glu32.def)
-target_link_libraries(glu32 cpprt ${PSEH_LIB})
+add_pch(glu32 precomp.h "${PCH_SKIP_SOURCE}")
 
 set_module_type(glu32 win32dll)
 
@@ -135,6 +135,6 @@ if(CMAKE_C_COMPILER_ID STREQUAL "Clang")
     target_compile_options(glu32 PRIVATE -Wno-deprecated-register -Wno-tautological-undefined-compare)
 endif()
 
+target_link_libraries(glu32 cpprt ${PSEH_LIB})
 add_importlibs(glu32 opengl32 gdi32 msvcrt kernel32 ntdll)
-add_pch(glu32 precomp.h "${PCH_SKIP_SOURCE}")
 add_cd_file(TARGET glu32 DESTINATION reactos/system32 FOR all)

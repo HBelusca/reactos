@@ -16,9 +16,9 @@ add_library(netlogon MODULE
     ${CMAKE_CURRENT_BINARY_DIR}/netlogon_s.c
     ${CMAKE_CURRENT_BINARY_DIR}/netlogon_stubs.c
     ${CMAKE_CURRENT_BINARY_DIR}/netlogon.def)
+add_pch(netlogon precomp.h SOURCE)
 
 set_module_type(netlogon win32dll UNICODE)
 target_link_libraries(netlogon wine ${PSEH_LIB})
 add_importlibs(netlogon advapi32 rpcrt4 msvcrt kernel32 ntdll)
-add_pch(netlogon precomp.h SOURCE)
 add_cd_file(TARGET netlogon DESTINATION reactos/system32 FOR all)

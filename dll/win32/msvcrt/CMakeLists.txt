@@ -199,7 +199,7 @@ target_compile_definitions(libmsvcrt INTERFACE _DLL __USE_CRTIMP)
 target_link_libraries(libmsvcrt INTERFACE msvcrtex)
 
 # Link GCC stack protector lib
-if (STACK_PROTECTOR)
+if(STACK_PROTECTOR)
     target_link_libraries(libmsvcrt INTERFACE gcc_ssp_msvcrt)
     target_link_libraries(libmsvcrt INTERFACE libkernel32) # For OutputDebugStringA
 endif()

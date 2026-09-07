@@ -19,11 +19,11 @@ add_library(itss MODULE
     ${PCH_SKIP_SOURCE}
     rsrc.rc
     ${CMAKE_CURRENT_BINARY_DIR}/itss.def)
+add_pch(itss precomp.h "${PCH_SKIP_SOURCE}")
 
 set_module_type(itss win32dll)
 target_link_libraries(itss uuid wine oldnames)
 add_importlibs(itss urlmon shlwapi ole32 msvcrt kernel32 ntdll)
-add_pch(itss precomp.h "${PCH_SKIP_SOURCE}")
 add_dependencies(itss wineheaders)
 add_cd_file(TARGET itss DESTINATION reactos/system32 FOR all)
 set_wine_module_FIXME(itss) # CORE-5743: No ARRAY_SIZE and CONST_VTABLE

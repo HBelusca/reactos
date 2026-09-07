@@ -1,5 +1,4 @@
 
-
 list(APPEND DIBLIB_SOURCE
     BitBlt.c
     BitBlt_DSTINVERT.c
@@ -33,4 +32,3 @@ list(APPEND DIBLIB_SOURCE
 )
 
 add_library(diblib ${DIBLIB_SOURCE})
-

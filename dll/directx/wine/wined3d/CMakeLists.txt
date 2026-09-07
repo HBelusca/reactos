@@ -43,14 +43,14 @@ add_library(d3dwine MODULE
     ${SOURCE}
     version.rc
     ${CMAKE_CURRENT_BINARY_DIR}/d3dwine.def)
-
-set_module_type(d3dwine win32dll)
-target_link_libraries(d3dwine wine)
-add_importlibs(d3dwine user32 opengl32 gdi32 gdi32_vista advapi32 msvcrt kernel32 ntdll)
 add_pch(d3dwine precomp.h SOURCE)
-add_cd_file(TARGET d3dwine DESTINATION reactos/system32 FOR all)
-set_wine_module(d3dwine)
 
 if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
     target_compile_options(d3dwine PRIVATE -Wno-format-overflow)
 endif()
+
+set_module_type(d3dwine win32dll)
+target_link_libraries(d3dwine wine)
+add_importlibs(d3dwine user32 opengl32 gdi32 gdi32_vista advapi32 msvcrt kernel32 ntdll)
+add_cd_file(TARGET d3dwine DESTINATION reactos/system32 FOR all)
+set_wine_module(d3dwine)

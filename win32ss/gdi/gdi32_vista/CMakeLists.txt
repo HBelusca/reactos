@@ -13,6 +13,7 @@ add_library(gdi32_vista MODULE
     ${SOURCE}
     gdi32_vista.rc
     ${CMAKE_CURRENT_BINARY_DIR}/gdi32_vista.def)
+#add_pch(gdi32_vista include/precomp.h SOURCE)
 
 set_module_type(gdi32_vista win32dll UNICODE ENTRYPOINT 0)
 
@@ -21,8 +22,6 @@ target_link_libraries(gdi32_vista_static win32ksys)
 add_dependencies(gdi32_vista_static psdk)
 
 target_link_libraries(gdi32_vista win32ksys)
-
 #add_importlibs(gdi32_vista user32 advapi32 kernel32 ntdll)
-#add_pch(gdi32_vista include/precomp.h SOURCE)
 add_dependencies(gdi32_vista psdk)
 add_cd_file(TARGET gdi32_vista DESTINATION reactos/system32 FOR all)
