@@ -12,11 +12,12 @@ list(APPEND SOURCE
     shellbars.h)
 
 add_library(shellbars OBJECT ${SOURCE})
+add_pch(shellbars shellbars.h SOURCE)
+
 target_link_libraries(shellbars PRIVATE atl_classes)
 
 if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
     target_compile_options(shellbars PRIVATE -Wno-unused-but-set-variable)
 endif()
 
-add_pch(shellbars shellbars.h SOURCE)
 add_dependencies(shellbars xdk psdk)

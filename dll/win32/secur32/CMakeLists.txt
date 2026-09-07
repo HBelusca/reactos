@@ -24,9 +24,9 @@ add_library(secur32 MODULE
     secur32.rc
     ${CMAKE_CURRENT_BINARY_DIR}/secur32_stubs.c
     ${CMAKE_CURRENT_BINARY_DIR}/secur32.def)
+add_pch(secur32 precomp.h SOURCE)
 
 set_module_type(secur32 win32dll UNICODE)
 target_link_libraries(secur32 lsalib wine)
 add_importlibs(secur32 advapi32 netapi32 msvcrt kernel32 ntdll)
-add_pch(secur32 precomp.h SOURCE)
 add_cd_file(TARGET secur32 DESTINATION reactos/system32 FOR all)

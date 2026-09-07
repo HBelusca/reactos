@@ -22,10 +22,10 @@ add_library(fltmgr MODULE
     ${SOURCE}
     fltmgr.rc
     ${CMAKE_CURRENT_BINARY_DIR}/fltmgr.def)
+add_pch(fltmgr fltmgr.h SOURCE)
 
 set_module_type(fltmgr kernelmodedriver)
 target_link_libraries(fltmgr ${PSEH_LIB})
 add_importlibs(fltmgr ntoskrnl hal)
 target_compile_definitions(fltmgr PRIVATE NTDDI_VERSION=NTDDI_WS03SP1)
-add_pch(fltmgr fltmgr.h SOURCE)
 add_cd_file(TARGET fltmgr DESTINATION reactos/system32/drivers NO_CAB FOR all)

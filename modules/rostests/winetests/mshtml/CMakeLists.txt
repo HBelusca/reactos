@@ -23,6 +23,7 @@ add_executable(mshtml_winetest
     ${SOURCE}
     ${PCH_SKIP_SOURCE}
     rsrc.rc)
+add_pch(mshtml_winetest precomp.h "${PCH_SKIP_SOURCE}")
 
 list(APPEND mshtml_winetest_rc_deps
     ${CMAKE_CURRENT_BINARY_DIR}/test_tlb.tlb
@@ -39,5 +40,4 @@ target_link_libraries(mshtml_winetest uuid strmiids)
 set_module_type(mshtml_winetest win32cui)
 add_importlibs(mshtml_winetest wininet ole32 oleaut32 user32 gdi32 urlmon advapi32 msvcrt kernel32)
 add_dependencies(mshtml_winetest test_tlb_header stdole2)
-add_pch(mshtml_winetest precomp.h "${PCH_SKIP_SOURCE}")
 add_rostests_file(TARGET mshtml_winetest)

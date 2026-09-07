@@ -1,6 +1,5 @@
 
-include_directories(
-    includes)
+include_directories(includes)
 
 list(APPEND SOURCE
     ACListISF.cpp

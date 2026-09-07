@@ -88,6 +88,7 @@ add_executable(win32u_apitest
     ${PCH_SKIP_SOURCE}
     dlihook.c
     win32knt.rc)
+add_pch(win32u_apitest win32nt.h "${PCH_SKIP_SOURCE}")
 
 target_link_libraries(win32u_apitest ${PSEH_LIB} gditools)
 set_module_type(win32u_apitest win32cui)
@@ -101,5 +102,4 @@ add_importlibs(win32u_apitest
     ntdll)
 add_delay_importlibs(win32u_apitest win32u imm32)
 add_dependencies(win32u_apitest xdk)
-add_pch(win32u_apitest win32nt.h "${PCH_SKIP_SOURCE}")
 add_rostests_file(TARGET win32u_apitest)

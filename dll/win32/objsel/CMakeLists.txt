@@ -8,6 +8,7 @@ add_library(objsel MODULE
     objsel.c
     objsel.rc
     ${CMAKE_CURRENT_BINARY_DIR}/objsel.def)
+add_pch(objsel precomp.h SOURCE)
 
 set_module_type(objsel win32dll)
 add_idl_reg_scripts(objsel registry objsel_classes.idl)

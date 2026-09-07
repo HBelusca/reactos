@@ -46,8 +46,6 @@ list(APPEND SOURCE_STATIC
 
 add_library(kernelbase_static ${SOURCE_STATIC})
 target_compile_definitions(kernelbase_static PRIVATE WINSHLWAPI= WINPATHCCHAPI= PATHCCH_NO_DEPRECATE=)
-target_link_libraries(kernelbase_static psapi_static ${PSEH_LIB})
-add_dependencies(kernelbase_static psdk)
 
 if(MSVC)
     target_compile_options(kernelbase_static PRIVATE
@@ -59,3 +57,5 @@ else()
     target_compile_options(kernelbase_static PRIVATE -Wno-unused-function)
 endif()
 
+target_link_libraries(kernelbase_static psapi_static ${PSEH_LIB})
+add_dependencies(kernelbase_static psdk)

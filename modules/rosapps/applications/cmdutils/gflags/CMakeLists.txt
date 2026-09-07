@@ -1,5 +1,4 @@
 
-
 list(APPEND SOURCE
     gflags.c
     imagefile.c
@@ -7,10 +6,9 @@ list(APPEND SOURCE
     gflags.h)
 
 add_executable(gflags ${SOURCE} gflags.rc)
+add_pch(gflags gflags.h SOURCE)
 set_module_type(gflags win32cui UNICODE)
 add_importlibs(gflags advapi32 user32 msvcrt kernel32)
-add_pch(gflags gflags.h SOURCE)
-
 if(MSVC)
     add_importlibs(gflags ntdll)
 endif()

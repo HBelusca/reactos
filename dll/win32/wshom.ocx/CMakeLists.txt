@@ -18,6 +18,7 @@ add_library(wshom MODULE
     ${PCH_SKIP_SOURCE}
     wshom.rc
     ${CMAKE_CURRENT_BINARY_DIR}/wshom.def)
+add_pch(wshom precomp.h "${PCH_SKIP_SOURCE}")
 
 list(APPEND wshom_rc_deps ${CMAKE_CURRENT_SOURCE_DIR}/wshom.rgs)
 
@@ -27,6 +28,5 @@ add_idl_reg_scripts(wshom regtypelib wshom.idl)
 target_link_libraries(wshom uuid wine wine_dll_register wine_dll_canunload oldnames)
 add_importlibs(wshom oleaut32 ole32 scrrun shell32 advapi32 advapi32_vista user32 msvcrt kernel32 ntdll)
 add_dependencies(wshom stdole2 wshom_idlheader)
-add_pch(wshom precomp.h "${PCH_SKIP_SOURCE}")
 add_cd_file(TARGET wshom DESTINATION reactos/system32 FOR all)
 set_wine_module_FIXME(wshom) # CORE-5743: No ARRAY_SIZE and CONST_VTABLE

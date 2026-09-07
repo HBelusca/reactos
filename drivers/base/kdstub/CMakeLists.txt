@@ -1,3 +1,4 @@
+
 spec2def(kdstub.dll kdstub.spec ADD_IMPORTLIB)
 
 list(APPEND SOURCE

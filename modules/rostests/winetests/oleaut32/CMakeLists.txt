@@ -33,6 +33,7 @@ add_executable(oleaut32_winetest
     ${SOURCE}
     ${PCH_SKIP_SOURCE}
     tmarshal.rc)
+add_pch(oleaut32_winetest precomp.h "${PCH_SKIP_SOURCE}")
 
 add_idl_reg_scripts(oleaut32_winetest regtypelib test_reg.idl test_tlb.idl tmarshal.idl test_simple.idl)
 target_link_libraries(oleaut32_winetest uuid)
@@ -50,5 +51,4 @@ if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
 endif()
 
 add_dependencies(oleaut32_winetest stdole2 oleaut32_idlheaders)
-add_pch(oleaut32_winetest precomp.h "${PCH_SKIP_SOURCE}")
 add_rostests_file(TARGET oleaut32_winetest)

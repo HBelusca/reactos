@@ -23,8 +23,8 @@ add_library(input MODULE
     ${SOURCE}
     input.rc
     ${CMAKE_CURRENT_BINARY_DIR}/input.def)
+add_pch(input input.h SOURCE)
 
 set_module_type(input win32dll UNICODE)
 add_importlibs(input advapi32 user32 comctl32 gdi32 msvcrt kernel32 setupapi)
-add_pch(input input.h SOURCE)
 add_cd_file(TARGET input DESTINATION reactos/system32 FOR all)

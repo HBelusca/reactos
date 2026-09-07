@@ -11,6 +11,7 @@ add_library(xmllite MODULE
     ${SOURCE}
     guid.c
     ${CMAKE_CURRENT_BINARY_DIR}/xmllite.def)
+add_pch(xmllite precomp.h SOURCE)
 
 if(MSVC)
     # Disable warning C4146: unary minus operator applied to unsigned type, result still unsigned
@@ -20,6 +21,5 @@ endif()
 set_module_type(xmllite win32dll)
 target_link_libraries(xmllite uuid wine oldnames)
 add_importlibs(xmllite msvcrt kernel32 ntdll)
-add_pch(xmllite precomp.h SOURCE)
 add_cd_file(TARGET xmllite DESTINATION reactos/system32 FOR all)
 set_wine_module_FIXME(xmllite) # CORE-5743: No ARRAY_SIZE and CONST_VTABLE

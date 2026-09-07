@@ -14,9 +14,9 @@ add_library(browser MODULE
     ${CMAKE_CURRENT_BINARY_DIR}/browser_s.c
     ${CMAKE_CURRENT_BINARY_DIR}/browser_stubs.c
     ${CMAKE_CURRENT_BINARY_DIR}/browser.def)
+add_pch(browser precomp.h SOURCE)
 
 set_module_type(browser win32dll UNICODE)
 target_link_libraries(browser wine ${PSEH_LIB})
 add_importlibs(browser advapi32 rpcrt4 msvcrt kernel32 ntdll)
-add_pch(browser precomp.h SOURCE)
 add_cd_file(TARGET browser DESTINATION reactos/system32 FOR all)

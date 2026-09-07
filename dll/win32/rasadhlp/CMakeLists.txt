@@ -12,8 +12,8 @@ list(APPEND SOURCE
 add_library(rasadhlp MODULE
     ${SOURCE}
     ${CMAKE_CURRENT_BINARY_DIR}/rasadhlp.def)
+add_pch(rasadhlp precomp.h SOURCE)
 
 set_module_type(rasadhlp win32dll)
 add_importlibs(rasadhlp ws2_32 msvcrt kernel32 ntdll)
-add_pch(rasadhlp precomp.h SOURCE)
 add_cd_file(TARGET rasadhlp DESTINATION reactos/system32 FOR all)

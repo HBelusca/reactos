@@ -30,21 +30,21 @@ if((ARCH STREQUAL "i386") OR (ARCH STREQUAL "amd64"))
     add_asm_files(btrfs_asm ${ASM_SOURCE})
 endif()
 
+file(GLOB shellbtrfs_rc_deps *.ico)
+add_rc_deps(shellbtrfs.rc ${shellbtrfs_rc_deps})
+
 add_library(shellbtrfs MODULE
     ${SOURCE}
     ${btrfs_asm}
     ${PCH_SKIP_SOURCE}
     shellbtrfs.rc
     ${CMAKE_CURRENT_BINARY_DIR}/shellbtrfs.def)
+add_pch(shellbtrfs precomp.h "${PCH_SKIP_SOURCE}")
 
 target_compile_definitions(shellbtrfs PRIVATE _CRT_NON_CONFORMING_SWPRINTFS)
-
-file(GLOB shellbtrfs_rc_deps *.ico)
-add_rc_deps(shellbtrfs.rc ${shellbtrfs_rc_deps})
 
 set_module_type(shellbtrfs win32dll UNICODE)
 target_link_libraries(shellbtrfs uuid cppstl)
 set_target_cpp_properties(shellbtrfs WITH_EXCEPTIONS)
 add_importlibs(shellbtrfs advapi32 advapi32_vista ole32 shell32 shlwapi user32 comctl32 uxtheme setupapi comdlg32 gdi32 msvcrt kernel32_vista kernel32 ntdll)
-add_pch(shellbtrfs precomp.h "${PCH_SKIP_SOURCE}")
 add_cd_file(TARGET shellbtrfs DESTINATION reactos/system32 FOR all)

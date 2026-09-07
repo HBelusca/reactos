@@ -29,6 +29,7 @@ add_executable(spoolsv
     ${SOURCE}
     spoolsv.rc
     ${CMAKE_CURRENT_BINARY_DIR}/spoolsv.def)
+add_pch(spoolsv precomp.h SOURCE)
 
 set_target_properties(spoolsv
     PROPERTIES
@@ -43,5 +44,4 @@ set_module_type(spoolsv win32cui UNICODE)
 target_link_libraries(spoolsv wine)
 add_delay_importlibs(spoolsv spoolss)
 add_importlibs(spoolsv advapi32 rpcrt4 msvcrt kernel32 ntdll)
-add_pch(spoolsv precomp.h SOURCE)
 add_cd_file(TARGET spoolsv DESTINATION reactos/system32 FOR all)

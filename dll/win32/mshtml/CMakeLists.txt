@@ -100,6 +100,7 @@ add_library(mshtml MODULE
     ${PCH_SKIP_SOURCE}
     rsrc.rc
     ${CMAKE_CURRENT_BINARY_DIR}/mshtml.def)
+add_pch(mshtml mshtml_private.h "${PCH_SKIP_SOURCE}")
 
 list(APPEND mshtml_rc_deps
     ${CMAKE_CURRENT_SOURCE_DIR}/blank.htm
@@ -112,6 +113,5 @@ target_link_libraries(mshtml uuid wine strmiids oldnames)
 add_delay_importlibs(mshtml wininet)
 add_importlibs(mshtml urlmon shlwapi shell32 ole32 oleaut32 user32 gdi32 advapi32 msvcrt kernel32 ntdll)
 add_dependencies(mshtml mshtml_nsiface_header)
-add_pch(mshtml mshtml_private.h "${PCH_SKIP_SOURCE}")
 add_cd_file(TARGET mshtml DESTINATION reactos/system32 FOR all)
 set_wine_module_FIXME(mshtml) # CORE-5743: No CONST_VTABLE

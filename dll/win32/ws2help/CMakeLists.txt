@@ -1,5 +1,6 @@
 
 include_directories(${REACTOS_SOURCE_DIR}/sdk/include/reactos/winsock)
+
 spec2def(ws2help.dll ws2help.spec ADD_IMPORTLIB)
 
 list(APPEND SOURCE
@@ -16,6 +17,7 @@ add_dependencies(ws2help_static xdk)
 add_library(ws2help MODULE
     ws2help.rc
     ${CMAKE_CURRENT_BINARY_DIR}/ws2help.def)
+add_pch(ws2help precomp.h SOURCE)
 
 set_module_type(ws2help win32dll)
 if(DLL_EXPORT_VERSION LESS 0x600)
@@ -23,5 +25,4 @@ if(DLL_EXPORT_VERSION LESS 0x600)
     set_entrypoint(ws2help Ws2HelpDllMain 12)
 endif()
 add_importlibs(ws2help advapi32 ws2_32 msvcrt kernel32 ntdll)
-add_pch(ws2help precomp.h SOURCE)
 add_cd_file(TARGET ws2help DESTINATION reactos/system32 FOR all)

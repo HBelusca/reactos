@@ -35,9 +35,9 @@ add_library(lsasrv MODULE
     ${SOURCE}
     lsasrv.rc
     ${CMAKE_CURRENT_BINARY_DIR}/lsasrv.def)
+add_pch(lsasrv lsasrv.h SOURCE)
 
 set_module_type(lsasrv win32dll UNICODE)
 target_link_libraries(lsasrv wine ${PSEH_LIB})
 add_importlibs(lsasrv samsrv rpcrt4 msvcrt kernel32 advapi32 ntdll)
-add_pch(lsasrv lsasrv.h SOURCE)
 add_cd_file(TARGET lsasrv DESTINATION reactos/system32 FOR all)

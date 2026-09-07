@@ -42,6 +42,7 @@ add_library(quartz MODULE
     ${PCH_SKIP_SOURCE}
     quartz.rc
     ${CMAKE_CURRENT_BINARY_DIR}/quartz.def)
+add_pch(quartz precomp.h "${PCH_SKIP_SOURCE}")
 
 add_idl_reg_scripts(quartz registry quartz_strmif.idl)
 add_idl_reg_scripts(quartz regtypelib control_tlb.idl)

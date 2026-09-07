@@ -6,9 +6,9 @@ list(APPEND FLTMGR_TEST_DRV_SOURCE
     fltmgr_create.c)
 
 add_library(fltmgr_create MODULE ${FLTMGR_TEST_DRV_SOURCE})
+#add_pch(fltmgr_create ../include/kmt_test.h)
 set_module_type(fltmgr_create kernelmodedriver)
 target_link_libraries(fltmgr_create kmtest_printf ${PSEH_LIB})
 add_importlibs(fltmgr_create fltmgr ntoskrnl hal)
 target_compile_definitions(fltmgr_create PRIVATE KMT_STANDALONE_DRIVER KMT_FILTER_DRIVER NTDDI_VERSION=NTDDI_WS03SP1)
-#add_pch(fltmgr_create ../include/kmt_test.h)
 add_rostests_file(TARGET fltmgr_create)

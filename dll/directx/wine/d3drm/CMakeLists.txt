@@ -24,13 +24,13 @@ add_library(d3drm MODULE
     ${CMAKE_CURRENT_BINARY_DIR}/d3drm_stubs.c
     ${CMAKE_CURRENT_BINARY_DIR}/d3drm.def)
 
+if(CMAKE_C_COMPILER_ID STREQUAL "Clang")
+    target_compile_options(d3drm PRIVATE -Wno-incompatible-function-pointer-types)
+endif()
+
 set_module_type(d3drm win32dll UNICODE)
 target_link_libraries(d3drm wine wine_dll_canunload dxguid uuid)
 add_importlibs(d3drm ddraw d3dxof msvcrt kernel32 ntdll)
 add_dependencies(d3drm wineheaders)
 add_cd_file(TARGET d3drm DESTINATION reactos/system32 FOR all)
 set_wine_module(d3drm)
-
-if(CMAKE_C_COMPILER_ID STREQUAL "Clang")
-    target_compile_options(d3drm PRIVATE -Wno-incompatible-function-pointer-types)
-endif()

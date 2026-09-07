@@ -3,11 +3,11 @@ list(APPEND SOURCE
     load.c
     handles.c
     instance.c
-	instance_find.c
-	filter_find.c
-	volume_find.c
-	info.c
-	comms.c
+    instance_find.c
+    filter_find.c
+    volume_find.c
+    info.c
+    comms.c
     testlist.c)
 
 add_executable(fltlib_apitest ${SOURCE})

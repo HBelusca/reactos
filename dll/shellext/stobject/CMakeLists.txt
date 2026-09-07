@@ -19,6 +19,7 @@ add_library(stobject MODULE
     ${SOURCE}
     stobject.rc
     ${CMAKE_CURRENT_BINARY_DIR}/stobject.def)
+add_pch(stobject precomp.h SOURCE)
 
 set_module_type(stobject win32dll UNICODE)
 target_link_libraries(stobject uuid wine cpprt atl_classes)
@@ -39,5 +40,4 @@ add_importlibs(stobject
     kernel32
     ntdll)
 
-add_pch(stobject precomp.h SOURCE)
 add_cd_file(TARGET stobject DESTINATION reactos/system32 FOR all)

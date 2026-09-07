@@ -28,6 +28,7 @@ add_library(ieframe MODULE
     ${SOURCE}
     ieframe.rc
     ${CMAKE_CURRENT_BINARY_DIR}/ieframe.def)
+add_pch(ieframe precomp.h SOURCE)
 
 add_typelib(ieframe_v1.idl)
 
@@ -44,6 +45,5 @@ set_module_type(ieframe win32dll)
 target_compile_definitions(ieframe PRIVATE _CRT_NON_CONFORMING_SWPRINTFS)
 target_link_libraries(ieframe uuid wine)
 add_importlibs(ieframe urlmon shell32 comctl32 shlwapi oleaut32 ole32 user32 gdi32 advapi32 msvcrt kernel32 ntdll)
-add_pch(ieframe precomp.h SOURCE)
 add_cd_file(TARGET ieframe DESTINATION reactos/system32 FOR all)
 set_wine_module_FIXME(ieframe) # CORE-5743: No CONST_VTABLE

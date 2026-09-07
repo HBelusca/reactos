@@ -10,9 +10,9 @@ add_library(kbdclass MODULE
     ${SOURCE}
     ${PCH_SKIP_SOURCE}
     kbdclass.rc)
+add_pch(kbdclass kbdclass.h "${PCH_SKIP_SOURCE}")
 
 set_module_type(kbdclass kernelmodedriver)
-add_pch(kbdclass kbdclass.h "${PCH_SKIP_SOURCE}")
 target_link_libraries(kbdclass ${PSEH_LIB})
 add_importlibs(kbdclass ntoskrnl hal)
 add_cd_file(TARGET kbdclass DESTINATION reactos/system32/drivers NO_CAB FOR all)

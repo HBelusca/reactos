@@ -23,9 +23,9 @@ list(APPEND SOURCE
     npfs.h)
 
 add_library(npfs MODULE ${SOURCE} npfs.rc)
+add_pch(npfs npfs.h SOURCE)
 set_module_type(npfs kernelmodedriver)
 target_link_libraries(npfs ${PSEH_LIB})
 add_importlibs(npfs ntoskrnl hal)
-add_pch(npfs npfs.h SOURCE)
 add_cd_file(TARGET npfs DESTINATION reactos/system32/drivers FOR all)
 add_registry_inf(npfs_reg.inf)
