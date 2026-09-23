@@ -25,6 +25,7 @@ NTAPI
 VidResetDisplay(
     _In_ BOOLEAN SetMode)
 {
+__debugbreak();
     /* Clear the current position */
     VidpCurrentX = 0;
     VidpCurrentY = 0;
