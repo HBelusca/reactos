@@ -34,19 +34,16 @@
 #define NOINLINE    __attribute__((noinline))
 #endif
 
-/* Print using the kernel debug output routine */
-#define printf DbgPrint
-
 /* The real implementations */
 UCHAR NTAPI MyFunction_NT5(int param1)
 {
-    printf("MyFunction_NT5(%d)\n", param1);
+    DbgPrint("MyFunction_NT5(%d)\n", param1);
     return (UCHAR)(param1 + 5);
 }
 
 UCHAR NTAPI MyFunction_NT6(int param1, int param2)
 {
-    printf("MyFunction_NT6(%d, %d)\n", param1, param2);
+    DbgPrint("MyFunction_NT6(%d, %d)\n", param1, param2);
     return (UCHAR)(param1 + param2 + 6);
 }
 
@@ -72,6 +69,7 @@ __init_MyFunction(VOID)
     PMYFUNCTION_NT6 pfnNT6 = MyFunction_NT6;
 
     (void)PsGetVersion(&MajorVersion, NULL /*&MinorVersion*/, NULL, NULL);
+    DbgPrint("__init_MyFunction(%lu)\n", MajorVersion);
     if (MajorVersion < 6)
         Stub = (PMYFUNCTION_STUB)pfnNT5;
     else // if (MajorVersion >= 6)
