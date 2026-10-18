@@ -82,10 +82,14 @@ jobs:
         F=$(find ${{github.workspace}}/build -name mymodule.dll | head -1)
         echo "DLL: $F"
         test -n "$F"
-        echo "=== Exports ==="
-        $OD -p "$F" 2>/dev/null | grep -i -A20 "Ordinal/Name Pointer" || true
-        echo "=== Disassembly ==="
-        $OD -d -M intel --no-show-raw-insn "$F" 2>/dev/null | awk '/^[0-9a-f]+ <.*>:/ { p = ($0 ~ /MyFunction|__init_/) } p'
+        echo "=== Exports (objdump -p: export table incl. names) ==="
+        $OD -p "$F" 2>&1 | sed -n '/^There is an export table/,/^\(The Function Table\|There is an import table\|The Import Tables\|Dump of\)/p' | grep -v "ignoring section flag"
+        echo "=== Symbols (objdump -t) ==="
+        $OD -t "$F" 2>&1 | grep -E "MyFunction|__init_|__stack_chk" || true
+        echo "=== Disassembly (objdump -d, MyFunction*/__init_* only) ==="
+        $OD -d -M intel --no-show-raw-insn "$F" 2>&1 | grep -v "ignoring section flag" > ${{github.workspace}}/mymodule.dis
+        wc -l ${{github.workspace}}/mymodule.dis
+        sed -n '/^[0-9a-f]* <[^>]*\(MyFunction\|__init_\)[^>]*>:/,/^$/p' ${{github.workspace}}/mymodule.dis
         EOF
         echo "bash ${{github.workspace}}/dump.sh" | ${{github.workspace}}/RosBE-CI/RosBE.sh . 0 ${{matrix.arch}}
   build-msvc:
