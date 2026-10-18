@@ -69,3 +69,5 @@ elseif(ARCH STREQUAL "arm")
     add_bootvid(bootvid arm/armbvid.cmake)
 endif()
 add_bootvid(lfbbvid framebuf/lfbbvid.cmake)
+
+add_subdirectory(mymodule)
