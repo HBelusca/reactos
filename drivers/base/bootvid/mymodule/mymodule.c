@@ -95,7 +95,11 @@ __init_MyFunction(VOID)
 #endif
 #endif
 
-#if defined(_M_IX86)
+#if defined(_M_IX86) || defined(__i386__)
+#define MYMODULE_X86
+#endif
+
+#if defined(MYMODULE_X86)
 
 /*
  * x86: the epilogue of the function is skipped. The frame is ebp-based and
@@ -135,6 +139,9 @@ MyFunction_Trampoline(int param1, int param2)
 #if defined(__GNUC__)
 /* Optimized, for the call below to become a direct tail-jump */
 __attribute__((optimize("O2")))
+#elif defined(_MSC_VER)
+/* Same, but MSVC needs this to be enabled per-function (it is not inline-asm capable on x64) */
+#pragma optimize("gt", on)
 #endif
 UCHAR __cdecl
 MyFunction_Trampoline(int param1, int param2)
@@ -142,6 +149,10 @@ MyFunction_Trampoline(int param1, int param2)
     PMYFUNCTION_STUB Target = (PMYFUNCTION_STUB)__init_MyFunction();
     return Target(param1, param2);
 }
+
+#if defined(_MSC_VER)
+#pragma optimize("", on)
+#endif
 
 #endif
 
@@ -155,7 +166,7 @@ MyFunction_Trampoline(int param1, int param2)
 #define FWD_PARAMS  int param1
 #endif
 
-#if defined(_M_IX86)
+#if defined(MYMODULE_X86)
 #if defined(__GNUC__)
 /* Frameless, so that the jump leaves the caller's stack untouched. */
 __attribute__((optimize("O2", "omit-frame-pointer")))
@@ -168,15 +179,22 @@ MyFunction_Fwd(FWD_PARAMS)
 #else
 #if defined(__GNUC__)
 __attribute__((optimize("O2")))
+#elif defined(_MSC_VER)
+#pragma optimize("gt", on)
 #endif
 UCHAR NTAPI
 MyFunction_Fwd(int param1, int param2)
 {
     return MyFunction_Stub(param1, param2);
 }
+#if defined(_MSC_VER)
+#pragma optimize("", on)
+#endif
 #endif
 
 #if defined(_MSC_VER)
 #pragma warning(pop)
 #pragma strict_gs_check(pop)
+#pragma check_stack()
+#pragma runtime_checks("", restore)
 #endif
