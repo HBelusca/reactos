@@ -47,6 +47,10 @@ UCHAR NTAPI MyFunction_NT6(int param1, int param2)
 /* Forward declaration; the trampoline is the initial target of the stub */
 UCHAR __cdecl MyFunction_Trampoline(int param1, int param2);
 
+typedef UCHAR (NTAPI *PMYFUNCTION_NT5)(int param1);
+typedef UCHAR (NTAPI *PMYFUNCTION_NT6)(int param1, int param2);
+
+/* Generic type of the stub; its actual signature is NT5 or NT6 */
 typedef UCHAR (NTAPI *PMYFUNCTION_STUB)(int param1, int param2);
 
 /* Initially points to the trampoline, then to MyFunction_NT5/NT6 */
@@ -58,12 +62,14 @@ __init_MyFunction(VOID)
 {
     ULONG MajorVersion; //, MinorVersion;
     PMYFUNCTION_STUB Stub;
+    PMYFUNCTION_NT5 pfnNT5 = MyFunction_NT5;
+    PMYFUNCTION_NT6 pfnNT6 = MyFunction_NT6;
 
     (void)PsGetVersion(&MajorVersion, NULL /*&MinorVersion*/, NULL, NULL);
     if (MajorVersion < 6)
-        Stub = (PMYFUNCTION_STUB)MyFunction_NT5;
+        Stub = (PMYFUNCTION_STUB)pfnNT5;
     else // if (MajorVersion >= 6)
-        Stub = (PMYFUNCTION_STUB)MyFunction_NT6;
+        Stub = (PMYFUNCTION_STUB)pfnNT6;
 
     MyFunction_Stub = Stub;
     return (PVOID)Stub;
@@ -78,6 +84,7 @@ __init_MyFunction(VOID)
 #pragma runtime_checks("", off)
 #pragma check_stack(off)
 #pragma strict_gs_check(push, off)
+#pragma warning(push)
 #pragma warning(disable:4731) // frame pointer register 'ebp' modified by inline assembly code
 #define NO_CHECKS   __declspec(safebuffers)
 #elif defined(__GNUC__)
@@ -167,4 +174,9 @@ MyFunction_Fwd(int param1, int param2)
 {
     return MyFunction_Stub(param1, param2);
 }
+#endif
+
+#if defined(_MSC_VER)
+#pragma warning(pop)
+#pragma strict_gs_check(pop)
 #endif
