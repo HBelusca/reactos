@@ -88,8 +88,6 @@ jobs:
         $OD -d -M intel --no-show-raw-insn "$F" 2>/dev/null | awk '/^[0-9a-f]+ <.*>:/ { p = ($0 ~ /MyFunction|__init_/) } p'
         EOF
         echo "bash ${{github.workspace}}/dump.sh" | ${{github.workspace}}/RosBE-CI/RosBE.sh . 0 ${{matrix.arch}}
-    - name: Print ccache statistics
-      run: ccache -s
   build-msvc:
     strategy:
       matrix:
