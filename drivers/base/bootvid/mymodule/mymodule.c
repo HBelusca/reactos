@@ -171,7 +171,12 @@ MyFunction_Trampoline(int param1, int param2)
  * The exported function. Its arguments are not touched, whatever their number.
  * It must be reached via the MyFunction=MyFunction_Fwd redirection in the .spec
  */
-#if (NTDDI_VERSION >= NTDDI_VISTA)
+/*
+ * The decoration of the forwarder (stdcall on x86, GCC) must match what
+ * spec2def generated in the .def, i.e. it follows DLL_EXPORT_VERSION
+ * (the --version given to spec2def), not the NTDDI_VERSION of the DLL build.
+ */
+#if (DLL_EXPORT_VERSION >= 0x600)
 #define FWD_PARAMS  int param1, int param2
 #else
 #define FWD_PARAMS  int param1
