@@ -73,7 +73,7 @@ jobs:
       run: echo 'cmake -S ${{github.workspace}}/src -B ${{github.workspace}}/build -G Ninja -DCMAKE_TOOLCHAIN_FILE:FILEPATH=toolchain-${{matrix.compiler}}.cmake -DARCH:STRING=${{matrix.arch}} -DCMAKE_BUILD_TYPE=${{matrix.config}} -DDLL_EXPORT_VERSION=${{matrix.dllver}} -DENABLE_CCACHE=1 -DENABLE_ROSTESTS=1 -DENABLE_ROSAPPS=1 ${{env.D_CLANG_VERSION}}' | ${{github.workspace}}/RosBE-CI/RosBE.sh . 0 ${{matrix.arch}}
     # GCC and Clang use relative file paths for error messages, use sed to convert these to absolute paths so that GitHub could parse them
     - name: Build
-      run: set -o pipefail && echo 'cmake --build ${{github.workspace}}/build -- -k0' | ${{github.workspace}}/RosBE-CI/RosBE.sh . 0 ${{matrix.arch}} 2>&1 | sed 's|^\.\./src/|${{github.workspace}}/src/|'
+      run: set -o pipefail && echo 'cmake --build ${{github.workspace}}/build --target drivers/base/bootvid/mymodule/all -- -k0' | ${{github.workspace}}/RosBE-CI/RosBE.sh . 0 ${{matrix.arch}} 2>&1 | sed 's|^\.\./src/|${{github.workspace}}/src/|'
     - name: Dump mymodule (disassembly, exports)
       run: |
         echo 'case ${{matrix.arch}} in i386) P=i686;; *) P=x86_64;; esac; OD=$P-w64-mingw32-objdump; F=$(find ${{github.workspace}}/build -name mymodule.dll | head -1); echo $F; $OD -p $F | sed -n "/Export Table/,/^$/p"; $OD -d --no-show-raw-insn $F | sed -n "/MyFunction/,/^$/p"' | ${{github.workspace}}/RosBE-CI/RosBE.sh . 0 ${{matrix.arch}}
@@ -120,7 +120,7 @@ jobs:
     - name: Configure
       run: cmake -S src -B build -G Ninja -DCMAKE_TOOLCHAIN_FILE:FILEPATH=toolchain-msvc.cmake -DARCH:STRING=${{matrix.arch}} -DCMAKE_BUILD_TYPE=${{matrix.config}} -DDLL_EXPORT_VERSION=${{matrix.dllver}} -DENABLE_ROSTESTS=1 -DENABLE_ROSAPPS=1
     - name: Build
-      run: cmake --build build -- -k0
+      run: cmake --build build --target drivers/base/bootvid/mymodule/all -- -k0
     - name: Dump mymodule (disassembly, exports)
       shell: pwsh
       run: |

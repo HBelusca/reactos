@@ -19,6 +19,8 @@
  */
 
 #include <ntddk.h>
+#include <stdio.h>
+#include <inttypes.h>
 
 /* Do not see the public MyFunction prototype here */
 #ifndef _MYMODULE_
@@ -36,11 +38,13 @@
 /* The real implementations */
 UCHAR NTAPI MyFunction_NT5(int param1)
 {
+    printf("MyFunction_NT5(%ld)\n", param1);
     return (UCHAR)(param1 + 5);
 }
 
 UCHAR NTAPI MyFunction_NT6(int param1, int param2)
 {
+    printf("MyFunction_NT6(%ld, %ld)\n", param1, param2);
     return (UCHAR)(param1 + param2 + 6);
 }
 
@@ -84,6 +88,15 @@ __init_MyFunction(VOID)
 #pragma runtime_checks("", off)
 #pragma check_stack(off)
 #pragma strict_gs_check(push, off)
+/*
+ * Enable the optimizations required for tail-calls on x64 (and a predictable
+ * code on x86), for the functions below only, even when compiling with /Od.
+ * On x86 keep the ebp frame (no /Oy), as the inline asm relies on it.
+ */
+#pragma optimize("gt", on)
+#if defined(_M_IX86)
+#pragma optimize("y", off)
+#endif
 #pragma warning(push)
 #pragma warning(disable:4731) // frame pointer register 'ebp' modified by inline assembly code
 #define NO_CHECKS   __declspec(safebuffers)
@@ -139,9 +152,6 @@ MyFunction_Trampoline(int param1, int param2)
 #if defined(__GNUC__)
 /* Optimized, for the call below to become a direct tail-jump */
 __attribute__((optimize("O2")))
-#elif defined(_MSC_VER)
-/* Same, but MSVC needs this to be enabled per-function (it is not inline-asm capable on x64) */
-#pragma optimize("gt", on)
 #endif
 UCHAR __cdecl
 MyFunction_Trampoline(int param1, int param2)
@@ -149,10 +159,6 @@ MyFunction_Trampoline(int param1, int param2)
     PMYFUNCTION_STUB Target = (PMYFUNCTION_STUB)__init_MyFunction();
     return Target(param1, param2);
 }
-
-#if defined(_MSC_VER)
-#pragma optimize("", on)
-#endif
 
 #endif
 
@@ -179,22 +185,45 @@ MyFunction_Fwd(FWD_PARAMS)
 #else
 #if defined(__GNUC__)
 __attribute__((optimize("O2")))
-#elif defined(_MSC_VER)
-#pragma optimize("gt", on)
 #endif
 UCHAR NTAPI
 MyFunction_Fwd(int param1, int param2)
 {
     return MyFunction_Stub(param1, param2);
 }
-#if defined(_MSC_VER)
-#pragma optimize("", on)
-#endif
 #endif
 
 #if defined(_MSC_VER)
+#pragma optimize("", on)
 #pragma warning(pop)
 #pragma strict_gs_check(pop)
 #pragma check_stack()
 #pragma runtime_checks("", restore)
+#endif
+
+#if 0
+int main()
+{
+    UCHAR Success;
+
+    NtMajorVersion = 5;
+    NtMinorVersion = 1;
+    NtBuildNumber = 9660;
+
+    Success = 0xEE;
+    if (NtMajorVersion < 6)
+        /*Success =*/ ((PMYFUNCTION_NT5)MyFunction_Fwd)(2);
+    else
+        /*Success =*/ ((PMYFUNCTION_NT6)MyFunction_Fwd)(1, 2);
+    printf("MyFunction() returned 0x%" PRIx8 "\n", Success);
+
+    Success = 0xDD;
+    if (NtMajorVersion < 6)
+        Success = ((PMYFUNCTION_NT5)MyFunction_Fwd)(5);
+    else
+        Success = ((PMYFUNCTION_NT6)MyFunction_Fwd)(4, 5);
+    printf("MyFunction() returned 0x%" PRIx8 "\n", Success);
+
+    return 0;
+}
 #endif
