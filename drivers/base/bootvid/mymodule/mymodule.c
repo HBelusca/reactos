@@ -27,6 +27,10 @@
 #endif
 #include "mymodule.h"
 
+#ifdef __GNUC__
+#include "gcc_ssp.c"
+#endif
+
 /* Compiler-specific helpers */
 #if defined(_MSC_VER)
 #define NOINLINE    __declspec(noinline)
