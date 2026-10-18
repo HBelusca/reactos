@@ -78,6 +78,7 @@ __init_MyFunction(VOID)
 #pragma runtime_checks("", off)
 #pragma check_stack(off)
 #pragma strict_gs_check(push, off)
+#pragma warning(disable:4731) // frame pointer register 'ebp' modified by inline assembly code
 #define NO_CHECKS   __declspec(safebuffers)
 #elif defined(__GNUC__)
 #if (__GNUC__ >= 11)
