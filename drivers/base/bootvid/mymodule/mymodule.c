@@ -19,7 +19,6 @@
  */
 
 #include <ntddk.h>
-#include <stdio.h>
 #include <inttypes.h>
 
 /* Do not see the public MyFunction prototype here */
@@ -35,16 +34,19 @@
 #define NOINLINE    __attribute__((noinline))
 #endif
 
+/* Print using the kernel debug output routine */
+#define printf DbgPrint
+
 /* The real implementations */
 UCHAR NTAPI MyFunction_NT5(int param1)
 {
-    printf("MyFunction_NT5(%ld)\n", param1);
+    printf("MyFunction_NT5(%d)\n", param1);
     return (UCHAR)(param1 + 5);
 }
 
 UCHAR NTAPI MyFunction_NT6(int param1, int param2)
 {
-    printf("MyFunction_NT6(%ld, %ld)\n", param1, param2);
+    printf("MyFunction_NT6(%d, %d)\n", param1, param2);
     return (UCHAR)(param1 + param2 + 6);
 }
 
@@ -108,11 +110,12 @@ __init_MyFunction(VOID)
 #endif
 #endif
 
-#if defined(_M_IX86) || defined(__i386__)
-#define MYMODULE_X86
+/* GCC defines __i386__ but not _M_IX86 (MSVC does the opposite) */
+#if !defined(_M_IX86) && defined(__i386__)
+#define _M_IX86
 #endif
 
-#if defined(MYMODULE_X86)
+#if defined(_M_IX86)
 
 /*
  * x86: the epilogue of the function is skipped. The frame is ebp-based and
@@ -172,7 +175,7 @@ MyFunction_Trampoline(int param1, int param2)
 #define FWD_PARAMS  int param1
 #endif
 
-#if defined(MYMODULE_X86)
+#if defined(_M_IX86)
 #if defined(__GNUC__)
 /* Frameless, so that the jump leaves the caller's stack untouched. */
 __attribute__((optimize("O2", "omit-frame-pointer")))
