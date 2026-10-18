@@ -135,9 +135,9 @@ __init_MyFunction(VOID)
 #else // GCC
 
 #define TAIL_JUMP_TO_REG(fn) \
-    __asm__ __volatile__("leave\n\tjmp *%%eax" : : "a"(fn)); __builtin_unreachable()
+    __asm__ __volatile__("leave\n\tjmp *%%eax" : : "a"(fn)); return 0
 #define TAIL_JUMP_TO_MEM(mem) \
-    __asm__ __volatile__("jmp *%0" : : "m"(mem)); __builtin_unreachable()
+    __asm__ __volatile__("jmp *%0" : : "m"(mem)); return 0
 #define FWD_CC      NTAPI   /* spec2def GCC: MyFunction=MyFunction_Fwd@N */
 #define TRAMP_ATTR  NO_CHECKS __attribute__((optimize("no-omit-frame-pointer")))
 
