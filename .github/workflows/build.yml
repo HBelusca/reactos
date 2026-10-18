@@ -76,7 +76,18 @@ jobs:
       run: set -o pipefail && echo 'cmake --build ${{github.workspace}}/build --target drivers/base/bootvid/mymodule/all -- -k0' | ${{github.workspace}}/RosBE-CI/RosBE.sh . 0 ${{matrix.arch}} 2>&1 | sed 's|^\.\./src/|${{github.workspace}}/src/|'
     - name: Dump mymodule (disassembly, exports)
       run: |
-        echo 'case ${{matrix.arch}} in i386) P=i686;; *) P=x86_64;; esac; OD=$P-w64-mingw32-objdump; F=$(find ${{github.workspace}}/build -name mymodule.dll | head -1); echo $F; $OD -p $F | sed -n "/Export Table/,/^$/p"; $OD -d --no-show-raw-insn $F | sed -n "/MyFunction/,/^$/p"' | ${{github.workspace}}/RosBE-CI/RosBE.sh . 0 ${{matrix.arch}}
+        cat > ${{github.workspace}}/dump.sh <<'EOF'
+        case "${{matrix.arch}}" in i386) P=i686;; *) P=x86_64;; esac
+        OD=$P-w64-mingw32-objdump
+        F=$(find ${{github.workspace}}/build -name mymodule.dll | head -1)
+        echo "DLL: $F"
+        test -n "$F"
+        echo "=== Exports ==="
+        $OD -p "$F" 2>/dev/null | grep -i -A20 "Ordinal/Name Pointer" || true
+        echo "=== Disassembly ==="
+        $OD -d -M intel --no-show-raw-insn "$F" 2>/dev/null | awk '/^[0-9a-f]+ <.*>:/ { p = ($0 ~ /MyFunction|__init_/) } p'
+        EOF
+        echo "bash ${{github.workspace}}/dump.sh" | ${{github.workspace}}/RosBE-CI/RosBE.sh . 0 ${{matrix.arch}}
     - name: Print ccache statistics
       run: ccache -s
   build-msvc:
@@ -127,9 +138,3 @@ jobs:
         $f = (Get-ChildItem -Path build -Recurse -Filter mymodule.dll | Select-Object -First 1).FullName
         $f
         dumpbin /exports /disasm $f
-    - name: Upload debug symbols
-      if: ${{ matrix.config == 'Debug' }}
-      uses: actions/upload-artifact@v7
-      with:
-        name: reactos-syms-msvc${{matrix.toolset}}-${{matrix.arch}}-${{matrix.config}}-${{matrix.dllver}}-${{github.sha}}
-        path: build/msvc_pdb
