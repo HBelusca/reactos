@@ -108,7 +108,7 @@ if(CMAKE_C_COMPILER_ID STREQUAL "MSVC")
 endif()
 
 if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
-    option(STACK_PROTECTOR "Whether to enable the GCC stack checker while compiling" OFF)
+    option(STACK_PROTECTOR "Whether to enable the GCC stack checker while compiling" ON)
 endif()
 
 set(USE_DUMMY_PSEH FALSE CACHE BOOL
