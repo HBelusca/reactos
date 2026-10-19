@@ -84,16 +84,8 @@ jobs:
         test -n "$F"
         echo "=== Exports (objdump -p: export table incl. names) ==="
         $OD -p "$F" 2>&1 | sed -n '/^There is an export table/,/^\(The Function Table\|There is an import table\|The Import Tables\|Dump of\)/p' | grep -v "ignoring section flag"
-        echo "=== Dynamic/exported symbols (objdump -T) ==="
-        $OD -T "$F" 2>&1 | grep -v "ignoring section flag" || true
-        echo "=== Exported symbols (nm -D) ==="
-        ${OD%objdump}nm -D "$F" 2>&1 | grep -v "ignoring section flag" || true
-        echo "=== Symbols (objdump -t) ==="
-        $OD -t "$F" 2>&1 | grep -E "MyFunction|__init_|__stack_chk" || true
-        echo "=== Disassembly (objdump -d, MyFunction*/__init_* only) ==="
-        $OD -d -M intel --no-show-raw-insn "$F" 2>&1 | grep -v "ignoring section flag" > ${{github.workspace}}/mymodule.dis
-        wc -l ${{github.workspace}}/mymodule.dis
-        sed -n '/^[0-9a-f]* <[^>]*\(MyFunction\|__init_\)[^>]*>:/,/^$/p' ${{github.workspace}}/mymodule.dis
+        echo "=== Disassembly (objdump -d, whole DLL; it is stripped so no function names) ==="
+        $OD -d -M intel --no-show-raw-insn "$F" 2>&1 | grep -v "ignoring section flag"
         EOF
         echo "bash ${{github.workspace}}/dump.sh" | ${{github.workspace}}/RosBE-CI/RosBE.sh . 0 ${{matrix.arch}}
   build-msvc:
